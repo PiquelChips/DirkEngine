@@ -1,4 +1,4 @@
-#include "Engine/DirkEngine.hpp"
+#include "engine/dirkengine.hpp"
 
 void DirkEngine::run()
 {

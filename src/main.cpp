@@ -3,7 +3,7 @@
 #include <cstdlib>
 #include <iostream>
 
-#include "Engine/DirkEngine.hpp"
+#include "engine/dirkengine.hpp"
 
 int main()
 {
