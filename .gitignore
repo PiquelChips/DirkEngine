@@ -1,3 +1,6 @@
-*.o
-*.d
+# CMake build files
 build/
+
+# Clangd files
+compile_commands.json
+.cache/

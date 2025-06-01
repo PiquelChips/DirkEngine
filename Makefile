@@ -1,14 +1,18 @@
-.ONESHELL: build run
-.PHONY: build run
+BUILD=build
 
-build:
-	@mkdir -p build
-	@cd build
-	@cmake ..
-	@cmake --build .
+.PHONY: build
+build: config clangd
+	@cmake --build $(BUILD)
 
-run:
-	@mkdir -p build
-	@cd build
-	@cmake ..
-	@cmake --build . --target run
+.PHONY: run
+run: build
+	@./$(BUILD)/bin/DirkEngine
+
+
+.PHONY: config
+config:
+	@cmake -S . -B $(BUILD) -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+.PHONY: clangd
+clangd:
+	@ln -fs $(BUILD)/compile_commands.json .
