@@ -5,8 +5,7 @@
 
 #include "engine/dirkengine.hpp"
 
-int main()
-{
+int main() {
     DirkEngine app;
 
     std::cout << "Hello World!" << std::endl;
