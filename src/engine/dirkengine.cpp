@@ -1,4 +1,6 @@
 #include "engine/dirkengine.hpp"
+
+#include <GLFW/glfw3.h>
 #include <iostream>
 
 DirkEngine::DirkEngine() {
