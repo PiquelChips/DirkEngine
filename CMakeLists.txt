@@ -5,11 +5,6 @@ project(DirkEngine VERSION 1.0.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Set build type to Release if not specified (equivalent to -O2)
-if(NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE Release)
-endif()
-
 find_package(Vulkan QUIET)
 find_package(glfw3 REQUIRED)
 
@@ -35,9 +30,20 @@ if(NOT Vulkan_FOUND)
     endif()
 endif()
 
-file(GLOB_RECURSE SOURCES "src/*.cpp")
+file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
 
 add_executable(${PROJECT_NAME} ${SOURCES})
+
+# Preprocessor macros
+target_compile_definitions("${CMAKE_PROJECT_NAME}" PUBLIC
+    GLFW_INCLUDE_NONE=1
+    GLFW_INCLUDE_VULKAN=1
+
+    RESSOURCE_PATH=$<IF:$<CONFIG:Release>,"./ressources/","${CMAKE_CURRENT_SOURCE_DIR}/resources">
+
+    DEBUG_BUILD=$<CONFIG:Debug>
+    RELEASE_BUILD=$<CONFIG:Release>
+)
 
 target_include_directories(${PROJECT_NAME} PRIVATE
     include
@@ -47,19 +53,4 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 target_link_libraries(${PROJECT_NAME} PRIVATE
     ${Vulkan_LIBRARIES}
     glfw
-)
-
-set_target_properties(${PROJECT_NAME} PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
-)
-
-add_custom_target(run
-    COMMAND ${PROJECT_NAME}
-    DEPENDS ${PROJECT_NAME}
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-    COMMENT "Running ${PROJECT_NAME}"
-)
-
-set_target_properties(${PROJECT_NAME} PROPERTIES
-    CXX_INCLUDE_WHAT_YOU_USE ""
 )
