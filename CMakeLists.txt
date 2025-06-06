@@ -14,6 +14,7 @@ set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 
 add_subdirectory(thirdparty/glfw-3.4)
+add_subdirectory(thirdparty/glm)
 
 pkg_search_module(Vulkan REQUIRED vulkan)
 
@@ -34,7 +35,6 @@ target_compile_definitions("${CMAKE_PROJECT_NAME}" PUBLIC
 
 target_include_directories(${PROJECT_NAME} PRIVATE
     include
-    glm
     ${Vulkan_INCLUDE_DIRS}
 )
 
