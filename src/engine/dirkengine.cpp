@@ -2,7 +2,8 @@
 
 #include <GLFW/glfw3.h>
 #include <cassert>
-#include <iostream>
+
+DirkEngine::DirkEngine(Logger* logger) : logger(logger) {}
 
 bool DirkEngine::init() {
     initWindow();
@@ -24,7 +25,7 @@ void DirkEngine::initWindow() {
     assert(window);
 }
 
-void DirkEngine::initVulkan() { std::cout << "Initlializing Vulkan...\n"; }
+void DirkEngine::initVulkan() { logger->Log(INFO, "Initlializing Vulkan..."); }
 
 void DirkEngine::start() {
     assert(initSuccessful);
@@ -45,7 +46,7 @@ void DirkEngine::start() {
 }
 
 void DirkEngine::tick() {
-    // std::cout << "Tick\n";
+    // logger->Log(DEBUG, "Tick");
 }
 
 void DirkEngine::exit() { requestingExit = true; }

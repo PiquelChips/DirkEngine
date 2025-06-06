@@ -4,9 +4,8 @@
 #include "engine/dirkengine.hpp"
 
 int main() {
-    DirkEngine* engine = new DirkEngine();
-
-    std::cout << RESSOURCE_PATH << DEBUG_BUILD << RELEASE_BUILD;
+    Logger* logger = new Logger();
+    DirkEngine* engine = new DirkEngine(logger);
 
     try {
         engine->init();
