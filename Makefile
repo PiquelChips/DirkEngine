@@ -18,5 +18,9 @@ release: config
 
 .PHONY: config
 config:
-	@cmake -S . -B $(BUILD) -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+	@cmake -S . -B $(BUILD) -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DGLFW_BUILD_X11=OFF
 	@ln -fs $(BUILD)/compile_commands.json .
+
+.PHONY: clean
+clean:
+	@rm -rf release build

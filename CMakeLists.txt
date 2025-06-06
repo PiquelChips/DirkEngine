@@ -5,8 +5,15 @@ project(DirkEngine VERSION 1.0.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+
+add_subdirectory(thirdparty/glfw-3.4)
+
 find_package(Vulkan QUIET)
-find_package(glfw3 REQUIRED)
 
 # Handle Vulkan manually if CMake's FindVulkan fails (common in Nix)
 if(NOT Vulkan_FOUND)
