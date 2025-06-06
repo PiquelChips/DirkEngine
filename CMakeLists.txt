@@ -54,10 +54,12 @@ target_compile_definitions("${CMAKE_PROJECT_NAME}" PUBLIC
 
 target_include_directories(${PROJECT_NAME} PRIVATE
     include
+    glm
     ${Vulkan_INCLUDE_DIRS}
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
-    ${Vulkan_LIBRARIES}
     glfw
+    glm
+    ${Vulkan_LIBRARIES}
 )
