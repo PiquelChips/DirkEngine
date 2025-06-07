@@ -4,7 +4,7 @@
 #include "engine/dirkengine.hpp"
 
 int main() {
-    Logger* logger = new Logger();
+    Logger* logger = new Logger("");
     DirkEngine* engine = new DirkEngine(logger);
 
     try {

@@ -1,10 +1,13 @@
 #include <ctime>
 #include <iostream>
+#include <sstream>
 
 #include "logger.hpp"
 
-void Logger::Log(LogLevel level, const std::string& message) {
-    std::string levelString = "";
+Logger::Log::Log(LogLevel level, const std::string& filename) {
+
+    file.open(filename);
+    std::string levelString{GetLevelString(level)};
 
     char timestamp[25];
 
@@ -12,7 +15,44 @@ void Logger::Log(LogLevel level, const std::string& message) {
     strftime(timestamp, sizeof(timestamp), "[%Y-%m-%d %H:%M:%S] ",
              localtime(&now));
 
-    std::cout << timestamp << levelString << ": " << message << std::endl;
+    std::ostringstream out;
+    out << timestamp << levelString << ": ";
+
+    std::string outString{out.str()};
+
+    std::cout << outString;
+
+    if (file.is_open())
+        file << outString;
+}
+
+Logger::Log::~Log() {
+    std::cout << std::endl;
+
+    if (file.is_open()) {
+        file << std::endl;
+
+        file.flush();
+        file.close();
+    }
+}
+
+Logger::Log& Logger::Log::operator<<(const std::string& message) {
+    std::cout << message;
+
+    if (file.is_open())
+        file << message;
+
+    return *this;
+}
+
+Logger::Log& Logger::Log::operator<<(const char* message) {
+    std::cout << message;
+
+    if (file.is_open())
+        file << message;
+
+    return *this;
 }
 
 std::string Logger::GetLevelString(LogLevel level) {
@@ -31,3 +71,10 @@ std::string Logger::GetLevelString(LogLevel level) {
         return "";
     }
 }
+
+Logger::Logger(const std::string& filename) : filename(filename) {
+    if (filename == "")
+        Get(INFO) << "No log file specified";
+}
+
+Logger::Log Logger::Get(LogLevel level) { return Log(level, filename); }
