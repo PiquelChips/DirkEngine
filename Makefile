@@ -1,6 +1,8 @@
 BUILD=build
 RELEASE=release
 
+CMAKE_ARGS= -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ${DIRK_ENGINE_CMAKE_ARGS}
+
 .PHONY: run
 run: config
 	@cmake --build $(BUILD) --config=Debug --target=run
@@ -21,7 +23,7 @@ release: config
 
 .PHONY: config
 config:
-	@cmake -S . -B $(BUILD) -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DGLFW_BUILD_X11=OFF -DBUILD_WSI_XCB_SUPPORT=OFF -DBUILD_WSI_XLIB_SUPPORT=OFF
+	@cmake -S . -B $(BUILD) $(CMAKE_ARGS)
 	@ln -fs $(BUILD)/compile_commands.json .
 
 .PHONY: clean
