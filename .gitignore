@@ -7,5 +7,4 @@ compile_commands.json
 
 # Release builds
 release/
-
-log/
+logs/
