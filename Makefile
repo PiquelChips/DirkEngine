@@ -24,7 +24,6 @@ release: config
 .PHONY: config
 config:
 	@cmake -S . -B $(BUILD) $(CMAKE_ARGS)
-	@ln -fs $(BUILD)/compile_commands.json .
 
 .PHONY: clean
 clean:
