@@ -1,10 +1,15 @@
 BUILD=build
 RELEASE=release
 
+CMAKE_ARGS= -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ${DIRK_ENGINE_CMAKE_ARGS}
+
 .PHONY: run
 run: config
+	@cmake --build $(BUILD) --config=Debug --target=run
+
+.PHONY: build
+build: config
 	@cmake --build $(BUILD) --config=Debug
-	@$(BUILD)/DirkEngine
 
 .PHONY: release
 release: config
@@ -18,5 +23,8 @@ release: config
 
 .PHONY: config
 config:
-	@cmake -S . -B $(BUILD) -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-	@ln -fs $(BUILD)/compile_commands.json .
+	@cmake -S . -B $(BUILD) $(CMAKE_ARGS)
+
+.PHONY: clean
+clean:
+	@git clean -dfx
