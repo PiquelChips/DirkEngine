@@ -3,8 +3,7 @@ RELEASE=release
 
 .PHONY: run
 run: config
-	@cmake --build $(BUILD) --config=Debug
-	@$(BUILD)/DirkEngine
+	@cmake --build $(BUILD) --config=Debug --target=run
 
 .PHONY: release
 release: config

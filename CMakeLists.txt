@@ -43,3 +43,9 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     glm
     ${Vulkan_LIBRARIES}
 )
+
+add_custom_target(run
+    COMMAND ${PROJECT_NAME}
+    DEPENDS ${PROJECT_NAME}
+    COMMENT "Running ${PROJECT_NAME}"
+)
