@@ -5,8 +5,6 @@ project(DirkEngine VERSION 1.0.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(PkgConfig)
-
 set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
@@ -15,8 +13,7 @@ set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 
 add_subdirectory(thirdparty/glfw-3.4)
 add_subdirectory(thirdparty/glm)
-
-pkg_search_module(Vulkan REQUIRED vulkan)
+add_subdirectory(thirdparty/vulkan)
 
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
 
@@ -35,13 +32,13 @@ target_compile_definitions("${CMAKE_PROJECT_NAME}" PUBLIC
 
 target_include_directories(${PROJECT_NAME} PRIVATE
     include
-    ${Vulkan_INCLUDE_DIRS}
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
     glfw
     glm
-    ${Vulkan_LIBRARIES}
+    Vulkan::Loader
+    Vulkan::Headers
 )
 
 add_custom_target(run
