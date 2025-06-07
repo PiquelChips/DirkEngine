@@ -5,6 +5,10 @@ RELEASE=release
 run: config
 	@cmake --build $(BUILD) --config=Debug --target=run
 
+.PHONY: build
+build: config
+	@cmake --build $(BUILD) --config=Debug
+
 .PHONY: release
 release: config
 	@cmake --build $(BUILD) --config=Release
