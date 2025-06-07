@@ -1,12 +1,15 @@
+#include <cstring>
 #include <ctime>
+#include <filesystem>
 #include <iostream>
 #include <sstream>
+#include <string>
 
 #include "logger.hpp"
 
 Logger::Log::Log(LogLevel level, const std::string& filename) {
-
     file.open(filename);
+
     std::string levelString{GetLevelString(level)};
 
     char timestamp[25];
@@ -32,7 +35,7 @@ Logger::Log::~Log() {
     if (file.is_open()) {
         file << std::endl;
 
-        file.flush();
+        // file.flush();
         file.close();
     }
 }
@@ -72,9 +75,21 @@ std::string Logger::GetLevelString(LogLevel level) {
     }
 }
 
-Logger::Logger(const std::string& filename) : filename(filename) {
-    if (filename == "")
-        Get(INFO) << "No log file specified";
+Logger::Logger() {
+    if (logPath == "") {
+        Get(INFO) << "No log path specified";
+        return;
+    }
+
+    std::filesystem::create_directory(std::filesystem::path{logPath});
 }
 
-Logger::Log Logger::Get(LogLevel level) { return Log(level, filename); }
+Logger::Log Logger::Get(LogLevel level) {
+    std::string filepath{""};
+
+    if (logPath != "") {
+        filepath = logPath + "/latest.log";
+    }
+
+    return Log(level, filepath);
+}

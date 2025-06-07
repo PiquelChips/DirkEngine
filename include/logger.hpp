@@ -25,12 +25,12 @@ public:
     };
 
 public:
-    Logger(const std::string& filename);
+    Logger();
 
     Log Get(LogLevel level);
 
     static std::string GetLevelString(LogLevel level);
 
 private:
-    const std::string& filename;
+    const std::string logPath = LOG_PATH;
 };
