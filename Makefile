@@ -26,4 +26,4 @@ config:
 
 .PHONY: clean
 clean:
-	@rm -rf release build
+	@git clean -dfx
