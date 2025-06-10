@@ -1,12 +1,12 @@
 #include <cstdlib>
 #include <iostream>
+#include <memory>
 
 #include "engine/dirkengine.hpp"
 
 int main() {
-    DirkEngine* engine = new DirkEngine();
-
-    std::cout << RESSOURCE_PATH << DEBUG_BUILD << RELEASE_BUILD;
+    auto logger = std::make_unique<Logger>();
+    auto engine = std::make_unique<DirkEngine>(logger.get());
 
     try {
         engine->init();
@@ -16,8 +16,6 @@ int main() {
         std::cerr << e.what() << std::endl;
         return EXIT_FAILURE;
     }
-
-    std::cout << std::endl;
 
     return EXIT_SUCCESS;
 }

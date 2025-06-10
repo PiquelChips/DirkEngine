@@ -2,9 +2,14 @@
 #include <cstdint>
 #include <string>
 
+#include "logger.hpp"
+
 class DirkEngine {
 
 public:
+
+    DirkEngine(Logger* logger);
+
     bool init();
     void start();
     void exit();
@@ -26,6 +31,8 @@ public:
 
 private:
     GLFWwindow* window = nullptr;
+
+    Logger* logger = nullptr;
 
     bool initSuccessful = false;
     bool requestingExit = false;
