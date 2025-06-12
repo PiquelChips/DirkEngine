@@ -33,7 +33,7 @@ public:
 
     bool isRequestingExit() const noexcept;
 
-    Logger* getLogger() { return logger; }
+    Logger* getLogger() const noexcept;
 
 private:
     void initWindow();
@@ -47,7 +47,6 @@ private:
     QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
 
     void tick();
-
     void cleanup();
 
 public:
