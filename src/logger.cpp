@@ -30,32 +30,16 @@ Logger::Log::Log(LogLevel level, const std::string& filename) {
 }
 
 Logger::Log::~Log() {
-    std::cout << std::endl;
+    std::string message = buffer.str();
+
+    std::cout << message << std::endl;
 
     if (file.is_open()) {
-        file << std::endl;
+        file << message << std::endl;
 
         // file.flush();
         file.close();
     }
-}
-
-Logger::Log& Logger::Log::operator<<(const std::string& message) {
-    std::cout << message;
-
-    if (file.is_open())
-        file << message;
-
-    return *this;
-}
-
-Logger::Log& Logger::Log::operator<<(const char* message) {
-    std::cout << message;
-
-    if (file.is_open())
-        file << message;
-
-    return *this;
 }
 
 std::string Logger::GetLevelString(LogLevel level) {

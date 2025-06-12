@@ -1,4 +1,5 @@
 #include <fstream>
+#include <sstream>
 
 enum LogLevel { DEBUG, INFO, WARNING, ERROR, FATAL };
 
@@ -17,10 +18,14 @@ public:
         Log(LogLevel level, const std::string& filename);
         virtual ~Log();
 
-        Log& operator<<(const std::string& message);
-        Log& operator<<(const char* message);
+        template <typename T> Log& operator<<(const T& value) {
+            buffer << value;
+            return *this;
+        }
 
     private:
+        std::ostringstream buffer;
+
         std::ofstream file;
     };
 
