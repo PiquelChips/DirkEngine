@@ -6,6 +6,9 @@
 #include <cassert>
 #include <cstdint>
 #include <cstring>
+#include <map>
+#include <stdexcept>
+#include <utility>
 #include <vector>
 
 DirkEngine::DirkEngine(Logger* logger) : logger(logger) {}
@@ -14,9 +17,8 @@ bool DirkEngine::init() {
     initWindow();
     initVulkan();
 
-    // if init successful
-    // log something
     initSuccessful = true;
+    // TODO: if init successful log something
     return initSuccessful;
 }
 
@@ -64,6 +66,8 @@ void DirkEngine::initVulkan() {
 #ifdef ENABLE_VALIDATION_LAYERS
     setupDebugMessenger();
 #endif
+
+    getPhysicalDevice();
 }
 
 void DirkEngine::start() {
@@ -115,6 +119,8 @@ std::vector<const char*> DirkEngine::getRequiredInstanceExtensions() {
 #ifdef ENABLE_VALIDATION_LAYERS
     extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 #endif
+
+    // TODO: make sure all extensions are supported by the driver
 
     return extensions;
 }
@@ -168,4 +174,47 @@ VkBool32 DirkEngine::debugCallback(
     engine->logger->Get(ERROR) << pCallbackData->pMessage;
 
     return VK_FALSE;
+}
+
+void DirkEngine::getPhysicalDevice() {
+    uint32_t deviceCount = 0;
+    vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
+    assert(deviceCount > 0);
+
+    std::vector<VkPhysicalDevice> devices(deviceCount);
+    vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
+
+    std::multimap<int, VkPhysicalDevice> candidates;
+
+    for (const auto& device : devices) {
+        int score = getDeviceSuitability(device);
+        candidates.insert(std::make_pair(score, device));
+    }
+
+    if (candidates.rbegin()->first > 0) {
+        physicalDevice = candidates.rbegin()->second;
+    } else {
+        throw std::runtime_error("failed to find a suitable GPU!");
+    }
+}
+
+int DirkEngine::getDeviceSuitability(VkPhysicalDevice device) {
+    VkPhysicalDeviceProperties deviceProperties;
+    VkPhysicalDeviceFeatures deviceFeatures;
+
+    vkGetPhysicalDeviceProperties(device, &deviceProperties);
+    vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+
+    int score = 0;
+
+    if (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+        score += 1000;
+
+    score += deviceProperties.limits.maxImageDimension2D;
+
+    if (!deviceFeatures.geometryShader) {
+        return 0;
+    }
+
+    return score;
 }

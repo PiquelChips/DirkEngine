@@ -30,11 +30,14 @@ private:
     void initWindow();
     void initVulkan();
 
+    std::vector<const char*> getRequiredInstanceExtensions();
+
+    void getPhysicalDevice();
+    int getDeviceSuitability(VkPhysicalDevice device);
+
     void tick();
 
     void cleanup();
-
-    std::vector<const char*> getRequiredInstanceExtensions();
 
 public:
     const uint32_t WIDTH = 800;
@@ -60,6 +63,7 @@ private:
 private:
     GLFWwindow* window = nullptr;
     VkInstance instance = nullptr;
+    VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
 
     Logger* logger = nullptr;
 
