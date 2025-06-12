@@ -165,13 +165,29 @@ void DirkEngine::setupDebugMessenger() {
 
 VkBool32 DirkEngine::debugCallback(
     VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-    VkDebugUtilsMessageTypeFlagsEXT,
+    VkDebugUtilsMessageTypeFlagsEXT messageType,
     const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
     void* pUserData) {
 
     DirkEngine* engine = static_cast<DirkEngine*>(pUserData);
     assert(engine);
-    engine->logger->Get(ERROR) << pCallbackData->pMessage;
+
+    LogLevel level;
+
+    switch (messageSeverity) {
+    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
+        level = ERROR;
+    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
+        level = WARNING;
+    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
+        level = INFO;
+    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
+        level = DEBUG;
+    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_FLAG_BITS_MAX_ENUM_EXT:
+        return VK_FALSE;
+    }
+
+    engine->logger->Get(level) << pCallbackData->pMessage;
 
     return VK_FALSE;
 }
