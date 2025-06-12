@@ -1,3 +1,5 @@
+#pragma once
+
 #include <GLFW/glfw3.h>
 #include <cstdint>
 #include <string>
@@ -7,7 +9,6 @@
 class DirkEngine {
 
 public:
-
     DirkEngine(Logger* logger);
 
     bool init();
@@ -15,6 +16,8 @@ public:
     void exit();
 
     bool isRequestingExit() const noexcept;
+
+    Logger* getLogger() { return logger; }
 
 private:
     void initWindow();
