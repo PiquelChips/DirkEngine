@@ -1,8 +1,8 @@
+#include "engine/dirkengine.hpp"
+
 #include <cstdlib>
 #include <iostream>
 #include <memory>
-
-#include "engine/dirkengine.hpp"
 
 int main() {
     auto logger = std::make_unique<Logger>();
