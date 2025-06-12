@@ -39,11 +39,11 @@ private:
     void initWindow();
     void initVulkan();
 
+    void createVulkanInstance();
     std::vector<const char*> getRequiredInstanceExtensions();
 
     void getPhysicalDevice();
     int getDeviceSuitability(VkPhysicalDevice device);
-
     QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
 
     void tick();

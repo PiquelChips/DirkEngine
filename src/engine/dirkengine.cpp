@@ -35,6 +35,14 @@ void DirkEngine::initWindow() {
 void DirkEngine::initVulkan() {
     logger->Get(INFO) << "Initlializing Vulkan...";
 
+    createVulkanInstance();
+#ifdef ENABLE_VALIDATION_LAYERS
+    setupDebugMessenger();
+#endif
+    getPhysicalDevice();
+}
+
+void DirkEngine::createVulkanInstance() {
     VkApplicationInfo appInfo{};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     appInfo.pApplicationName = "DirkEngine";
@@ -62,12 +70,6 @@ void DirkEngine::initVulkan() {
 #endif
 
     assert(vkCreateInstance(&createInfo, nullptr, &instance) == VK_SUCCESS);
-
-#ifdef ENABLE_VALIDATION_LAYERS
-    setupDebugMessenger();
-#endif
-
-    getPhysicalDevice();
 }
 
 void DirkEngine::start() {
