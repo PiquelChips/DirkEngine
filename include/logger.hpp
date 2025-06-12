@@ -20,7 +20,8 @@ public:
         Log(LogLevel level, const std::string& filename);
         virtual ~Log();
 
-        template <typename T> Log& operator<<(const T& value) {
+        template <typename T>
+        Log& operator<<(const T& value) {
             buffer << value;
             return *this;
         }

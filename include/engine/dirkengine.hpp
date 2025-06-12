@@ -5,6 +5,7 @@
 #include <string>
 
 #include "logger.hpp"
+#include "vulkan/vulkan_core.h"
 
 class DirkEngine {
 
@@ -34,6 +35,7 @@ public:
 
 private:
     GLFWwindow* window = nullptr;
+    VkInstance instance = nullptr;
 
     Logger* logger = nullptr;
 
