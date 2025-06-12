@@ -2,6 +2,7 @@
 
 #include <GLFW/glfw3.h>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -12,6 +13,14 @@
 #ifdef DEBUG_BUILD
 #define ENABLE_VALIDATION_LAYERS
 #endif
+
+struct QueueFamilyIndices {
+    std::optional<uint32_t> graphicsFamily;
+
+    bool isComplete() {
+        return graphicsFamily.has_value();
+    }
+};
 
 class DirkEngine {
 
@@ -34,6 +43,8 @@ private:
 
     void getPhysicalDevice();
     int getDeviceSuitability(VkPhysicalDevice device);
+
+    QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
 
     void tick();
 
