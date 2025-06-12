@@ -45,6 +45,8 @@ private:
     void getPhysicalDevice();
     int getDeviceSuitability(VkPhysicalDevice device);
     QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
+    
+    void createLogicalDevice();
 
     void tick();
     void cleanup();
@@ -74,6 +76,8 @@ private:
     GLFWwindow* window = nullptr;
     VkInstance instance = nullptr;
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+    VkDevice device;
+    VkQueue graphicsQueue;
 
     Logger* logger = nullptr;
 
