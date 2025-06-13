@@ -310,9 +310,6 @@ VKAPI_ATTR bool VKAPI_CALL loader_icd_init_entries(struct loader_instance* inst,
     LOOKUP_GIPA(GetPhysicalDeviceScreenPresentationSupportQNX);
 #endif // VK_USE_PLATFORM_SCREEN_QNX
 
-    // ---- VK_ARM_tensors extension commands
-    LOOKUP_GIPA(GetPhysicalDeviceExternalTensorPropertiesARM);
-
     // ---- VK_NV_optical_flow extension commands
     LOOKUP_GIPA(GetPhysicalDeviceOpticalFlowImageFormatsNV);
 
@@ -747,9 +744,6 @@ VKAPI_ATTR void VKAPI_CALL loader_init_device_extension_dispatch_table(struct lo
     table->GetRenderingAreaGranularityKHR = (PFN_vkGetRenderingAreaGranularityKHR)gdpa(dev, "vkGetRenderingAreaGranularityKHR");
     table->GetDeviceImageSubresourceLayoutKHR = (PFN_vkGetDeviceImageSubresourceLayoutKHR)gdpa(dev, "vkGetDeviceImageSubresourceLayoutKHR");
     table->GetImageSubresourceLayout2KHR = (PFN_vkGetImageSubresourceLayout2KHR)gdpa(dev, "vkGetImageSubresourceLayout2KHR");
-
-    // ---- VK_KHR_present_wait2 extension commands
-    table->WaitForPresent2KHR = (PFN_vkWaitForPresent2KHR)gdpa(dev, "vkWaitForPresent2KHR");
 
     // ---- VK_KHR_pipeline_binary extension commands
     table->CreatePipelineBinariesKHR = (PFN_vkCreatePipelineBinariesKHR)gdpa(dev, "vkCreatePipelineBinariesKHR");
@@ -1197,18 +1191,6 @@ VKAPI_ATTR void VKAPI_CALL loader_init_device_extension_dispatch_table(struct lo
     table->CmdSetRepresentativeFragmentTestEnableNV = (PFN_vkCmdSetRepresentativeFragmentTestEnableNV)gdpa(dev, "vkCmdSetRepresentativeFragmentTestEnableNV");
     table->CmdSetCoverageReductionModeNV = (PFN_vkCmdSetCoverageReductionModeNV)gdpa(dev, "vkCmdSetCoverageReductionModeNV");
 
-    // ---- VK_ARM_tensors extension commands
-    table->CreateTensorARM = (PFN_vkCreateTensorARM)gdpa(dev, "vkCreateTensorARM");
-    table->DestroyTensorARM = (PFN_vkDestroyTensorARM)gdpa(dev, "vkDestroyTensorARM");
-    table->CreateTensorViewARM = (PFN_vkCreateTensorViewARM)gdpa(dev, "vkCreateTensorViewARM");
-    table->DestroyTensorViewARM = (PFN_vkDestroyTensorViewARM)gdpa(dev, "vkDestroyTensorViewARM");
-    table->GetTensorMemoryRequirementsARM = (PFN_vkGetTensorMemoryRequirementsARM)gdpa(dev, "vkGetTensorMemoryRequirementsARM");
-    table->BindTensorMemoryARM = (PFN_vkBindTensorMemoryARM)gdpa(dev, "vkBindTensorMemoryARM");
-    table->GetDeviceTensorMemoryRequirementsARM = (PFN_vkGetDeviceTensorMemoryRequirementsARM)gdpa(dev, "vkGetDeviceTensorMemoryRequirementsARM");
-    table->CmdCopyTensorARM = (PFN_vkCmdCopyTensorARM)gdpa(dev, "vkCmdCopyTensorARM");
-    table->GetTensorOpaqueCaptureDescriptorDataARM = (PFN_vkGetTensorOpaqueCaptureDescriptorDataARM)gdpa(dev, "vkGetTensorOpaqueCaptureDescriptorDataARM");
-    table->GetTensorViewOpaqueCaptureDescriptorDataARM = (PFN_vkGetTensorViewOpaqueCaptureDescriptorDataARM)gdpa(dev, "vkGetTensorViewOpaqueCaptureDescriptorDataARM");
-
     // ---- VK_EXT_shader_module_identifier extension commands
     table->GetShaderModuleIdentifierEXT = (PFN_vkGetShaderModuleIdentifierEXT)gdpa(dev, "vkGetShaderModuleIdentifierEXT");
     table->GetShaderModuleCreateInfoIdentifierEXT = (PFN_vkGetShaderModuleCreateInfoIdentifierEXT)gdpa(dev, "vkGetShaderModuleCreateInfoIdentifierEXT");
@@ -1575,9 +1557,6 @@ VKAPI_ATTR void VKAPI_CALL loader_init_instance_extension_dispatch_table(VkLayer
 #if defined(VK_USE_PLATFORM_SCREEN_QNX)
     table->GetPhysicalDeviceScreenPresentationSupportQNX = (PFN_vkGetPhysicalDeviceScreenPresentationSupportQNX)gpa(inst, "vkGetPhysicalDeviceScreenPresentationSupportQNX");
 #endif // VK_USE_PLATFORM_SCREEN_QNX
-
-    // ---- VK_ARM_tensors extension commands
-    table->GetPhysicalDeviceExternalTensorPropertiesARM = (PFN_vkGetPhysicalDeviceExternalTensorPropertiesARM)gpa(inst, "vkGetPhysicalDeviceExternalTensorPropertiesARM");
 
     // ---- VK_NV_optical_flow extension commands
     table->GetPhysicalDeviceOpticalFlowImageFormatsNV = (PFN_vkGetPhysicalDeviceOpticalFlowImageFormatsNV)gpa(inst, "vkGetPhysicalDeviceOpticalFlowImageFormatsNV");
@@ -2687,9 +2666,6 @@ VKAPI_ATTR void* VKAPI_CALL loader_lookup_device_dispatch_table(const VkLayerDis
     if (!strcmp(name, "GetDeviceImageSubresourceLayoutKHR")) return (void *)table->GetDeviceImageSubresourceLayoutKHR;
     if (!strcmp(name, "GetImageSubresourceLayout2KHR")) return (void *)table->GetImageSubresourceLayout2KHR;
 
-    // ---- VK_KHR_present_wait2 extension commands
-    if (!strcmp(name, "WaitForPresent2KHR")) return (void *)table->WaitForPresent2KHR;
-
     // ---- VK_KHR_pipeline_binary extension commands
     if (!strcmp(name, "CreatePipelineBinariesKHR")) return (void *)table->CreatePipelineBinariesKHR;
     if (!strcmp(name, "DestroyPipelineBinaryKHR")) return (void *)table->DestroyPipelineBinaryKHR;
@@ -3136,18 +3112,6 @@ VKAPI_ATTR void* VKAPI_CALL loader_lookup_device_dispatch_table(const VkLayerDis
     if (!strcmp(name, "CmdSetRepresentativeFragmentTestEnableNV")) return (void *)table->CmdSetRepresentativeFragmentTestEnableNV;
     if (!strcmp(name, "CmdSetCoverageReductionModeNV")) return (void *)table->CmdSetCoverageReductionModeNV;
 
-    // ---- VK_ARM_tensors extension commands
-    if (!strcmp(name, "CreateTensorARM")) return (void *)table->CreateTensorARM;
-    if (!strcmp(name, "DestroyTensorARM")) return (void *)table->DestroyTensorARM;
-    if (!strcmp(name, "CreateTensorViewARM")) return (void *)table->CreateTensorViewARM;
-    if (!strcmp(name, "DestroyTensorViewARM")) return (void *)table->DestroyTensorViewARM;
-    if (!strcmp(name, "GetTensorMemoryRequirementsARM")) return (void *)table->GetTensorMemoryRequirementsARM;
-    if (!strcmp(name, "BindTensorMemoryARM")) return (void *)table->BindTensorMemoryARM;
-    if (!strcmp(name, "GetDeviceTensorMemoryRequirementsARM")) return (void *)table->GetDeviceTensorMemoryRequirementsARM;
-    if (!strcmp(name, "CmdCopyTensorARM")) return (void *)table->CmdCopyTensorARM;
-    if (!strcmp(name, "GetTensorOpaqueCaptureDescriptorDataARM")) return (void *)table->GetTensorOpaqueCaptureDescriptorDataARM;
-    if (!strcmp(name, "GetTensorViewOpaqueCaptureDescriptorDataARM")) return (void *)table->GetTensorViewOpaqueCaptureDescriptorDataARM;
-
     // ---- VK_EXT_shader_module_identifier extension commands
     if (!strcmp(name, "GetShaderModuleIdentifierEXT")) return (void *)table->GetShaderModuleIdentifierEXT;
     if (!strcmp(name, "GetShaderModuleCreateInfoIdentifierEXT")) return (void *)table->GetShaderModuleCreateInfoIdentifierEXT;
@@ -3519,9 +3483,6 @@ VKAPI_ATTR void* VKAPI_CALL loader_lookup_instance_dispatch_table(const VkLayerI
 #if defined(VK_USE_PLATFORM_SCREEN_QNX)
     if (!strcmp(name, "GetPhysicalDeviceScreenPresentationSupportQNX")) return (void *)table->GetPhysicalDeviceScreenPresentationSupportQNX;
 #endif // VK_USE_PLATFORM_SCREEN_QNX
-
-    // ---- VK_ARM_tensors extension commands
-    if (!strcmp(name, "GetPhysicalDeviceExternalTensorPropertiesARM")) return (void *)table->GetPhysicalDeviceExternalTensorPropertiesARM;
 
     // ---- VK_NV_optical_flow extension commands
     if (!strcmp(name, "GetPhysicalDeviceOpticalFlowImageFormatsNV")) return (void *)table->GetPhysicalDeviceOpticalFlowImageFormatsNV;
@@ -5146,23 +5107,6 @@ VKAPI_ATTR void VKAPI_CALL GetImageSubresourceLayout2KHR(
         abort(); /* Intentionally fail so user can correct issue. */
     }
     disp->GetImageSubresourceLayout2KHR(device, image, pSubresource, pLayout);
-}
-
-
-// ---- VK_KHR_present_wait2 extension trampoline/terminators
-
-VKAPI_ATTR VkResult VKAPI_CALL WaitForPresent2KHR(
-    VkDevice                                    device,
-    VkSwapchainKHR                              swapchain,
-    const VkPresentWait2InfoKHR*                pPresentWait2Info) {
-    const VkLayerDispatchTable *disp = loader_get_dispatch(device);
-    if (NULL == disp) {
-        loader_log(NULL, VULKAN_LOADER_FATAL_ERROR_BIT | VULKAN_LOADER_ERROR_BIT | VULKAN_LOADER_VALIDATION_BIT, 0,
-                   "vkWaitForPresent2KHR: Invalid device "
-                   "[VUID-vkWaitForPresent2KHR-device-parameter]");
-        abort(); /* Intentionally fail so user can correct issue. */
-    }
-    return disp->WaitForPresent2KHR(device, swapchain, pPresentWait2Info);
 }
 
 
@@ -8036,8 +7980,7 @@ VKAPI_ATTR void VKAPI_CALL CmdCudaLaunchKernelNV(
 // ---- VK_QCOM_tile_shading extension trampoline/terminators
 
 VKAPI_ATTR void VKAPI_CALL CmdDispatchTileQCOM(
-    VkCommandBuffer                             commandBuffer,
-    const VkDispatchTileInfoQCOM*               pDispatchTileInfo) {
+    VkCommandBuffer                             commandBuffer) {
     const VkLayerDispatchTable *disp = loader_get_dispatch(commandBuffer);
     if (NULL == disp) {
         loader_log(NULL, VULKAN_LOADER_FATAL_ERROR_BIT | VULKAN_LOADER_ERROR_BIT | VULKAN_LOADER_VALIDATION_BIT, 0,
@@ -8045,7 +7988,7 @@ VKAPI_ATTR void VKAPI_CALL CmdDispatchTileQCOM(
                    "[VUID-vkCmdDispatchTileQCOM-commandBuffer-parameter]");
         abort(); /* Intentionally fail so user can correct issue. */
     }
-    disp->CmdDispatchTileQCOM(commandBuffer, pDispatchTileInfo);
+    disp->CmdDispatchTileQCOM(commandBuffer);
 }
 
 VKAPI_ATTR void VKAPI_CALL CmdBeginPerTileExecutionQCOM(
@@ -9548,180 +9491,6 @@ VKAPI_ATTR void VKAPI_CALL CmdSetCoverageReductionModeNV(
 }
 
 
-// ---- VK_ARM_tensors extension trampoline/terminators
-
-VKAPI_ATTR VkResult VKAPI_CALL CreateTensorARM(
-    VkDevice                                    device,
-    const VkTensorCreateInfoARM*                pCreateInfo,
-    const VkAllocationCallbacks*                pAllocator,
-    VkTensorARM*                                pTensor) {
-    const VkLayerDispatchTable *disp = loader_get_dispatch(device);
-    if (NULL == disp) {
-        loader_log(NULL, VULKAN_LOADER_FATAL_ERROR_BIT | VULKAN_LOADER_ERROR_BIT | VULKAN_LOADER_VALIDATION_BIT, 0,
-                   "vkCreateTensorARM: Invalid device "
-                   "[VUID-vkCreateTensorARM-device-parameter]");
-        abort(); /* Intentionally fail so user can correct issue. */
-    }
-    return disp->CreateTensorARM(device, pCreateInfo, pAllocator, pTensor);
-}
-
-VKAPI_ATTR void VKAPI_CALL DestroyTensorARM(
-    VkDevice                                    device,
-    VkTensorARM                                 tensor,
-    const VkAllocationCallbacks*                pAllocator) {
-    const VkLayerDispatchTable *disp = loader_get_dispatch(device);
-    if (NULL == disp) {
-        loader_log(NULL, VULKAN_LOADER_FATAL_ERROR_BIT | VULKAN_LOADER_ERROR_BIT | VULKAN_LOADER_VALIDATION_BIT, 0,
-                   "vkDestroyTensorARM: Invalid device "
-                   "[VUID-vkDestroyTensorARM-device-parameter]");
-        abort(); /* Intentionally fail so user can correct issue. */
-    }
-    disp->DestroyTensorARM(device, tensor, pAllocator);
-}
-
-VKAPI_ATTR VkResult VKAPI_CALL CreateTensorViewARM(
-    VkDevice                                    device,
-    const VkTensorViewCreateInfoARM*            pCreateInfo,
-    const VkAllocationCallbacks*                pAllocator,
-    VkTensorViewARM*                            pView) {
-    const VkLayerDispatchTable *disp = loader_get_dispatch(device);
-    if (NULL == disp) {
-        loader_log(NULL, VULKAN_LOADER_FATAL_ERROR_BIT | VULKAN_LOADER_ERROR_BIT | VULKAN_LOADER_VALIDATION_BIT, 0,
-                   "vkCreateTensorViewARM: Invalid device "
-                   "[VUID-vkCreateTensorViewARM-device-parameter]");
-        abort(); /* Intentionally fail so user can correct issue. */
-    }
-    return disp->CreateTensorViewARM(device, pCreateInfo, pAllocator, pView);
-}
-
-VKAPI_ATTR void VKAPI_CALL DestroyTensorViewARM(
-    VkDevice                                    device,
-    VkTensorViewARM                             tensorView,
-    const VkAllocationCallbacks*                pAllocator) {
-    const VkLayerDispatchTable *disp = loader_get_dispatch(device);
-    if (NULL == disp) {
-        loader_log(NULL, VULKAN_LOADER_FATAL_ERROR_BIT | VULKAN_LOADER_ERROR_BIT | VULKAN_LOADER_VALIDATION_BIT, 0,
-                   "vkDestroyTensorViewARM: Invalid device "
-                   "[VUID-vkDestroyTensorViewARM-device-parameter]");
-        abort(); /* Intentionally fail so user can correct issue. */
-    }
-    disp->DestroyTensorViewARM(device, tensorView, pAllocator);
-}
-
-VKAPI_ATTR void VKAPI_CALL GetTensorMemoryRequirementsARM(
-    VkDevice                                    device,
-    const VkTensorMemoryRequirementsInfoARM*    pInfo,
-    VkMemoryRequirements2*                      pMemoryRequirements) {
-    const VkLayerDispatchTable *disp = loader_get_dispatch(device);
-    if (NULL == disp) {
-        loader_log(NULL, VULKAN_LOADER_FATAL_ERROR_BIT | VULKAN_LOADER_ERROR_BIT | VULKAN_LOADER_VALIDATION_BIT, 0,
-                   "vkGetTensorMemoryRequirementsARM: Invalid device "
-                   "[VUID-vkGetTensorMemoryRequirementsARM-device-parameter]");
-        abort(); /* Intentionally fail so user can correct issue. */
-    }
-    disp->GetTensorMemoryRequirementsARM(device, pInfo, pMemoryRequirements);
-}
-
-VKAPI_ATTR VkResult VKAPI_CALL BindTensorMemoryARM(
-    VkDevice                                    device,
-    uint32_t                                    bindInfoCount,
-    const VkBindTensorMemoryInfoARM*            pBindInfos) {
-    const VkLayerDispatchTable *disp = loader_get_dispatch(device);
-    if (NULL == disp) {
-        loader_log(NULL, VULKAN_LOADER_FATAL_ERROR_BIT | VULKAN_LOADER_ERROR_BIT | VULKAN_LOADER_VALIDATION_BIT, 0,
-                   "vkBindTensorMemoryARM: Invalid device "
-                   "[VUID-vkBindTensorMemoryARM-device-parameter]");
-        abort(); /* Intentionally fail so user can correct issue. */
-    }
-    return disp->BindTensorMemoryARM(device, bindInfoCount, pBindInfos);
-}
-
-VKAPI_ATTR void VKAPI_CALL GetDeviceTensorMemoryRequirementsARM(
-    VkDevice                                    device,
-    const VkDeviceTensorMemoryRequirementsARM*  pInfo,
-    VkMemoryRequirements2*                      pMemoryRequirements) {
-    const VkLayerDispatchTable *disp = loader_get_dispatch(device);
-    if (NULL == disp) {
-        loader_log(NULL, VULKAN_LOADER_FATAL_ERROR_BIT | VULKAN_LOADER_ERROR_BIT | VULKAN_LOADER_VALIDATION_BIT, 0,
-                   "vkGetDeviceTensorMemoryRequirementsARM: Invalid device "
-                   "[VUID-vkGetDeviceTensorMemoryRequirementsARM-device-parameter]");
-        abort(); /* Intentionally fail so user can correct issue. */
-    }
-    disp->GetDeviceTensorMemoryRequirementsARM(device, pInfo, pMemoryRequirements);
-}
-
-VKAPI_ATTR void VKAPI_CALL CmdCopyTensorARM(
-    VkCommandBuffer                             commandBuffer,
-     const VkCopyTensorInfoARM*                 pCopyTensorInfo) {
-    const VkLayerDispatchTable *disp = loader_get_dispatch(commandBuffer);
-    if (NULL == disp) {
-        loader_log(NULL, VULKAN_LOADER_FATAL_ERROR_BIT | VULKAN_LOADER_ERROR_BIT | VULKAN_LOADER_VALIDATION_BIT, 0,
-                   "vkCmdCopyTensorARM: Invalid commandBuffer "
-                   "[VUID-vkCmdCopyTensorARM-commandBuffer-parameter]");
-        abort(); /* Intentionally fail so user can correct issue. */
-    }
-    disp->CmdCopyTensorARM(commandBuffer, pCopyTensorInfo);
-}
-
-VKAPI_ATTR void VKAPI_CALL GetPhysicalDeviceExternalTensorPropertiesARM(
-    VkPhysicalDevice                            physicalDevice,
-    const VkPhysicalDeviceExternalTensorInfoARM* pExternalTensorInfo,
-    VkExternalTensorPropertiesARM*              pExternalTensorProperties) {
-    const VkLayerInstanceDispatchTable *disp;
-    VkPhysicalDevice unwrapped_phys_dev = loader_unwrap_physical_device(physicalDevice);
-    if (VK_NULL_HANDLE == unwrapped_phys_dev) {
-        loader_log(NULL, VULKAN_LOADER_FATAL_ERROR_BIT | VULKAN_LOADER_ERROR_BIT | VULKAN_LOADER_VALIDATION_BIT, 0,
-                   "vkGetPhysicalDeviceExternalTensorPropertiesARM: Invalid physicalDevice "
-                   "[VUID-vkGetPhysicalDeviceExternalTensorPropertiesARM-physicalDevice-parameter]");
-        abort(); /* Intentionally fail so user can correct issue. */
-    }
-    disp = loader_get_instance_layer_dispatch(physicalDevice);
-    disp->GetPhysicalDeviceExternalTensorPropertiesARM(unwrapped_phys_dev, pExternalTensorInfo, pExternalTensorProperties);
-}
-
-VKAPI_ATTR void VKAPI_CALL terminator_GetPhysicalDeviceExternalTensorPropertiesARM(
-    VkPhysicalDevice                            physicalDevice,
-    const VkPhysicalDeviceExternalTensorInfoARM* pExternalTensorInfo,
-    VkExternalTensorPropertiesARM*              pExternalTensorProperties) {
-    struct loader_physical_device_term *phys_dev_term = (struct loader_physical_device_term *)physicalDevice;
-    struct loader_icd_term *icd_term = phys_dev_term->this_icd_term;
-    if (NULL == icd_term->dispatch.GetPhysicalDeviceExternalTensorPropertiesARM) {
-        loader_log(icd_term->this_instance, VULKAN_LOADER_FATAL_ERROR_BIT | VULKAN_LOADER_ERROR_BIT, 0,
-                   "ICD associated with VkPhysicalDevice does not support GetPhysicalDeviceExternalTensorPropertiesARM");
-        abort(); /* Intentionally fail so user can correct issue. */
-    }
-    icd_term->dispatch.GetPhysicalDeviceExternalTensorPropertiesARM(phys_dev_term->phys_dev, pExternalTensorInfo, pExternalTensorProperties);
-}
-
-VKAPI_ATTR VkResult VKAPI_CALL GetTensorOpaqueCaptureDescriptorDataARM(
-    VkDevice                                    device,
-    const VkTensorCaptureDescriptorDataInfoARM* pInfo,
-    void*                                       pData) {
-    const VkLayerDispatchTable *disp = loader_get_dispatch(device);
-    if (NULL == disp) {
-        loader_log(NULL, VULKAN_LOADER_FATAL_ERROR_BIT | VULKAN_LOADER_ERROR_BIT | VULKAN_LOADER_VALIDATION_BIT, 0,
-                   "vkGetTensorOpaqueCaptureDescriptorDataARM: Invalid device "
-                   "[VUID-vkGetTensorOpaqueCaptureDescriptorDataARM-device-parameter]");
-        abort(); /* Intentionally fail so user can correct issue. */
-    }
-    return disp->GetTensorOpaqueCaptureDescriptorDataARM(device, pInfo, pData);
-}
-
-VKAPI_ATTR VkResult VKAPI_CALL GetTensorViewOpaqueCaptureDescriptorDataARM(
-    VkDevice                                    device,
-    const VkTensorViewCaptureDescriptorDataInfoARM* pInfo,
-    void*                                       pData) {
-    const VkLayerDispatchTable *disp = loader_get_dispatch(device);
-    if (NULL == disp) {
-        loader_log(NULL, VULKAN_LOADER_FATAL_ERROR_BIT | VULKAN_LOADER_ERROR_BIT | VULKAN_LOADER_VALIDATION_BIT, 0,
-                   "vkGetTensorViewOpaqueCaptureDescriptorDataARM: Invalid device "
-                   "[VUID-vkGetTensorViewOpaqueCaptureDescriptorDataARM-device-parameter]");
-        abort(); /* Intentionally fail so user can correct issue. */
-    }
-    return disp->GetTensorViewOpaqueCaptureDescriptorDataARM(device, pInfo, pData);
-}
-
-
 // ---- VK_EXT_shader_module_identifier extension trampoline/terminators
 
 VKAPI_ATTR void VKAPI_CALL GetShaderModuleIdentifierEXT(
@@ -10944,43 +10713,43 @@ bool extension_instance_gpa(struct loader_instance *ptr_instance, const char *na
 
     // ---- VK_KHR_get_physical_device_properties2 extension commands
     if (!strcmp("vkGetPhysicalDeviceFeatures2KHR", name)) {
-        *addr = (ptr_instance->enabled_extensions.khr_get_physical_device_properties2 == 1)
+        *addr = (ptr_instance->enabled_known_extensions.khr_get_physical_device_properties2 == 1)
                      ? (void *)vkGetPhysicalDeviceFeatures2
                      : NULL;
         return true;
     }
     if (!strcmp("vkGetPhysicalDeviceProperties2KHR", name)) {
-        *addr = (ptr_instance->enabled_extensions.khr_get_physical_device_properties2 == 1)
+        *addr = (ptr_instance->enabled_known_extensions.khr_get_physical_device_properties2 == 1)
                      ? (void *)vkGetPhysicalDeviceProperties2
                      : NULL;
         return true;
     }
     if (!strcmp("vkGetPhysicalDeviceFormatProperties2KHR", name)) {
-        *addr = (ptr_instance->enabled_extensions.khr_get_physical_device_properties2 == 1)
+        *addr = (ptr_instance->enabled_known_extensions.khr_get_physical_device_properties2 == 1)
                      ? (void *)vkGetPhysicalDeviceFormatProperties2
                      : NULL;
         return true;
     }
     if (!strcmp("vkGetPhysicalDeviceImageFormatProperties2KHR", name)) {
-        *addr = (ptr_instance->enabled_extensions.khr_get_physical_device_properties2 == 1)
+        *addr = (ptr_instance->enabled_known_extensions.khr_get_physical_device_properties2 == 1)
                      ? (void *)vkGetPhysicalDeviceImageFormatProperties2
                      : NULL;
         return true;
     }
     if (!strcmp("vkGetPhysicalDeviceQueueFamilyProperties2KHR", name)) {
-        *addr = (ptr_instance->enabled_extensions.khr_get_physical_device_properties2 == 1)
+        *addr = (ptr_instance->enabled_known_extensions.khr_get_physical_device_properties2 == 1)
                      ? (void *)vkGetPhysicalDeviceQueueFamilyProperties2
                      : NULL;
         return true;
     }
     if (!strcmp("vkGetPhysicalDeviceMemoryProperties2KHR", name)) {
-        *addr = (ptr_instance->enabled_extensions.khr_get_physical_device_properties2 == 1)
+        *addr = (ptr_instance->enabled_known_extensions.khr_get_physical_device_properties2 == 1)
                      ? (void *)vkGetPhysicalDeviceMemoryProperties2
                      : NULL;
         return true;
     }
     if (!strcmp("vkGetPhysicalDeviceSparseImageFormatProperties2KHR", name)) {
-        *addr = (ptr_instance->enabled_extensions.khr_get_physical_device_properties2 == 1)
+        *addr = (ptr_instance->enabled_known_extensions.khr_get_physical_device_properties2 == 1)
                      ? (void *)vkGetPhysicalDeviceSparseImageFormatProperties2
                      : NULL;
         return true;
@@ -11008,7 +10777,7 @@ bool extension_instance_gpa(struct loader_instance *ptr_instance, const char *na
 
     // ---- VK_KHR_device_group_creation extension commands
     if (!strcmp("vkEnumeratePhysicalDeviceGroupsKHR", name)) {
-        *addr = (ptr_instance->enabled_extensions.khr_device_group_creation == 1)
+        *addr = (ptr_instance->enabled_known_extensions.khr_device_group_creation == 1)
                      ? (void *)vkEnumeratePhysicalDeviceGroups
                      : NULL;
         return true;
@@ -11016,7 +10785,7 @@ bool extension_instance_gpa(struct loader_instance *ptr_instance, const char *na
 
     // ---- VK_KHR_external_memory_capabilities extension commands
     if (!strcmp("vkGetPhysicalDeviceExternalBufferPropertiesKHR", name)) {
-        *addr = (ptr_instance->enabled_extensions.khr_external_memory_capabilities == 1)
+        *addr = (ptr_instance->enabled_known_extensions.khr_external_memory_capabilities == 1)
                      ? (void *)vkGetPhysicalDeviceExternalBufferProperties
                      : NULL;
         return true;
@@ -11048,7 +10817,7 @@ bool extension_instance_gpa(struct loader_instance *ptr_instance, const char *na
 
     // ---- VK_KHR_external_semaphore_capabilities extension commands
     if (!strcmp("vkGetPhysicalDeviceExternalSemaphorePropertiesKHR", name)) {
-        *addr = (ptr_instance->enabled_extensions.khr_external_semaphore_capabilities == 1)
+        *addr = (ptr_instance->enabled_known_extensions.khr_external_semaphore_capabilities == 1)
                      ? (void *)vkGetPhysicalDeviceExternalSemaphoreProperties
                      : NULL;
         return true;
@@ -11128,7 +10897,7 @@ bool extension_instance_gpa(struct loader_instance *ptr_instance, const char *na
 
     // ---- VK_KHR_external_fence_capabilities extension commands
     if (!strcmp("vkGetPhysicalDeviceExternalFencePropertiesKHR", name)) {
-        *addr = (ptr_instance->enabled_extensions.khr_external_fence_capabilities == 1)
+        *addr = (ptr_instance->enabled_known_extensions.khr_external_fence_capabilities == 1)
                      ? (void *)vkGetPhysicalDeviceExternalFenceProperties
                      : NULL;
         return true;
@@ -11430,12 +11199,6 @@ bool extension_instance_gpa(struct loader_instance *ptr_instance, const char *na
         return true;
     }
 
-    // ---- VK_KHR_present_wait2 extension commands
-    if (!strcmp("vkWaitForPresent2KHR", name)) {
-        *addr = (void *)WaitForPresent2KHR;
-        return true;
-    }
-
     // ---- VK_KHR_pipeline_binary extension commands
     if (!strcmp("vkCreatePipelineBinariesKHR", name)) {
         *addr = (void *)CreatePipelineBinariesKHR;
@@ -11608,7 +11371,7 @@ bool extension_instance_gpa(struct loader_instance *ptr_instance, const char *na
 
     // ---- VK_NV_external_memory_capabilities extension commands
     if (!strcmp("vkGetPhysicalDeviceExternalImageFormatPropertiesNV", name)) {
-        *addr = (ptr_instance->enabled_extensions.nv_external_memory_capabilities == 1)
+        *addr = (ptr_instance->enabled_known_extensions.nv_external_memory_capabilities == 1)
                      ? (void *)GetPhysicalDeviceExternalImageFormatPropertiesNV
                      : NULL;
         return true;
@@ -11640,7 +11403,7 @@ bool extension_instance_gpa(struct loader_instance *ptr_instance, const char *na
 
     // ---- VK_EXT_direct_mode_display extension commands
     if (!strcmp("vkReleaseDisplayEXT", name)) {
-        *addr = (ptr_instance->enabled_extensions.ext_direct_mode_display == 1)
+        *addr = (ptr_instance->enabled_known_extensions.ext_direct_mode_display == 1)
                      ? (void *)ReleaseDisplayEXT
                      : NULL;
         return true;
@@ -11649,7 +11412,7 @@ bool extension_instance_gpa(struct loader_instance *ptr_instance, const char *na
     // ---- VK_EXT_acquire_xlib_display extension commands
 #if defined(VK_USE_PLATFORM_XLIB_XRANDR_EXT)
     if (!strcmp("vkAcquireXlibDisplayEXT", name)) {
-        *addr = (ptr_instance->enabled_extensions.ext_acquire_xlib_display == 1)
+        *addr = (ptr_instance->enabled_known_extensions.ext_acquire_xlib_display == 1)
                      ? (void *)AcquireXlibDisplayEXT
                      : NULL;
         return true;
@@ -11657,7 +11420,7 @@ bool extension_instance_gpa(struct loader_instance *ptr_instance, const char *na
 #endif // VK_USE_PLATFORM_XLIB_XRANDR_EXT
 #if defined(VK_USE_PLATFORM_XLIB_XRANDR_EXT)
     if (!strcmp("vkGetRandROutputDisplayEXT", name)) {
-        *addr = (ptr_instance->enabled_extensions.ext_acquire_xlib_display == 1)
+        *addr = (ptr_instance->enabled_known_extensions.ext_acquire_xlib_display == 1)
                      ? (void *)GetRandROutputDisplayEXT
                      : NULL;
         return true;
@@ -11666,7 +11429,7 @@ bool extension_instance_gpa(struct loader_instance *ptr_instance, const char *na
 
     // ---- VK_EXT_display_surface_counter extension commands
     if (!strcmp("vkGetPhysicalDeviceSurfaceCapabilities2EXT", name)) {
-        *addr = (ptr_instance->enabled_extensions.ext_display_surface_counter == 1)
+        *addr = (ptr_instance->enabled_known_extensions.ext_display_surface_counter == 1)
                      ? (void *)GetPhysicalDeviceSurfaceCapabilities2EXT
                      : NULL;
         return true;
@@ -11722,49 +11485,49 @@ bool extension_instance_gpa(struct loader_instance *ptr_instance, const char *na
 
     // ---- VK_EXT_debug_utils extension commands
     if (!strcmp("vkSetDebugUtilsObjectNameEXT", name)) {
-        *addr = (ptr_instance->enabled_extensions.ext_debug_utils == 1)
+        *addr = (ptr_instance->enabled_known_extensions.ext_debug_utils == 1)
                      ? (void *)SetDebugUtilsObjectNameEXT
                      : NULL;
         return true;
     }
     if (!strcmp("vkSetDebugUtilsObjectTagEXT", name)) {
-        *addr = (ptr_instance->enabled_extensions.ext_debug_utils == 1)
+        *addr = (ptr_instance->enabled_known_extensions.ext_debug_utils == 1)
                      ? (void *)SetDebugUtilsObjectTagEXT
                      : NULL;
         return true;
     }
     if (!strcmp("vkQueueBeginDebugUtilsLabelEXT", name)) {
-        *addr = (ptr_instance->enabled_extensions.ext_debug_utils == 1)
+        *addr = (ptr_instance->enabled_known_extensions.ext_debug_utils == 1)
                      ? (void *)QueueBeginDebugUtilsLabelEXT
                      : NULL;
         return true;
     }
     if (!strcmp("vkQueueEndDebugUtilsLabelEXT", name)) {
-        *addr = (ptr_instance->enabled_extensions.ext_debug_utils == 1)
+        *addr = (ptr_instance->enabled_known_extensions.ext_debug_utils == 1)
                      ? (void *)QueueEndDebugUtilsLabelEXT
                      : NULL;
         return true;
     }
     if (!strcmp("vkQueueInsertDebugUtilsLabelEXT", name)) {
-        *addr = (ptr_instance->enabled_extensions.ext_debug_utils == 1)
+        *addr = (ptr_instance->enabled_known_extensions.ext_debug_utils == 1)
                      ? (void *)QueueInsertDebugUtilsLabelEXT
                      : NULL;
         return true;
     }
     if (!strcmp("vkCmdBeginDebugUtilsLabelEXT", name)) {
-        *addr = (ptr_instance->enabled_extensions.ext_debug_utils == 1)
+        *addr = (ptr_instance->enabled_known_extensions.ext_debug_utils == 1)
                      ? (void *)CmdBeginDebugUtilsLabelEXT
                      : NULL;
         return true;
     }
     if (!strcmp("vkCmdEndDebugUtilsLabelEXT", name)) {
-        *addr = (ptr_instance->enabled_extensions.ext_debug_utils == 1)
+        *addr = (ptr_instance->enabled_known_extensions.ext_debug_utils == 1)
                      ? (void *)CmdEndDebugUtilsLabelEXT
                      : NULL;
         return true;
     }
     if (!strcmp("vkCmdInsertDebugUtilsLabelEXT", name)) {
-        *addr = (ptr_instance->enabled_extensions.ext_debug_utils == 1)
+        *addr = (ptr_instance->enabled_known_extensions.ext_debug_utils == 1)
                      ? (void *)CmdInsertDebugUtilsLabelEXT
                      : NULL;
         return true;
@@ -12216,13 +11979,13 @@ bool extension_instance_gpa(struct loader_instance *ptr_instance, const char *na
 
     // ---- VK_EXT_acquire_drm_display extension commands
     if (!strcmp("vkAcquireDrmDisplayEXT", name)) {
-        *addr = (ptr_instance->enabled_extensions.ext_acquire_drm_display == 1)
+        *addr = (ptr_instance->enabled_known_extensions.ext_acquire_drm_display == 1)
                      ? (void *)AcquireDrmDisplayEXT
                      : NULL;
         return true;
     }
     if (!strcmp("vkGetDrmDisplayEXT", name)) {
-        *addr = (ptr_instance->enabled_extensions.ext_acquire_drm_display == 1)
+        *addr = (ptr_instance->enabled_known_extensions.ext_acquire_drm_display == 1)
                      ? (void *)GetDrmDisplayEXT
                      : NULL;
         return true;
@@ -12754,52 +12517,6 @@ bool extension_instance_gpa(struct loader_instance *ptr_instance, const char *na
         return true;
     }
 
-    // ---- VK_ARM_tensors extension commands
-    if (!strcmp("vkCreateTensorARM", name)) {
-        *addr = (void *)CreateTensorARM;
-        return true;
-    }
-    if (!strcmp("vkDestroyTensorARM", name)) {
-        *addr = (void *)DestroyTensorARM;
-        return true;
-    }
-    if (!strcmp("vkCreateTensorViewARM", name)) {
-        *addr = (void *)CreateTensorViewARM;
-        return true;
-    }
-    if (!strcmp("vkDestroyTensorViewARM", name)) {
-        *addr = (void *)DestroyTensorViewARM;
-        return true;
-    }
-    if (!strcmp("vkGetTensorMemoryRequirementsARM", name)) {
-        *addr = (void *)GetTensorMemoryRequirementsARM;
-        return true;
-    }
-    if (!strcmp("vkBindTensorMemoryARM", name)) {
-        *addr = (void *)BindTensorMemoryARM;
-        return true;
-    }
-    if (!strcmp("vkGetDeviceTensorMemoryRequirementsARM", name)) {
-        *addr = (void *)GetDeviceTensorMemoryRequirementsARM;
-        return true;
-    }
-    if (!strcmp("vkCmdCopyTensorARM", name)) {
-        *addr = (void *)CmdCopyTensorARM;
-        return true;
-    }
-    if (!strcmp("vkGetPhysicalDeviceExternalTensorPropertiesARM", name)) {
-        *addr = (void *)GetPhysicalDeviceExternalTensorPropertiesARM;
-        return true;
-    }
-    if (!strcmp("vkGetTensorOpaqueCaptureDescriptorDataARM", name)) {
-        *addr = (void *)GetTensorOpaqueCaptureDescriptorDataARM;
-        return true;
-    }
-    if (!strcmp("vkGetTensorViewOpaqueCaptureDescriptorDataARM", name)) {
-        *addr = (void *)GetTensorViewOpaqueCaptureDescriptorDataARM;
-        return true;
-    }
-
     // ---- VK_EXT_shader_module_identifier extension commands
     if (!strcmp("vkGetShaderModuleIdentifierEXT", name)) {
         *addr = (void *)GetShaderModuleIdentifierEXT;
@@ -13132,157 +12849,56 @@ bool extension_instance_gpa(struct loader_instance *ptr_instance, const char *na
     return false;
 }
 
-// Used to keep track of all enabled instance extensions
-void fill_out_enabled_instance_extensions(uint32_t extension_count, const char *const * extension_list, struct loader_instance_extension_enable_list* enables) {
-    for (uint32_t i = 0; i < extension_count; i++) {
-
-    // ---- VK_KHR_surface extension commands
-        if (0 == strcmp(extension_list[i], VK_KHR_SURFACE_EXTENSION_NAME)) { enables->khr_surface = 1; }
-
-    // ---- VK_KHR_display extension commands
-        else if (0 == strcmp(extension_list[i], VK_KHR_DISPLAY_EXTENSION_NAME)) { enables->khr_display = 1; }
-
-    // ---- VK_KHR_xlib_surface extension commands
-#if defined(VK_USE_PLATFORM_XLIB_KHR)
-        else if (0 == strcmp(extension_list[i], VK_KHR_XLIB_SURFACE_EXTENSION_NAME)) { enables->khr_xlib_surface = 1; }
-#endif // VK_USE_PLATFORM_XLIB_KHR
-
-    // ---- VK_KHR_xcb_surface extension commands
-#if defined(VK_USE_PLATFORM_XCB_KHR)
-        else if (0 == strcmp(extension_list[i], VK_KHR_XCB_SURFACE_EXTENSION_NAME)) { enables->khr_xcb_surface = 1; }
-#endif // VK_USE_PLATFORM_XCB_KHR
-
-    // ---- VK_KHR_wayland_surface extension commands
-#if defined(VK_USE_PLATFORM_WAYLAND_KHR)
-        else if (0 == strcmp(extension_list[i], VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME)) { enables->khr_wayland_surface = 1; }
-#endif // VK_USE_PLATFORM_WAYLAND_KHR
-
-    // ---- VK_KHR_android_surface extension commands
-#if defined(VK_USE_PLATFORM_ANDROID_KHR)
-        else if (0 == strcmp(extension_list[i], VK_KHR_ANDROID_SURFACE_EXTENSION_NAME)) { enables->khr_android_surface = 1; }
-#endif // VK_USE_PLATFORM_ANDROID_KHR
-
-    // ---- VK_KHR_win32_surface extension commands
-#if defined(VK_USE_PLATFORM_WIN32_KHR)
-        else if (0 == strcmp(extension_list[i], VK_KHR_WIN32_SURFACE_EXTENSION_NAME)) { enables->khr_win32_surface = 1; }
-#endif // VK_USE_PLATFORM_WIN32_KHR
+// A function that can be used to query enabled extensions during a vkCreateInstance call
+void extensions_create_instance(struct loader_instance *ptr_instance, const VkInstanceCreateInfo *pCreateInfo) {
+    for (uint32_t i = 0; i < pCreateInfo->enabledExtensionCount; i++) {
 
     // ---- VK_KHR_get_physical_device_properties2 extension commands
-        else if (0 == strcmp(extension_list[i], VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) { enables->khr_get_physical_device_properties2 = 1; }
+        if (0 == strcmp(pCreateInfo->ppEnabledExtensionNames[i], VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
+            ptr_instance->enabled_known_extensions.khr_get_physical_device_properties2 = 1;
 
     // ---- VK_KHR_device_group_creation extension commands
-        else if (0 == strcmp(extension_list[i], VK_KHR_DEVICE_GROUP_CREATION_EXTENSION_NAME)) { enables->khr_device_group_creation = 1; }
+        } else if (0 == strcmp(pCreateInfo->ppEnabledExtensionNames[i], VK_KHR_DEVICE_GROUP_CREATION_EXTENSION_NAME)) {
+            ptr_instance->enabled_known_extensions.khr_device_group_creation = 1;
 
     // ---- VK_KHR_external_memory_capabilities extension commands
-        else if (0 == strcmp(extension_list[i], VK_KHR_EXTERNAL_MEMORY_CAPABILITIES_EXTENSION_NAME)) { enables->khr_external_memory_capabilities = 1; }
+        } else if (0 == strcmp(pCreateInfo->ppEnabledExtensionNames[i], VK_KHR_EXTERNAL_MEMORY_CAPABILITIES_EXTENSION_NAME)) {
+            ptr_instance->enabled_known_extensions.khr_external_memory_capabilities = 1;
 
     // ---- VK_KHR_external_semaphore_capabilities extension commands
-        else if (0 == strcmp(extension_list[i], VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_EXTENSION_NAME)) { enables->khr_external_semaphore_capabilities = 1; }
+        } else if (0 == strcmp(pCreateInfo->ppEnabledExtensionNames[i], VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_EXTENSION_NAME)) {
+            ptr_instance->enabled_known_extensions.khr_external_semaphore_capabilities = 1;
 
     // ---- VK_KHR_external_fence_capabilities extension commands
-        else if (0 == strcmp(extension_list[i], VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME)) { enables->khr_external_fence_capabilities = 1; }
-
-    // ---- VK_KHR_get_surface_capabilities2 extension commands
-        else if (0 == strcmp(extension_list[i], VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME)) { enables->khr_get_surface_capabilities2 = 1; }
-
-    // ---- VK_KHR_get_display_properties2 extension commands
-        else if (0 == strcmp(extension_list[i], VK_KHR_GET_DISPLAY_PROPERTIES_2_EXTENSION_NAME)) { enables->khr_get_display_properties2 = 1; }
-
-    // ---- VK_KHR_surface_protected_capabilities extension commands
-        else if (0 == strcmp(extension_list[i], VK_KHR_SURFACE_PROTECTED_CAPABILITIES_EXTENSION_NAME)) { enables->khr_surface_protected_capabilities = 1; }
-
-    // ---- VK_KHR_portability_enumeration extension commands
-        else if (0 == strcmp(extension_list[i], VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME)) { enables->khr_portability_enumeration = 1; }
-
-    // ---- VK_EXT_debug_report extension commands
-        else if (0 == strcmp(extension_list[i], VK_EXT_DEBUG_REPORT_EXTENSION_NAME)) { enables->ext_debug_report = 1; }
-
-    // ---- VK_GGP_stream_descriptor_surface extension commands
-#if defined(VK_USE_PLATFORM_GGP)
-        else if (0 == strcmp(extension_list[i], VK_GGP_STREAM_DESCRIPTOR_SURFACE_EXTENSION_NAME)) { enables->ggp_stream_descriptor_surface = 1; }
-#endif // VK_USE_PLATFORM_GGP
+        } else if (0 == strcmp(pCreateInfo->ppEnabledExtensionNames[i], VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME)) {
+            ptr_instance->enabled_known_extensions.khr_external_fence_capabilities = 1;
 
     // ---- VK_NV_external_memory_capabilities extension commands
-        else if (0 == strcmp(extension_list[i], VK_NV_EXTERNAL_MEMORY_CAPABILITIES_EXTENSION_NAME)) { enables->nv_external_memory_capabilities = 1; }
-
-    // ---- VK_EXT_validation_flags extension commands
-        else if (0 == strcmp(extension_list[i], VK_EXT_VALIDATION_FLAGS_EXTENSION_NAME)) { enables->ext_validation_flags = 1; }
-
-    // ---- VK_NN_vi_surface extension commands
-#if defined(VK_USE_PLATFORM_VI_NN)
-        else if (0 == strcmp(extension_list[i], VK_NN_VI_SURFACE_EXTENSION_NAME)) { enables->nn_vi_surface = 1; }
-#endif // VK_USE_PLATFORM_VI_NN
+        } else if (0 == strcmp(pCreateInfo->ppEnabledExtensionNames[i], VK_NV_EXTERNAL_MEMORY_CAPABILITIES_EXTENSION_NAME)) {
+            ptr_instance->enabled_known_extensions.nv_external_memory_capabilities = 1;
 
     // ---- VK_EXT_direct_mode_display extension commands
-        else if (0 == strcmp(extension_list[i], VK_EXT_DIRECT_MODE_DISPLAY_EXTENSION_NAME)) { enables->ext_direct_mode_display = 1; }
+        } else if (0 == strcmp(pCreateInfo->ppEnabledExtensionNames[i], VK_EXT_DIRECT_MODE_DISPLAY_EXTENSION_NAME)) {
+            ptr_instance->enabled_known_extensions.ext_direct_mode_display = 1;
 
     // ---- VK_EXT_acquire_xlib_display extension commands
 #if defined(VK_USE_PLATFORM_XLIB_XRANDR_EXT)
-        else if (0 == strcmp(extension_list[i], VK_EXT_ACQUIRE_XLIB_DISPLAY_EXTENSION_NAME)) { enables->ext_acquire_xlib_display = 1; }
+        } else if (0 == strcmp(pCreateInfo->ppEnabledExtensionNames[i], VK_EXT_ACQUIRE_XLIB_DISPLAY_EXTENSION_NAME)) {
+            ptr_instance->enabled_known_extensions.ext_acquire_xlib_display = 1;
 #endif // VK_USE_PLATFORM_XLIB_XRANDR_EXT
 
     // ---- VK_EXT_display_surface_counter extension commands
-        else if (0 == strcmp(extension_list[i], VK_EXT_DISPLAY_SURFACE_COUNTER_EXTENSION_NAME)) { enables->ext_display_surface_counter = 1; }
-
-    // ---- VK_EXT_swapchain_colorspace extension commands
-        else if (0 == strcmp(extension_list[i], VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME)) { enables->ext_swapchain_colorspace = 1; }
-
-    // ---- VK_MVK_ios_surface extension commands
-#if defined(VK_USE_PLATFORM_IOS_MVK)
-        else if (0 == strcmp(extension_list[i], VK_MVK_IOS_SURFACE_EXTENSION_NAME)) { enables->mvk_ios_surface = 1; }
-#endif // VK_USE_PLATFORM_IOS_MVK
-
-    // ---- VK_MVK_macos_surface extension commands
-#if defined(VK_USE_PLATFORM_MACOS_MVK)
-        else if (0 == strcmp(extension_list[i], VK_MVK_MACOS_SURFACE_EXTENSION_NAME)) { enables->mvk_macos_surface = 1; }
-#endif // VK_USE_PLATFORM_MACOS_MVK
+        } else if (0 == strcmp(pCreateInfo->ppEnabledExtensionNames[i], VK_EXT_DISPLAY_SURFACE_COUNTER_EXTENSION_NAME)) {
+            ptr_instance->enabled_known_extensions.ext_display_surface_counter = 1;
 
     // ---- VK_EXT_debug_utils extension commands
-        else if (0 == strcmp(extension_list[i], VK_EXT_DEBUG_UTILS_EXTENSION_NAME)) { enables->ext_debug_utils = 1; }
-
-    // ---- VK_FUCHSIA_imagepipe_surface extension commands
-#if defined(VK_USE_PLATFORM_FUCHSIA)
-        else if (0 == strcmp(extension_list[i], VK_FUCHSIA_IMAGEPIPE_SURFACE_EXTENSION_NAME)) { enables->fuchsia_imagepipe_surface = 1; }
-#endif // VK_USE_PLATFORM_FUCHSIA
-
-    // ---- VK_EXT_metal_surface extension commands
-#if defined(VK_USE_PLATFORM_METAL_EXT)
-        else if (0 == strcmp(extension_list[i], VK_EXT_METAL_SURFACE_EXTENSION_NAME)) { enables->ext_metal_surface = 1; }
-#endif // VK_USE_PLATFORM_METAL_EXT
-
-    // ---- VK_EXT_validation_features extension commands
-        else if (0 == strcmp(extension_list[i], VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME)) { enables->ext_validation_features = 1; }
-
-    // ---- VK_EXT_headless_surface extension commands
-        else if (0 == strcmp(extension_list[i], VK_EXT_HEADLESS_SURFACE_EXTENSION_NAME)) { enables->ext_headless_surface = 1; }
-
-    // ---- VK_EXT_surface_maintenance1 extension commands
-        else if (0 == strcmp(extension_list[i], VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME)) { enables->ext_surface_maintenance1 = 1; }
+        } else if (0 == strcmp(pCreateInfo->ppEnabledExtensionNames[i], VK_EXT_DEBUG_UTILS_EXTENSION_NAME)) {
+            ptr_instance->enabled_known_extensions.ext_debug_utils = 1;
 
     // ---- VK_EXT_acquire_drm_display extension commands
-        else if (0 == strcmp(extension_list[i], VK_EXT_ACQUIRE_DRM_DISPLAY_EXTENSION_NAME)) { enables->ext_acquire_drm_display = 1; }
-
-    // ---- VK_EXT_directfb_surface extension commands
-#if defined(VK_USE_PLATFORM_DIRECTFB_EXT)
-        else if (0 == strcmp(extension_list[i], VK_EXT_DIRECTFB_SURFACE_EXTENSION_NAME)) { enables->ext_directfb_surface = 1; }
-#endif // VK_USE_PLATFORM_DIRECTFB_EXT
-
-    // ---- VK_QNX_screen_surface extension commands
-#if defined(VK_USE_PLATFORM_SCREEN_QNX)
-        else if (0 == strcmp(extension_list[i], VK_QNX_SCREEN_SURFACE_EXTENSION_NAME)) { enables->qnx_screen_surface = 1; }
-#endif // VK_USE_PLATFORM_SCREEN_QNX
-
-    // ---- VK_GOOGLE_surfaceless_query extension commands
-        else if (0 == strcmp(extension_list[i], VK_GOOGLE_SURFACELESS_QUERY_EXTENSION_NAME)) { enables->google_surfaceless_query = 1; }
-
-    // ---- VK_LUNARG_direct_driver_loading extension commands
-        else if (0 == strcmp(extension_list[i], VK_LUNARG_DIRECT_DRIVER_LOADING_EXTENSION_NAME)) { enables->lunarg_direct_driver_loading = 1; }
-
-    // ---- VK_EXT_layer_settings extension commands
-        else if (0 == strcmp(extension_list[i], VK_EXT_LAYER_SETTINGS_EXTENSION_NAME)) { enables->ext_layer_settings = 1; }
-
-    // ---- VK_NV_display_stereo extension commands
-        else if (0 == strcmp(extension_list[i], VK_NV_DISPLAY_STEREO_EXTENSION_NAME)) { enables->nv_display_stereo = 1; }
+        } else if (0 == strcmp(pCreateInfo->ppEnabledExtensionNames[i], VK_EXT_ACQUIRE_DRM_DISPLAY_EXTENSION_NAME)) {
+            ptr_instance->enabled_known_extensions.ext_acquire_drm_display = 1;
+        }
     }
 }
 
@@ -13624,9 +13240,6 @@ const VkLayerInstanceDispatchTable instance_disp = {
 #if defined(VK_USE_PLATFORM_SCREEN_QNX)
     .GetPhysicalDeviceScreenPresentationSupportQNX = terminator_GetPhysicalDeviceScreenPresentationSupportQNX,
 #endif // VK_USE_PLATFORM_SCREEN_QNX
-
-    // ---- VK_ARM_tensors extension commands
-    .GetPhysicalDeviceExternalTensorPropertiesARM = terminator_GetPhysicalDeviceExternalTensorPropertiesARM,
 
     // ---- VK_NV_optical_flow extension commands
     .GetPhysicalDeviceOpticalFlowImageFormatsNV = terminator_GetPhysicalDeviceOpticalFlowImageFormatsNV,

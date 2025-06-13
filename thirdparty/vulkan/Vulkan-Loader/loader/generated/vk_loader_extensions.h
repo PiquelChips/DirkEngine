@@ -47,12 +47,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkDevExtError(VkDevice dev);
 // the appropriate information for any instance extensions we know about.
 bool extension_instance_gpa(struct loader_instance *ptr_instance, const char *name, void **addr);
 
-struct loader_instance_extension_enable_list; // Forward declaration
-
 // Extension interception for vkCreateInstance function, so we can properly
 // detect and enable any instance extension information for extensions we know
 // about.
-void fill_out_enabled_instance_extensions(uint32_t extension_count, const char *const * extension_list, struct loader_instance_extension_enable_list* enables);
+void extensions_create_instance(struct loader_instance *ptr_instance, const VkInstanceCreateInfo *pCreateInfo);
 
 // Extension interception for vkGetDeviceProcAddr function, so we can return
 // an appropriate terminator if this is one of those few device commands requiring
@@ -477,9 +475,6 @@ struct loader_icd_term_dispatch {
     PFN_vkGetPhysicalDeviceScreenPresentationSupportQNX GetPhysicalDeviceScreenPresentationSupportQNX;
 #endif // VK_USE_PLATFORM_SCREEN_QNX
 
-    // ---- VK_ARM_tensors extension commands
-    PFN_vkGetPhysicalDeviceExternalTensorPropertiesARM GetPhysicalDeviceExternalTensorPropertiesARM;
-
     // ---- VK_NV_optical_flow extension commands
     PFN_vkGetPhysicalDeviceOpticalFlowImageFormatsNV GetPhysicalDeviceOpticalFlowImageFormatsNV;
 
@@ -490,75 +485,19 @@ struct loader_icd_term_dispatch {
     PFN_vkGetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV GetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV;
 };
 
-struct loader_instance_extension_enable_list {
-    uint8_t khr_surface;
-    uint8_t khr_display;
-#if defined(VK_USE_PLATFORM_XLIB_KHR)
-    uint8_t khr_xlib_surface;
-#endif // defined(VK_USE_PLATFORM_XLIB_KHR)
-#if defined(VK_USE_PLATFORM_XCB_KHR)
-    uint8_t khr_xcb_surface;
-#endif // defined(VK_USE_PLATFORM_XCB_KHR)
-#if defined(VK_USE_PLATFORM_WAYLAND_KHR)
-    uint8_t khr_wayland_surface;
-#endif // defined(VK_USE_PLATFORM_WAYLAND_KHR)
-#if defined(VK_USE_PLATFORM_ANDROID_KHR)
-    uint8_t khr_android_surface;
-#endif // defined(VK_USE_PLATFORM_ANDROID_KHR)
-#if defined(VK_USE_PLATFORM_WIN32_KHR)
-    uint8_t khr_win32_surface;
-#endif // defined(VK_USE_PLATFORM_WIN32_KHR)
+struct loader_instance_extension_enables {
     uint8_t khr_get_physical_device_properties2;
     uint8_t khr_device_group_creation;
     uint8_t khr_external_memory_capabilities;
     uint8_t khr_external_semaphore_capabilities;
     uint8_t khr_external_fence_capabilities;
-    uint8_t khr_get_surface_capabilities2;
-    uint8_t khr_get_display_properties2;
-    uint8_t khr_surface_protected_capabilities;
-    uint8_t khr_portability_enumeration;
     uint8_t ext_debug_report;
-#if defined(VK_USE_PLATFORM_GGP)
-    uint8_t ggp_stream_descriptor_surface;
-#endif // defined(VK_USE_PLATFORM_GGP)
     uint8_t nv_external_memory_capabilities;
-    uint8_t ext_validation_flags;
-#if defined(VK_USE_PLATFORM_VI_NN)
-    uint8_t nn_vi_surface;
-#endif // defined(VK_USE_PLATFORM_VI_NN)
     uint8_t ext_direct_mode_display;
-#if defined(VK_USE_PLATFORM_XLIB_XRANDR_EXT)
     uint8_t ext_acquire_xlib_display;
-#endif // defined(VK_USE_PLATFORM_XLIB_XRANDR_EXT)
     uint8_t ext_display_surface_counter;
-    uint8_t ext_swapchain_colorspace;
-#if defined(VK_USE_PLATFORM_IOS_MVK)
-    uint8_t mvk_ios_surface;
-#endif // defined(VK_USE_PLATFORM_IOS_MVK)
-#if defined(VK_USE_PLATFORM_MACOS_MVK)
-    uint8_t mvk_macos_surface;
-#endif // defined(VK_USE_PLATFORM_MACOS_MVK)
     uint8_t ext_debug_utils;
-#if defined(VK_USE_PLATFORM_FUCHSIA)
-    uint8_t fuchsia_imagepipe_surface;
-#endif // defined(VK_USE_PLATFORM_FUCHSIA)
-#if defined(VK_USE_PLATFORM_METAL_EXT)
-    uint8_t ext_metal_surface;
-#endif // defined(VK_USE_PLATFORM_METAL_EXT)
-    uint8_t ext_validation_features;
-    uint8_t ext_headless_surface;
-    uint8_t ext_surface_maintenance1;
     uint8_t ext_acquire_drm_display;
-#if defined(VK_USE_PLATFORM_DIRECTFB_EXT)
-    uint8_t ext_directfb_surface;
-#endif // defined(VK_USE_PLATFORM_DIRECTFB_EXT)
-#if defined(VK_USE_PLATFORM_SCREEN_QNX)
-    uint8_t qnx_screen_surface;
-#endif // defined(VK_USE_PLATFORM_SCREEN_QNX)
-    uint8_t google_surfaceless_query;
-    uint8_t lunarg_direct_driver_loading;
-    uint8_t ext_layer_settings;
-    uint8_t nv_display_stereo;
 };
 
 // Functions that required a terminator need to have a separate dispatch table which contains their corresponding

@@ -7,7 +7,7 @@
  */
 #include <vulkan/vulkan.hpp>
 
-int test_version()
+int header_version()
 {
-    return static_cast<int>(vk::makeApiVersion(1, 0, 0, 0));
+    return VK_HEADER_VERSION;
 }
