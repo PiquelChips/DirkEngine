@@ -8,21 +8,23 @@ pub struct Logger {
 }
 
 impl Logger {
-    pub fn init(enable: bool, verbose: bool, prefix: bool) {
+    pub fn new(enable: bool, verbose: bool, prefix: bool) -> Box<Logger> {
         let max_level = if verbose { Level::Trace } else { Level::Info };
-        let logger = Box::new(Logger {
+        Box::new(Logger {
             enable,
             max_level,
             prefix,
-        });
-
-        let max_level = logger.max_level().to_level_filter();
-        log::set_boxed_logger(logger).unwrap(); // logger should not have already been set
-        log::set_max_level(max_level);
+        })
     }
     pub fn max_level(&self) -> Level {
         self.max_level
     }
+}
+
+pub fn init(logger: Box<Logger>) {
+    let max_level = logger.max_level().to_level_filter();
+    log::set_boxed_logger(logger).unwrap(); // logger should not have already been set
+    log::set_max_level(max_level);
 }
 
 impl log::Log for Logger {

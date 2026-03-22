@@ -63,7 +63,8 @@ impl ApplicationHandler for App {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    logging::Logger::init(true, true, true);
+    let logger = logging::Logger::new(true, true, true);
+    logging::init(logger);
 
     let event_loop = EventLoop::new()?;
     // For alternative loop run options see `pump_events` and `run_on_demand` examples.
