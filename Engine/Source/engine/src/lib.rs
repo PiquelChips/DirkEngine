@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use anyhow::Context;
 
 use crate::errors::{InitResult, RenderResult, ShutdownResult};
@@ -8,6 +10,8 @@ mod errors;
 pub struct Engine {
     platform: platform::Platform,
     is_requesting_exit: bool,
+    exit_error: Option<anyhow::Error>,
+    last_tick: Instant,
 }
 
 impl Engine {
@@ -30,12 +34,12 @@ impl Engine {
          * - Init ImGui for renderer
          *
          * Create main viewport
-         *
-         * Set `last_tick` to time::now()
          */
         Ok(Self {
             is_requesting_exit: false,
             platform,
+            exit_error: None,
+            last_tick: Instant::now(),
         })
     }
     /// Engine tick.
@@ -45,7 +49,7 @@ impl Engine {
             return Ok(false);
         }
 
-        let delta_time: f32 = 0.; // TODO: captureDeltaTime
+        let delta_time = self.capture_delta_time();
 
         self.platform.tick(delta_time).context("ticking platform")?;
         if self.is_requesting_exit() {
@@ -84,11 +88,22 @@ impl Engine {
         Ok(())
     }
     pub fn is_requesting_exit(&self) -> bool {
-        self.is_requesting_exit
+        self.is_requesting_exit || self.exit_error.is_some()
     }
     /// Specify [err] to exit with an error.
-    /// TODO: have the engine exit with the specified error
-    pub fn exit(&mut self, _err: Option<anyhow::Error>) {
-        self.is_requesting_exit = true
+    pub fn exit(&mut self, err: Option<anyhow::Error>) {
+        self.is_requesting_exit = true;
+        self.exit_error = err;
+    }
+    /// Returns the exit error
+    pub fn get_exit_error(&self) -> &Option<anyhow::Error> {
+        &self.exit_error
+    }
+    /// Returns the time in seconds since last tick. This consumes the delta time.
+    fn capture_delta_time(&mut self) -> f32 {
+        let current_time = Instant::now();
+        let delta = current_time.duration_since(self.last_tick).as_secs_f32();
+        self.last_tick = current_time;
+        delta
     }
 }
