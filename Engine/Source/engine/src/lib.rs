@@ -28,17 +28,6 @@ impl Engine {
          * Create main viewport
          *
          * Set `last_tick` to time::now()
-         * while (true) {
-         *     deltaTime = captureDeltaTime();
-         *     if is_requesting_exit
-         *         break;
-         *     if !tick
-         *         break;
-         *     if !render
-         *         break;
-         * }
-         *
-         * Shutdown ImGui (renderer then platform)
          */
         Ok(Self {
             is_requesting_exit: false,
@@ -47,7 +36,13 @@ impl Engine {
     /// Engine tick.
     /// Returns if the engine should continue ticking.
     pub fn tick(&self) -> TickResult<bool> {
+        if self.is_requesting_exit() {
+            return Ok(false);
+        }
+
         /*
+         * deltaTime = captureDeltaTime();
+         *
          * Platform tick
          * if is_requesting_exit
          *     return false;
@@ -55,15 +50,13 @@ impl Engine {
          * EventManager dispatch events
          *
          * World Tick
-         *
          * Main Viewport tick
-         *
-         * return !is_requesting_exit
+         * Render
          */
-        Ok(true)
+        Ok(self.is_requesting_exit())
     }
     pub fn render(&self) -> RenderResult<()> {
-        /* Renderer render
+        /* Renderer::render
          *
          * ImGui:
          * - update delta time
@@ -72,14 +65,16 @@ impl Engine {
          * - engine renderImGui
          * - ImGui::Render()
          * - Renderer render ImGui
-         *
-         * return !is_requesting_exit
          */
         Ok(())
     }
     pub fn shutdown(&self) -> ShutdownResult<()> {
-        // TODO: logger.cleanup()
-        // Should cleanup and close all the log files
+        /*
+         * Shutdown ImGui (renderer then platform)
+         *
+         * logger.cleanup():
+         * - Should cleanup and close all the log files
+         */
         Ok(())
     }
     pub fn is_requesting_exit(&self) -> bool {
