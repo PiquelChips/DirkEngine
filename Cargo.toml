@@ -2,6 +2,13 @@
 resolver = "3"
 members = ["Engine/Source/engine","Engine/Source/logging","Engine/Source/run"]
 
+[workspace.package]
+edition = "2024"
+license = "Apache-2.0"
+repository = "https://github.com/PiquelChips/DirkEngine"
+rust-version = "1.94.0"
+version = "0.1.0"
+
 [workspace.dependencies]
 # Basic stuff
 log  = { version = "0.4", features = ["std"] }
