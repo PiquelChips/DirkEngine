@@ -80,7 +80,9 @@ impl Engine {
     pub fn is_requesting_exit(&self) -> bool {
         self.is_requesting_exit
     }
-    pub fn exit(&mut self) {
+    /// Specify [err] to exit with an error.
+    /// TODO: have the engine exit with the specified error
+    pub fn exit(&mut self, _err: Option<anyhow::Error>) {
         self.is_requesting_exit = true
     }
 }
