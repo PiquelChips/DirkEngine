@@ -1,9 +1,12 @@
-use crate::errors::{InitResult, RenderResult, ShutdownResult, TickResult};
+use anyhow::Context;
+
+use crate::errors::{InitResult, RenderResult, ShutdownResult};
 
 mod errors;
 
 /// This is the main struct that holds global engine state.
 pub struct Engine {
+    platform: platform::Platform,
     is_requesting_exit: bool,
 }
 
@@ -11,6 +14,8 @@ impl Engine {
     pub fn init() -> InitResult<Self> {
         let logger = logging::Logger::new(true, true, true);
         logging::init(logger);
+
+        let platform = platform::Platform::init();
 
         /* A rough idea of the flow of the C++ Engine
          *
@@ -31,22 +36,24 @@ impl Engine {
          */
         Ok(Self {
             is_requesting_exit: false,
+            platform,
         })
     }
     /// Engine tick.
     /// Returns if the engine should continue ticking.
-    pub fn tick(&self) -> TickResult<bool> {
+    pub fn tick(&mut self) -> anyhow::Result<bool> {
+        if self.is_requesting_exit() {
+            return Ok(false);
+        }
+
+        let delta_time: f32 = 0.; // TODO: captureDeltaTime
+
+        self.platform.tick(delta_time).context("ticking platform")?;
         if self.is_requesting_exit() {
             return Ok(false);
         }
 
         /*
-         * deltaTime = captureDeltaTime();
-         *
-         * Platform tick
-         * if is_requesting_exit
-         *     return false;
-         *
          * EventManager dispatch events
          *
          * World Tick

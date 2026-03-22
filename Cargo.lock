@@ -264,6 +264,7 @@ dependencies = [
  "anyhow",
  "log",
  "logging",
+ "platform",
  "thiserror 2.0.18",
 ]
 
