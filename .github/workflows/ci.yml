@@ -26,8 +26,9 @@ jobs:
       matrix:
         toolchain:
           - stable
-          - beta
-          - nightly
+          # Unnecessary for now
+          #- beta
+          #- nightly
     steps:
     - uses: actions/checkout@v4
     - name: Setup
