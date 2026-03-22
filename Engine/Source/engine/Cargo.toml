@@ -12,3 +12,4 @@ thiserror.workspace = true
 log.workspace = true
 
 logging.workspace = true
+platform.workspace = true

@@ -1,6 +1,5 @@
 [package]
-name = "run"
-default-run = "run"
+name = "platform"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -10,5 +9,5 @@ version.workspace = true
 [dependencies]
 log.workspace = true
 anyhow.workspace = true
-
-engine.workspace = true
+thiserror.workspace = true
+winit.workspace = true

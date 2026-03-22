@@ -1,7 +1,5 @@
-mod test;
-
 fn run() -> anyhow::Result<()> {
-    let engine = engine::Engine::init()?;
+    let mut engine = engine::Engine::init()?;
     while engine.tick()? {}
     engine.shutdown()?;
     Ok(())
