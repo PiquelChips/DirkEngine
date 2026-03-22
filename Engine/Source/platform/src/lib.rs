@@ -5,7 +5,7 @@
 //!
 //! The DirkEngine's platform API is build on the winit crate.
 
-use winit::event_loop::{EventLoop, run_on_demand::EventLoopExtRunOnDemand};
+use winit::event_loop::{run_on_demand::EventLoopExtRunOnDemand, EventLoop};
 
 mod errors;
 mod handler;

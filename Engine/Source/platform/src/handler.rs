@@ -52,7 +52,7 @@ impl ApplicationHandler for PlatformHandler {
         };
 
         match event {
-            WindowEvent::CloseRequested => {
+            WindowEvent::CloseRequested | WindowEvent::Destroyed => {
                 debug!("Closing Window={window_id:?}");
                 self.windows.remove(&window_id);
             }
@@ -69,26 +69,14 @@ impl ApplicationHandler for PlatformHandler {
             }
             WindowEvent::ThemeChanged(theme) => {
                 trace!("Theme changed to {theme:?}");
-                // TODO: window.set_draw_theme(theme);
+                window.set_draw_theme(theme);
             }
-            WindowEvent::RedrawRequested => {
-                /* TODO
-                if let Err(err) = window.draw() {
-                    error!("Error drawing window: {err}");
-                }
-                if window.continuous_redraw {
-                    window.window.request_redraw();
-                }
-                */
+            WindowEvent::Occluded(occluded) => {
+                window.set_occluded(occluded);
             }
-            WindowEvent::Occluded(_occluded) => {
-                // TODO: window.set_occluded(occluded);
-            }
-            WindowEvent::ModifiersChanged(_modifiers) => {
-                /* TODO
-                window.modifiers = modifiers.state();
-                trace!("Modifiers changed to {:?}", window.modifiers);
-                */
+            WindowEvent::ModifiersChanged(modifiers) => {
+                window.set_modifiers(modifiers.state());
+                trace!("Modifiers changed to {:?}", window.get_modifiers());
             }
             WindowEvent::MouseWheel { delta, .. } => match delta {
                 /* TODO
@@ -168,7 +156,9 @@ impl ApplicationHandler for PlatformHandler {
             | WindowEvent::DragMoved { .. }
             | WindowEvent::DragDropped { .. }
             | WindowEvent::ScaleFactorChanged { .. }
-            | WindowEvent::Destroyed
+            // Drawing is handled by the main engine loop. Redraw requests
+            // are thus ignored.
+            | WindowEvent::RedrawRequested
             | WindowEvent::Ime(_)
             | WindowEvent::Moved(_) => (),
         }
