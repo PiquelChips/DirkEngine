@@ -5,3 +5,5 @@ edition = "2024"
 default-run = "run"
 
 [dependencies]
+tracing.workspace = true
+winit.workspace = true

@@ -1,3 +1,10 @@
 [workspace]
 resolver = "3"
 members = ["Engine/Source/run"]
+
+[workspace.dependencies]
+# Basic stuff
+tracing = "0.1"
+
+# Main Engine Dependencies
+winit = "0.31.0-beta.2"
