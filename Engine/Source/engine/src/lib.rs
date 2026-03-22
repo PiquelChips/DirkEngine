@@ -8,6 +8,7 @@ mod errors;
 pub struct Engine {
     platform: platform::Platform,
     is_requesting_exit: bool,
+    exit_error: Option<anyhow::Error>,
 }
 
 impl Engine {
@@ -36,6 +37,7 @@ impl Engine {
         Ok(Self {
             is_requesting_exit: false,
             platform,
+            exit_error: None,
         })
     }
     /// Engine tick.
@@ -87,8 +89,12 @@ impl Engine {
         self.is_requesting_exit
     }
     /// Specify [err] to exit with an error.
-    /// TODO: have the engine exit with the specified error
-    pub fn exit(&mut self, _err: Option<anyhow::Error>) {
-        self.is_requesting_exit = true
+    pub fn exit(&mut self, err: Option<anyhow::Error>) {
+        self.is_requesting_exit = true;
+        self.exit_error = err;
+    }
+    /// Returns the exit error
+    pub fn get_exit_error(&self) -> &Option<anyhow::Error> {
+        &self.exit_error
     }
 }

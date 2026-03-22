@@ -1,7 +1,13 @@
+use log::error;
+
 fn run() -> anyhow::Result<()> {
     let mut engine = engine::Engine::init()?;
     while engine.tick()? {}
     engine.shutdown()?;
+
+    if let Some(err) = engine.get_exit_error() {
+        error!("{:#}", err);
+    }
     Ok(())
 }
 
