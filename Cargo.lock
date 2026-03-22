@@ -800,7 +800,10 @@ dependencies = [
 name = "renderer"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "ash",
+ "log",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
