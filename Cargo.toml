@@ -20,8 +20,10 @@ anyhow = "1"
 logging = { path = "Engine/Source/logging" }
 engine = { path = "Engine/Source/engine" }
 platform = { path = "Engine/Source/platform" }
-renderer = { path = "Engine/Source/renderer" }
+# TODO: find a way to only enable this in debug builds
+renderer = { path = "Engine/Source/renderer", features = ["validation"] }
 
 # Main Engine Dependencies
 winit = "0.31.0-beta.2"
-ash = "0.38"
+ash = { version = "0.38", features = ["linked"] }
+glam = "0.32"
