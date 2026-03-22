@@ -2,7 +2,7 @@
 
 use std::error::Error;
 
-use tracing::{error, info};
+use log::{error, info};
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, EventLoop};

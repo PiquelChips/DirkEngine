@@ -1,9 +1,8 @@
 [package]
-name = "run"
+name = "logging"
 version = "0.1.0"
 edition = "2024"
-default-run = "run"
 
 [dependencies]
 log.workspace = true
-winit.workspace = true
+time.workspace = true
