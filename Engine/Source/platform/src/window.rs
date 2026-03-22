@@ -1,3 +1,4 @@
+use log::debug;
 use winit::{dpi::PhysicalSize, window::WindowId};
 
 pub struct Window {
@@ -15,8 +16,13 @@ impl Window {
     pub fn id(&self) -> WindowId {
         self.window.id()
     }
-    pub fn resize(&mut self, _size: PhysicalSize<u32>) {
-        todo!("Window::resize")
+    pub fn resize(&mut self, size: PhysicalSize<u32>) {
+        let (width, height) = (size.width, size.height);
+
+        // TODO: update the surface size
+        debug!("Update window size to {width}/{height}");
+
+        self.window.request_redraw();
     }
     /// Update if window is focused. This only updates internal state, do
     /// not call if you want to focus the window;
