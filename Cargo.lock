@@ -793,7 +793,6 @@ dependencies = [
  "anyhow",
  "engine",
  "log",
- "winit",
 ]
 
 [[package]]

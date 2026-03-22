@@ -1,5 +1,3 @@
-mod test;
-
 fn run() -> anyhow::Result<()> {
     let engine = engine::Engine::init()?;
     while engine.tick()? {}
