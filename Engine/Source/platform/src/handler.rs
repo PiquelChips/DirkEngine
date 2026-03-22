@@ -79,7 +79,7 @@ impl ApplicationHandler for PlatformHandler {
                 trace!("Modifiers changed to {:?}", window.get_modifiers());
             }
             WindowEvent::MouseWheel { delta, .. } => match delta {
-                /* TODO
+                /* TODO: input events
                 MouseScrollDelta::LineDelta(x, y) => {
                     trace!("Mouse wheel Line Delta: ({x},{y})");
                 }
@@ -94,7 +94,7 @@ impl ApplicationHandler for PlatformHandler {
                 is_synthetic: false,
                 ..
             } => {
-                /* TODO
+                /* TODO: input events
                 let mods = window.modifiers;
 
                 // Dispatch actions only on press.
@@ -113,7 +113,7 @@ impl ApplicationHandler for PlatformHandler {
             }
             WindowEvent::PointerButton { button, state, .. } => {
                 trace!("Pointer button {button:?} {state:?}");
-                /* TODO
+                /* TODO: input events
                 let mods = window.modifiers;
                 if let Some(action) = state
                     .is_pressed()
@@ -127,14 +127,14 @@ impl ApplicationHandler for PlatformHandler {
             }
             WindowEvent::PointerLeft { .. } => {
                 trace!("Pointer left Window={window_id:?}");
-                // TODO: window.cursor_left();
+                // TODO: input events: window.cursor_left();
             }
             WindowEvent::PointerMoved { position, .. } => {
                 trace!("Moved pointer to {position:?}");
-                // TODO: window.cursor_moved(position);
+                // TODO: input events: window.cursor_moved(position);
             }
             WindowEvent::ActivationTokenDone { token: _token, .. } => {
-                /* TODO
+                /* TODO: activation token (X11/Wayland)
                 #[cfg(any(x11_platform, wayland_platform))]
                 {
                     startup_notify::set_activation_token_env(_token);
