@@ -8,7 +8,7 @@ pub type TickResult<T> = std::result::Result<T, EngineTickError>;
 #[derive(Debug, Error)]
 pub enum EngineTickError {}
 
-pub type RenderResult<T> = std::result::Result<T, EngineTickError>;
+pub type RenderResult<T> = std::result::Result<T, EngineRenderError>;
 #[derive(Debug, Error)]
 pub enum EngineRenderError {}
 
