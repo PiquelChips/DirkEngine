@@ -33,11 +33,6 @@ impl log::Log for Logger {
             return false;
         }
 
-        // TODO: add configuration for logging of external libraries
-        if !metadata.target().starts_with("piquel") {
-            return false;
-        }
-
         metadata.level() <= self.max_level
     }
     fn log(&self, record: &Record) {
