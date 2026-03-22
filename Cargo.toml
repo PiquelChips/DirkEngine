@@ -7,6 +7,7 @@ members = ["Engine/Source/logging","Engine/Source/run"]
 log  = { version = "0.4", features = ["std"] }
 time = { version = "0.3", features = ["formatting"] }
 
+anyhow = "1"
 # Engine modules
 logging = { path = "Engine/Source/logging" }
 
