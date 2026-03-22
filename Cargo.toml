@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["Engine/Source/engine","Engine/Source/logging", "Engine/Source/platform","Engine/Source/run"]
+members = ["Engine/Source/engine","Engine/Source/logging", "Engine/Source/platform", "Engine/Source/renderer","Engine/Source/run"]
 
 [workspace.package]
 edition = "2024"
@@ -20,6 +20,8 @@ anyhow = "1"
 logging = { path = "Engine/Source/logging" }
 engine = { path = "Engine/Source/engine" }
 platform = { path = "Engine/Source/platform" }
+renderer = { path = "Engine/Source/renderer" }
 
 # Main Engine Dependencies
 winit = "0.31.0-beta.2"
+ash = "0.38"
