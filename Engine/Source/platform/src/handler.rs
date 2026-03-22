@@ -26,7 +26,7 @@ impl PlatformHandler {
 
         let window = event_loop.create_window(window_attributes)?;
 
-        let window = Window::new(self, window);
+        let window = Window::new(window);
         let window_id = window.id();
         debug!("Created new window with id={window_id:?}");
         self.windows.insert(window_id, window);
