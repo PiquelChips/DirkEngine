@@ -78,17 +78,17 @@ impl ApplicationHandler for PlatformHandler {
                 window.set_modifiers(modifiers.state());
                 trace!("Modifiers changed to {:?}", window.get_modifiers());
             }
-            WindowEvent::MouseWheel { delta, .. } => match delta {
-                /* TODO: input events
+            WindowEvent::MouseWheel { delta: _, .. } => {}
+            /* TODO: input events
+            match delta {
                 MouseScrollDelta::LineDelta(x, y) => {
                     trace!("Mouse wheel Line Delta: ({x},{y})");
                 }
                 MouseScrollDelta::PixelDelta(px) => {
                     trace!("Mouse wheel Pixel Delta: ({},{})", px.x, px.y);
                 }
-                */
-                _ => {}
             },
+            */
             WindowEvent::KeyboardInput {
                 event: _,
                 is_synthetic: false,
