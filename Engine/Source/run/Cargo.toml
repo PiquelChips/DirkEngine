@@ -6,7 +6,7 @@ default-run = "run"
 
 [dependencies]
 log.workspace = true
-logging.workspace = true
 anyhow.workspace = true
-
 winit.workspace = true
+
+engine.workspace = true

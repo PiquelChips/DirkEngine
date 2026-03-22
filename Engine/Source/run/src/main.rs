@@ -1,9 +1,9 @@
 mod test;
 
 fn run() -> anyhow::Result<()> {
-    let logger = logging::Logger::new(true, true, true);
-    logging::init(logger);
-
+    let engine = engine::Engine::init()?;
+    while engine.tick()? {}
+    engine.shutdown()?;
     Ok(())
 }
 
