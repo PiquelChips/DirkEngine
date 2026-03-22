@@ -22,7 +22,6 @@ impl Engine {
          * Intialize Main Engine Objects:
          * - EventManager
          * - Renderer
-         * - Platform
          * - World
          *
          * ImGui:
