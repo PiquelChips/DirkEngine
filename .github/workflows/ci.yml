@@ -66,5 +66,5 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v6
         with:
-          name: dirkengine-${{ matrix.toolchain }}
+          name: dirkengine-${{ matrix.os }}
           path: target/debug/run
