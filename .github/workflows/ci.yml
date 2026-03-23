@@ -31,8 +31,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest] #, windows-latest, macos-latest]
-        toolchain: [stable] #, unstable, nightly]
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        toolchain: [stable, unstable, nightly]
     steps:
       - uses: actions/checkout@v6
       - name: Install Rust toolchain
