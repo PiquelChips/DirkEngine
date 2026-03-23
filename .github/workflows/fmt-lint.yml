@@ -25,16 +25,17 @@ env:
 
 jobs:
   clippy:
-    name: Clippy (${{ matrix.os }})
+    name: Clippy (${{ matrix.toolchain }}/${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest #, windows-latest, macos-latest]
+        os: [ubuntu-latest] #, windows-latest, macos-latest]
+        toolchain: [stable] #, unstable, nightly]
     steps:
       - uses: actions/checkout@v6
-      - name: Install stable Rust toolchain with Clippy
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust toolchain with Clippy
+        uses: dtolnay/rust-toolchain@${{ matrix.toolchain }}
         with:
           components: clippy
       - name: Cache dependencies

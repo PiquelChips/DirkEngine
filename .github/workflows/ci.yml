@@ -26,16 +26,17 @@ env:
 
 jobs:
   check:
-    name: Check (${{ matrix.os }})
+    name: Check (${{ matrix.toolchain }}/${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest] #, windows-latest, macos-latest]
+        toolchain: [stable] #, unstable, nightly]
     steps:
       - uses: actions/checkout@v6
-      - name: Install stable Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@${{ matrix.toolchain }}
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
       - name: cargo check (default features)
@@ -46,17 +47,18 @@ jobs:
         run: cargo check --locked --all-features
 
   build-and-test:
-    name: Build & Test (${{ matrix.os }})
+    name: Build & Test (${{ matrix.toolchain }}/${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     needs: check
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest] #, windows-latest, macos-latest]
+        toolchain: [stable] #, unstable, nightly]
     steps:
       - uses: actions/checkout@v6
-      - name: Install stable Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@${{ matrix.toolchain }}
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
       - name: cargo build
@@ -66,5 +68,5 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v6
         with:
-          name: dirkengine-${{ matrix.os }}
+          name: dirkengine-${{ matrix.toolchain }}-${{ matrix.os }}
           path: target/debug/run
