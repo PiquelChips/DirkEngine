@@ -36,7 +36,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@${{ matrix.toolchain }}
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.toolchain }}
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
       - name: cargo check (default features)
@@ -53,12 +55,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest] #, windows-latest, macos-latest]
-        toolchain: [stable] #, unstable, nightly]
+        os: [ubuntu-latest] #, windows-latest, macos-latest] toolchain: [stable] #, unstable, nightly]
     steps:
       - uses: actions/checkout@v6
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@${{ matrix.toolchain }}
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.toolchain }}
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
       - name: cargo build
