@@ -63,3 +63,8 @@ jobs:
         run: cargo build --locked
       - name: cargo test
         run: cargo test --locked
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: dirkengine-${{ matrix.toolchain }}
+          path: target/debug/run
