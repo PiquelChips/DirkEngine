@@ -9,12 +9,14 @@ on:
       - 'flake.nix'
       - 'flake.lock'
       - 'README.md'
+      - '**.rs'
   pull_request:
     paths-ignore:
       - 'nix/**'
       - 'flake.nix'
       - 'flake.lock'
       - 'README.md'
+      - '**.rs'
   # Also run on a schedule to catch newly published advisories even when there's no code change
   schedule:
     - cron: "0 8 * * 1" # Every Monday at 08:00 UTC
