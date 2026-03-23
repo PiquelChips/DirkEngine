@@ -33,17 +33,17 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
-    - uses: actions/checkout@v6
-    - name: Install stable Rust toolchain
-      uses: dtolnay/rust-toolchain@stable
-    - name: Cache dependencies
-      uses: Swatinem/rust-cache@v2
-    - name: cargo check (default features)
-      run: cargo check --locked
-    - name: cargo check (no default features)
-      run: cargo check --locked --no-default-features
-    - name: cargo check (all features)
-      run: cargo check --locked --all-features
+      - uses: actions/checkout@v6
+      - name: Install stable Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+      - name: cargo check (default features)
+        run: cargo check --locked
+      - name: cargo check (no default features)
+        run: cargo check --locked --no-default-features
+      - name: cargo check (all features)
+        run: cargo check --locked --all-features
 
   build-and-test:
     name: Build & Test (${{ matrix.os }})
@@ -54,12 +54,12 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
-    - uses: actions/checkout@v6
-    - name: Install stable Rust toolchain
-      uses: dtolnay/rust-toolchain@stable
-    - name: Cache dependencies
-      uses: Swatinem/rust-cache@v2
-    - name: cargo build
-      run: cargo build --locked
-    - name: cargo test
-      run: cargo test --locked
+      - uses: actions/checkout@v6
+      - name: Install stable Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+      - name: cargo build
+        run: cargo build --locked
+      - name: cargo test
+        run: cargo test --locked
