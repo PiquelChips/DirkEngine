@@ -11,7 +11,11 @@ log.workspace = true
 thiserror.workspace = true
 anyhow.workspace = true
 
+platform.workspace = true
+
 ash.workspace = true
+ash-window.workspace = true
+winit.workspace = true
 glam.workspace = true
 
 [lints.rust]

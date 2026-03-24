@@ -13,6 +13,7 @@ use log::{debug, error, info, trace, warn};
 mod errors;
 
 use errors::RendererResult;
+use winit::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
 const MAX_DESCRIPTOR_SET_COUNT: u32 = 1024;
 
@@ -37,6 +38,9 @@ pub struct Renderer {
     // physical_device: vk::PhysicalDevice,
     // queue: Queues,
 
+    // Renderer State
+    surface: vk::SurfaceKHR, // The surface of the main window
+
     // Extensions
     surface_loader: surface::Instance,
     #[cfg(validation)]
@@ -46,7 +50,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn init() -> RendererResult<Self> {
+    pub fn init(window: platform::Window) -> RendererResult<Self> {
         info!("Intializing Vulkan...");
 
         let entry = unsafe { Entry::load()? };
@@ -100,8 +104,6 @@ impl Renderer {
 
         let instance = unsafe { entry.create_instance(&instance_create_info, None)? };
 
-        let surface_loader = surface::Instance::new(&entry, &instance);
-
         #[cfg(validation)]
         let (debug_utils_loader, debug_messenger) = {
             let loader = debug_utils::Instance::new(&entry, &instance);
@@ -110,9 +112,26 @@ impl Renderer {
             (loader, messenger)
         };
 
+        let (surface_loader, surface) = {
+            let surface = unsafe {
+                ash_window::create_surface(
+                    &entry,
+                    &instance,
+                    window.display_handle()?.as_raw(),
+                    window.window_handle()?.as_raw(),
+                    None,
+                )?
+            };
+            let loader = surface::Instance::new(&entry, &instance);
+
+            (loader, surface)
+        };
+
         Ok(Self {
             entry,
             instance,
+
+            surface,
             surface_loader,
 
             #[cfg(validation)]
