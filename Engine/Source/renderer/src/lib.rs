@@ -1,4 +1,6 @@
-//! This crate contains everything to do with the main rendering logic
+//! This crate contains everything to do with the main rendering logic.
+//! As the Ash Vulkan bindings are unsafe, all Vulkan calls should be
+//! make here, to centralize the unsafe Vulkan code.
 
 use std::{
     collections::{BTreeMap, HashSet},
