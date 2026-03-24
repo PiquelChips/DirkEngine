@@ -1,5 +1,7 @@
 //! This crate contains everything to do with the main rendering logic
 
+mod errors;
+
 /// The Renderer struct that holds all render state and is called upon to handle
 /// all rendering operations
 pub struct Renderer {}
