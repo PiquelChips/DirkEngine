@@ -27,7 +27,7 @@ const MAX_DESCRIPTOR_SET_COUNT: u32 = 1024;
 const DEVICE_EXTENSIONS: &[&CStr] = &[ash::khr::swapchain::NAME];
 
 #[cfg(validation)]
-const VALIDATION_LAYERS: &[*const i8] = &[b"VK_LAYER_KHRONOS_validation\0".as_ptr() as *const i8];
+const VALIDATION_LAYERS: &[*const i8] = &[c"VK_LAYER_KHRONOS_validation".as_ptr()];
 
 struct Queues {
     graphics_queue: vk::Queue,
