@@ -10,6 +10,8 @@ use winit::event_loop::{EventLoop, run_on_demand::EventLoopExtRunOnDemand};
 mod errors;
 mod handler;
 mod window;
+pub use window::Window;
+pub use errors::PlatformError;
 
 use errors::Result;
 use handler::PlatformHandler;

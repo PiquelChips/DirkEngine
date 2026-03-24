@@ -2,6 +2,7 @@ use log::debug;
 use winit::{
     dpi::PhysicalSize,
     keyboard::ModifiersState,
+    raw_window_handle::{HasDisplayHandle, HasWindowHandle},
     window::{Theme, WindowId},
 };
 
@@ -53,5 +54,23 @@ impl Window {
     }
     pub fn get_modifiers(&mut self) -> &ModifiersState {
         &self.modifiers
+    }
+}
+
+impl HasWindowHandle for Window {
+    fn window_handle(
+        &self,
+    ) -> Result<winit::raw_window_handle::WindowHandle<'_>, winit::raw_window_handle::HandleError>
+    {
+        self.window.window_handle()
+    }
+}
+
+impl HasDisplayHandle for Window {
+    fn display_handle(
+        &self,
+    ) -> Result<winit::raw_window_handle::DisplayHandle<'_>, winit::raw_window_handle::HandleError>
+    {
+        self.window.display_handle()
     }
 }
