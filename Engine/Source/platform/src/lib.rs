@@ -33,4 +33,7 @@ impl Platform {
         // TODO: maybe listen on a separate thread in the future
         Ok(self.event_loop.run_app_on_demand(&mut self.handler)?)
     }
+    pub fn main_window(&self) -> &Window {
+        self.handler.main_window()
+    }
 }

@@ -21,7 +21,7 @@ logging = { path = "Engine/Source/logging" }
 engine = { path = "Engine/Source/engine" }
 platform = { path = "Engine/Source/platform" }
 # TODO: find a way to only enable this in debug builds
-renderer = { path = "Engine/Source/renderer", features = ["validation"] }
+renderer = { path = "Engine/Source/renderer" }
 
 # Main Engine Dependencies
 winit = "0.31.0-beta.2"

@@ -9,6 +9,8 @@ mod errors;
 /// This is the main struct that holds global engine state.
 pub struct Engine {
     platform: platform::Platform,
+    renderer: renderer::Renderer,
+
     is_requesting_exit: bool,
     exit_error: Option<anyhow::Error>,
     last_tick: Instant,
@@ -20,12 +22,12 @@ impl Engine {
         logging::init(logger);
 
         let platform = platform::Platform::init();
+        let renderer = renderer::Renderer::init(platform.main_window())?;
 
         /* A rough idea of the flow of the C++ Engine
          *
          * Intialize Main Engine Objects:
          * - EventManager
-         * - Renderer
          * - World
          *
          * ImGui:
@@ -37,7 +39,9 @@ impl Engine {
          */
         Ok(Self {
             is_requesting_exit: false,
+
             platform,
+            renderer,
             exit_error: None,
             last_tick: Instant::now(),
         })

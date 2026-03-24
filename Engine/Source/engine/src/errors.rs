@@ -2,7 +2,10 @@ use thiserror::Error;
 
 pub type InitResult<T> = std::result::Result<T, EngineInitError>;
 #[derive(Debug, Error)]
-pub enum EngineInitError {}
+pub enum EngineInitError {
+    #[error("failed to init renderer: {0}")]
+    RendererInit(#[from] renderer::RendererError),
+}
 
 pub type RenderResult<T> = std::result::Result<T, EngineRenderError>;
 #[derive(Debug, Error)]

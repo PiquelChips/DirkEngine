@@ -367,6 +367,7 @@ dependencies = [
  "log",
  "logging",
  "platform",
+ "renderer",
  "thiserror 2.0.18",
 ]
 

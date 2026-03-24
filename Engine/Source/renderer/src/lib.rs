@@ -17,10 +17,9 @@ use log::{debug, error, info, trace, warn};
 
 mod errors;
 
-use errors::Result;
 use winit::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
-use crate::errors::RendererError;
+pub use errors::{Result, RendererError};
 
 const MAX_DESCRIPTOR_SET_COUNT: u32 = 1024;
 
@@ -104,7 +103,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn init(window: platform::Window) -> Result<Self> {
+    pub fn init(window: &platform::Window) -> Result<Self> {
         info!("Intializing Vulkan...");
 
         let entry = unsafe { Entry::load()? };
