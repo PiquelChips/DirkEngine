@@ -19,7 +19,7 @@ mod errors;
 
 use winit::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
-pub use errors::{Result, RendererError};
+pub use errors::{RendererError, Result};
 
 const MAX_DESCRIPTOR_SET_COUNT: u32 = 1024;
 
