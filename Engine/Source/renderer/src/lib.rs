@@ -1,6 +1,9 @@
 //! This crate contains everything to do with the main rendering logic
 
-use std::ffi::{CStr, c_void};
+use std::{
+    collections::{BTreeMap, HashSet},
+    ffi::{CStr, c_void},
+};
 
 #[cfg(validation)]
 use ash::ext::debug_utils;
@@ -12,12 +15,14 @@ use log::{debug, error, info, trace, warn};
 
 mod errors;
 
-use errors::RendererResult;
+use errors::Result;
 use winit::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
+
+use crate::errors::RendererError;
 
 const MAX_DESCRIPTOR_SET_COUNT: u32 = 1024;
 
-const DEVICE_EXTENSIONS: &[*const i8] = &[ash::khr::swapchain::NAME.as_ptr()];
+const DEVICE_EXTENSIONS: &[&CStr] = &[ash::khr::swapchain::NAME];
 
 #[cfg(validation)]
 const VALIDATION_LAYERS: &[*const i8] = &[b"VK_LAYER_KHRONOS_validation\0".as_ptr() as *const i8];
@@ -25,6 +30,51 @@ const VALIDATION_LAYERS: &[*const i8] = &[b"VK_LAYER_KHRONOS_validation\0".as_pt
 struct Queues {
     graphics_queue: vk::Queue,
     present_queue: vk::Queue,
+}
+
+#[derive(Clone, Copy, Default)]
+struct QueueFamilyIndices {
+    graphics_family: Option<u32>,
+    present_family: Option<u32>,
+}
+
+impl QueueFamilyIndices {
+    fn is_complete(&self) -> bool {
+        self.graphics_family.is_some() && self.present_family.is_some()
+    }
+}
+
+#[derive(Clone, Copy)]
+struct DeviceFeatures {
+    anisotropy: bool,
+    msaa_samples: vk::SampleCountFlags,
+}
+
+struct RendererProperties {
+    msaa_samples: vk::SampleCountFlags,
+    anisotropy: bool,
+    surface_format: vk::SurfaceFormatKHR,
+    min_image_count: u32,
+    queue_family_indices: QueueFamilyIndices,
+    depth_format: vk::Format,
+}
+
+impl DeviceFeatures {
+    fn is_complete(&self) -> bool {
+        self.anisotropy && self.msaa_samples.as_raw() > 1
+    }
+    fn get_score(&self) -> u32 {
+        if self.is_complete() {
+            return 1000;
+        }
+
+        let mut score = 0;
+        if self.anisotropy {
+            score += 10;
+        }
+        score += self.msaa_samples.as_raw();
+        score
+    }
 }
 
 /// The Renderer struct that holds all render state and is called upon to handle
@@ -35,11 +85,13 @@ pub struct Renderer {
     // Renderer Resources
     instance: Instance,
     // device: Device,
-    // physical_device: vk::PhysicalDevice,
     // queue: Queues,
+    physical_device: vk::PhysicalDevice,
 
     // Renderer State
     surface: vk::SurfaceKHR, // The surface of the main window
+
+    properties: RendererProperties,
 
     // Extensions
     surface_loader: surface::Instance,
@@ -50,7 +102,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn init(window: platform::Window) -> RendererResult<Self> {
+    pub fn init(window: platform::Window) -> Result<Self> {
         info!("Intializing Vulkan...");
 
         let entry = unsafe { Entry::load()? };
@@ -127,11 +179,76 @@ impl Renderer {
             (loader, surface)
         };
 
+        // PHYSICAL DEVICE
+        let (physical_device, properties) = {
+            let physical_devices = unsafe { instance.enumerate_physical_devices()? };
+
+            let mut candidates: BTreeMap<u32, vk::PhysicalDevice> = BTreeMap::new();
+            for &device in &physical_devices {
+                let score =
+                    Self::get_device_suitability(&instance, device, surface, &surface_loader)?;
+                candidates.insert(score, device);
+            }
+
+            let device = *candidates
+                .iter()
+                .rev()
+                .find(|&(&score, _)| score > 0)
+                .map(|(_, device)| device)
+                .ok_or(RendererError::NoDeviceFound)?;
+
+            let properties = unsafe { instance.get_physical_device_properties(device) };
+            info!(
+                "Physical device selected: {:#?} (vendor: {}, id: {}, api: {}, driver: {})",
+                properties.device_name_as_c_str().unwrap_or_default(),
+                properties.vendor_id,
+                properties.device_id,
+                properties.api_version,
+                properties.driver_version
+            );
+
+            let features = Self::get_device_features(&instance, device);
+            let formats =
+                unsafe { surface_loader.get_physical_device_surface_formats(device, surface)? };
+            let capabilities = unsafe {
+                surface_loader.get_physical_device_surface_capabilities(device, surface)?
+            };
+
+            let surface_format = Self::choose_swap_surface_format(&formats);
+            let queue_family_indices =
+                Self::find_queue_families(&instance, device, surface, &surface_loader)?;
+            let depth_format = Self::find_supported_format(
+                &instance,
+                device,
+                &[
+                    vk::Format::D32_SFLOAT,
+                    vk::Format::D32_SFLOAT_S8_UINT,
+                    vk::Format::D24_UNORM_S8_UINT,
+                ],
+                vk::ImageTiling::OPTIMAL,
+                vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT,
+            )?;
+
+            let properties = RendererProperties {
+                msaa_samples: Self::get_max_usable_sample_count(&instance, device),
+                anisotropy: features.anisotropy,
+                surface_format,
+                min_image_count: capabilities.min_image_count,
+                queue_family_indices,
+                depth_format,
+            };
+
+            (device, properties)
+        };
+
         Ok(Self {
             entry,
             instance,
+            physical_device,
 
             surface,
+            properties,
+
             surface_loader,
 
             #[cfg(validation)]
@@ -139,6 +256,169 @@ impl Renderer {
             #[cfg(validation)]
             debug_messenger,
         })
+    }
+    fn get_device_suitability(
+        instance: &Instance,
+        device: vk::PhysicalDevice,
+        surface: vk::SurfaceKHR,
+        surface_loader: &surface::Instance,
+    ) -> Result<u32> {
+        let properties = unsafe { instance.get_physical_device_properties(device) };
+        let features = unsafe { instance.get_physical_device_features(device) };
+
+        // TODO: update with vulkan tutorial checks
+
+        // prereturn if required stuff doesn't exist
+        if features.geometry_shader == vk::FALSE {
+            return Ok(0);
+        }
+
+        let indices = Self::find_queue_families(instance, device, surface, surface_loader)?;
+        if !indices.is_complete() {
+            return Ok(0);
+        }
+
+        if !Self::check_device_extension_support(instance, device)? {
+            return Ok(0);
+        }
+
+        let formats =
+            unsafe { surface_loader.get_physical_device_surface_formats(device, surface)? };
+        let present_modes =
+            unsafe { surface_loader.get_physical_device_surface_present_modes(device, surface)? };
+        if formats.is_empty() || present_modes.is_empty() {
+            return Ok(0);
+        }
+
+        let mut score = 0_u32;
+
+        if properties.device_type == vk::PhysicalDeviceType::DISCRETE_GPU {
+            score += 1000;
+        }
+        score += properties.limits.max_image_dimension2_d;
+
+        if indices.graphics_family == indices.present_family {
+            score += 10;
+        }
+
+        score += formats.len() as u32;
+        score += present_modes.len() as u32;
+        score += Self::get_device_features(instance, device).get_score();
+
+        let name = properties.device_name_as_c_str().unwrap_or_default();
+        debug!("Found device: {:#?} (score {})", name, score);
+
+        Ok(score)
+    }
+    fn find_queue_families(
+        instance: &Instance,
+        device: vk::PhysicalDevice,
+        surface: vk::SurfaceKHR,
+        surface_loader: &surface::Instance,
+    ) -> Result<QueueFamilyIndices> {
+        let queue_families =
+            unsafe { instance.get_physical_device_queue_family_properties(device) };
+
+        let mut indices = QueueFamilyIndices::default();
+
+        for (i, family) in queue_families.iter().enumerate() {
+            let i = i as u32;
+
+            // graphics queue
+            if family.queue_flags.contains(vk::QueueFlags::GRAPHICS) {
+                indices.graphics_family = Some(i);
+            }
+
+            // present queue
+            let present_support =
+                unsafe { surface_loader.get_physical_device_surface_support(device, i, surface)? };
+            if present_support {
+                indices.present_family = Some(i);
+            }
+
+            if indices.is_complete() {
+                break;
+            }
+        }
+
+        Ok(indices)
+    }
+    fn check_device_extension_support(
+        instance: &Instance,
+        device: vk::PhysicalDevice,
+    ) -> Result<bool> {
+        let available = unsafe { instance.enumerate_device_extension_properties(device)? };
+        let available_extensions: HashSet<&CStr> = available
+            .iter()
+            .map(|e| e.extension_name_as_c_str().unwrap_or_default())
+            .collect();
+
+        Ok(DEVICE_EXTENSIONS
+            .iter()
+            .all(|req| available_extensions.contains(req)))
+    }
+    fn get_device_features(
+        instance: &Instance,
+        physical_device: vk::PhysicalDevice,
+    ) -> DeviceFeatures {
+        let features = unsafe { instance.get_physical_device_features(physical_device) };
+        DeviceFeatures {
+            anisotropy: features.sampler_anisotropy == vk::TRUE,
+            msaa_samples: Self::get_max_usable_sample_count(instance, physical_device),
+        }
+    }
+    fn get_max_usable_sample_count(
+        instance: &Instance,
+        physical_device: vk::PhysicalDevice,
+    ) -> vk::SampleCountFlags {
+        let properties = unsafe { instance.get_physical_device_properties(physical_device) };
+        let counts = properties.limits.framebuffer_color_sample_counts
+            & properties.limits.framebuffer_depth_sample_counts;
+
+        for flag in [
+            vk::SampleCountFlags::TYPE_64,
+            vk::SampleCountFlags::TYPE_32,
+            vk::SampleCountFlags::TYPE_16,
+            vk::SampleCountFlags::TYPE_8,
+            vk::SampleCountFlags::TYPE_4,
+            vk::SampleCountFlags::TYPE_2,
+        ] {
+            if counts.contains(flag) {
+                return flag;
+            }
+        }
+        vk::SampleCountFlags::TYPE_1
+    }
+    fn choose_swap_surface_format(formats: &[vk::SurfaceFormatKHR]) -> vk::SurfaceFormatKHR {
+        formats
+            .iter()
+            .find(|format| {
+                format.format == vk::Format::B8G8R8A8_SRGB
+                    && format.color_space == vk::ColorSpaceKHR::SRGB_NONLINEAR
+            })
+            .copied()
+            .unwrap_or(formats[0])
+    }
+    fn find_supported_format(
+        instance: &Instance,
+        physical_device: vk::PhysicalDevice,
+        candidates: &[vk::Format],
+        tiling: vk::ImageTiling,
+        features: vk::FormatFeatureFlags,
+    ) -> Result<vk::Format> {
+        for &format in candidates {
+            let properties =
+                unsafe { instance.get_physical_device_format_properties(physical_device, format) };
+            let supported = match tiling {
+                vk::ImageTiling::LINEAR => properties.linear_tiling_features.contains(features),
+                vk::ImageTiling::OPTIMAL => properties.optimal_tiling_features.contains(features),
+                _ => false,
+            };
+            if supported {
+                return Ok(format);
+            }
+        }
+        Err(RendererError::NoSupportedFormat)
     }
 }
 

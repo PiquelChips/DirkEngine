@@ -1,7 +1,7 @@
 use thiserror::Error;
 use winit::raw_window_handle::HandleError;
 
-pub type RendererResult<T> = std::result::Result<T, RendererError>;
+pub type Result<T> = std::result::Result<T, RendererError>;
 
 #[derive(Debug, Error)]
 pub enum RendererError {
@@ -13,6 +13,12 @@ pub enum RendererError {
 
     #[error("platform error: {0}")]
     Platform(#[from] platform::PlatformError),
+
+    #[error("no suitable graphics device found")]
+    NoDeviceFound,
+
+    #[error("failed to find supported format")]
+    NoSupportedFormat,
 }
 
 impl From<HandleError> for RendererError {
