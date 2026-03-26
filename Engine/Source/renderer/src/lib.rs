@@ -13,7 +13,11 @@ use ash::ext::debug_utils;
 #[cfg(target_os = "linux")]
 use ash::khr::wayland_surface;
 
-use ash::{Device, Entry, Instance, khr::surface, vk};
+use ash::{
+    Device, Entry, Instance,
+    khr::{surface, swapchain},
+    vk,
+};
 use log::{debug, error, info, trace, warn};
 
 mod errors;
@@ -92,11 +96,13 @@ pub struct Renderer {
 
     // Renderer State
     surface: vk::SurfaceKHR, // The surface of the main window
+    in_flight_fence: vk::Fence,
 
     properties: RendererProperties,
 
     // Extensions
     surface_loader: surface::Instance,
+    swapchain_loader: swapchain::Device,
     #[cfg(validation)]
     debug_utils_loader: debug_utils::Instance,
     #[cfg(validation)]
@@ -316,6 +322,19 @@ impl Renderer {
             },
         };
 
+        // SWAP CHAIN
+        let swapchain_loader = swapchain::Device::new(&instance, &device);
+
+        // SYNCHRONIZATION
+        let in_flight_fence = unsafe {
+            device
+                .create_fence(
+                    &vk::FenceCreateInfo::default().flags(vk::FenceCreateFlags::SIGNALED),
+                    None,
+                )
+                .context("creating in flight fence")?
+        };
+
         Ok(Self {
             entry,
             instance,
@@ -324,9 +343,11 @@ impl Renderer {
             physical_device,
 
             surface,
+            in_flight_fence,
             properties,
 
             surface_loader,
+            swapchain_loader,
 
             #[cfg(validation)]
             debug_utils_loader,

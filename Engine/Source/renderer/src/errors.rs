@@ -5,6 +5,7 @@ pub type Result<T> = std::result::Result<T, RendererError>;
 
 #[derive(Debug, Error)]
 pub enum RendererError {
+    // TODO: make it so that errors convert to RendererError before context is added
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
 
