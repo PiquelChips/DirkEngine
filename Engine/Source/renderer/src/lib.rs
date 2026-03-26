@@ -7,12 +7,13 @@ use std::{
     ffi::{CStr, c_void},
 };
 
+use anyhow::Context;
 #[cfg(validation)]
 use ash::ext::debug_utils;
 #[cfg(target_os = "linux")]
 use ash::khr::wayland_surface;
 
-use ash::{Entry, Instance, khr::surface, vk};
+use ash::{Device, Entry, Instance, khr::surface, vk};
 use log::{debug, error, info, trace, warn};
 
 mod errors;
@@ -85,7 +86,7 @@ pub struct Renderer {
 
     // Renderer Resources
     instance: Instance,
-    // device: Device,
+    device: Device,
     // queue: Queues,
     physical_device: vk::PhysicalDevice,
 
@@ -155,13 +156,20 @@ impl Renderer {
 
         instance_create_info = instance_create_info.enabled_extension_names(&extensions);
 
-        let instance = unsafe { entry.create_instance(&instance_create_info, None)? };
+        let instance = unsafe {
+            entry
+                .create_instance(&instance_create_info, None)
+                .context("creating vulkan instance")?
+        };
 
         #[cfg(validation)]
         let (debug_utils_loader, debug_messenger) = {
             let loader = debug_utils::Instance::new(&entry, &instance);
-            let messenger =
-                unsafe { loader.create_debug_utils_messenger(&debug_create_info, None)? };
+            let messenger = unsafe {
+                loader
+                    .create_debug_utils_messenger(&debug_create_info, None)
+                    .context("creatint vulkan debug messenger")?
+            };
             (loader, messenger)
         };
 
@@ -173,7 +181,8 @@ impl Renderer {
                     window.display_handle()?.as_raw(),
                     window.window_handle()?.as_raw(),
                     None,
-                )?
+                )
+                .context("creating vulkan surface")?
             };
             let loader = surface::Instance::new(&entry, &instance);
 
@@ -181,7 +190,7 @@ impl Renderer {
         };
 
         // PHYSICAL DEVICE
-        let (physical_device, properties) = {
+        let (physical_device, queue_family_indices, properties) = {
             let physical_devices = unsafe { instance.enumerate_physical_devices()? };
 
             let mut candidates: BTreeMap<u32, vk::PhysicalDevice> = BTreeMap::new();
@@ -239,12 +248,58 @@ impl Renderer {
                 depth_format,
             };
 
-            (device, properties)
+            (device, queue_family_indices, properties)
+        };
+
+        // LOGICAL DEVICE
+        let device = {
+            let unique_families: HashSet<u32> = [
+                queue_family_indices
+                    .graphics_family
+                    .expect("should have a graphics queue family"),
+                queue_family_indices
+                    .present_family
+                    .expect("should have a present queue family"),
+            ]
+            .iter()
+            .cloned()
+            .collect();
+
+            // only one queue per family, so all 1.0 priority
+            let queue_priorities = vec![1.0_f32];
+            let queue_create_infos: Vec<vk::DeviceQueueCreateInfo> = unique_families
+                .iter()
+                .map(|&family| {
+                    vk::DeviceQueueCreateInfo::default()
+                        .queue_family_index(family)
+                        .queue_priorities(&queue_priorities)
+                })
+                .collect();
+
+            let physical_device_features =
+                vk::PhysicalDeviceFeatures::default().sampler_anisotropy(true);
+            let mut vulkan13_features =
+                vk::PhysicalDeviceVulkan13Features::default().dynamic_rendering(true);
+
+            let extensions: Vec<*const i8> =
+                DEVICE_EXTENSIONS.iter().map(|name| name.as_ptr()).collect();
+            let device_create_info = vk::DeviceCreateInfo::default()
+                .queue_create_infos(&queue_create_infos)
+                .enabled_features(&physical_device_features)
+                .enabled_extension_names(&extensions)
+                .push_next(&mut vulkan13_features);
+
+            unsafe {
+                instance
+                    .create_device(physical_device, &device_create_info, None)
+                    .context("create logical device")?
+            }
         };
 
         Ok(Self {
             entry,
             instance,
+            device,
             physical_device,
 
             surface,

@@ -5,18 +5,19 @@ pub type Result<T> = std::result::Result<T, RendererError>;
 
 #[derive(Debug, Error)]
 pub enum RendererError {
+    #[error(transparent)]
+    Anyhow(#[from] anyhow::Error),
+
     #[error("Vulkan error: {0}")]
     VulkanError(#[from] ash::vk::Result),
 
     #[error("Error loading Vulkan functions: {0}")]
     Loading(#[from] ash::LoadingError),
-
     #[error("platform error: {0}")]
     Platform(#[from] platform::PlatformError),
 
     #[error("no suitable graphics device found")]
     NoDeviceFound,
-
     #[error("failed to find supported format")]
     NoSupportedFormat,
 }
