@@ -335,6 +335,18 @@ impl Renderer {
                 .context("creating in flight fence")?
         };
 
+        // COMMAND POOL
+        let command_pool = unsafe {
+            device
+                .create_command_pool(
+                    &vk::CommandPoolCreateInfo::default()
+                        .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
+                        .queue_family_index(queue_family_indices.graphics_family.unwrap()),
+                    None,
+                )
+                .context("creating command pool")?
+        };
+
         Ok(Self {
             entry,
             instance,
