@@ -93,6 +93,9 @@ pub struct Renderer {
     device: Device,
     queues: Queues,
     physical_device: vk::PhysicalDevice,
+    command_pool: vk::CommandPool,
+    descriptor_set_layout: vk::DescriptorSetLayout,
+    descriptor_pool: vk::DescriptorPool,
 
     // Renderer State
     surface: vk::SurfaceKHR, // The surface of the main window
@@ -347,12 +350,64 @@ impl Renderer {
                 .context("creating command pool")?
         };
 
+        // DESCRIPTOR SETS
+        let (descriptor_pool, descriptor_set_layout) = {
+            let bindings = [
+                vk::DescriptorSetLayoutBinding::default()
+                    .binding(0)
+                    .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                    .descriptor_count(1)
+                    .stage_flags(vk::ShaderStageFlags::VERTEX),
+                vk::DescriptorSetLayoutBinding::default()
+                    .binding(1)
+                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                    .descriptor_count(1)
+                    .stage_flags(vk::ShaderStageFlags::FRAGMENT),
+            ];
+
+            let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
+
+            let descriptor_set_layout = unsafe {
+                device
+                    .create_descriptor_set_layout(&layout_info, None)
+                    .context("creating descriptor set layout")?
+            };
+
+            let pool_sizes = [
+                vk::DescriptorPoolSize::default()
+                    .ty(vk::DescriptorType::UNIFORM_BUFFER)
+                    .descriptor_count(MAX_DESCRIPTOR_SET_COUNT),
+                vk::DescriptorPoolSize::default()
+                    .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                    .descriptor_count(MAX_DESCRIPTOR_SET_COUNT),
+            ];
+
+            let descriptor_pool = unsafe {
+                device
+                    .create_descriptor_pool(
+                        &vk::DescriptorPoolCreateInfo::default()
+                            .flags(vk::DescriptorPoolCreateFlags::FREE_DESCRIPTOR_SET)
+                            .max_sets(MAX_DESCRIPTOR_SET_COUNT)
+                            .pool_sizes(&pool_sizes),
+                        None,
+                    )
+                    .context("creating descriptor pool")?
+            };
+
+            (descriptor_pool, descriptor_set_layout)
+        };
+
+        info!("Vulkan initalized successfully");
+
         Ok(Self {
             entry,
             instance,
             device,
             queues,
             physical_device,
+            command_pool,
+            descriptor_pool,
+            descriptor_set_layout,
 
             surface,
             in_flight_fence,
