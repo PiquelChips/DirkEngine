@@ -87,7 +87,7 @@ pub struct Renderer {
     // Renderer Resources
     instance: Instance,
     device: Device,
-    // queue: Queues,
+    queues: Queues,
     physical_device: vk::PhysicalDevice,
 
     // Renderer State
@@ -296,10 +296,31 @@ impl Renderer {
             }
         };
 
+        // QUEUES
+        let queues = Queues {
+            graphics_queue: unsafe {
+                device.get_device_queue(
+                    queue_family_indices
+                        .graphics_family
+                        .context("creating graphics queue")?,
+                    0,
+                )
+            },
+            present_queue: unsafe {
+                device.get_device_queue(
+                    queue_family_indices
+                        .present_family
+                        .context("creating present queue")?,
+                    0,
+                )
+            },
+        };
+
         Ok(Self {
             entry,
             instance,
             device,
+            queues,
             physical_device,
 
             surface,
