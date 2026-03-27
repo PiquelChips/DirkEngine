@@ -17,6 +17,3 @@ ash.workspace = true
 ash-window.workspace = true
 winit.workspace = true
 glam.workspace = true
-
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ["cfg(validation)"] }
