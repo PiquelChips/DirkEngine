@@ -3,6 +3,8 @@ use thiserror::Error;
 pub type InitResult<T> = std::result::Result<T, EngineInitError>;
 #[derive(Debug, Error)]
 pub enum EngineInitError {
+    #[error("failed to init platform: {0}")]
+    PlatformInit(#[from] platform::PlatformError),
     #[error("failed to init renderer: {0}")]
     RendererInit(#[from] renderer::RendererError),
 }

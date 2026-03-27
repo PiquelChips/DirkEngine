@@ -21,7 +21,7 @@ impl Engine {
         let logger = logging::Logger::new(true, true, true);
         logging::init(logger);
 
-        let platform = platform::Platform::init();
+        let platform = platform::Platform::init()?;
         let renderer = renderer::Renderer::init(platform.main_window())?;
 
         /* A rough idea of the flow of the C++ Engine

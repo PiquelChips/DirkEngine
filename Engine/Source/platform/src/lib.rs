@@ -23,11 +23,13 @@ pub struct Platform {
 }
 
 impl Platform {
-    pub fn init() -> Self {
-        Self {
+    pub fn init() -> Result<Self> {
+        let mut platform = Self {
             handler: handler::PlatformHandler::default(),
             event_loop: EventLoop::new().expect("failed to create empty winit event loop"),
-        }
+        };
+        platform.tick(0.)?;
+        Ok(platform)
     }
     pub fn tick(&mut self, _delta_time: f32) -> Result<()> {
         // TODO: maybe listen on a separate thread in the future
