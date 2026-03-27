@@ -11,3 +11,6 @@ log.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 winit.workspace = true
+
+[build-dependencies]
+build.workspace = true
