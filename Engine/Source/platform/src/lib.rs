@@ -5,6 +5,7 @@
 //!
 //! The DirkEngine's platform API is build on the winit crate.
 
+use log::info;
 use winit::event_loop::{EventLoop, run_on_demand::EventLoopExtRunOnDemand};
 
 mod errors;
@@ -28,7 +29,9 @@ impl Platform {
             handler: handler::PlatformHandler::default(),
             event_loop: EventLoop::new().expect("failed to create empty winit event loop"),
         };
+        // TODO: blocking call
         platform.tick(0.)?;
+        info!("initialized platform");
         Ok(platform)
     }
     pub fn tick(&mut self, _delta_time: f32) -> Result<()> {
