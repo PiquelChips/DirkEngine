@@ -17,6 +17,6 @@ pub fn configure_editor() {
     // declare editor config keys
     println!("cargo:rustc-check-cfg=cfg(editor)");
 
-    // build as editor
+    // always build as editor for now
     println!("cargo:rustc-cfg=editor");
 }
