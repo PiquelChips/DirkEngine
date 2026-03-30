@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["Engine/Source/engine","Engine/Source/logging", "Engine/Source/platform", "Engine/Source/renderer","Engine/Source/run"]
+members = ["Engine/Source/build","Engine/Source/engine","Engine/Source/logging", "Engine/Source/platform", "Engine/Source/renderer","Engine/Source/run"]
 
 [workspace.package]
 edition = "2024"
@@ -17,6 +17,7 @@ time = { version = "0.3", features = ["formatting"] }
 thiserror = "2"
 anyhow = "1"
 # Engine modules
+build = { path = "Engine/Source/build" }
 logging = { path = "Engine/Source/logging" }
 engine = { path = "Engine/Source/engine" }
 platform = { path = "Engine/Source/platform" }

@@ -1,5 +1,5 @@
 [package]
-name = "platform"
+name = "build"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -7,10 +7,3 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
-log.workspace = true
-anyhow.workspace = true
-thiserror.workspace = true
-winit.workspace = true
-
-[build-dependencies]
-build.workspace = true
