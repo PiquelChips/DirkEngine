@@ -5,6 +5,7 @@
 use std::{
     collections::{BTreeMap, HashSet},
     ffi::{CStr, c_void},
+    u64,
 };
 
 use anyhow::Context;
@@ -421,6 +422,16 @@ impl Renderer {
             #[cfg(validation)]
             debug_messenger,
         })
+    }
+    pub fn render(&self) -> Result<()> {
+        unsafe {
+            self.device
+                .wait_for_fences(&[self.in_flight_fence], true, u64::MAX)?;
+            self.device.reset_fences(&[self.in_flight_fence])?;
+        }
+
+        // TODO: actually render stuff
+        Ok(())
     }
     fn get_device_suitability(
         instance: &Instance,

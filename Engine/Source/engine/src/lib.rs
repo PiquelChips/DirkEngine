@@ -65,8 +65,10 @@ impl Engine {
          *
          * World Tick
          * Main Viewport tick
-         * Render
          */
+
+        self.render()?;
+
         Ok(self.is_requesting_exit())
     }
     pub fn render(&self) -> RenderResult<()> {
