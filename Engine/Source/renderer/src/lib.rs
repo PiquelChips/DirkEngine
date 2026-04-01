@@ -598,6 +598,29 @@ impl Renderer {
     }
 }
 
+impl Drop for Renderer {
+    fn drop(&mut self) {
+        unsafe {
+            self.device.device_wait_idle().ok();
+            log::info!("cleaning up renderer");
+
+            self.device
+                .destroy_descriptor_pool(self.descriptor_pool, None);
+            self.device
+                .destroy_descriptor_set_layout(self.descriptor_set_layout, None);
+            self.device.destroy_command_pool(self.command_pool, None);
+            self.device.destroy_fence(self.in_flight_fence, None);
+            self.device.destroy_device(None);
+
+            #[cfg(validation)]
+            self.debug_utils_loader
+                .destroy_debug_utils_messenger(self.debug_messenger, None);
+
+            self.instance.destroy_instance(None);
+        }
+    }
+}
+
 #[cfg(validation)]
 extern "system" fn debug_callback(
     severity: vk::DebugUtilsMessageSeverityFlagsEXT,
