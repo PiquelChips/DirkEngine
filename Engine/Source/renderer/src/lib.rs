@@ -51,6 +51,12 @@ impl QueueFamilyIndices {
     }
 }
 
+#[derive(Clone)]
+pub struct SwapchainImage {
+    pub image: vk::Image,
+    pub view: vk::ImageView,
+}
+
 #[derive(Clone, Copy)]
 struct DeviceFeatures {
     anisotropy: bool,
@@ -114,6 +120,8 @@ pub struct Renderer {
 }
 
 impl Renderer {
+    // MAIN RENDERER RUNTIME FUNCTIONS
+
     pub fn init(window: &platform::Window) -> Result<Self> {
         info!("Intializing Vulkan...");
 
@@ -433,6 +441,8 @@ impl Renderer {
         // TODO: actually render stuff
         Ok(())
     }
+    // RENDERER UTILITY FUNCTIONS
+
     fn get_device_suitability(
         instance: &Instance,
         device: vk::PhysicalDevice,
@@ -565,16 +575,6 @@ impl Renderer {
         }
         vk::SampleCountFlags::TYPE_1
     }
-    fn choose_swap_surface_format(formats: &[vk::SurfaceFormatKHR]) -> vk::SurfaceFormatKHR {
-        formats
-            .iter()
-            .find(|format| {
-                format.format == vk::Format::B8G8R8A8_SRGB
-                    && format.color_space == vk::ColorSpaceKHR::SRGB_NONLINEAR
-            })
-            .copied()
-            .unwrap_or(formats[0])
-    }
     fn find_supported_format(
         instance: &Instance,
         physical_device: vk::PhysicalDevice,
@@ -595,6 +595,48 @@ impl Renderer {
             }
         }
         Err(RendererError::NoSupportedFormat)
+    }
+    fn has_stencil_component(format: vk::Format) -> bool {
+        matches!(
+            format,
+            vk::Format::D32_SFLOAT_S8_UINT | vk::Format::D24_UNORM_S8_UINT
+        )
+    }
+    fn choose_swap_surface_format(formats: &[vk::SurfaceFormatKHR]) -> vk::SurfaceFormatKHR {
+        formats
+            .iter()
+            .find(|format| {
+                format.format == vk::Format::B8G8R8A8_SRGB
+                    && format.color_space == vk::ColorSpaceKHR::SRGB_NONLINEAR
+            })
+            .copied()
+            .unwrap_or(formats[0])
+    }
+    fn choose_swap_present_mode(available: &[vk::PresentModeKHR]) -> vk::PresentModeKHR {
+        if available.contains(&vk::PresentModeKHR::MAILBOX) {
+            vk::PresentModeKHR::MAILBOX
+        } else {
+            vk::PresentModeKHR::FIFO
+        }
+    }
+    fn choose_swap_extent(
+        window_size: vk::Extent2D,
+        capabilities: &vk::SurfaceCapabilitiesKHR,
+    ) -> vk::Extent2D {
+        if capabilities.current_extent.width != u32::MAX {
+            return capabilities.current_extent;
+        }
+
+        vk::Extent2D {
+            width: window_size.width.clamp(
+                capabilities.min_image_extent.width,
+                capabilities.max_image_extent.width,
+            ),
+            height: window_size.height.clamp(
+                capabilities.min_image_extent.height,
+                capabilities.max_image_extent.height,
+            ),
+        }
     }
 }
 
