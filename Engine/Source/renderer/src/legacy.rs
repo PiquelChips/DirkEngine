@@ -147,6 +147,7 @@ pub struct Renderer {
     debug_messenger: vk::DebugUtilsMessengerEXT,
 }
 
+/// TODO: REMOVE
 impl From<anyhow::Error> for RendererError {
     fn from(value: anyhow::Error) -> Self {
         Self::Anyhow(value)
