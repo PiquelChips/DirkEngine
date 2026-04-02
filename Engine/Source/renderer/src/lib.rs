@@ -72,6 +72,32 @@ struct RendererProperties {
     depth_format: vk::Format,
 }
 
+struct ImageMemoryView {
+    image: vk::Image,
+    memory: vk::DeviceMemory,
+    view: vk::ImageView,
+}
+
+struct CreateImageMemoryViewInfo {
+    width: u32,
+    height: u32,
+    format: vk::Format,
+    tiling: vk::ImageTiling,
+    usage: vk::ImageUsageFlags,
+    properties: vk::MemoryPropertyFlags,
+    num_samples: vk::SampleCountFlags,
+    mip_levels: u32,
+    image_aspect: vk::ImageAspectFlags,
+}
+
+// Mirrors the ModelViewProjection UBO used in descriptor set writes.
+#[repr(C)]
+struct ModelViewProjection {
+    model: glam::Mat4,
+    view: glam::Mat4,
+    proj: glam::Mat4,
+}
+
 impl DeviceFeatures {
     fn is_complete(&self) -> bool {
         self.anisotropy && self.msaa_samples.as_raw() > 1
@@ -441,6 +467,101 @@ impl Renderer {
         // TODO: actually render stuff
         Ok(())
     }
+
+    // EXTERNAL HELPER FUNCTIONS
+
+    pub fn create_swap_chain(
+        &self,
+        surface: vk::SurfaceKHR,
+        window_size: vk::Extent2D,
+        surface_format: vk::SurfaceFormatKHR,
+        present_mode: vk::PresentModeKHR,
+        old_swapchain: vk::SwapchainKHR,
+        extent: &mut vk::Extent2D,
+        out_swapchain: &mut vk::SwapchainKHR,
+    ) -> Result<Vec<SwapchainImage>> {
+        let capabilities = unsafe {
+            self.surface_loader
+                .get_physical_device_surface_capabilities(self.physical_device, surface)?
+        };
+
+        *extent = Self::choose_swap_extent(window_size, &capabilities);
+
+        let mut image_count = capabilities.min_image_count + 1;
+        if capabilities.max_image_count > 0 && image_count > capabilities.max_image_count {
+            image_count = capabilities.max_image_count;
+        }
+
+        let indices = self.properties.queue_family_indices;
+        let indices_array = [
+            indices.graphics_family.expect("graphics_family"),
+            indices.present_family.expect("present_family"),
+        ];
+
+        let (sharing_mode, indices_slice): (vk::SharingMode, &[u32]) =
+            if indices.graphics_family != indices.present_family {
+                (vk::SharingMode::CONCURRENT, &indices_array)
+            } else {
+                (vk::SharingMode::EXCLUSIVE, &[])
+            };
+
+        let create_info = vk::SwapchainCreateInfoKHR::default()
+            .surface(surface)
+            .min_image_count(image_count)
+            .image_format(surface_format.format)
+            .image_color_space(surface_format.color_space)
+            .image_extent(*extent)
+            .image_array_layers(1)
+            .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)
+            .image_sharing_mode(sharing_mode)
+            .queue_family_indices(indices_slice)
+            .pre_transform(capabilities.current_transform)
+            .composite_alpha(vk::CompositeAlphaFlagsKHR::OPAQUE)
+            .present_mode(present_mode)
+            .clipped(true)
+            .old_swapchain(old_swapchain);
+
+        *out_swapchain = unsafe {
+            self.swapchain_loader
+                .create_swapchain(&create_info, None)
+                .context("swap chain creation")?
+        };
+
+        let images = unsafe {
+            self.swapchain_loader
+                .get_swapchain_images(*out_swapchain)
+                .context("get swap chain images")?
+        };
+
+        Ok(images
+            .into_iter()
+            .map(|image| {
+                // TODO: try to promote error
+                let cmd = self.begin_single_time_commands().unwrap();
+                // TODO: try to promote error
+                self.transition_image_layout(
+                    cmd,
+                    image,
+                    surface_format.format,
+                    vk::ImageLayout::UNDEFINED,
+                    vk::ImageLayout::PRESENT_SRC_KHR,
+                    1,
+                )
+                .unwrap();
+                // TODO: try to promote error
+                self.end_single_time_commands(cmd, self.queues.graphics)
+                    .unwrap();
+
+                // TODO: try to promote error
+                let view = self
+                    .create_image_view(image, surface_format.format, vk::ImageAspectFlags::COLOR, 1)
+                    .unwrap();
+
+                SwapchainImage { image, view }
+            })
+            .collect())
+    }
+
     // RENDERER UTILITY FUNCTIONS
 
     fn get_device_suitability(
@@ -805,7 +926,7 @@ impl Renderer {
             );
         })
     }
-    fn create_image_view_raw(
+    fn create_image_view(
         &self,
         image: vk::Image,
         format: vk::Format,
@@ -829,6 +950,403 @@ impl Renderer {
                 .create_image_view(&create_info, None)
                 .context("create image view")?
         })
+    }
+    fn create_image(
+        &self,
+        width: u32,
+        height: u32,
+        format: vk::Format,
+        tiling: vk::ImageTiling,
+        usage: vk::ImageUsageFlags,
+        properties: vk::MemoryPropertyFlags,
+        num_samples: vk::SampleCountFlags,
+        mip_levels: u32,
+    ) -> Result<(vk::Image, vk::DeviceMemory)> {
+        let image_info = vk::ImageCreateInfo::default()
+            .image_type(vk::ImageType::TYPE_2D)
+            .format(format)
+            .extent(vk::Extent3D {
+                width,
+                height,
+                depth: 1,
+            })
+            .mip_levels(mip_levels)
+            .array_layers(1)
+            .samples(num_samples)
+            .tiling(tiling)
+            .usage(usage)
+            .sharing_mode(vk::SharingMode::EXCLUSIVE)
+            .initial_layout(vk::ImageLayout::UNDEFINED);
+
+        let image = unsafe {
+            self.device
+                .create_image(&image_info, None)
+                .context("create image")?
+        };
+
+        let mem_req = unsafe { self.device.get_image_memory_requirements(image) };
+
+        let alloc_info = vk::MemoryAllocateInfo::default()
+            .allocation_size(mem_req.size)
+            .memory_type_index(Self::find_memory_type(
+                &self.instance,
+                self.physical_device,
+                mem_req.memory_type_bits,
+                properties,
+            )?);
+
+        let memory = unsafe {
+            self.device
+                .allocate_memory(&alloc_info, None)
+                .context("allocate image memory")?
+        };
+
+        unsafe { self.device.bind_image_memory(image, memory, 0).unwrap() };
+
+        Ok((image, memory))
+    }
+    pub fn create_buffer(
+        &self,
+        size: vk::DeviceSize,
+        usage: vk::BufferUsageFlags,
+        properties: vk::MemoryPropertyFlags,
+    ) -> Result<(vk::Buffer, vk::DeviceMemory)> {
+        let buffer_info = vk::BufferCreateInfo::default()
+            .size(size)
+            .usage(usage)
+            .sharing_mode(vk::SharingMode::EXCLUSIVE);
+
+        let buffer = unsafe {
+            self.device
+                .create_buffer(&buffer_info, None)
+                .expect("Failed to create buffer")
+        };
+
+        let mem_req = unsafe { self.device.get_buffer_memory_requirements(buffer) };
+
+        let alloc_info = vk::MemoryAllocateInfo::default()
+            .allocation_size(mem_req.size)
+            .memory_type_index(Self::find_memory_type(
+                &self.instance,
+                self.physical_device,
+                mem_req.memory_type_bits,
+                properties,
+            )?);
+
+        let memory = unsafe {
+            self.device
+                .allocate_memory(&alloc_info, None)
+                .expect("Failed to allocate buffer memory")
+        };
+
+        unsafe { self.device.bind_buffer_memory(buffer, memory, 0).unwrap() };
+
+        Ok((buffer, memory))
+    }
+    fn create_image_memory_view(
+        &self,
+        info: &CreateImageMemoryViewInfo,
+    ) -> Result<ImageMemoryView> {
+        assert_ne!(info.format, vk::Format::UNDEFINED);
+
+        let (image, memory) = self.create_image(
+            info.width,
+            info.height,
+            info.format,
+            info.tiling,
+            info.usage,
+            info.properties,
+            info.num_samples,
+            info.mip_levels,
+        )?;
+
+        let view =
+            self.create_image_view(image, info.format, info.image_aspect, info.mip_levels)?;
+
+        Ok(ImageMemoryView {
+            image,
+            memory,
+            view,
+        })
+    }
+
+    fn create_semaphore(&self) -> Result<vk::Semaphore> {
+        let info = vk::SemaphoreCreateInfo::default();
+        Ok(unsafe {
+            self.device
+                .create_semaphore(&info, None)
+                .context("create semaphore")?
+        })
+    }
+    fn create_command_buffer(&self) -> Result<vk::CommandBuffer> {
+        let alloc_info = vk::CommandBufferAllocateInfo::default()
+            .command_pool(self.command_pool)
+            .level(vk::CommandBufferLevel::PRIMARY)
+            .command_buffer_count(1);
+
+        Ok(unsafe {
+            self.device
+                .allocate_command_buffers(&alloc_info)
+                .context("allocate command buffers")?[0]
+        })
+    }
+    fn create_descriptor_sets(
+        &self,
+        uniform_buffer: vk::Buffer,
+        sampler: vk::Sampler,
+        image_view: vk::ImageView,
+        layout: vk::ImageLayout,
+    ) -> Result<vk::DescriptorSet> {
+        let layouts = [self.descriptor_set_layout];
+        let alloc_info = vk::DescriptorSetAllocateInfo::default()
+            .descriptor_pool(self.descriptor_pool)
+            .set_layouts(&layouts);
+
+        let descriptor_set = unsafe {
+            self.device
+                .allocate_descriptor_sets(&alloc_info)
+                .context("allocate descriptor set")?[0]
+        };
+
+        let buffer_info = vk::DescriptorBufferInfo {
+            buffer: uniform_buffer,
+            offset: 0,
+            range: std::mem::size_of::<ModelViewProjection>() as u64,
+        };
+
+        let image_info = vk::DescriptorImageInfo {
+            image_view,
+            sampler,
+            image_layout: layout,
+        };
+
+        let descriptor_writes = [
+            vk::WriteDescriptorSet::default()
+                .dst_set(descriptor_set)
+                .dst_binding(0)
+                .dst_array_element(0)
+                .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                .buffer_info(std::slice::from_ref(&buffer_info)),
+            vk::WriteDescriptorSet::default()
+                .dst_set(descriptor_set)
+                .dst_binding(1)
+                .dst_array_element(0)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .image_info(std::slice::from_ref(&image_info)),
+        ];
+
+        unsafe { self.device.update_descriptor_sets(&descriptor_writes, &[]) };
+
+        Ok(descriptor_set)
+    }
+    fn copy_buffer_to_image(
+        &self,
+        cmd: vk::CommandBuffer,
+        buffer: vk::Buffer,
+        image: vk::Image,
+        width: u32,
+        height: u32,
+        offset_x: u32,
+        offset_y: u32,
+    ) {
+        let region = vk::BufferImageCopy {
+            buffer_offset: 0,
+            buffer_row_length: 0,
+            buffer_image_height: 0,
+            image_subresource: vk::ImageSubresourceLayers {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                mip_level: 0,
+                base_array_layer: 0,
+                layer_count: 1,
+            },
+            image_offset: vk::Offset3D {
+                x: offset_x as i32,
+                y: offset_y as i32,
+                z: 0,
+            },
+            image_extent: vk::Extent3D {
+                width,
+                height,
+                depth: 1,
+            },
+        };
+
+        unsafe {
+            self.device.cmd_copy_buffer_to_image(
+                cmd,
+                buffer,
+                image,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                &[region],
+            );
+        }
+    }
+    fn generate_mipmaps(
+        &self,
+        cmd: vk::CommandBuffer,
+        image: vk::Image,
+        image_format: vk::Format,
+        tex_width: u32,
+        tex_height: u32,
+        mip_levels: u32,
+    ) -> Result<()> {
+        let format_properties = unsafe {
+            self.instance
+                .get_physical_device_format_properties(self.physical_device, image_format)
+        };
+
+        if !format_properties
+            .optimal_tiling_features
+            .contains(vk::FormatFeatureFlags::SAMPLED_IMAGE_FILTER_LINEAR)
+        {
+            return Err(RendererError::FormatNoBlittingSupport);
+        }
+
+        let mut barrier = vk::ImageMemoryBarrier::default()
+            .image(image)
+            .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+            .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+            .subresource_range(vk::ImageSubresourceRange {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                base_array_layer: 0,
+                layer_count: 1,
+                level_count: 1,
+                base_mip_level: 0,
+            });
+
+        let mut mip_width = tex_width;
+        let mut mip_height = tex_height;
+
+        for i in 1..mip_levels {
+            barrier.subresource_range.base_mip_level = i - 1;
+            barrier.old_layout = vk::ImageLayout::TRANSFER_DST_OPTIMAL;
+            barrier.new_layout = vk::ImageLayout::TRANSFER_SRC_OPTIMAL;
+            barrier.src_access_mask = vk::AccessFlags::TRANSFER_WRITE;
+            barrier.dst_access_mask = vk::AccessFlags::TRANSFER_READ;
+
+            unsafe {
+                self.device.cmd_pipeline_barrier(
+                    cmd,
+                    vk::PipelineStageFlags::TRANSFER,
+                    vk::PipelineStageFlags::TRANSFER,
+                    vk::DependencyFlags::empty(),
+                    &[],
+                    &[],
+                    &[barrier],
+                );
+            }
+
+            let blit = vk::ImageBlit {
+                src_subresource: vk::ImageSubresourceLayers {
+                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                    mip_level: i - 1,
+                    base_array_layer: 0,
+                    layer_count: 1,
+                },
+                src_offsets: [
+                    vk::Offset3D { x: 0, y: 0, z: 0 },
+                    vk::Offset3D {
+                        x: mip_width as i32,
+                        y: mip_height as i32,
+                        z: 1,
+                    },
+                ],
+                dst_subresource: vk::ImageSubresourceLayers {
+                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                    mip_level: i,
+                    base_array_layer: 0,
+                    layer_count: 1,
+                },
+                dst_offsets: [
+                    vk::Offset3D { x: 0, y: 0, z: 0 },
+                    vk::Offset3D {
+                        x: if mip_width > 1 {
+                            mip_width as i32 / 2
+                        } else {
+                            1
+                        },
+                        y: if mip_height > 1 {
+                            mip_height as i32 / 2
+                        } else {
+                            1
+                        },
+                        z: 1,
+                    },
+                ],
+            };
+
+            unsafe {
+                self.device.cmd_blit_image(
+                    cmd,
+                    image,
+                    vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                    image,
+                    vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                    &[blit],
+                    vk::Filter::LINEAR,
+                );
+            }
+
+            barrier.old_layout = vk::ImageLayout::TRANSFER_SRC_OPTIMAL;
+            barrier.new_layout = vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL;
+            barrier.src_access_mask = vk::AccessFlags::TRANSFER_READ;
+            barrier.dst_access_mask = vk::AccessFlags::SHADER_READ;
+
+            unsafe {
+                self.device.cmd_pipeline_barrier(
+                    cmd,
+                    vk::PipelineStageFlags::TRANSFER,
+                    vk::PipelineStageFlags::FRAGMENT_SHADER,
+                    vk::DependencyFlags::empty(),
+                    &[],
+                    &[],
+                    &[barrier],
+                );
+            }
+
+            if mip_width > 1 {
+                mip_width /= 2;
+            }
+            if mip_height > 1 {
+                mip_height /= 2;
+            }
+        }
+
+        // Transition the last mip level (never blitted from)
+        barrier.subresource_range.base_mip_level = mip_levels - 1;
+        barrier.old_layout = vk::ImageLayout::TRANSFER_DST_OPTIMAL;
+        barrier.new_layout = vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL;
+        barrier.src_access_mask = vk::AccessFlags::TRANSFER_WRITE;
+        barrier.dst_access_mask = vk::AccessFlags::SHADER_READ;
+
+        Ok(unsafe {
+            self.device.cmd_pipeline_barrier(
+                cmd,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::PipelineStageFlags::FRAGMENT_SHADER,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[barrier],
+            );
+        })
+    }
+    fn find_memory_type(
+        instance: &Instance,
+        physical_device: vk::PhysicalDevice,
+        type_filter: u32,
+        properties: vk::MemoryPropertyFlags,
+    ) -> Result<u32> {
+        let mem_props = unsafe { instance.get_physical_device_memory_properties(physical_device) };
+
+        Ok((0..mem_props.memory_type_count)
+            .find(|&i| {
+                (type_filter & (1 << i)) != 0
+                    && mem_props.memory_types[i as usize]
+                        .property_flags
+                        .contains(properties)
+            })
+            .context("Failed to find suitable memory type")?)
     }
 }
 

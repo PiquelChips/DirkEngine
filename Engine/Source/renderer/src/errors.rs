@@ -28,6 +28,9 @@ pub enum RendererError {
         old: vk::ImageLayout,
         new: vk::ImageLayout,
     },
+
+    #[error("texture image format does not support linear blitting")]
+    FormatNoBlittingSupport,
 }
 
 impl From<HandleError> for RendererError {
