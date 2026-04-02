@@ -147,6 +147,12 @@ pub struct Renderer {
     debug_messenger: vk::DebugUtilsMessengerEXT,
 }
 
+impl From<anyhow::Error> for RendererError {
+    fn from(value: anyhow::Error) -> Self {
+        Self::Anyhow(value)
+    }
+}
+
 impl Renderer {
     // MAIN RENDERER RUNTIME FUNCTIONS
 

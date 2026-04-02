@@ -8,7 +8,7 @@ pub type Result<T> = std::result::Result<T, RendererError>;
 pub enum RendererError {
     // TODO: make it so that errors convert to RendererError before context is added
     #[error(transparent)]
-    Anyhow(#[from] anyhow::Error),
+    Anyhow(anyhow::Error),
 
     #[error("Vulkan error: {0}")]
     VulkanError(#[from] ash::vk::Result),
