@@ -695,6 +695,141 @@ impl Renderer {
 
         Ok(())
     }
+    fn transition_image_layout(
+        &self,
+        cmd: vk::CommandBuffer,
+        image: vk::Image,
+        format: vk::Format,
+        old_layout: vk::ImageLayout,
+        new_layout: vk::ImageLayout,
+        mip_levels: u32,
+    ) -> Result<()> {
+        let mut aspect_mask = vk::ImageAspectFlags::COLOR;
+
+        if new_layout == vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL {
+            aspect_mask = vk::ImageAspectFlags::DEPTH;
+            if Self::has_stencil_component(format) {
+                aspect_mask |= vk::ImageAspectFlags::STENCIL;
+            }
+        }
+
+        let mut barrier = vk::ImageMemoryBarrier::default()
+            .old_layout(old_layout)
+            .new_layout(new_layout)
+            .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+            .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+            .image(image)
+            .subresource_range(vk::ImageSubresourceRange {
+                aspect_mask,
+                base_mip_level: 0,
+                level_count: mip_levels,
+                base_array_layer: 0,
+                layer_count: 1,
+            });
+
+        let (src_stage, dst_stage) = match (old_layout, new_layout) {
+            (vk::ImageLayout::UNDEFINED, vk::ImageLayout::TRANSFER_DST_OPTIMAL) => {
+                barrier.src_access_mask = vk::AccessFlags::empty();
+                barrier.dst_access_mask = vk::AccessFlags::TRANSFER_WRITE;
+                (
+                    vk::PipelineStageFlags::TOP_OF_PIPE,
+                    vk::PipelineStageFlags::TRANSFER,
+                )
+            }
+            (vk::ImageLayout::TRANSFER_DST_OPTIMAL, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL) => {
+                barrier.src_access_mask = vk::AccessFlags::TRANSFER_WRITE;
+                barrier.dst_access_mask = vk::AccessFlags::SHADER_READ;
+                (
+                    vk::PipelineStageFlags::TRANSFER,
+                    vk::PipelineStageFlags::FRAGMENT_SHADER,
+                )
+            }
+            (vk::ImageLayout::UNDEFINED, vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL) => {
+                barrier.src_access_mask = vk::AccessFlags::empty();
+                barrier.dst_access_mask = vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_READ
+                    | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE;
+                (
+                    vk::PipelineStageFlags::TOP_OF_PIPE,
+                    vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
+                )
+            }
+            (vk::ImageLayout::PRESENT_SRC_KHR, vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL) => {
+                barrier.src_access_mask = vk::AccessFlags::empty();
+                barrier.dst_access_mask = vk::AccessFlags::COLOR_ATTACHMENT_WRITE;
+                (
+                    vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+                    vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+                )
+            }
+            (vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL, vk::ImageLayout::PRESENT_SRC_KHR) => {
+                barrier.src_access_mask = vk::AccessFlags::COLOR_ATTACHMENT_WRITE;
+                barrier.dst_access_mask = vk::AccessFlags::empty();
+                (
+                    vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+                    vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+                )
+            }
+            (vk::ImageLayout::UNDEFINED, vk::ImageLayout::PRESENT_SRC_KHR) => {
+                barrier.src_access_mask = vk::AccessFlags::empty();
+                barrier.dst_access_mask = vk::AccessFlags::empty();
+                (
+                    vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+                    vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+                )
+            }
+            (vk::ImageLayout::UNDEFINED, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL) => {
+                barrier.src_access_mask = vk::AccessFlags::empty();
+                barrier.dst_access_mask = vk::AccessFlags::SHADER_READ;
+                (
+                    vk::PipelineStageFlags::TOP_OF_PIPE,
+                    vk::PipelineStageFlags::FRAGMENT_SHADER,
+                )
+            }
+            _ => {
+                return Err(RendererError::UnsupportedImageLayoutTransition {
+                    old: old_layout,
+                    new: new_layout,
+                });
+            }
+        };
+
+        Ok(unsafe {
+            self.device.cmd_pipeline_barrier(
+                cmd,
+                src_stage,
+                dst_stage,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[barrier],
+            );
+        })
+    }
+    fn create_image_view_raw(
+        &self,
+        image: vk::Image,
+        format: vk::Format,
+        aspect_flags: vk::ImageAspectFlags,
+        mip_levels: u32,
+    ) -> Result<vk::ImageView> {
+        let create_info = vk::ImageViewCreateInfo::default()
+            .image(image)
+            .view_type(vk::ImageViewType::TYPE_2D)
+            .format(format)
+            .subresource_range(vk::ImageSubresourceRange {
+                aspect_mask: aspect_flags,
+                base_mip_level: 0,
+                level_count: mip_levels,
+                base_array_layer: 0,
+                layer_count: 1,
+            });
+
+        Ok(unsafe {
+            self.device
+                .create_image_view(&create_info, None)
+                .context("create image view")?
+        })
+    }
 }
 
 impl Drop for Renderer {
