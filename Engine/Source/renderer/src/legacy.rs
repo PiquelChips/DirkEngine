@@ -54,9 +54,9 @@ impl QueueFamilyIndices {
 }
 
 #[derive(Clone)]
-pub struct SwapchainImage {
-    pub image: vk::Image,
-    pub view: vk::ImageView,
+struct SwapchainImage {
+    image: vk::Image,
+    view: vk::ImageView,
 }
 
 #[derive(Clone, Copy)]
@@ -220,7 +220,7 @@ impl Renderer {
             let messenger = unsafe {
                 loader
                     .create_debug_utils_messenger(&debug_create_info, None)
-                    .context("creatint vulkan debug messenger")?
+                    .context("creating vulkan debug messenger")?
             };
             (loader, messenger)
         };
@@ -478,7 +478,7 @@ impl Renderer {
 
     // EXTERNAL HELPER FUNCTIONS
 
-    pub fn create_swap_chain(
+    fn create_swap_chain(
         &self,
         surface: vk::SurfaceKHR,
         window_size: vk::Extent2D,
@@ -1013,7 +1013,7 @@ impl Renderer {
 
         Ok((image, memory))
     }
-    pub fn create_buffer(
+    fn create_buffer(
         &self,
         size: vk::DeviceSize,
         usage: vk::BufferUsageFlags,
