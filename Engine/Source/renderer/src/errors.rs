@@ -1,6 +1,6 @@
 use ash::vk;
+use raw_window_handle::HandleError;
 use thiserror::Error;
-use winit::raw_window_handle::HandleError;
 
 pub type Result<T> = std::result::Result<T, RendererError>;
 
