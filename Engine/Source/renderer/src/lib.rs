@@ -35,8 +35,8 @@ const DEVICE_EXTENSIONS: &[&CStr] = &[ash::khr::swapchain::NAME];
 const VALIDATION_LAYERS: &[*const i8] = &[c"VK_LAYER_KHRONOS_validation".as_ptr()];
 
 struct Queues {
-    graphics_queue: vk::Queue,
-    present_queue: vk::Queue,
+    graphics: vk::Queue,
+    present: vk::Queue,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -316,7 +316,7 @@ impl Renderer {
 
         // QUEUES
         let queues = Queues {
-            graphics_queue: unsafe {
+            graphics: unsafe {
                 device.get_device_queue(
                     queue_family_indices
                         .graphics_family
@@ -324,7 +324,7 @@ impl Renderer {
                     0,
                 )
             },
-            present_queue: unsafe {
+            present: unsafe {
                 device.get_device_queue(
                     queue_family_indices
                         .present_family

@@ -1,3 +1,4 @@
+use ash::vk;
 use thiserror::Error;
 use winit::raw_window_handle::HandleError;
 
@@ -21,6 +22,12 @@ pub enum RendererError {
     NoDeviceFound,
     #[error("failed to find supported format")]
     NoSupportedFormat,
+
+    #[error("unsupported image layout transition {old:?} --> {new:?}")]
+    UnsupportedImageLayoutTransition {
+        old: vk::ImageLayout,
+        new: vk::ImageLayout,
+    },
 }
 
 impl From<HandleError> for RendererError {
