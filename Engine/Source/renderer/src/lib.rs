@@ -638,6 +638,63 @@ impl Renderer {
             ),
         }
     }
+    fn begin_single_time_commands(&self) -> Result<vk::CommandBuffer> {
+        let pool_info = vk::CommandPoolCreateInfo::default()
+            .flags(vk::CommandPoolCreateFlags::TRANSIENT)
+            .queue_family_index(
+                self.properties
+                    .queue_family_indices
+                    .graphics_family
+                    .expect("graphics_family"),
+            );
+
+        let pool = unsafe {
+            self.device
+                .create_command_pool(&pool_info, None)
+                .context("creating command pool")?
+        };
+
+        let alloc_info = vk::CommandBufferAllocateInfo::default()
+            .command_pool(pool)
+            .level(vk::CommandBufferLevel::PRIMARY)
+            .command_buffer_count(1);
+
+        let cmd = unsafe {
+            self.device
+                .allocate_command_buffers(&alloc_info)
+                .context("allocating command buffers")?[0]
+        };
+
+        let begin_info = vk::CommandBufferBeginInfo::default()
+            .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+
+        unsafe {
+            self.device
+                .begin_command_buffer(cmd, &begin_info)
+                .context("begin command buffer")?
+        };
+        Ok(cmd)
+    }
+    fn end_single_time_commands(&self, cmd: vk::CommandBuffer, queue: vk::Queue) -> Result<()> {
+        unsafe {
+            self.device
+                .end_command_buffer(cmd)
+                .context("end command buffer")?
+        };
+
+        let submit_info = vk::SubmitInfo::default().command_buffers(std::slice::from_ref(&cmd));
+
+        unsafe {
+            self.device
+                .queue_submit(queue, &[submit_info], vk::Fence::null())
+                .context("submit command buffer")?;
+            self.device
+                .queue_wait_idle(queue)
+                .context("waiting for device idle")?;
+        };
+
+        Ok(())
+    }
 }
 
 impl Drop for Renderer {
