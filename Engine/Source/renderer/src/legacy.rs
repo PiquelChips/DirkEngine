@@ -1,6 +1,10 @@
+//! This is the legacy C++ engine ported to Rust
+//!
 //! This crate contains everything to do with the main rendering logic.
 //! As the Ash Vulkan bindings are unsafe, all Vulkan calls should be
 //! make here, to centralize the unsafe Vulkan code.
+
+#![allow(dead_code, unused)]
 
 use std::{
     collections::{BTreeMap, HashSet},
@@ -23,7 +27,7 @@ use log::{debug, error, info, trace, warn};
 
 use crate::errors::{RendererError, Result};
 
-use winit::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
+use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
 const MAX_DESCRIPTOR_SET_COUNT: u32 = 1024;
 

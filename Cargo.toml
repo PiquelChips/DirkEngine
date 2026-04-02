@@ -28,4 +28,5 @@ renderer = { path = "Engine/Source/renderer" }
 winit = "0.31.0-beta.2"
 ash = { version = "0.38", features = ["loaded"] }
 ash-window = "0.13"
+raw-window-handle = "0.6"
 glam = "0.32"
