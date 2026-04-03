@@ -1,4 +1,5 @@
-use anyhow::Context;
+use std::ffi::CString;
+
 #[cfg(validation)]
 use ash::ext::debug_utils;
 use ash::{
@@ -13,6 +14,17 @@ pub use errors::{RendererError, Result};
 mod legacy;
 mod structs;
 use structs::*;
+
+pub struct RendererCreateInfo {
+    engine_name: CString,
+    engine_version: utils::Version,
+    app_name: CString,
+    app_version: utils::Version,
+}
+
+fn make_version(version: utils::Version) -> u32 {
+    vk::make_api_version(0, version.major(), version.minor(), version.patch())
+}
 
 /// The Renderer struct that holds all render state and is called upon to handle
 /// all rendering operations
@@ -38,16 +50,16 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn init(window: &platform::Window) -> Result<Self> {
+    pub fn init(create_info: RendererCreateInfo, window: &platform::Window) -> Result<Self> {
         info!("Intializing Vulkan...");
 
         let entry = unsafe { Entry::load()? };
 
         let app_info = vk::ApplicationInfo::default()
-            .application_name(c"DirkEngine")
-            .application_version(vk::make_api_version(0, 1, 0, 0))
-            .engine_name(c"DirkEngine")
-            .engine_version(vk::make_api_version(0, 1, 0, 0))
+            .application_name(create_info.app_name.as_c_str())
+            .application_version(make_version(create_info.app_version))
+            .engine_name(create_info.engine_name.as_c_str())
+            .engine_version(make_version(create_info.app_version))
             .api_version(vk::API_VERSION_1_3);
 
         Ok(Self {
