@@ -11,6 +11,7 @@ use log::{debug, error, info, trace, warn};
 
 mod errors;
 pub use errors::{RendererError, Result};
+use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 mod legacy;
 mod structs;
 
@@ -40,13 +41,13 @@ pub struct Renderer {
     queues: Queues,
     physical_device: vk::PhysicalDevice,
 
-    surface: vk::SurfaceKHR, // The surface of the main window
     properties: RendererProperties,
+    */
+    surface: vk::SurfaceKHR, // The surface of the main window
 
     // Extensions
     surface_loader: surface::Instance,
-    swapchain_loader: swapchain::Device,
-    */
+    //swapchain_loader: swapchain::Device,
     #[cfg(validation)]
     debug_utils_loader: debug_utils::Instance,
     #[cfg(validation)]
@@ -160,6 +161,21 @@ impl Renderer {
             (instance, debug_utils_loader, debug_messenger)
         };
 
+        let (surface_loader, surface) = {
+            let surface = unsafe {
+                ash_window::create_surface(
+                    &entry,
+                    &instance,
+                    window.display_handle()?.as_raw(),
+                    window.window_handle()?.as_raw(),
+                    None,
+                )?
+            };
+            let loader = surface::Instance::new(&entry, &instance);
+
+            (loader, surface)
+        };
+
         Ok(Self {
             entry,
             instance,
@@ -167,11 +183,11 @@ impl Renderer {
             device,
             queues,
             physical_device,
-            surface,
             properties,
-            surface_loader,
-            swapchain_loader,
             */
+            surface,
+            surface_loader,
+            //swapchain_loader,
             debug_utils_loader,
             debug_messenger,
         })
