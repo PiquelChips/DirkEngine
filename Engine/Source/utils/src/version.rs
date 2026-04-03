@@ -2,6 +2,10 @@ use std::{fmt, str::FromStr};
 
 use thiserror::Error;
 
+/// A simple representation of a version. This is
+/// used to track engine version, etc...
+/// For now it is mainly used by Vulkan when populating
+/// the application info struct.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Version(u32);
 
