@@ -23,6 +23,11 @@ pub enum RendererError {
     #[error("failed to find supported format")]
     NoSupportedFormat,
 
+    #[error("instance extension {0} not found")]
+    ExtensionNotFound(String),
+    #[error("validation layer {0} not found")]
+    ValidationLayerNotFound(String),
+
     #[error("unsupported image layout transition {old:?} --> {new:?}")]
     UnsupportedImageLayoutTransition {
         old: vk::ImageLayout,
