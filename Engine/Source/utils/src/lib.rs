@@ -6,6 +6,7 @@ use thiserror::Error;
 pub struct Version(u32);
 
 impl Version {
+    pub const ZERO: Self = Self(0);
     pub fn new(major: u32, minor: u32, patch: u32) -> Self {
         assert!(
             major < (1 << 10),
