@@ -22,10 +22,10 @@ fn make_version(version: utils::Version) -> u32 {
 const VALIDATION_LAYERS: &[*const i8] = &[c"VK_LAYER_KHRONOS_validation".as_ptr()];
 
 pub struct RendererCreateInfo {
-    engine_name: CString,
-    engine_version: utils::Version,
-    app_name: CString,
-    app_version: utils::Version,
+    pub engine_name: CString,
+    pub engine_version: utils::Version,
+    pub app_name: CString,
+    pub app_version: utils::Version,
 }
 
 /// The Renderer struct that holds all render state and is called upon to handle
@@ -175,6 +175,11 @@ impl Renderer {
             debug_utils_loader,
             debug_messenger,
         })
+    }
+
+    pub fn render(&self) -> Result<()> {
+        // TODO: render
+        Ok(())
     }
 }
 

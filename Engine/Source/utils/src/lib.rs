@@ -5,6 +5,12 @@ use thiserror::Error;
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Version(u32);
 
+impl Default for Version {
+    fn default() -> Self {
+        Self::ZERO
+    }
+}
+
 impl Version {
     pub const ZERO: Self = Self(0);
     pub fn new(major: u32, minor: u32, patch: u32) -> Self {

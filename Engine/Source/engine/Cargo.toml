@@ -12,5 +12,6 @@ thiserror.workspace = true
 log.workspace = true
 
 logging.workspace = true
+utils.workspace = true
 platform.workspace = true
 renderer.workspace = true

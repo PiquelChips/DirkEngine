@@ -11,7 +11,10 @@ pub enum EngineInitError {
 
 pub type RenderResult<T> = std::result::Result<T, EngineRenderError>;
 #[derive(Debug, Error)]
-pub enum EngineRenderError {}
+pub enum EngineRenderError {
+    #[error("renderer error: {0}")]
+    RendererError(#[from] renderer::RendererError),
+}
 
 pub type ShutdownResult<T> = std::result::Result<T, EngineShutdownError>;
 #[derive(Debug, Error)]
