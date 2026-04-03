@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["Engine/Source/build","Engine/Source/engine","Engine/Source/logging", "Engine/Source/platform", "Engine/Source/renderer","Engine/Source/run"]
+members = ["Engine/Source/build","Engine/Source/engine","Engine/Source/logging", "Engine/Source/platform", "Engine/Source/renderer","Engine/Source/run", "Engine/Source/utils"]
 
 [workspace.package]
 edition = "2024"
@@ -18,10 +18,10 @@ thiserror = "2"
 anyhow = "1"
 # Engine modules
 build = { path = "Engine/Source/build" }
+utils = { path = "Engine/Source/utils" }
 logging = { path = "Engine/Source/logging" }
 engine = { path = "Engine/Source/engine" }
 platform = { path = "Engine/Source/platform" }
-# TODO: find a way to only enable this in debug builds
 renderer = { path = "Engine/Source/renderer" }
 
 # Main Engine Dependencies
