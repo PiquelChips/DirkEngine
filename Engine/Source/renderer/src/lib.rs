@@ -15,15 +15,15 @@ mod legacy;
 mod structs;
 use structs::*;
 
+fn make_version(version: utils::Version) -> u32 {
+    vk::make_api_version(0, version.major(), version.minor(), version.patch())
+}
+
 pub struct RendererCreateInfo {
     engine_name: CString,
     engine_version: utils::Version,
     app_name: CString,
     app_version: utils::Version,
-}
-
-fn make_version(version: utils::Version) -> u32 {
-    vk::make_api_version(0, version.major(), version.minor(), version.patch())
 }
 
 /// The Renderer struct that holds all render state and is called upon to handle
@@ -59,7 +59,7 @@ impl Renderer {
             .application_name(create_info.app_name.as_c_str())
             .application_version(make_version(create_info.app_version))
             .engine_name(create_info.engine_name.as_c_str())
-            .engine_version(make_version(create_info.app_version))
+            .engine_version(make_version(create_info.engine_version))
             .api_version(vk::API_VERSION_1_3);
 
         Ok(Self {
