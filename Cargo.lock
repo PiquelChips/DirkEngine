@@ -965,6 +965,7 @@ dependencies = [
  "anyhow",
  "ash",
  "ash-window",
+ "build",
  "glam",
  "log",
  "platform",
