@@ -12,6 +12,7 @@ thiserror.workspace = true
 anyhow.workspace = true
 
 utils.workspace = true
+platform.workspace = true
 
 ash.workspace = true
 ash-window.workspace = true

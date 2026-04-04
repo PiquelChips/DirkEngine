@@ -1,12 +1,11 @@
-/// Renderer internal window type. This object stores
-/// the [utils::Window] implementation provided on
-/// renderer init & window creation.
+use ash::vk;
+
 pub struct Window {
-    window: Box<dyn utils::Window>,
+    surface: vk::SurfaceKHR,
 }
 
 impl Window {
-    pub fn new(window: Box<dyn utils::Window>) -> Self {
-        Self { window }
+    pub fn new(surface: vk::SurfaceKHR) -> Self {
+        Self { surface }
     }
 }

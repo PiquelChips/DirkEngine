@@ -74,14 +74,3 @@ impl HasDisplayHandle for Window {
         self.window.display_handle()
     }
 }
-
-impl utils::Window for Window {
-    fn needs_resize(&self) -> bool {
-        // TODO: window resizing
-        false
-    }
-    fn get_window_size(&self) -> (u32, u32) {
-        let size = self.window.surface_size();
-        (size.width, size.height)
-    }
-}

@@ -8,5 +8,3 @@ version.workspace = true
 
 [dependencies]
 thiserror.workspace = true
-
-raw-window-handle.workspace = true

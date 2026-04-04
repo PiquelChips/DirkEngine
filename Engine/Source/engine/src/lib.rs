@@ -22,13 +22,15 @@ impl Engine {
         logging::init(logger);
 
         let platform = platform::Platform::init()?;
-        let renderer = renderer::Renderer::init(renderer::RendererCreateInfo {
-            engine_name: c"DirkEngine".into(),
-            engine_version: utils::Version::ZERO.bump_minor(),
-            app_name: c"DirkEditor".into(),
-            app_version: utils::Version::ZERO.bump_minor(),
-            window: platform.main_window(),
-        })?;
+        let renderer = renderer::Renderer::init(
+            renderer::RendererCreateInfo {
+                engine_name: c"DirkEngine".into(),
+                engine_version: utils::Version::ZERO.bump_minor(),
+                app_name: c"DirkEditor".into(),
+                app_version: utils::Version::ZERO.bump_minor(),
+            },
+            platform.main_window(),
+        )?;
 
         /* A rough idea of the flow of the C++ Engine
          *

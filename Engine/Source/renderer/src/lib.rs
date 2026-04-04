@@ -19,6 +19,7 @@ use log::{debug, error, info, trace, warn};
 mod errors;
 mod physical_device;
 pub use errors::{RendererError, Result};
+use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
 use crate::window::Window;
 mod legacy;
@@ -81,7 +82,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn init(create_info: RendererCreateInfo, window: Box<dyn utils::Window>) -> Result<Self> {
+    pub fn init(create_info: RendererCreateInfo, window: &platform::Window) -> Result<Self> {
         info!("Intializing Vulkan...");
 
         let entry = unsafe { Entry::load()? };
@@ -346,7 +347,7 @@ impl Renderer {
         // SWAP CHAIN
         let swapchain_loader = swapchain::Device::new(&instance, &device);
 
-        let main_window = Window::new(window);
+        let main_window = Window::new(surface);
 
         Ok(Self {
             entry,
