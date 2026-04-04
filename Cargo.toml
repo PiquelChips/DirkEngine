@@ -6,9 +6,9 @@ members = [
     "Engine/Source/logging",
     "Engine/Source/platform",
     "Engine/Source/run",
-    "Engine/Source/resource_manager"
-    "Engine/Source/utils"
-    "Engine/Source/renderer",
+    "Engine/Source/resource_manager",
+    "Engine/Source/utils",
+    "Engine/Source/renderer"
 ]
 
 [workspace.package]
