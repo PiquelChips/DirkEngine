@@ -180,3 +180,126 @@ impl ResourceManager {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -- model_path --
+
+    #[test]
+    fn model_path_formats_correctly() {
+        let path = ResourceManager::model_path("Sword");
+        // Should end with the expected sub-path regardless of MODELS_PATH prefix
+        assert!(
+            path.ends_with("/Sword/Sword.gltf"),
+            "unexpected path: {path}"
+        );
+    }
+
+    #[test]
+    fn model_path_contains_name_twice() {
+        // The name must appear as both the directory and the file stem.
+        let name = "PlayerShip";
+        let path = ResourceManager::model_path(name);
+        let occurrences = path.matches(name).count();
+        assert_eq!(occurrences, 2, "name should appear twice in path: {path}");
+    }
+
+    // -- load_texture: pixel conversion --
+
+    /// Helper: build a minimal gltf::image::Data for a 1×1 RGB pixel.
+    fn rgb_image_data(r: u8, g: u8, b: u8) -> gltf::image::Data {
+        gltf::image::Data {
+            format: gltf::image::Format::R8G8B8,
+            pixels: vec![r, g, b],
+            width: 1,
+            height: 1,
+        }
+    }
+
+    /// Helper: build a minimal gltf::image::Data for a 1×1 RGBA pixel.
+    fn rgba_image_data(r: u8, g: u8, b: u8, a: u8) -> gltf::image::Data {
+        gltf::image::Data {
+            format: gltf::image::Format::R8G8B8A8,
+            pixels: vec![r, g, b, a],
+            width: 1,
+            height: 1,
+        }
+    }
+
+    #[test]
+    fn load_texture_rgb_injects_full_alpha() {
+        let data = rgb_image_data(10, 20, 30);
+        let tex = ResourceManager::load_texture(&data, None);
+
+        assert_eq!(
+            *tex.pixels(),
+            vec![10, 20, 30, 255],
+            "RGB→RGBA conversion should inject alpha = 255"
+        );
+    }
+
+    #[test]
+    fn load_texture_rgb_multi_pixel_layout() {
+        // 2 pixels: [R1 G1 B1] [R2 G2 B2] → [R1 G1 B1 255 R2 G2 B2 255]
+        let data = gltf::image::Data {
+            format: gltf::image::Format::R8G8B8,
+            pixels: vec![1, 2, 3, 4, 5, 6],
+            width: 2,
+            height: 1,
+        };
+        let tex = ResourceManager::load_texture(&data, None);
+        assert_eq!(*tex.pixels(), vec![1, 2, 3, 255, 4, 5, 6, 255]);
+    }
+
+    #[test]
+    fn load_texture_rgba_passthrough() {
+        // RGBA pixels must be stored unchanged.
+        let data = rgba_image_data(50, 100, 150, 200);
+        let tex = ResourceManager::load_texture(&data, None);
+        assert_eq!(*tex.pixels(), vec![50, 100, 150, 200]);
+    }
+
+    #[test]
+    fn load_texture_rgba_preserves_partial_alpha() {
+        // Make sure a semi-transparent pixel isn't accidentally modified.
+        let data = rgba_image_data(255, 0, 128, 64);
+        let tex = ResourceManager::load_texture(&data, None);
+        assert_eq!(*tex.pixels(), vec![255, 0, 128, 64]);
+    }
+
+    #[test]
+    fn load_texture_size_is_preserved() {
+        let data = gltf::image::Data {
+            format: gltf::image::Format::R8G8B8A8,
+            pixels: vec![0u8; 4 * 3 * 7], // 3 × 7 image
+            width: 3,
+            height: 7,
+        };
+        let tex = ResourceManager::load_texture(&data, None);
+        assert_eq!(*tex.width(), 3);
+        assert_eq!(*tex.height(), 7);
+    }
+
+    #[test]
+    fn load_texture_no_info_gives_nameless() {
+        let data = rgb_image_data(0, 0, 0);
+        let tex = ResourceManager::load_texture(&data, None);
+        assert_eq!(tex.name(), "Nameless");
+    }
+
+    // -- load_texture: panic on unsupported format --
+
+    #[test]
+    #[should_panic(expected = "Unsuported glTF image format")]
+    fn load_texture_panics_on_unsupported_format() {
+        let data = gltf::image::Data {
+            format: gltf::image::Format::R8, // not handled
+            pixels: vec![128],
+            width: 1,
+            height: 1,
+        };
+        ResourceManager::load_texture(&data, None);
+    }
+}
