@@ -20,6 +20,7 @@ mod errors;
 mod physical_device;
 pub use errors::{RendererError, Result};
 mod legacy;
+mod window;
 
 fn make_version(version: utils::Version) -> u32 {
     vk::make_api_version(0, version.major(), version.minor(), version.patch())
