@@ -18,6 +18,7 @@ use errors::Result;
 // const ASSETS_PATH: &str = env!("ASSETS_PATH");
 const MODELS_PATH: &str = env!("MODELS_PATH");
 
+/// Internal representation of a model loaded from a gltf model.
 #[derive(derive_getters::Getters)]
 pub struct Model {
     meshes: Vec<Mesh>,
@@ -25,12 +26,16 @@ pub struct Model {
     materials: Vec<Material>,
 }
 
+/// Internal representation of a mesh. Has many primitives that each
+/// can be rendered to make the full model.
 #[derive(derive_getters::Getters)]
 pub struct Mesh {
     name: String,
     primitives: Vec<Primitive>,
 }
 
+/// Internal primitive type. Stores all data required to render
+/// the primitive: positions, normals, texcoords, indices & materials.
 #[derive(derive_getters::Getters)]
 pub struct Primitive {
     positions: Vec<[f32; 3]>,
@@ -41,6 +46,7 @@ pub struct Primitive {
     material: Option<usize>,
 }
 
+/// A texture. Stores a name and size alongside the pixel data.
 #[derive(derive_getters::Getters)]
 pub struct Texture {
     name: String,
@@ -52,6 +58,7 @@ pub struct Texture {
     height: u32,
 }
 
+/// A material. Stores indices into the model's textures array.
 #[derive(derive_getters::Getters)]
 pub struct Material {
     /// An optional index into the model's textures array.
@@ -67,9 +74,14 @@ pub struct Material {
 }
 
 /// This is the main struct that handles loading resources.
+/// Doesn't actually have any internal state, just a bunch
+/// of utility functions for loading.
 pub struct ResourceManager {}
 
 impl ResourceManager {
+    /// Loads a gltf model with the specified name.
+    /// Will load it from `Engine/Assets/{name}/{name}.gltf`.
+    /// Will return an error if the model is not in that location.
     pub fn load_model(name: &str) -> Result<Model> {
         let (gltf, buffers, images) = gltf::import(Self::model_path(name))?;
 
@@ -98,8 +110,10 @@ impl ResourceManager {
             materials,
         })
     }
+    /// Gives the path to a model from its name.
+    /// Just a simple utility to get `MODELS_PATH/{name}/{name}.gltf`.
     fn model_path(name: &str) -> String {
-        format!("{}/{}/{}.gltf", MODELS_PATH, name, name)
+        format!("{MODELS_PATH}/{name}/{name}.gltf")
     }
     fn load_texture(image: &gltf::image::Data, info: Option<gltf::Image>) -> Texture {
         let pixels = match image.format {
