@@ -34,5 +34,5 @@ platform = { path = "Engine/Source/platform" }
 
 # Main Engine Dependencies
 winit = "0.31.0-beta.2"
-spirv-builder = "0.9"
-spirv-std = "0.9"
+spirv-builder = { git = "https://github.com/Rust-GPU/rust-gpu.git", branch = "main" }
+spirv-std = { git = "https://github.com/Rust-GPU/rust-gpu.git", branch = "main" }
