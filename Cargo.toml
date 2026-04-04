@@ -7,6 +7,7 @@ members = [
     "Engine/Source/logging",
     "Engine/Source/platform",
     "Engine/Source/run",
+    "Engine/Source/resource_manager",
 
     # Shaders
     "Engine/Shaders/shaders",
@@ -27,6 +28,8 @@ time = { version = "0.3", features = ["formatting"] }
 
 thiserror = "2"
 anyhow = "1"
+derive-getters = "0.5"
+
 # Engine modules
 build = { path = "Engine/Source/build" }
 logging = { path = "Engine/Source/logging" }
@@ -37,3 +40,4 @@ platform = { path = "Engine/Source/platform" }
 winit = "0.31.0-beta.2"
 spirv-builder = { git = "https://github.com/Rust-GPU/rust-gpu.git", branch = "main" }
 spirv-std = { git = "https://github.com/Rust-GPU/rust-gpu.git", branch = "main" }
+gltf = "1"
