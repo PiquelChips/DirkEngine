@@ -1,13 +1,16 @@
-use std::ffi::{CStr, CString};
 #[cfg(validation)]
 use std::os::raw::c_void;
+use std::{
+    collections::HashSet,
+    ffi::{CStr, CString},
+};
 
 #[cfg(validation)]
 use ash::ext::debug_utils;
 #[cfg(platform_linux)]
 use ash::khr::wayland_surface;
 use ash::{
-    Entry, Instance,
+    Device, Entry, Instance,
     khr::{surface, swapchain},
     vk,
 };
@@ -58,10 +61,8 @@ pub struct Renderer {
 
     // Renderer Resources
     instance: Instance,
-    /*
     device: Device,
     queues: Queues,
-    */
     physical_device: vk::PhysicalDevice,
 
     properties: RendererProperties,
@@ -69,7 +70,7 @@ pub struct Renderer {
 
     // Extensions
     surface_loader: surface::Instance,
-    //swapchain_loader: swapchain::Device,
+    swapchain_loader: swapchain::Device,
     #[cfg(validation)]
     debug_utils_loader: debug_utils::Instance,
     #[cfg(validation)]
@@ -288,18 +289,70 @@ impl Renderer {
             (device_info.handle, properties)
         };
 
+        let device = {
+            let unique_families: HashSet<u32> = [
+                properties.queue_family_indices.graphics,
+                properties.queue_family_indices.present,
+                properties.queue_family_indices.compute,
+                properties.queue_family_indices.transfer,
+            ]
+            .iter()
+            .cloned()
+            .collect();
+
+            // only one queue per family, so all 1.0 priority
+            let queue_priorities = vec![1.0_f32];
+            let queue_create_infos: Vec<vk::DeviceQueueCreateInfo> = unique_families
+                .iter()
+                .map(|&family| {
+                    vk::DeviceQueueCreateInfo::default()
+                        .queue_family_index(family)
+                        .queue_priorities(&queue_priorities)
+                })
+                .collect();
+
+            let physical_device_features =
+                vk::PhysicalDeviceFeatures::default().sampler_anisotropy(true);
+            let mut vulkan13_features =
+                vk::PhysicalDeviceVulkan13Features::default().dynamic_rendering(true);
+
+            let extensions: Vec<*const i8> = DEVICE_EXTENSIONS
+                .iter()
+                .map(|name| unsafe { std::mem::transmute(name.as_ptr()) })
+                .collect();
+            let device_create_info = vk::DeviceCreateInfo::default()
+                .queue_create_infos(&queue_create_infos)
+                .enabled_features(&physical_device_features)
+                .enabled_extension_names(&extensions)
+                .push_next(&mut vulkan13_features);
+
+            unsafe { instance.create_device(physical_device, &device_create_info, None)? }
+        };
+
+        // QUEUES
+        let queues = {
+            let indices = &properties.queue_family_indices;
+            Queues {
+                graphics: unsafe { device.get_device_queue(indices.graphics, 0) },
+                present: unsafe { device.get_device_queue(indices.present, 0) },
+                compute: unsafe { device.get_device_queue(indices.compute, 0) },
+                transfer: unsafe { device.get_device_queue(indices.transfer, 0) },
+            }
+        };
+
+        // SWAP CHAIN
+        let swapchain_loader = swapchain::Device::new(&instance, &device);
+
         Ok(Self {
             entry,
             instance,
-            /*
             device,
             queues,
-            */
             physical_device,
             properties,
             surface,
             surface_loader,
-            //swapchain_loader,
+            swapchain_loader,
             debug_utils_loader,
             debug_messenger,
         })
