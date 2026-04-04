@@ -2,8 +2,6 @@ use std::time::Instant;
 
 use anyhow::Context;
 
-use crate::errors::{InitResult, RenderResult, ShutdownResult};
-
 mod errors;
 
 /// This is the main struct that holds global engine state.
@@ -17,11 +15,11 @@ pub struct Engine {
 }
 
 impl Engine {
-    pub fn init() -> InitResult<Self> {
+    pub fn init() -> anyhow::Result<Self> {
         let logger = logging::Logger::new(true, true, true);
         logging::init(logger);
 
-        let platform = platform::Platform::init()?;
+        let platform = platform::Platform::init().context("platform init")?;
         let renderer = renderer::Renderer::init(
             renderer::RendererCreateInfo {
                 engine_name: c"DirkEngine".into(),
@@ -30,7 +28,8 @@ impl Engine {
                 app_version: utils::Version::ZERO.bump_minor(),
             },
             platform.main_window(),
-        )?;
+        )
+        .context("renderer init")?;
 
         /* A rough idea of the flow of the C++ Engine
          *
@@ -75,11 +74,11 @@ impl Engine {
          * Main Viewport tick
          */
 
-        self.render()?;
+        self.render().context("tick: render")?;
 
         Ok(self.is_requesting_exit())
     }
-    pub fn render(&self) -> RenderResult<()> {
+    pub fn render(&self) -> anyhow::Result<()> {
         self.renderer.render()?;
         /* Renderer::render
          *
@@ -93,7 +92,7 @@ impl Engine {
          */
         Ok(())
     }
-    pub fn shutdown(&self) -> ShutdownResult<()> {
+    pub fn shutdown(&self) -> anyhow::Result<()> {
         /*
          * Shutdown ImGui (renderer then platform)
          *
