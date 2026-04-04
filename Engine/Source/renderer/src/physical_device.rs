@@ -107,12 +107,14 @@ fn score_device(info: &PhysicalDeviceInfo) -> u32 {
     score
 }
 
+type Requirement = dyn Fn(&PhysicalDeviceInfo) -> bool;
+
 /// A simple struct to help select a physical device for vulkan.
 /// Add requirements that implement the [DeviceRequirement] trait.
 /// When selecting, will make sure all requirements are met, or will
 /// return [None].
 pub struct PhysicalDeviceSelector {
-    requirements: Vec<Box<dyn Fn(&PhysicalDeviceInfo) -> bool>>,
+    requirements: Vec<Box<Requirement>>,
 }
 
 impl PhysicalDeviceSelector {
