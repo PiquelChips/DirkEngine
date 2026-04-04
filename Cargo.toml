@@ -5,10 +5,10 @@ members = [
     "Engine/Source/engine",
     "Engine/Source/logging",
     "Engine/Source/platform",
-    "Engine/Source/renderer",
-    "Engine/Source/run",
-    "Engine/Source/resource_manager",
     "Engine/Source/utils"
+    "Engine/Source/run",
+    "Engine/Source/resource_manager"
+    "Engine/Source/renderer",
 ]
 
 [workspace.package]
