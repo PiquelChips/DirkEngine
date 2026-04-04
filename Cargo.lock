@@ -858,6 +858,7 @@ dependencies = [
  "build",
  "log",
  "thiserror 2.0.18",
+ "utils",
  "winit",
 ]
 
