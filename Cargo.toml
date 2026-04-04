@@ -1,6 +1,15 @@
 [workspace]
 resolver = "3"
-members = ["Engine/Source/build","Engine/Source/engine","Engine/Source/logging", "Engine/Source/platform", "Engine/Source/renderer","Engine/Source/run", "Engine/Source/utils"]
+members = [
+    "Engine/Source/build",
+    "Engine/Source/engine",
+    "Engine/Source/logging",
+    "Engine/Source/platform",
+    "Engine/Source/renderer",
+    "Engine/Source/run",
+    "Engine/Source/resource_manager",
+    "Engine/Source/utils"
+]
 
 [workspace.package]
 edition = "2024"
@@ -16,6 +25,8 @@ time = { version = "0.3", features = ["formatting"] }
 
 thiserror = "2"
 anyhow = "1"
+derive-getters = "0.5"
+
 # Engine modules
 build = { path = "Engine/Source/build" }
 utils = { path = "Engine/Source/utils" }
@@ -30,3 +41,4 @@ ash = { version = "0.38", features = ["loaded"] }
 ash-window = "0.13"
 raw-window-handle = "0.6"
 glam = "0.32"
+gltf = "1"
