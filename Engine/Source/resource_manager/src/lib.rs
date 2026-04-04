@@ -11,5 +11,8 @@
 //! as these systems aren't implemented yet, the resource manager does
 //! not support loading them.
 
+mod errors;
+pub use errors::Error;
+use errors::Result;
 /// This is the main struct that handles loading resources.
 pub struct ResourceManager {}

@@ -1494,8 +1494,10 @@ dependencies = [
 name = "resource_manager"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "gltf",
  "image",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
