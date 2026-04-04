@@ -555,7 +555,7 @@ impl Renderer {
             self.upload_slice(&vertices, vk::BufferUsageFlags::VERTEX_BUFFER)?;
 
         let (index_buffer, index_buffer_memory) =
-            self.upload_slice(&prim.indices(), vk::BufferUsageFlags::INDEX_BUFFER)?;
+            self.upload_slice(prim.indices(), vk::BufferUsageFlags::INDEX_BUFFER)?;
 
         Ok(Primitive {
             vertex_buffer,
@@ -586,9 +586,7 @@ impl Renderer {
         }
 
         let (image, memory) = self.create_image(
-            *tex.width(),
-            *tex.height(),
-            mip_levels,
+            (*tex.width(), *tex.height()),
             format,
             vk::ImageTiling::OPTIMAL,
             // TRANSFER_SRC needed so for mip creation
@@ -596,7 +594,7 @@ impl Renderer {
                 | vk::ImageUsageFlags::TRANSFER_SRC
                 | vk::ImageUsageFlags::SAMPLED,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
-            vk::SampleCountFlags::TYPE_1,
+            (mip_levels, vk::SampleCountFlags::TYPE_1),
         )?;
 
         let cmd = self.begin_single_time_commands()?;
@@ -679,14 +677,12 @@ impl Renderer {
     }
     fn create_image(
         &self,
-        width: u32,
-        height: u32,
-        mip_levels: u32,
+        (width, height): (u32, u32),
         format: vk::Format,
         tiling: vk::ImageTiling,
         usage: vk::ImageUsageFlags,
         properties: vk::MemoryPropertyFlags,
-        num_samples: vk::SampleCountFlags,
+        (mip_levels, num_samples): (u32, vk::SampleCountFlags),
     ) -> Result<(vk::Image, vk::DeviceMemory)> {
         let image_info = vk::ImageCreateInfo::default()
             .image_type(vk::ImageType::TYPE_2D)
@@ -807,7 +803,7 @@ impl Renderer {
                 layer_count: 1,
             });
 
-        Ok(unsafe {
+        unsafe {
             self.device.cmd_pipeline_barrier(
                 cmd,
                 src_stage,
@@ -816,8 +812,9 @@ impl Renderer {
                 &[],
                 &[],
                 &[barrier],
-            );
-        })
+            )
+        };
+        Ok(())
     }
     fn generate_mipmaps(
         &self,
@@ -943,7 +940,7 @@ impl Renderer {
         data: &[T],
         usage: vk::BufferUsageFlags,
     ) -> Result<(vk::Buffer, vk::DeviceMemory)> {
-        let size = (data.len() * std::mem::size_of::<T>()) as vk::DeviceSize;
+        let size = std::mem::size_of_val(data) as vk::DeviceSize;
 
         // 1. Staging buffer (CPU-visible)
         let (staging_buf, staging_mem) = self.create_buffer(
@@ -1064,7 +1061,7 @@ impl Renderer {
                 .get_physical_device_memory_properties(self.physical_device)
         };
 
-        Ok((0..mem_props.memory_type_count)
+        (0..mem_props.memory_type_count)
             .find(|&i| {
                 let type_match = type_filter & (1 << i) != 0;
                 let prop_match = mem_props.memory_types[i as usize]
@@ -1072,7 +1069,7 @@ impl Renderer {
                     .contains(properties);
                 type_match && prop_match
             })
-            .ok_or(Error::NoSuitableMemoryType)?)
+            .ok_or(Error::NoSuitableMemoryType)
     }
 }
 
