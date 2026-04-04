@@ -1,5 +1,5 @@
 fn main() {
-    let assets_path = "./Engine/Assets";
+    let assets_path = "../../Assets";
     println!("cargo:rustc-env=ASSETS_PATH={assets_path}");
 
     let models_path = format!("{}/models", assets_path);
