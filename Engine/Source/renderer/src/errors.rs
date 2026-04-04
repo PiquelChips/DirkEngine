@@ -6,22 +6,20 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, Error)]
 pub enum Error {
-    // TODO: make it so that errors convert to Error before context is added
-    #[error(transparent)]
-    Anyhow(anyhow::Error),
-
     #[error("Vulkan error: {0}")]
     VulkanError(#[from] ash::vk::Result),
 
     #[error("Error loading Vulkan functions: {0}")]
     Loading(#[from] ash::LoadingError),
     #[error("platform error: {0}")]
-    Platform(anyhow::Error),
+    Platform(#[from] platform::Error),
 
     #[error("no suitable graphics device found")]
     NoDeviceFound,
     #[error("failed to find supported format")]
     NoSupportedFormat,
+    #[error("failed to find a suitable memory type")]
+    NoSuitableMemoryType,
 
     #[error("instance extension {0} not found")]
     ExtensionNotFound(String),
@@ -33,9 +31,6 @@ pub enum Error {
         old: vk::ImageLayout,
         new: vk::ImageLayout,
     },
-
-    #[error("texture image format does not support linear blitting")]
-    FormatNoBlittingSupport,
 }
 
 impl From<HandleError> for Error {

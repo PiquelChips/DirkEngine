@@ -1185,6 +1185,7 @@ dependencies = [
  "log",
  "platform",
  "raw-window-handle",
+ "resource_manager",
  "thiserror 2.0.18",
  "utils",
 ]

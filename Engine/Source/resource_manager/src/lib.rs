@@ -59,7 +59,7 @@ pub struct Texture {
 }
 
 /// A material. Stores indices into the model's textures array.
-#[derive(derive_getters::Getters)]
+#[derive(derive_getters::Getters, Clone)]
 pub struct Material {
     /// An optional index into the model's textures array.
     base_color_texture: Option<usize>,

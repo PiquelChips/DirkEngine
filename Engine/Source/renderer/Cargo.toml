@@ -13,6 +13,7 @@ anyhow.workspace = true
 
 utils.workspace = true
 platform.workspace = true
+resource_manager.workspace = true
 
 ash.workspace = true
 ash-window.workspace = true
