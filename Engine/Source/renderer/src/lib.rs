@@ -942,14 +942,12 @@ impl Renderer {
     ) -> Result<(vk::Buffer, vk::DeviceMemory)> {
         let size = std::mem::size_of_val(data) as vk::DeviceSize;
 
-        // 1. Staging buffer (CPU-visible)
         let (staging_buf, staging_mem) = self.create_buffer(
             size,
             vk::BufferUsageFlags::TRANSFER_SRC,
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
         )?;
 
-        // 2. Write into staging memory
         unsafe {
             let ptr = self
                 .device
@@ -959,17 +957,13 @@ impl Renderer {
             self.device.unmap_memory(staging_mem);
         }
 
-        // 3. Device-local buffer (GPU-only, fast)
         let (device_buf, device_mem) = self.create_buffer(
             size,
             vk::BufferUsageFlags::TRANSFER_DST | usage,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
         )?;
 
-        // 4. Copy staging → device-local over the transfer queue
         self.copy_buffer(staging_buf, device_buf, size)?;
-
-        // 5. Free the staging buffer — no longer needed
         unsafe {
             self.device.destroy_buffer(staging_buf, None);
             self.device.free_memory(staging_mem, None);
