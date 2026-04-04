@@ -10,9 +10,9 @@ use ash::{Entry, Instance, khr::surface, vk};
 use log::{debug, error, info, trace, warn};
 
 mod errors;
+mod physical_device;
 pub use errors::{RendererError, Result};
 mod legacy;
-mod structs;
 
 fn make_version(version: utils::Version) -> u32 {
     vk::make_api_version(0, version.major(), version.minor(), version.patch())
@@ -29,6 +29,22 @@ pub struct RendererCreateInfo<'a> {
     pub window: &'a dyn utils::Window,
 }
 
+pub struct Queues {
+    graphics: vk::Queue,
+    compute: vk::Queue,
+    transfer: vk::Queue,
+    present: vk::Queue,
+}
+
+pub struct RendererProperties {
+    msaa_samples: vk::SampleCountFlags,
+    anisotropy: bool,
+    surface_format: vk::SurfaceFormatKHR,
+    min_image_count: u32,
+    queue_family_indices: physical_device::QueueFamilyIndices,
+    depth_format: vk::Format,
+}
+
 /// The Renderer struct that holds all render state and is called upon to handle
 /// all rendering operations
 pub struct Renderer {
@@ -39,10 +55,10 @@ pub struct Renderer {
     /*
     device: Device,
     queues: Queues,
+    */
     physical_device: vk::PhysicalDevice,
 
     properties: RendererProperties,
-    */
     surface: vk::SurfaceKHR, // The surface of the main window
 
     // Extensions
@@ -176,15 +192,105 @@ impl Renderer {
             (loader, surface)
         };
 
+        // PHYSICAL DEVICE
+        let (physical_device, properties) = {
+            let (device_info, queues) = physical_device::PhysicalDeviceSelector::new()
+                .require_extension(ash::khr::swapchain::NAME.to_str().unwrap())
+                .require(|info| info.features.geometry_shader == vk::FALSE)
+                .select(&instance, &surface_loader, surface)
+                .ok_or(RendererError::NoDeviceFound)?;
+
+            info!(
+                "Physical device selected: {:#?} (vendor: {}, id: {}, api: {}, driver: {})",
+                device_info
+                    .properties
+                    .device_name_as_c_str()
+                    .unwrap_or_default(),
+                device_info.properties.vendor_id,
+                device_info.properties.device_id,
+                device_info.properties.api_version,
+                device_info.properties.driver_version
+            );
+
+            let formats = unsafe {
+                surface_loader.get_physical_device_surface_formats(device_info.handle, surface)?
+            };
+            let capabilities = unsafe {
+                surface_loader
+                    .get_physical_device_surface_capabilities(device_info.handle, surface)?
+            };
+
+            let surface_format = formats
+                .iter()
+                .find(|format| {
+                    format.format == vk::Format::B8G8R8A8_SRGB
+                        && format.color_space == vk::ColorSpaceKHR::SRGB_NONLINEAR
+                })
+                .copied()
+                .unwrap_or(formats[0]);
+
+            let depth_format = *{
+                let candidates = &[
+                    vk::Format::D32_SFLOAT,
+                    vk::Format::D32_SFLOAT_S8_UINT,
+                    vk::Format::D24_UNORM_S8_UINT,
+                ];
+                let features = vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT;
+
+                candidates
+                    .iter()
+                    .find(|&f| {
+                        let properties = unsafe {
+                            instance.get_physical_device_format_properties(device_info.handle, *f)
+                        };
+                        properties.optimal_tiling_features.contains(features)
+                    })
+                    .ok_or(RendererError::NoSupportedFormat)
+            }?;
+
+            let msaa_samples = *{
+                let counts = device_info
+                    .properties
+                    .limits
+                    .framebuffer_color_sample_counts
+                    & device_info
+                        .properties
+                        .limits
+                        .framebuffer_depth_sample_counts;
+                [
+                    vk::SampleCountFlags::TYPE_64,
+                    vk::SampleCountFlags::TYPE_32,
+                    vk::SampleCountFlags::TYPE_16,
+                    vk::SampleCountFlags::TYPE_8,
+                    vk::SampleCountFlags::TYPE_4,
+                    vk::SampleCountFlags::TYPE_2,
+                ]
+                .iter()
+                .find(|&flag| counts.contains(*flag))
+                .unwrap_or(&vk::SampleCountFlags::TYPE_1)
+            };
+
+            let properties = RendererProperties {
+                msaa_samples,
+                anisotropy: device_info.features.sampler_anisotropy == vk::TRUE,
+                surface_format,
+                min_image_count: capabilities.min_image_count,
+                queue_family_indices: queues,
+                depth_format,
+            };
+
+            (device_info.handle, properties)
+        };
+
         Ok(Self {
             entry,
             instance,
             /*
             device,
             queues,
+            */
             physical_device,
             properties,
-            */
             surface,
             surface_loader,
             //swapchain_loader,
