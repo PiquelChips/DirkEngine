@@ -1,6 +1,13 @@
 [workspace]
 resolver = "3"
-members = ["Engine/Source/build","Engine/Source/engine","Engine/Source/logging", "Engine/Source/platform", "Engine/Source/resource_manager","Engine/Source/run"]
+members = [
+    "Engine/Source/build",
+    "Engine/Source/engine",
+    "Engine/Source/logging",
+    "Engine/Source/platform",
+    "Engine/Source/run",
+    "Engine/Source/resource_manager"
+]
 
 [workspace.package]
 edition = "2024"
