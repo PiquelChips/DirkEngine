@@ -10,5 +10,4 @@ version.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 gltf.workspace = true
-image.workspace = true
 derive-getters.workspace = true
