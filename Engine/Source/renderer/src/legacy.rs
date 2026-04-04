@@ -4,7 +4,7 @@
 //! As the Ash Vulkan bindings are unsafe, all Vulkan calls should be
 //! make here, to centralize the unsafe Vulkan code.
 
-#![allow(dead_code, unused)]
+#![allow(dead_code, unused, clippy::all)]
 
 use std::{
     collections::{BTreeMap, HashSet},
