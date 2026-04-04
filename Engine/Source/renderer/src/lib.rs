@@ -1,7 +1,7 @@
 #[cfg(validation)]
 use std::os::raw::c_void;
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     ffi::{CStr, CString},
 };
 
@@ -21,7 +21,7 @@ mod physical_device;
 pub use errors::{RendererError, Result};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
-use crate::window::Window;
+use crate::window::{Window, WindowId};
 mod legacy;
 mod window;
 
@@ -41,7 +41,7 @@ pub struct RendererCreateInfo {
     pub app_version: utils::Version,
 }
 
-pub struct Queues {
+struct Queues {
     graphics: vk::Queue,
     compute: vk::Queue,
     transfer: vk::Queue,
@@ -55,6 +55,12 @@ pub struct RendererProperties {
     min_image_count: u32,
     queue_family_indices: physical_device::QueueFamilyIndices,
     depth_format: vk::Format,
+    present_mode: vk::PresentModeKHR,
+}
+
+struct SwapchainImage {
+    image: vk::Image,
+    view: vk::ImageView,
 }
 
 /// The Renderer struct that holds all render state and is called upon to handle
@@ -70,7 +76,7 @@ pub struct Renderer {
 
     properties: RendererProperties,
     surface: vk::SurfaceKHR, // The surface of the main window
-    windows: Vec<Window>,
+    windows: HashMap<WindowId, Window>,
 
     // Extensions
     surface_loader: surface::Instance,
@@ -281,6 +287,18 @@ impl Renderer {
                 .unwrap_or(&vk::SampleCountFlags::TYPE_1)
             };
 
+            let present_mode = {
+                let modes = unsafe {
+                    surface_loader
+                        .get_physical_device_surface_present_modes(device_info.handle, surface)?
+                };
+
+                *modes
+                    .iter()
+                    .find(|&mode| *mode == vk::PresentModeKHR::MAILBOX)
+                    .unwrap_or(&vk::PresentModeKHR::FIFO)
+            };
+
             let properties = RendererProperties {
                 msaa_samples,
                 anisotropy: device_info.features.sampler_anisotropy == vk::TRUE,
@@ -288,6 +306,7 @@ impl Renderer {
                 min_image_count: capabilities.min_image_count,
                 queue_family_indices: queues,
                 depth_format,
+                present_mode,
             };
 
             (device_info.handle, properties)
@@ -347,9 +366,9 @@ impl Renderer {
         // SWAP CHAIN
         let swapchain_loader = swapchain::Device::new(&instance, &device);
 
-        let main_window = Window::new(surface);
+        let windows = HashMap::new();
 
-        Ok(Self {
+        let mut renderer = Self {
             entry,
             instance,
             device,
@@ -357,17 +376,144 @@ impl Renderer {
             physical_device,
             properties,
             surface,
-            windows: vec![main_window],
+            windows,
             surface_loader,
             swapchain_loader,
             debug_utils_loader,
             debug_messenger,
-        })
+        };
+
+        let window_size = window.size();
+        let size = vk::Extent2D {
+            width: window_size.width,
+            height: window_size.height,
+        };
+        let window = window::Window::build(window.id().into_raw(), &renderer, surface, size)?;
+        renderer.windows.insert(window.id(), window);
+
+        Ok(renderer)
     }
 
     pub fn render(&self) -> Result<()> {
         // TODO: render
         Ok(())
+    }
+
+    pub fn create_window(&mut self, plat_window: &platform::Window) -> Result<WindowId> {
+        let surface = unsafe {
+            ash_window::create_surface(
+                &self.entry,
+                &self.instance,
+                plat_window.display_handle()?.as_raw(),
+                plat_window.window_handle()?.as_raw(),
+                None,
+            )?
+        };
+
+        let window_size = plat_window.size();
+        let size = vk::Extent2D {
+            width: window_size.width,
+            height: window_size.height,
+        };
+
+        let window = window::Window::build(plat_window.id().into_raw(), self, surface, size)?;
+        self.windows.insert(window.id(), window);
+        Ok(plat_window.id().into_raw())
+    }
+
+    fn create_swap_chain(
+        &self,
+        surface: vk::SurfaceKHR,
+        window_size: vk::Extent2D,
+    ) -> Result<(vk::SwapchainKHR, vk::Extent2D, Vec<SwapchainImage>)> {
+        let capabilities = unsafe {
+            self.surface_loader
+                .get_physical_device_surface_capabilities(self.physical_device, surface)?
+        };
+
+        let extent = if capabilities.current_extent.width != u32::MAX {
+            capabilities.current_extent
+        } else {
+            vk::Extent2D {
+                width: window_size.width.clamp(
+                    capabilities.min_image_extent.width,
+                    capabilities.max_image_extent.width,
+                ),
+                height: window_size.height.clamp(
+                    capabilities.min_image_extent.height,
+                    capabilities.max_image_extent.height,
+                ),
+            }
+        };
+
+        let mut image_count = capabilities.min_image_count + 1;
+        if capabilities.max_image_count > 0 && image_count > capabilities.max_image_count {
+            image_count = capabilities.max_image_count;
+        }
+
+        let indices = &self.properties.queue_family_indices;
+        let indices_array = [indices.graphics, indices.present, indices.transfer];
+
+        let create_info = vk::SwapchainCreateInfoKHR::default()
+            .surface(surface)
+            .min_image_count(image_count)
+            .image_format(self.properties.surface_format.format)
+            .image_color_space(self.properties.surface_format.color_space)
+            .image_extent(extent)
+            .image_array_layers(1)
+            .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)
+            .image_sharing_mode(vk::SharingMode::CONCURRENT)
+            .queue_family_indices(&indices_array)
+            .pre_transform(capabilities.current_transform)
+            .composite_alpha(vk::CompositeAlphaFlagsKHR::OPAQUE)
+            .present_mode(self.properties.present_mode)
+            .clipped(true);
+
+        let swapchain = unsafe { self.swapchain_loader.create_swapchain(&create_info, None)? };
+        let images = unsafe { self.swapchain_loader.get_swapchain_images(swapchain)? };
+
+        let swap_images = images
+            .into_iter()
+            .map(|image| {
+                // TODO: try to promote error
+                let view = self
+                    .create_image_view(
+                        image,
+                        self.properties.surface_format.format,
+                        vk::ImageAspectFlags::COLOR,
+                        1,
+                    )
+                    .unwrap();
+
+                SwapchainImage { image, view }
+            })
+            .collect();
+
+        Ok((swapchain, extent, swap_images))
+    }
+
+    // UTILITIES
+
+    fn create_image_view(
+        &self,
+        image: vk::Image,
+        format: vk::Format,
+        aspect_flags: vk::ImageAspectFlags,
+        mip_levels: u32,
+    ) -> Result<vk::ImageView> {
+        let create_info = vk::ImageViewCreateInfo::default()
+            .image(image)
+            .view_type(vk::ImageViewType::TYPE_2D)
+            .format(format)
+            .subresource_range(vk::ImageSubresourceRange {
+                aspect_mask: aspect_flags,
+                base_mip_level: 0,
+                level_count: mip_levels,
+                base_array_layer: 0,
+                layer_count: 1,
+            });
+
+        Ok(unsafe { self.device.create_image_view(&create_info, None)? })
     }
 }
 

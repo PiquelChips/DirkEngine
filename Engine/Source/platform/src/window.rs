@@ -37,6 +37,9 @@ impl Window {
 
         self.window.request_redraw();
     }
+    pub fn size(&self) -> PhysicalSize<u32> {
+        self.window.surface_size()
+    }
     /// Update if window is focused. This only updates internal state, do
     /// not call if you want to focus the window;
     pub fn focused(&mut self, focused: bool) {
