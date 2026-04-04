@@ -16,6 +16,8 @@ time = { version = "0.3", features = ["formatting"] }
 
 thiserror = "2"
 anyhow = "1"
+derive-getters = "0.5"
+
 # Engine modules
 build = { path = "Engine/Source/build" }
 logging = { path = "Engine/Source/logging" }

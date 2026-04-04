@@ -15,20 +15,23 @@ mod errors;
 pub use errors::Error;
 use errors::Result;
 
-const ASSETS_PATH: &str = env!("ASSETS_PATH");
+// const ASSETS_PATH: &str = env!("ASSETS_PATH");
 const MODELS_PATH: &str = env!("MODELS_PATH");
 
+#[derive(derive_getters::Getters)]
 pub struct Model {
     meshes: Vec<Mesh>,
     textures: Vec<Texture>,
     materials: Vec<Material>,
 }
 
+#[derive(derive_getters::Getters)]
 pub struct Mesh {
     name: String,
     primitives: Vec<Primitive>,
 }
 
+#[derive(derive_getters::Getters)]
 pub struct Primitive {
     positions: Vec<[f32; 3]>,
     normals: Vec<[f32; 3]>,
@@ -38,6 +41,7 @@ pub struct Primitive {
     material: Option<usize>,
 }
 
+#[derive(derive_getters::Getters)]
 pub struct Texture {
     name: String,
     /// Vector of RGBA8 pixels
@@ -48,6 +52,7 @@ pub struct Texture {
     height: u32,
 }
 
+#[derive(derive_getters::Getters)]
 pub struct Material {
     /// An optional index into the model's textures array.
     base_color_texture: Option<usize>,
