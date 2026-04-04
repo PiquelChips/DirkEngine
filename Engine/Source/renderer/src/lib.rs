@@ -563,6 +563,7 @@ impl Renderer {
             index_buffer,
             index_buffer_memory,
             index_count: prim.indices().len() as u32,
+            material: *prim.material(),
         })
     }
     fn upload_texture(&self, tex: &resource_manager::Texture) -> Result<Texture> {
