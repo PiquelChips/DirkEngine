@@ -6,7 +6,11 @@ use std::os::raw::c_void;
 use ash::ext::debug_utils;
 #[cfg(platform_linux)]
 use ash::khr::wayland_surface;
-use ash::{Entry, Instance, khr::surface, vk};
+use ash::{
+    Entry, Instance,
+    khr::{surface, swapchain},
+    vk,
+};
 use log::{debug, error, info, trace, warn};
 
 mod errors;
@@ -18,6 +22,8 @@ fn make_version(version: utils::Version) -> u32 {
     vk::make_api_version(0, version.major(), version.minor(), version.patch())
 }
 
+const DEVICE_EXTENSIONS: &[&str] =
+    &[unsafe { std::str::from_utf8_unchecked(swapchain::NAME.to_bytes()) }];
 #[cfg(validation)]
 const VALIDATION_LAYERS: &[*const i8] = &[c"VK_LAYER_KHRONOS_validation".as_ptr()];
 
@@ -195,7 +201,7 @@ impl Renderer {
         // PHYSICAL DEVICE
         let (physical_device, properties) = {
             let (device_info, queues) = physical_device::PhysicalDeviceSelector::new()
-                .require_extension(ash::khr::swapchain::NAME.to_str().unwrap())
+                .require_extensions(DEVICE_EXTENSIONS)
                 .require(|info| info.features.geometry_shader == vk::FALSE)
                 .select(&instance, &surface_loader, surface)
                 .ok_or(RendererError::NoDeviceFound)?;

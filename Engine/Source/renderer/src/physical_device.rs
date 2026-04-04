@@ -122,13 +122,15 @@ impl PhysicalDeviceSelector {
         }
     }
 
-    pub fn require_extension(self, extension: &'static str) -> Self {
+    pub fn require_extensions(self, extensions: &'static [&'static str]) -> Self {
         self.require(move |info: &PhysicalDeviceInfo| {
-            info.extensions.iter().any(|e| {
-                unsafe { std::ffi::CStr::from_ptr(e.extension_name.as_ptr()) }
-                    .to_str()
-                    .unwrap_or("")
-                    == extension
+            extensions.iter().all(|&extension| {
+                info.extensions.iter().any(|e| {
+                    unsafe { std::ffi::CStr::from_ptr(e.extension_name.as_ptr()) }
+                        .to_str()
+                        .unwrap_or("")
+                        == extension
+                })
             })
         })
     }
