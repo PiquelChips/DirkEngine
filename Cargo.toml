@@ -1,6 +1,16 @@
 [workspace]
 resolver = "3"
-members = ["Engine/Shaders","Engine/Source/build","Engine/Source/engine","Engine/Source/logging", "Engine/Source/platform","Engine/Source/run"]
+members = [
+    # Engine modules
+    "Engine/Source/build",
+    "Engine/Source/engine",
+    "Engine/Source/logging",
+    "Engine/Source/platform",
+    "Engine/Source/run",
+
+    # Shaders
+    "Engine/Shaders/main"
+, "Engine/Shaders/build-shaders"]
 
 [workspace.package]
 edition = "2024"
@@ -24,3 +34,5 @@ platform = { path = "Engine/Source/platform" }
 
 # Main Engine Dependencies
 winit = "0.31.0-beta.2"
+spirv-builder = { git = "https://github.com/EmbarkStudios/rust-gpu" }
+spirv-std = { git = "https://github.com/EmbarkStudios/rust-gpu" }
