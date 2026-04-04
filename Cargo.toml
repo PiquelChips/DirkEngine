@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["Engine/Source/build","Engine/Source/engine","Engine/Source/logging", "Engine/Source/platform","Engine/Source/run"]
+members = ["Engine/Source/build","Engine/Source/engine","Engine/Source/logging", "Engine/Source/platform", "Engine/Source/resource_manager","Engine/Source/run"]
 
 [workspace.package]
 edition = "2024"
@@ -16,6 +16,8 @@ time = { version = "0.3", features = ["formatting"] }
 
 thiserror = "2"
 anyhow = "1"
+derive-getters = "0.5"
+
 # Engine modules
 build = { path = "Engine/Source/build" }
 logging = { path = "Engine/Source/logging" }
@@ -24,3 +26,4 @@ platform = { path = "Engine/Source/platform" }
 
 # Main Engine Dependencies
 winit = "0.31.0-beta.2"
+gltf = "1"
