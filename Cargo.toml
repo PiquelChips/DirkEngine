@@ -9,6 +9,7 @@ members = [
     "Engine/Source/run",
 
     # Shaders
+    "Engine/Shaders/shaders",
     "Engine/Shaders/main"
 ]
 
