@@ -14,5 +14,8 @@
 mod errors;
 pub use errors::Error;
 use errors::Result;
+
+const ASSETS_PATH: &str = env!("ASSETS_PATH");
+const MODELS_PATH: &str = env!("MODELS_PATH");
 /// This is the main struct that handles loading resources.
 pub struct ResourceManager {}
