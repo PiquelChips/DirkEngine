@@ -17,8 +17,9 @@ use ash::{
 use log::{debug, error, info, trace, warn};
 
 mod errors;
+pub use errors::{Error, Result};
+
 mod physical_device;
-pub use errors::{RendererError, Result};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
 use crate::window::{Window, WindowId};
@@ -147,7 +148,7 @@ impl Renderer {
                         );
 
                         if !found {
-                            return Err(RendererError::ValidationLayerNotFound(
+                            return Err(Error::ValidationLayerNotFound(
                                 required.to_string_lossy().into_owned(),
                             ));
                         }
@@ -173,7 +174,7 @@ impl Renderer {
                     );
 
                     if !found {
-                        return Err(RendererError::ExtensionNotFound(
+                        return Err(Error::ExtensionNotFound(
                             required.to_string_lossy().into_owned(),
                         ));
                     }
@@ -215,7 +216,7 @@ impl Renderer {
                 .require_extensions(DEVICE_EXTENSIONS)
                 .require(|info| info.features.geometry_shader == vk::FALSE)
                 .select(&instance, &surface_loader, surface)
-                .ok_or(RendererError::NoDeviceFound)?;
+                .ok_or(Error::NoDeviceFound)?;
 
             info!(
                 "Physical device selected: {:#?} (vendor: {}, id: {}, api: {}, driver: {})",
@@ -262,7 +263,7 @@ impl Renderer {
                         };
                         properties.optimal_tiling_features.contains(features)
                     })
-                    .ok_or(RendererError::NoSupportedFormat)
+                    .ok_or(Error::NoSupportedFormat)
             }?;
 
             let msaa_samples = *{

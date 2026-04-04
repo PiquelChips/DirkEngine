@@ -2,11 +2,11 @@ use ash::vk;
 use raw_window_handle::HandleError;
 use thiserror::Error;
 
-pub type Result<T> = std::result::Result<T, RendererError>;
+pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, Error)]
-pub enum RendererError {
-    // TODO: make it so that errors convert to RendererError before context is added
+pub enum Error {
+    // TODO: make it so that errors convert to Error before context is added
     #[error(transparent)]
     Anyhow(anyhow::Error),
 
@@ -38,8 +38,8 @@ pub enum RendererError {
     FormatNoBlittingSupport,
 }
 
-impl From<HandleError> for RendererError {
+impl From<HandleError> for Error {
     fn from(value: HandleError) -> Self {
-        RendererError::Platform(value.into())
+        Error::Platform(value.into())
     }
 }

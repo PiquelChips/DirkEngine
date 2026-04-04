@@ -25,7 +25,7 @@ use ash::{
 };
 use log::{debug, error, info, trace, warn};
 
-use crate::errors::{RendererError, Result};
+use crate::errors::{Error, Result};
 
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
@@ -148,7 +148,7 @@ pub struct Renderer {
 }
 
 /// TODO: REMOVE
-impl From<anyhow::Error> for RendererError {
+impl From<anyhow::Error> for Error {
     fn from(value: anyhow::Error) -> Self {
         Self::Anyhow(value)
     }
@@ -258,7 +258,7 @@ impl Renderer {
                 .rev()
                 .find(|&(&score, _)| score > 0)
                 .map(|(_, device)| device)
-                .ok_or(RendererError::NoDeviceFound)?;
+                .ok_or(Error::NoDeviceFound)?;
 
             let properties = unsafe { instance.get_physical_device_properties(device) };
             info!(
@@ -724,7 +724,7 @@ impl Renderer {
                 return Ok(format);
             }
         }
-        Err(RendererError::NoSupportedFormat)
+        Err(Error::NoSupportedFormat)
     }
     fn has_stencil_component(format: vk::Format) -> bool {
         matches!(
@@ -916,7 +916,7 @@ impl Renderer {
                 )
             }
             _ => {
-                return Err(RendererError::UnsupportedImageLayoutTransition {
+                return Err(Error::UnsupportedImageLayoutTransition {
                     old: old_layout,
                     new: new_layout,
                 });
@@ -1208,7 +1208,7 @@ impl Renderer {
             .optimal_tiling_features
             .contains(vk::FormatFeatureFlags::SAMPLED_IMAGE_FILTER_LINEAR)
         {
-            return Err(RendererError::FormatNoBlittingSupport);
+            return Err(Error::FormatNoBlittingSupport);
         }
 
         let mut barrier = vk::ImageMemoryBarrier::default()
