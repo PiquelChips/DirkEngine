@@ -16,7 +16,7 @@ pub enum RendererError {
     #[error("Error loading Vulkan functions: {0}")]
     Loading(#[from] ash::LoadingError),
     #[error("platform error: {0}")]
-    Platform(#[from] platform::PlatformError),
+    Platform(anyhow::Error),
 
     #[error("no suitable graphics device found")]
     NoDeviceFound,

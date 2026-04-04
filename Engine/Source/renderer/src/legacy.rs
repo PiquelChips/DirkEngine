@@ -157,7 +157,7 @@ impl From<anyhow::Error> for RendererError {
 impl Renderer {
     // MAIN RENDERER RUNTIME FUNCTIONS
 
-    pub fn init(window: &platform::Window) -> Result<Self> {
+    pub fn init(window: &impl utils::Window) -> Result<Self> {
         info!("Intializing Vulkan...");
 
         let entry = unsafe { Entry::load()? };

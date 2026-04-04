@@ -970,7 +970,6 @@ dependencies = [
  "build",
  "glam",
  "log",
- "platform",
  "raw-window-handle",
  "thiserror 2.0.18",
  "utils",
