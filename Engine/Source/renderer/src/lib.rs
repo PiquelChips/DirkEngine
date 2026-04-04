@@ -11,7 +11,6 @@ use log::{debug, error, info, trace, warn};
 
 mod errors;
 pub use errors::{RendererError, Result};
-use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 mod legacy;
 mod structs;
 
@@ -22,11 +21,12 @@ fn make_version(version: utils::Version) -> u32 {
 #[cfg(validation)]
 const VALIDATION_LAYERS: &[*const i8] = &[c"VK_LAYER_KHRONOS_validation".as_ptr()];
 
-pub struct RendererCreateInfo {
+pub struct RendererCreateInfo<'a> {
     pub engine_name: CString,
     pub engine_version: utils::Version,
     pub app_name: CString,
     pub app_version: utils::Version,
+    pub window: &'a dyn utils::Window,
 }
 
 /// The Renderer struct that holds all render state and is called upon to handle
@@ -55,7 +55,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn init(create_info: RendererCreateInfo, window: &platform::Window) -> Result<Self> {
+    pub fn init(create_info: RendererCreateInfo) -> Result<Self> {
         info!("Intializing Vulkan...");
 
         let entry = unsafe { Entry::load()? };
@@ -98,7 +98,7 @@ impl Renderer {
                     .message_type(message_type_flags)
                     .pfn_user_callback(Some(debug_callback));
 
-                let validation_layers = VALIDATION_LAYERS.clone();
+                let validation_layers = VALIDATION_LAYERS;
 
                 // check validation layer support
                 {
@@ -166,8 +166,8 @@ impl Renderer {
                 ash_window::create_surface(
                     &entry,
                     &instance,
-                    window.display_handle()?.as_raw(),
-                    window.window_handle()?.as_raw(),
+                    create_info.window.display_handle()?.as_raw(),
+                    create_info.window.window_handle()?.as_raw(),
                     None,
                 )?
             };
