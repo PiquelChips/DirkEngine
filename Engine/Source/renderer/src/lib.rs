@@ -19,6 +19,8 @@ use log::{debug, error, info, trace, warn};
 mod errors;
 mod physical_device;
 pub use errors::{RendererError, Result};
+
+use crate::window::Window;
 mod legacy;
 mod window;
 
@@ -31,12 +33,11 @@ const DEVICE_EXTENSIONS: &[&str] =
 #[cfg(validation)]
 const VALIDATION_LAYERS: &[*const i8] = &[c"VK_LAYER_KHRONOS_validation".as_ptr()];
 
-pub struct RendererCreateInfo<'a> {
+pub struct RendererCreateInfo {
     pub engine_name: CString,
     pub engine_version: utils::Version,
     pub app_name: CString,
     pub app_version: utils::Version,
-    pub window: &'a dyn utils::Window,
 }
 
 pub struct Queues {
@@ -68,6 +69,7 @@ pub struct Renderer {
 
     properties: RendererProperties,
     surface: vk::SurfaceKHR, // The surface of the main window
+    windows: Vec<Window>,
 
     // Extensions
     surface_loader: surface::Instance,
@@ -79,7 +81,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn init(create_info: RendererCreateInfo) -> Result<Self> {
+    pub fn init(create_info: RendererCreateInfo, window: Box<dyn utils::Window>) -> Result<Self> {
         info!("Intializing Vulkan...");
 
         let entry = unsafe { Entry::load()? };
@@ -190,8 +192,8 @@ impl Renderer {
                 ash_window::create_surface(
                     &entry,
                     &instance,
-                    create_info.window.display_handle()?.as_raw(),
-                    create_info.window.window_handle()?.as_raw(),
+                    window.display_handle()?.as_raw(),
+                    window.window_handle()?.as_raw(),
                     None,
                 )?
             };
@@ -344,6 +346,8 @@ impl Renderer {
         // SWAP CHAIN
         let swapchain_loader = swapchain::Device::new(&instance, &device);
 
+        let main_window = Window::new(window);
+
         Ok(Self {
             entry,
             instance,
@@ -352,6 +356,7 @@ impl Renderer {
             physical_device,
             properties,
             surface,
+            windows: vec![main_window],
             surface_loader,
             swapchain_loader,
             debug_utils_loader,
