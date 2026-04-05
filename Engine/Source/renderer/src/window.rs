@@ -1,6 +1,6 @@
 use ash::vk;
 
-use crate::{Renderer, Result, SwapchainImage};
+use crate::{Renderer, Result};
 
 pub type WindowId = usize;
 

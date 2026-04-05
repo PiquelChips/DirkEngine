@@ -14,7 +14,6 @@ use ash::{
     khr::{surface, swapchain},
     vk,
 };
-use glam::Mat4;
 use log::{debug, error, info, trace, warn};
 
 mod errors;
@@ -46,10 +45,17 @@ fn make_version(version: utils::Version) -> u32 {
     vk::make_api_version(0, version.major(), version.minor(), version.patch())
 }
 
+const MAX_FRAMES_IN_FLIGHT: usize = 2;
 const DEVICE_EXTENSIONS: &[&str] =
     &[unsafe { std::str::from_utf8_unchecked(swapchain::NAME.to_bytes()) }];
 #[cfg(validation)]
 const VALIDATION_LAYERS: &[*const i8] = &[c"VK_LAYER_KHRONOS_validation".as_ptr()];
+
+#[derive(Debug)]
+struct Frame {
+    /// Command pool to allocate command buffers on every frame
+    command_pool: vk::CommandPool,
+}
 
 pub struct RendererCreateInfo {
     pub engine_name: CString,
@@ -99,6 +105,8 @@ pub struct Renderer {
     models: HashMap<String, Model>,
     /// All of the internal [world::World] representations.
     scenes: HashMap<world::WorldId, Scene>,
+
+    frames: [Frame; MAX_FRAMES_IN_FLIGHT],
 
     // Extensions
     surface_loader: surface::Instance,
@@ -329,6 +337,7 @@ impl Renderer {
             (device_info.handle, properties)
         };
 
+        // DEVICE
         let device = {
             let unique_families: HashSet<u32> = [
                 properties.queue_family_indices.graphics,
@@ -391,6 +400,21 @@ impl Renderer {
             unsafe { device.create_command_pool(&pool_info, None)? }
         };
 
+        let frames: Result<Vec<Frame>> = (0..MAX_FRAMES_IN_FLIGHT)
+            .map(|_| {
+                let command_pool = {
+                    let pool_info = vk::CommandPoolCreateInfo::default()
+                        .queue_family_index(properties.queue_family_indices.graphics)
+                        .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER);
+
+                    unsafe { device.create_command_pool(&pool_info, None)? }
+                };
+                Ok(Frame { command_pool })
+            })
+            .collect();
+
+        let frames: [Frame; MAX_FRAMES_IN_FLIGHT] = frames?.try_into().unwrap();
+
         let mut renderer = Self {
             entry,
             instance,
@@ -403,6 +427,7 @@ impl Renderer {
             windows: HashMap::new(),
             models: HashMap::new(),
             scenes: HashMap::new(),
+            frames,
             surface_loader,
             swapchain_loader,
             debug_utils_loader,
@@ -510,7 +535,6 @@ impl Renderer {
         let swap_images = images
             .into_iter()
             .map(|image| {
-                // TODO: try to promote error
                 let view = self
                     .create_image_view(
                         image,
