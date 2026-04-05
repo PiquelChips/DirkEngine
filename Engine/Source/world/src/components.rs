@@ -4,8 +4,8 @@
 pub struct Renderable;
 
 #[derive(Debug, Clone)]
-pub struct Position {
-    pub x: f32,
-    pub y: f32,
-    pub z: f32,
+pub struct Transform {
+    pub position: glam::Vec3,
+    pub rotation: glam::Vec3,
+    pub scale: glam::Vec3,
 }
