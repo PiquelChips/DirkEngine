@@ -14,6 +14,7 @@ use ash::{
     khr::{surface, swapchain},
     vk,
 };
+use glam::Mat4;
 use log::{debug, error, info, trace, warn};
 
 mod errors;
@@ -39,6 +40,12 @@ struct Vertex {
     position: [f32; 3],
     normal: [f32; 3],
     texcoord: [f32; 2],
+}
+
+pub struct ModelViewProjection {
+    model: Mat4,
+    view: Mat4,
+    proj: Mat4,
 }
 
 fn make_version(version: utils::Version) -> u32 {
