@@ -26,12 +26,10 @@ mod model;
 use model::*;
 
 mod scene;
+use scene::Scene;
 
-use crate::{
-    scene::Scene,
-    window::{Window, WindowId},
-};
 mod window;
+use window::{Window, WindowId};
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -432,6 +430,7 @@ impl Renderer {
             .collect();
         let frames: [Frame; MAX_FRAMES_IN_FLIGHT] = frames?.try_into().unwrap();
 
+        // LAYOUTS
         let layouts = DescriptorLayouts {
             scene: {
                 let binding = vk::DescriptorSetLayoutBinding::default()
