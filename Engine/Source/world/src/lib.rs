@@ -1,3 +1,10 @@
+//! This crate handles the world and the ECS that it runs.
+//! All world state is managed by the World struct.
+//!
+//! To add a component, add a struct to the [components] module
+//! and add it inside the [define_components] macro. You can
+//! then use it like any other component.
+
 use std::collections::HashMap;
 
 pub mod components;
