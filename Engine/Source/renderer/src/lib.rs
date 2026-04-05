@@ -25,6 +25,8 @@ use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 mod model;
 use model::*;
 
+mod scene;
+
 use crate::window::{Window, WindowId};
 mod window;
 
