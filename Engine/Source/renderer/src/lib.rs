@@ -54,6 +54,7 @@ pub struct RendererCreateInfo {
 
 struct Queues {
     graphics: vk::Queue,
+    #[allow(unused)]
     compute: vk::Queue,
     transfer: vk::Queue,
     present: vk::Queue,
@@ -63,7 +64,6 @@ pub struct RendererProperties {
     msaa_samples: vk::SampleCountFlags,
     anisotropy: bool,
     surface_format: vk::SurfaceFormatKHR,
-    min_image_count: u32,
     queue_family_indices: physical_device::QueueFamilyIndices,
     depth_format: vk::Format,
     present_mode: vk::PresentModeKHR,
@@ -247,10 +247,6 @@ impl Renderer {
             let formats = unsafe {
                 surface_loader.get_physical_device_surface_formats(device_info.handle, surface)?
             };
-            let capabilities = unsafe {
-                surface_loader
-                    .get_physical_device_surface_capabilities(device_info.handle, surface)?
-            };
 
             let surface_format = formats
                 .iter()
@@ -318,7 +314,6 @@ impl Renderer {
                 msaa_samples,
                 anisotropy: device_info.features.sampler_anisotropy == vk::TRUE,
                 surface_format,
-                min_image_count: capabilities.min_image_count,
                 queue_family_indices: queues,
                 depth_format,
                 present_mode,
@@ -590,7 +585,7 @@ impl Renderer {
             (*tex.width(), *tex.height()),
             format,
             vk::ImageTiling::OPTIMAL,
-            // TRANSFER_SRC needed so for mip creation
+            // TRANSFER_SRC needed for mip creation
             vk::ImageUsageFlags::TRANSFER_DST
                 | vk::ImageUsageFlags::TRANSFER_SRC
                 | vk::ImageUsageFlags::SAMPLED,
