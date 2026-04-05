@@ -1,4 +1,4 @@
-use std::time::Instant;
+use std::{ffi::CString, str::FromStr, time::Instant};
 
 use anyhow::Context;
 
@@ -19,13 +19,16 @@ impl Engine {
         let logger = logging::Logger::new(true, true, true);
         logging::init(logger);
 
+        let version = utils::Version::from_str(env!("CARGO_PKG_VERSION"))?;
+        let name = "DirkEngine";
+
         let platform = platform::Platform::init().context("platform init")?;
         let renderer = renderer::Renderer::init(
             renderer::RendererCreateInfo {
-                engine_name: c"DirkEngine".into(),
-                engine_version: utils::Version::ZERO.bump_minor(),
-                app_name: c"DirkEditor".into(),
-                app_version: utils::Version::ZERO.bump_minor(),
+                engine_name: CString::from_str(name)?,
+                engine_version: version,
+                app_name: CString::from_str(name)?,
+                app_version: version,
             },
             platform.main_window(),
         )
