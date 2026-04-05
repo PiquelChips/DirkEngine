@@ -90,7 +90,8 @@ pub struct Renderer {
     command_pool: vk::CommandPool,
 
     properties: RendererProperties,
-    surface: vk::SurfaceKHR, // The surface of the main window
+    /// The ID of the main window in [windows] field.
+    main_window: WindowId,
     windows: HashMap<WindowId, Window>,
     models: HashMap<String, Model>,
 
@@ -393,7 +394,7 @@ impl Renderer {
             physical_device,
             properties,
             command_pool,
-            surface,
+            main_window: window.id().into_raw(),
             windows: HashMap::new(),
             models: HashMap::new(),
             surface_loader,
