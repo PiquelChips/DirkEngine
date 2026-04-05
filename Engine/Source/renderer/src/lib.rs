@@ -27,7 +27,10 @@ use model::*;
 
 mod scene;
 
-use crate::window::{Window, WindowId};
+use crate::{
+    scene::Scene,
+    window::{Window, WindowId},
+};
 mod window;
 
 #[repr(C)]
@@ -98,6 +101,8 @@ pub struct Renderer {
     windows: HashMap<WindowId, Window>,
     /// All the uploaded [resource_manager::Model]s.
     models: HashMap<String, Model>,
+    /// All of the internal [world::World] representations.
+    scenes: HashMap<world::WorldId, Scene>,
 
     // Extensions
     surface_loader: surface::Instance,
@@ -401,6 +406,7 @@ impl Renderer {
             main_window: window.id().into_raw(),
             windows: HashMap::new(),
             models: HashMap::new(),
+            scenes: HashMap::new(),
             surface_loader,
             swapchain_loader,
             debug_utils_loader,
@@ -420,6 +426,13 @@ impl Renderer {
 
     pub fn render(&self) -> Result<()> {
         // TODO: render
+        Ok(())
+    }
+
+    // SCENES
+
+    pub fn create_scene(&mut self, world: &world::World) -> Result<()> {
+        self.scenes.insert(world.id(), Scene::build(self, world)?);
         Ok(())
     }
 
@@ -544,6 +557,10 @@ impl Renderer {
             },
         );
         Ok(self.models.get(model.name()).unwrap())
+    }
+
+    fn get_model(&self, name: &str) -> Option<&Model> {
+        self.models.get(name)
     }
 
     fn upload_primitive(&self, prim: &resource_manager::Primitive) -> Result<Primitive> {
