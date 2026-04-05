@@ -41,7 +41,7 @@ world = { path = "Engine/Source/world" }
 
 # Main Engine Dependencies
 winit = "0.31.0-beta.2"
-spirv-builder = { git = "https://github.com/Rust-GPU/rust-gpu.git", branch = "main" }
 spirv-std = { git = "https://github.com/Rust-GPU/rust-gpu.git", branch = "main" }
+cargo-gpu-install = { git = "https://github.com/rust-gpu/cargo-gpu", branch = "main" }
 glam = "0.32"
 gltf = "1"
