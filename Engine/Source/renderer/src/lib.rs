@@ -22,8 +22,8 @@ pub use errors::{Error, Result};
 mod physical_device;
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
-mod structs;
-use structs::*;
+mod model;
+use model::*;
 
 use crate::window::{Window, WindowId};
 mod window;
