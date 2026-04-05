@@ -7,7 +7,7 @@ members = [
     "Engine/Source/platform",
     "Engine/Source/run",
     "Engine/Source/resource_manager",
-    "Engine/Source/ecs"
+    "Engine/Source/world"
 ]
 
 [workspace.package]
@@ -32,7 +32,7 @@ logging = { path = "Engine/Source/logging" }
 engine = { path = "Engine/Source/engine" }
 platform = { path = "Engine/Source/platform" }
 resource_manager = { path = "Engine/Source/resource_manager" }
-ecs = { path = "Engine/Source/ecs" }
+world = { path = "Engine/Source/world" }
 
 # Main Engine Dependencies
 winit = "0.31.0-beta.2"
