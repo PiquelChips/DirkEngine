@@ -89,6 +89,11 @@ const VALIDATION_LAYERS: &[*const i8] = &[c"VK_LAYER_KHRONOS_validation".as_ptr(
 struct Frame {
     /// Command pool to allocate command buffers on every frame
     command_pool: vk::CommandPool,
+    /// Main synchronization fence
+    fence: vk::Fence,
+    // TODO: have one primary command buffer that is allocated once and
+    // secondary command for each scene. Should be allocated every time
+    // there is a change in scene count. If not reallocated, reset.
 }
 
 /// This struct is owned by [Renderer] and stores
@@ -158,6 +163,7 @@ pub struct Renderer {
     layouts: DescriptorLayouts,
 
     frames: [Frame; MAX_FRAMES_IN_FLIGHT],
+    current_frame: usize,
 
     // Extensions
     surface_loader: surface::Instance,
@@ -463,7 +469,16 @@ impl Renderer {
 
                     unsafe { device.create_command_pool(&pool_info, None)? }
                 };
-                Ok(Frame { command_pool })
+                let fence = unsafe {
+                    device.create_fence(
+                        &vk::FenceCreateInfo::default().flags(vk::FenceCreateFlags::SIGNALED),
+                        None,
+                    )?
+                };
+                Ok(Frame {
+                    command_pool,
+                    fence,
+                })
             })
             .collect();
         let frames: [Frame; MAX_FRAMES_IN_FLIGHT] = frames?.try_into().unwrap();
@@ -524,6 +539,7 @@ impl Renderer {
             scenes: HashMap::new(),
             layouts,
             frames,
+            current_frame: 0,
             surface_loader,
             swapchain_loader,
             debug_utils_loader,
@@ -543,8 +559,46 @@ impl Renderer {
         Ok(renderer)
     }
 
-    pub fn render(&self) -> Result<()> {
-        // TODO: render
+    pub fn render(&mut self) -> Result<()> {
+        let frame = &self.frames[self.current_frame];
+
+        unsafe {
+            self.device
+                .wait_for_fences(std::slice::from_ref(&frame.fence), true, u64::MAX)?;
+            self.device
+                .reset_fences(std::slice::from_ref(&frame.fence))?;
+        }
+
+        let allocate_info = vk::CommandBufferAllocateInfo::default()
+            .command_pool(frame.command_pool)
+            .level(vk::CommandBufferLevel::PRIMARY)
+            .command_buffer_count(1);
+        let cmd = unsafe { self.device.allocate_command_buffers(&allocate_info)?[0] };
+
+        unsafe {
+            self.device
+                .begin_command_buffer(cmd, &vk::CommandBufferBeginInfo::default())?
+        }
+
+        // TODO: render all scenes
+
+        unsafe { self.device.end_command_buffer(cmd)? }
+
+        let submit_info = vk::SubmitInfo::default()
+            .wait_dst_stage_mask(std::slice::from_ref(
+                &vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+            ))
+            .command_buffers(std::slice::from_ref(&cmd));
+
+        unsafe {
+            self.device.queue_submit(
+                self.queues.graphics,
+                std::slice::from_ref(&submit_info),
+                frame.fence,
+            )?
+        }
+
+        self.current_frame = (self.current_frame + 1) % MAX_FRAMES_IN_FLIGHT;
         Ok(())
     }
 
