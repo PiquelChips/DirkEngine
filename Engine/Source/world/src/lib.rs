@@ -12,6 +12,8 @@ use components::*;
 
 /// An Entity is nothing more than a unique numeric identifier.
 pub type Entity = u32;
+/// An identifier used to find the world.
+pub type WorldId = u32;
 
 /// Component trait. Should not be implemented manually.
 /// Should be implemented by the [define_components] macro.
@@ -58,6 +60,7 @@ define_components!(Transform, Renderable);
 /// of all the entities in the world.
 #[derive(Default)]
 pub struct World {
+    id: WorldId,
     next_id: Entity,
     alive: Vec<Entity>,
     components: Components,
@@ -65,8 +68,13 @@ pub struct World {
 
 impl World {
     /// Creates a new empty world.
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(id: WorldId) -> Self {
+        let mut world = Self::default();
+        world.id = id;
+        world
+    }
+    pub fn id(&self) -> WorldId {
+        self.id
     }
 
     /// Spawn a new entity and return its ID.
