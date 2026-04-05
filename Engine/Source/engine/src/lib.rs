@@ -1,6 +1,7 @@
-use std::{ffi::CString, str::FromStr, time::Instant};
+use std::{collections::HashMap, ffi::CString, str::FromStr, time::Instant};
 
 use anyhow::Context;
+use world::{World, WorldId};
 
 mod errors;
 
@@ -8,6 +9,9 @@ mod errors;
 pub struct Engine {
     platform: platform::Platform,
     renderer: renderer::Renderer,
+
+    next_world_id: WorldId,
+    worlds: HashMap<WorldId, World>,
 
     is_requesting_exit: bool,
     exit_error: Option<anyhow::Error>,
@@ -47,14 +51,21 @@ impl Engine {
          *
          * Create main viewport
          */
-        Ok(Self {
-            is_requesting_exit: false,
-
+        let mut engine = Self {
             platform,
             renderer,
+
+            next_world_id: 0,
+            worlds: HashMap::new(),
+
+            is_requesting_exit: false,
             exit_error: None,
             last_tick: Instant::now(),
-        })
+        };
+
+        engine.create_world();
+
+        Ok(engine)
     }
     /// Engine tick.
     /// Returns if the engine should continue ticking.
@@ -95,7 +106,7 @@ impl Engine {
          */
         Ok(())
     }
-    pub fn shutdown(&self) -> anyhow::Result<()> {
+    pub fn shutdown(&mut self) -> anyhow::Result<()> {
         /*
          * Shutdown ImGui (renderer then platform)
          *
@@ -122,5 +133,22 @@ impl Engine {
         let delta = current_time.duration_since(self.last_tick).as_secs_f32();
         self.last_tick = current_time;
         delta
+    }
+
+    fn create_world(&mut self) -> anyhow::Result<WorldId> {
+        let id = self.next_world_id;
+        self.next_world_id += 1;
+
+        let world = World::new(id);
+        self.renderer
+            .create_scene(&world)
+            .context("create renderer scene")?;
+        self.worlds.insert(id, world);
+        Ok(id)
+    }
+    #[allow(unused)]
+    fn destroy_world(&mut self, id: WorldId) {
+        // TODO: delete renderer scene
+        self.worlds.remove(&id);
     }
 }

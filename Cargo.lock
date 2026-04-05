@@ -416,6 +416,7 @@ dependencies = [
  "renderer",
  "thiserror 2.0.18",
  "utils",
+ "world",
 ]
 
 [[package]]

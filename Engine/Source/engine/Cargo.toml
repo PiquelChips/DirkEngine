@@ -15,3 +15,4 @@ logging.workspace = true
 utils.workspace = true
 platform.workspace = true
 renderer.workspace = true
+world.workspace = true
