@@ -1,7 +1,7 @@
 use ash::vk;
 use world::{World, components};
 
-use crate::Result;
+use crate::{Renderer, Result};
 
 /// This scene is created from a [world::World].
 /// It should then be updated whenever the world is updated.
@@ -20,7 +20,10 @@ pub struct Scene {
 }
 
 impl Scene {
-    pub fn build(renderer: &crate::Renderer, world: &World) -> Result<Self> {
+    /// Builds a [Scene].
+    /// Constructs the renderer stuff like command pools, descriptor sets, ... from
+    /// the [Renderer] and all world proxy stuff from [World].
+    pub fn build(renderer: &Renderer, world: &World) -> Result<Self> {
         let command_pool = {
             let pool_info = vk::CommandPoolCreateInfo::default()
                 .queue_family_index(renderer.properties.queue_family_indices.graphics)
