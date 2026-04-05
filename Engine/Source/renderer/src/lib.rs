@@ -31,12 +31,46 @@ use scene::Scene;
 mod window;
 use window::{Window, WindowId};
 
+mod render_pass;
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 struct Vertex {
     position: [f32; 3],
     normal: [f32; 3],
     texcoord: [f32; 2],
+}
+
+impl Vertex {
+    const fn binding_description() -> vk::VertexInputBindingDescription {
+        vk::VertexInputBindingDescription {
+            binding: 0,
+            stride: size_of::<Self>() as u32,
+            input_rate: vk::VertexInputRate::VERTEX,
+        }
+    }
+    const fn attribute_description() -> [vk::VertexInputAttributeDescription; 3] {
+        [
+            vk::VertexInputAttributeDescription {
+                location: 0,
+                binding: 0,
+                format: vk::Format::R32G32B32_SFLOAT,
+                offset: std::mem::offset_of!(Self, position) as u32,
+            },
+            vk::VertexInputAttributeDescription {
+                location: 0,
+                binding: 1,
+                format: vk::Format::R32G32B32_SFLOAT,
+                offset: std::mem::offset_of!(Self, normal) as u32,
+            },
+            vk::VertexInputAttributeDescription {
+                location: 0,
+                binding: 2,
+                format: vk::Format::R32G32_SFLOAT,
+                offset: std::mem::offset_of!(Self, texcoord) as u32,
+            },
+        ]
+    }
 }
 
 fn make_version(version: utils::Version) -> u32 {
