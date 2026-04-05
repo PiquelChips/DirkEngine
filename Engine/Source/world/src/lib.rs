@@ -54,7 +54,7 @@ macro_rules! define_components {
     };
 }
 
-define_components!(Transform, Renderable);
+define_components!(Transform, Renderable, Camera);
 
 /// Stores all the entities and their components. Handles state
 /// of all the entities in the world.
