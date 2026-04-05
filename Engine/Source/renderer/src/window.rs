@@ -4,6 +4,11 @@ use crate::{Renderer, Result, SwapchainImage};
 
 pub type WindowId = usize;
 
+pub struct SwapchainImage {
+    pub image: vk::Image,
+    pub view: vk::ImageView,
+}
+
 /// The renderer's representation of a platform window.
 /// Holds the swapchain, surface & other related state.
 /// Doesn't actually do any of the rendering of the game.

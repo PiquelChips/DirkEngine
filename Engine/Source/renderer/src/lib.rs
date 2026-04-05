@@ -42,12 +42,6 @@ struct Vertex {
     texcoord: [f32; 2],
 }
 
-pub struct ModelViewProjection {
-    model: Mat4,
-    view: Mat4,
-    proj: Mat4,
-}
-
 fn make_version(version: utils::Version) -> u32 {
     vk::make_api_version(0, version.major(), version.minor(), version.patch())
 }
@@ -79,11 +73,6 @@ pub struct RendererProperties {
     queue_family_indices: physical_device::QueueFamilyIndices,
     depth_format: vk::Format,
     present_mode: vk::PresentModeKHR,
-}
-
-struct SwapchainImage {
-    image: vk::Image,
-    view: vk::ImageView,
 }
 
 /// The Renderer struct that holds all render state and is called upon to handle
@@ -471,7 +460,7 @@ impl Renderer {
         &self,
         surface: vk::SurfaceKHR,
         window_size: vk::Extent2D,
-    ) -> Result<(vk::SwapchainKHR, vk::Extent2D, Vec<SwapchainImage>)> {
+    ) -> Result<(vk::SwapchainKHR, vk::Extent2D, Vec<window::SwapchainImage>)> {
         let capabilities = unsafe {
             self.surface_loader
                 .get_physical_device_surface_capabilities(self.physical_device, surface)?
@@ -531,7 +520,7 @@ impl Renderer {
                     )
                     .unwrap();
 
-                SwapchainImage { image, view }
+                window::SwapchainImage { image, view }
             })
             .collect();
 

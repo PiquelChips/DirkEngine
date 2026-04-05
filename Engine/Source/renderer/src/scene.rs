@@ -26,6 +26,7 @@ impl Scene {
     /// Constructs the renderer stuff like command pools, descriptor sets, ... from
     /// the [Renderer] and all world proxy stuff from [World].
     pub fn build(renderer: &Renderer, world: &World) -> Result<Self> {
+        // TODO: load all the models that are used by the scene proxies
         let command_pool = {
             let pool_info = vk::CommandPoolCreateInfo::default()
                 .queue_family_index(renderer.properties.queue_family_indices.graphics)
