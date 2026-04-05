@@ -57,6 +57,21 @@ struct Frame {
     command_pool: vk::CommandPool,
 }
 
+/// This struct is owned by [Renderer] and stores
+/// all the different descriptor set layouts used by
+/// the renderer.
+/// Every field should be a descriptor set layout with a
+/// propper comment explain what the layout is and where
+/// it is used.
+struct DescriptorLayouts {
+    /// Per scene layout. Holds view & proj matrices for rendering.
+    scene: vk::DescriptorSetLayout,
+    /// Per object layout. For model matrix.
+    object: vk::DescriptorSetLayout,
+    /// Per material layout. For texture descriptor.
+    material: vk::DescriptorSetLayout,
+}
+
 pub struct RendererCreateInfo {
     pub engine_name: CString,
     pub engine_version: utils::Version,
@@ -105,6 +120,8 @@ pub struct Renderer {
     models: HashMap<String, Model>,
     /// All of the internal [world::World] representations.
     scenes: HashMap<world::WorldId, Scene>,
+    /// All the descriptor layouts used in the renderer.
+    layouts: DescriptorLayouts,
 
     frames: [Frame; MAX_FRAMES_IN_FLIGHT],
 
@@ -400,6 +417,7 @@ impl Renderer {
             unsafe { device.create_command_pool(&pool_info, None)? }
         };
 
+        // IN FLIGHT FRAMES
         let frames: Result<Vec<Frame>> = (0..MAX_FRAMES_IN_FLIGHT)
             .map(|_| {
                 let command_pool = {
@@ -412,8 +430,46 @@ impl Renderer {
                 Ok(Frame { command_pool })
             })
             .collect();
-
         let frames: [Frame; MAX_FRAMES_IN_FLIGHT] = frames?.try_into().unwrap();
+
+        let layouts = DescriptorLayouts {
+            scene: {
+                let binding = vk::DescriptorSetLayoutBinding::default()
+                    .binding(0)
+                    .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                    .descriptor_count(2)
+                    .stage_flags(vk::ShaderStageFlags::VERTEX);
+
+                let info = vk::DescriptorSetLayoutCreateInfo::default()
+                    .bindings(std::slice::from_ref(&binding));
+
+                unsafe { device.create_descriptor_set_layout(&info, None)? }
+            },
+            object: {
+                let binding = vk::DescriptorSetLayoutBinding::default()
+                    .binding(1)
+                    .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                    .descriptor_count(1)
+                    .stage_flags(vk::ShaderStageFlags::VERTEX);
+
+                let info = vk::DescriptorSetLayoutCreateInfo::default()
+                    .bindings(std::slice::from_ref(&binding));
+
+                unsafe { device.create_descriptor_set_layout(&info, None)? }
+            },
+            material: {
+                let binding = vk::DescriptorSetLayoutBinding::default()
+                    .binding(2)
+                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                    .descriptor_count(1)
+                    .stage_flags(vk::ShaderStageFlags::FRAGMENT);
+
+                let info = vk::DescriptorSetLayoutCreateInfo::default()
+                    .bindings(std::slice::from_ref(&binding));
+
+                unsafe { device.create_descriptor_set_layout(&info, None)? }
+            },
+        };
 
         let mut renderer = Self {
             entry,
@@ -427,6 +483,7 @@ impl Renderer {
             windows: HashMap::new(),
             models: HashMap::new(),
             scenes: HashMap::new(),
+            layouts,
             frames,
             surface_loader,
             swapchain_loader,
