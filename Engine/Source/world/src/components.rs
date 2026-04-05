@@ -34,6 +34,14 @@ impl Transform {
     pub fn forward(&self) -> glam::Vec3 {
         self.rotation_quat() * utils::FORWARD_DIRECTION
     }
+    /// Gets the view matrix for this transform's position & look-at from rotation.
+    pub fn view(&self) -> glam::Mat4 {
+        glam::Mat4::look_at_lh(
+            self.location,
+            self.location + self.forward(),
+            utils::UP_DIRECTION,
+        )
+    }
 }
 
 impl From<Transform> for glam::Mat4 {
