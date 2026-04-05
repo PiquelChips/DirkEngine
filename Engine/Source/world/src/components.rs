@@ -3,10 +3,9 @@
 // TODO: actually renderable
 pub struct Renderable;
 
-/// A zero-size tag component — marks the player entity.
 #[derive(Debug, Clone)]
-pub struct IsPlayer;
-
-/// A zero-size tag component — marks entities scheduled for removal.
-#[derive(Debug, Clone)]
-pub struct IsDead;
+pub struct Position {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+}

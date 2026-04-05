@@ -45,7 +45,7 @@ macro_rules! define_components {
     };
 }
 
-define_components!(Renderable, IsPlayer, IsDead);
+define_components!(Position, Renderable);
 
 /// Stores all the entities and their components. Handles state
 /// of all the entities in the world.
