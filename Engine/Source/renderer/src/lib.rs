@@ -92,6 +92,7 @@ pub struct Renderer {
     properties: RendererProperties,
     surface: vk::SurfaceKHR, // The surface of the main window
     windows: HashMap<WindowId, Window>,
+    models: HashMap<String, Model>,
 
     // Extensions
     surface_loader: surface::Instance,
@@ -394,6 +395,7 @@ impl Renderer {
             command_pool,
             surface,
             windows: HashMap::new(),
+            models: HashMap::new(),
             surface_loader,
             swapchain_loader,
             debug_utils_loader,
@@ -513,7 +515,7 @@ impl Renderer {
 
     // UPLOADING TO THE RENDERER
 
-    pub fn upload_model(&self, model: resource_manager::Model) -> Result<Model> {
+    pub fn upload_model(&mut self, model: resource_manager::Model) -> Result<&Model> {
         let primitives = model
             .meshes()
             .iter()
@@ -527,12 +529,16 @@ impl Renderer {
             .map(|t| self.upload_texture(t))
             .collect::<Result<_>>()?;
 
-        Ok(Model {
-            name: model.name().to_owned(),
-            primitives,
-            textures,
-            materials: model.materials().to_vec(),
-        })
+        self.models.insert(
+            model.name().to_string(),
+            Model {
+                name: model.name().to_owned(),
+                primitives,
+                textures,
+                materials: model.materials().to_vec(),
+            },
+        );
+        Ok(self.models.get(model.name()).unwrap())
     }
 
     fn upload_primitive(&self, prim: &resource_manager::Primitive) -> Result<Primitive> {
