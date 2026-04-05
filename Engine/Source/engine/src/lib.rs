@@ -63,7 +63,7 @@ impl Engine {
             last_tick: Instant::now(),
         };
 
-        engine.create_world();
+        engine.create_world()?;
 
         Ok(engine)
     }
