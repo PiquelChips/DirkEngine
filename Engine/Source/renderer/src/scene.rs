@@ -20,6 +20,7 @@ pub struct Scene {
 
     descriptor_pool: vk::DescriptorPool,
     ubo: [UboData; MAX_FRAMES_IN_FLIGHT],
+    descriptor_sets: [vk::DescriptorSet; MAX_FRAMES_IN_FLIGHT],
 }
 
 #[derive(Debug)]
@@ -39,6 +40,9 @@ impl Scene {
     /// Constructs the renderer stuff like command pools, descriptor sets, ... from
     /// the [Renderer] and all world proxy stuff from [World].
     pub fn build(renderer: &Renderer, world: &World) -> Result<Self> {
+        // TODO: load all the models that are used by the scene proxies
+        let (camera, camera_trans) = Self::get_camera(world);
+
         let proxy_count = world
             .query_double::<components::Renderable, components::Transform>()
             .len() as u32;
@@ -76,8 +80,6 @@ impl Scene {
                 .unwrap()
         };
 
-        // TODO: create scene UBO buffers, write descriptor sets, build proxies
-
         let ubo: Vec<UboData> = (0..MAX_FRAMES_IN_FLIGHT)
             .map(|_| {
                 let size = size_of::<SceneUbo>() as u64;
@@ -102,8 +104,8 @@ impl Scene {
             .collect::<Result<Vec<_>>>()?;
         let ubo: [UboData; MAX_FRAMES_IN_FLIGHT] = ubo.try_into().unwrap();
 
-        // TODO: load all the models that are used by the scene proxies
-        let (camera, camera_trans) = Self::get_camera(world);
+        // TODO: write descriptor sets
+        // TODO: build proxies
 
         Ok(Self {
             proxies: Self::make_scene_proxies(renderer, world),
@@ -111,6 +113,7 @@ impl Scene {
             proj: camera.projection(),
             descriptor_pool,
             ubo,
+            descriptor_sets: scene_desc_sets,
         })
     }
     // TODO: on tick, worlds should be sent to update scenes
