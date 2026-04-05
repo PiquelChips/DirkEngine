@@ -92,9 +92,11 @@ pub struct Renderer {
     command_pool: vk::CommandPool,
 
     properties: RendererProperties,
-    /// The ID of the main window in [windows] field.
+    /// The ID of the main window in [Renderer::windows] field.
     main_window: WindowId,
+    /// All of the [window::Window]s constructed from [platform::Window]s.
     windows: HashMap<WindowId, Window>,
+    /// All the uploaded [resource_manager::Model]s.
     models: HashMap<String, Model>,
 
     // Extensions

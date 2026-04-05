@@ -18,7 +18,7 @@ pub struct Scene {
 /// Owned by [Scene], constructed from [world::components::Renderable] and
 /// [world::components::Transform].
 pub struct SceneProxy {
-    /// The name of the model. Used to request a [Model] from the
+    /// The name of the model. Used to request a [crate::model::Model] from the
     /// renderer at render time.
     model: String,
     /// The model matrix used for rendering. Constructed from the
