@@ -21,6 +21,8 @@ const MODELS_PATH: &str = env!("MODELS_PATH");
 /// Internal representation of a model loaded from a gltf model.
 #[derive(derive_getters::Getters)]
 pub struct Model {
+    /// The name of the model. Derived from the file name.
+    name: String,
     meshes: Vec<Mesh>,
     textures: Vec<Texture>,
     materials: Vec<Material>,
@@ -105,6 +107,7 @@ impl ResourceManager {
             .collect();
 
         Ok(Model {
+            name: name.to_string(),
             meshes,
             textures,
             materials,

@@ -2,6 +2,7 @@ use ash::{Device, vk};
 
 /// Complete GPU model.
 pub struct Model {
+    pub name: String,
     pub primitives: Vec<Primitive>,
     pub textures: Vec<Texture>,
     pub materials: Vec<resource_manager::Material>,

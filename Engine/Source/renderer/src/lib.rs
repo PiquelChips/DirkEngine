@@ -528,6 +528,7 @@ impl Renderer {
             .collect::<Result<_>>()?;
 
         Ok(Model {
+            name: model.name().to_owned(),
             primitives,
             textures,
             materials: model.materials().to_vec(),
