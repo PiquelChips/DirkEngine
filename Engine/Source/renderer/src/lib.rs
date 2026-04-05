@@ -45,12 +45,6 @@ fn make_version(version: utils::Version) -> u32 {
     vk::make_api_version(0, version.major(), version.minor(), version.patch())
 }
 
-/// Y-up
-const UP_DIRECTION: glam::Vec3 = glam::Vec3 {
-    x: 0.,
-    y: 1.,
-    z: 0.,
-};
 const DEVICE_EXTENSIONS: &[&str] =
     &[unsafe { std::str::from_utf8_unchecked(swapchain::NAME.to_bytes()) }];
 #[cfg(validation)]
