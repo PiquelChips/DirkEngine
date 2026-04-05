@@ -14,9 +14,9 @@ pub struct Scene {
     /// The entities to render.
     proxies: Vec<SceneProxy>,
     /// View matrix calculated from camera position.
-    view: glam::Vec4,
+    view: glam::Mat4,
     /// Projection matrix calculated from screen settings.
-    proj: glam::Vec4,
+    proj: glam::Mat4,
 }
 
 impl Scene {
@@ -29,10 +29,22 @@ impl Scene {
             unsafe { renderer.device.create_command_pool(&pool_info, None)? }
         };
 
+        let (camera, camera_trans) = Self::get_camera(world);
+
         Ok(Self {
             command_pool,
             proxies: Self::make_scene_proxies(world),
+            view: camera_trans.view(),
+            proj: camera.projection(),
         })
+    }
+    /// This function will reconstruct the internal world data with the new input world.
+    /// This includes: [SceneProxy]s, view matrix & projection matrix.
+    pub fn rebuild(&mut self, world: &World) {
+        let (camera, camera_trans) = Self::get_camera(world);
+        self.proxies = Self::make_scene_proxies(world);
+        self.view = camera_trans.view();
+        self.proj = camera.projection();
     }
     fn make_scene_proxies(world: &World) -> Vec<SceneProxy> {
         world
@@ -48,6 +60,14 @@ impl Scene {
                 }
             })
             .collect()
+    }
+    fn get_camera(world: &World) -> (&components::Camera, &components::Transform) {
+        // TODO: don't just get the first camera + error handling if no camera
+        let camera_entity = world.query_double::<components::Transform, components::Camera>()[0];
+        (
+            world.get::<components::Camera>(camera_entity).unwrap(),
+            world.get::<components::Transform>(camera_entity).unwrap(),
+        )
     }
 }
 
