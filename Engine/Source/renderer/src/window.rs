@@ -28,14 +28,15 @@ impl Window {
             images,
         })
     }
+    /// Returns the window's ID
+    pub fn id(&self) -> WindowId {
+        self.id
+    }
     pub fn resize(&mut self, renderer: &Renderer, in_size: vk::Extent2D) -> Result<()> {
         let (swapchain, extent, images) = renderer.create_swap_chain(self.surface, in_size)?;
         self.swapchain = swapchain;
         self.extent = extent;
         self.images = images;
         Ok(())
-    }
-    pub fn id(&self) -> WindowId {
-        self.id
     }
 }
