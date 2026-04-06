@@ -85,8 +85,8 @@ impl Window {
         &mut self,
         swapchain_loader: &swapchain::Device,
     ) -> Result<(SwapchainImage, u32)> {
-        let (_, image_available_semaphore) = self.semaphores[self.semaphore_count];
         self.semaphore_count = (self.semaphore_count + 1) % self.semaphores.len();
+        let (_, image_available_semaphore) = self.semaphores[self.semaphore_count];
 
         let (image_index, suboptimal) = unsafe {
             swapchain_loader.acquire_next_image(
