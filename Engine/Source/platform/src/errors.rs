@@ -8,4 +8,6 @@ pub enum Error {
     EventLoopError(#[from] winit::error::EventLoopError),
     #[error("Error fetching handle: {0}")]
     HandleError(#[from] winit::raw_window_handle::HandleError),
+    #[error("Application exited with code {0}")]
+    AppExited(i32),
 }

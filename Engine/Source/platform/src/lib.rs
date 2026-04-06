@@ -5,8 +5,13 @@
 //!
 //! The DirkEngine's platform API is build on the winit crate.
 
+use std::time::Duration;
+
 use log::info;
-use winit::event_loop::{EventLoop, run_on_demand::EventLoopExtRunOnDemand};
+use winit::event_loop::{
+    EventLoop,
+    pump_events::{EventLoopExtPumpEvents, PumpStatus},
+};
 
 mod errors;
 mod handler;
@@ -26,18 +31,41 @@ pub struct Platform {
 impl Platform {
     pub fn init() -> Result<Self> {
         let mut platform = Self {
-            handler: handler::PlatformHandler::default(),
-            event_loop: EventLoop::new().expect("failed to create empty winit event loop"),
+            handler: PlatformHandler::default(),
+            event_loop: EventLoop::new().expect("failed to create winit event loop"),
         };
-        // TODO: blocking call
-        platform.tick(0.)?;
+
+        // Pump until `can_create_surfaces` fires and the main window exists.
+        // Each call returns quickly; the OS dispatches the startup events
+        // within the first few iterations.
+        while !platform.handler.is_initialized() {
+            match platform
+                .event_loop
+                .pump_app_events(Some(Duration::ZERO), &mut platform.handler)
+            {
+                PumpStatus::Exit(code) => return Err(Error::AppExited(code)),
+                PumpStatus::Continue => {}
+            }
+        }
+
         info!("initialized platform");
         Ok(platform)
     }
-    pub fn tick(&mut self, _delta_time: f32) -> Result<()> {
-        // TODO: maybe listen on a separate thread in the future
-        Ok(self.event_loop.run_app_on_demand(&mut self.handler)?)
+    /// Process all pending OS events without blocking. Returns `Ok(true)`
+    /// when the application has requested to exit (e.g. last window closed).
+    pub fn tick(&mut self, _delta_time: f32) -> Result<bool> {
+        match self
+            .event_loop
+            .pump_app_events(Some(Duration::ZERO), &mut self.handler)
+        {
+            PumpStatus::Exit(code) => {
+                info!("Event loop exited with code {code}");
+                Ok(true)
+            }
+            PumpStatus::Continue => Ok(false),
+        }
     }
+
     pub fn main_window(&self) -> &Window {
         self.handler.main_window()
     }

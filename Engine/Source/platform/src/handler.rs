@@ -37,6 +37,9 @@ impl PlatformHandler {
             .get(&self.main_window)
             .expect("there should always be a main window")
     }
+    pub fn is_initialized(&self) -> bool {
+        self.can_create_surfaces
+    }
 }
 
 impl Default for PlatformHandler {
