@@ -1064,6 +1064,7 @@ impl Renderer {
         let mut mip_height = height;
 
         for level in 1..mip_levels {
+            let base_mip = level - 1;
             // Transition previous level: TRANSFER_DST → TRANSFER_SRC
             self.transition_image_layout(
                 cmd,
@@ -1071,7 +1072,7 @@ impl Renderer {
                 vk::ImageLayout::TRANSFER_DST_OPTIMAL,
                 vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
                 1,
-                0,
+                base_mip,
             )?;
 
             let next_w = (mip_width / 2).max(1);
@@ -1126,7 +1127,7 @@ impl Renderer {
                 vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
                 vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
                 1,
-                0,
+                base_mip,
             )?;
 
             mip_width = next_w;
@@ -1139,8 +1140,8 @@ impl Renderer {
             image,
             vk::ImageLayout::TRANSFER_DST_OPTIMAL,
             vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-            mip_levels - 1,
             1,
+            mip_levels - 1,
         )
     }
     fn create_sampler(&self, mip_levels: u32) -> Result<vk::Sampler> {
