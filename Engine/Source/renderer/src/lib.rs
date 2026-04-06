@@ -303,7 +303,7 @@ impl Renderer {
         let (physical_device, properties) = {
             let (device_info, queues) = physical_device::PhysicalDeviceSelector::new()
                 .require_extensions(DEVICE_EXTENSIONS)
-                .require(|info| info.features.geometry_shader == vk::FALSE)
+                .require(|info| info.features.geometry_shader == vk::TRUE)
                 .select(&instance, &surface_loader, surface)
                 .ok_or(Error::NoDeviceFound)?;
 
