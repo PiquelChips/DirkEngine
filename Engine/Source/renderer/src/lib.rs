@@ -597,6 +597,11 @@ impl Renderer {
     pub fn render(&mut self) -> Result<()> {
         let frame = self.get_current_frame();
 
+        let window = self.windows.get(&self.main_window).unwrap();
+        let size = window.extent();
+        let swapchain = window.swapchain();
+        let (swapchain_img, idx) = window.next_image(self)?;
+
         unsafe {
             self.device
                 .wait_for_fences(std::slice::from_ref(&frame.fence), true, u64::MAX)?;
@@ -616,7 +621,7 @@ impl Renderer {
         }
 
         for scene in self.scenes.values() {
-            scene.render(self, cmd)?;
+            scene.render(self, cmd, size, swapchain_img.view)?;
         }
 
         unsafe { self.device.end_command_buffer(cmd)? }
@@ -636,6 +641,16 @@ impl Renderer {
                 frame.fence,
             )?
         }
+
+        let present_info = vk::PresentInfoKHR::default()
+            .wait_semaphores(std::slice::from_ref(&frame.render_finished_semaphore))
+            .swapchains(std::slice::from_ref(&swapchain))
+            .image_indices(std::slice::from_ref(&idx));
+
+        unsafe {
+            self.swapchain_loader
+                .queue_present(self.queues.present, &present_info)?
+        };
 
         self.current_frame = (self.current_frame + 1) % MAX_FRAMES_IN_FLIGHT;
         Ok(())

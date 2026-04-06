@@ -56,7 +56,10 @@ impl Window {
     pub fn extent(&self) -> vk::Extent2D {
         self.extent
     }
-    pub fn next_image(&self, renderer: &Renderer) -> Result<&SwapchainImage> {
+    pub fn swapchain(&self) -> vk::SwapchainKHR {
+        self.swapchain
+    }
+    pub fn next_image(&self, renderer: &Renderer) -> Result<(&SwapchainImage, u32)> {
         let frame = renderer.get_current_frame();
 
         let (image_index, suboptimal) = unsafe {
@@ -72,7 +75,7 @@ impl Window {
             return Err(Error::SuboptimalSurface);
         }
 
-        Ok(&self.images[image_index as usize])
+        Ok((&self.images[image_index as usize], image_index))
     }
     pub fn resize(&mut self, renderer: &Renderer, in_size: vk::Extent2D) -> Result<()> {
         let (swapchain, extent, images) = renderer.create_swap_chain(self.surface, in_size)?;

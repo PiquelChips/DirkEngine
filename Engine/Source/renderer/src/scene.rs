@@ -189,29 +189,28 @@ impl Scene {
             world.get::<components::Transform>(camera_entity).unwrap(),
         )
     }
-    pub fn render(&self, renderer: &Renderer, cmd: vk::CommandBuffer) -> Result<()> {
+    pub fn render(
+        &self,
+        renderer: &Renderer,
+        cmd: vk::CommandBuffer,
+        size: vk::Extent2D,
+        view: vk::ImageView,
+    ) -> Result<()> {
         let device = &renderer.device;
 
-        let window = renderer.windows.get(&renderer.main_window).unwrap();
-
-        self.render_pass.begin(
-            renderer,
-            cmd,
-            window.extent(),
-            window.next_image(renderer)?.view,
-        );
+        self.render_pass.begin(renderer, cmd, size, view);
         renderer.graphics_pipeline.bind(renderer, cmd);
 
         let viewport = vk::Viewport::default()
-            .width(window.extent().width as f32)
-            .height(window.extent().height as f32)
+            .width(size.width as f32)
+            .height(size.height as f32)
             .min_depth(0.)
             .max_depth(1.);
         unsafe { renderer.device.cmd_set_viewport(cmd, 0, &[viewport]) };
 
         let scissor = vk::Rect2D::default()
             .offset(vk::Offset2D::default())
-            .extent(window.extent());
+            .extent(size);
         unsafe { renderer.device.cmd_set_scissor(cmd, 0, &[scissor]) };
 
         let mut descriptor_sets = [
