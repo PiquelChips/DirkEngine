@@ -13,6 +13,8 @@ pub enum Error {
     Loading(#[from] ash::LoadingError),
     #[error("platform error: {0}")]
     Platform(#[from] platform::Error),
+    #[error("resource manager error: {0}")]
+    ResourceManager(#[from] resource_manager::Error),
 
     #[error("no suitable graphics device found")]
     NoDeviceFound,
