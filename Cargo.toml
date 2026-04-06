@@ -40,4 +40,3 @@ shaders = { path = "Engine/Shaders" }
 winit = "0.31.0-beta.2"
 glam = "0.32"
 gltf = "1"
-shaderc = "0.8"
