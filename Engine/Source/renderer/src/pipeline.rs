@@ -18,15 +18,21 @@ impl GraphicsPipeline {
         let layout_info = vk::PipelineLayoutCreateInfo::default().set_layouts(&set_layouts);
         let pipeline_layout = unsafe { device.create_pipeline_layout(&layout_info, None)? };
 
+        let vert = Renderer::create_shader_module(device, &shaders::VERT)?;
+        let vert_name = shaders::VERT.entrypoint();
+
+        let frag = Renderer::create_shader_module(device, &shaders::FRAG)?;
+        let frag_name = shaders::FRAG.entrypoint();
+
         let shader_stages = [
-            vk::PipelineShaderStageCreateInfo::default().stage(vk::ShaderStageFlags::VERTEX),
-            // TODO: load the shaders
-            //.module(vert)
-            //.name(main)
-            vk::PipelineShaderStageCreateInfo::default().stage(vk::ShaderStageFlags::FRAGMENT),
-            // TODO: load the shaders
-            //.module(frag)
-            //.name(main)
+            vk::PipelineShaderStageCreateInfo::default()
+                .stage(vk::ShaderStageFlags::VERTEX)
+                .module(vert)
+                .name(vert_name),
+            vk::PipelineShaderStageCreateInfo::default()
+                .stage(vk::ShaderStageFlags::FRAGMENT)
+                .module(frag)
+                .name(frag_name),
         ];
 
         let binding_description = Vertex::binding_description();
