@@ -12,12 +12,7 @@ pub struct Model {
 impl Model {
     pub fn destroy(&self, device: &Device) {
         for prim in &self.primitives {
-            unsafe {
-                device.destroy_buffer(prim.vertex_buffer, None);
-                device.free_memory(prim.vertex_buffer_memory, None);
-                device.destroy_buffer(prim.index_buffer, None);
-                device.free_memory(prim.index_buffer_memory, None);
-            }
+            prim.destroy(device);
         }
         for tex in &self.textures {
             tex.destroy(device);
@@ -26,6 +21,7 @@ impl Model {
 }
 
 /// All GPU-side handles for a single texture.
+#[derive(Clone)]
 pub struct Texture {
     pub image: vk::Image,
     pub memory: vk::DeviceMemory,
@@ -46,6 +42,7 @@ impl Texture {
 }
 
 /// GPU-side handles for a single glTF primitive.
+#[derive(Clone)]
 pub struct Primitive {
     pub vertex_buffer: vk::Buffer,
     pub vertex_buffer_memory: vk::DeviceMemory,
@@ -53,4 +50,15 @@ pub struct Primitive {
     pub index_buffer_memory: vk::DeviceMemory,
     pub index_count: u32,
     pub material: Option<usize>,
+}
+
+impl Primitive {
+    fn destroy(&self, device: &Device) {
+        unsafe {
+            device.destroy_buffer(self.vertex_buffer, None);
+            device.free_memory(self.vertex_buffer_memory, None);
+            device.destroy_buffer(self.index_buffer, None);
+            device.free_memory(self.index_buffer_memory, None);
+        }
+    }
 }
