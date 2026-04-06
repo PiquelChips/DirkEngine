@@ -1,5 +1,7 @@
 //! This crate contains all the shaders used in the engine.
 
+/// A simple struct that holds a block of shader bytecode and
+/// the name of the shader's entrypoint.
 pub struct Shader {
     code: &'static [u8],
     entrypoint: &'static str,
