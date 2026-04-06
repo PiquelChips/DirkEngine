@@ -581,7 +581,7 @@ impl Renderer {
                 .begin_command_buffer(cmd, &vk::CommandBufferBeginInfo::default())?
         }
 
-        for (_, scene) in &self.scenes {
+        for scene in self.scenes.values() {
             scene.render(self, cmd);
         }
 

@@ -58,7 +58,6 @@ define_components!(Transform, Renderable, Camera);
 
 /// Stores all the entities and their components. Handles state
 /// of all the entities in the world.
-#[derive(Default)]
 pub struct World {
     id: WorldId,
     next_id: Entity,
@@ -69,9 +68,12 @@ pub struct World {
 impl World {
     /// Creates a new empty world.
     pub fn new(id: WorldId) -> Self {
-        let mut world = Self::default();
-        world.id = id;
-        world
+        Self {
+            id,
+            next_id: 0,
+            alive: Vec::new(),
+            components: Components::default(),
+        }
     }
     pub fn id(&self) -> WorldId {
         self.id

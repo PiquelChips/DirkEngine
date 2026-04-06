@@ -170,7 +170,7 @@ impl Scene {
         Ok(())
     }
     fn make_scene_proxies(&self, renderer: &Renderer, world: &World) -> Result<Vec<SceneProxy>> {
-        Ok(world
+        world
             .query_double::<components::Renderable, components::Transform>()
             .iter()
             .map(|&entity| {
@@ -179,7 +179,7 @@ impl Scene {
                 let transform = world.get::<components::Transform>(entity).unwrap();
                 SceneProxy::build(renderer, self, &renderable.model, transform.matrix())
             })
-            .collect::<Result<Vec<_>>>()?)
+            .collect::<Result<Vec<_>>>()
     }
     fn get_camera(world: &World) -> (&components::Camera, &components::Transform) {
         // TODO: don't just get the first camera + error handling if no camera
