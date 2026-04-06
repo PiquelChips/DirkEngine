@@ -185,6 +185,7 @@ pub struct Renderer {
     scenes: HashMap<world::WorldId, Scene>,
     /// All the descriptor layouts used in the renderer.
     layouts: DescriptorLayouts,
+    material_descriptor_pool: vk::DescriptorPool,
 
     frames: [Frame; MAX_FRAMES_IN_FLIGHT],
     current_frame: usize,
@@ -560,6 +561,20 @@ impl Renderer {
 
         let graphics_pipeline = GraphicsPipeline::build(&device, &layouts, &properties)?;
 
+        // MATERIAL DESCRIPTOR SETS
+        let material_descriptor_pool = {
+            const MAX_MATERIAL_DESCRIPTOR_SET: u32 = 256;
+            let pool_size = vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+                descriptor_count: MAX_MATERIAL_DESCRIPTOR_SET,
+            };
+            let pool_info = vk::DescriptorPoolCreateInfo::default()
+                .pool_sizes(std::slice::from_ref(&pool_size))
+                .max_sets(MAX_MATERIAL_DESCRIPTOR_SET);
+
+            unsafe { device.create_descriptor_pool(&pool_info, None)? }
+        };
+
         let mut renderer = Self {
             entry,
             instance,
@@ -573,6 +588,7 @@ impl Renderer {
             models: HashMap::new(),
             scenes: HashMap::new(),
             layouts,
+            material_descriptor_pool,
             frames,
             current_frame: 0,
             surface_loader,
@@ -780,11 +796,47 @@ impl Renderer {
             .map(|p| self.upload_primitive(p))
             .collect::<Result<_>>()?;
 
-        let textures = model
+        let textures: Vec<_> = model
             .textures()
             .iter()
             .map(|t| self.upload_texture(t))
             .collect::<Result<_>>()?;
+
+        let material_count = model.materials().len();
+        // Allocate one set per material
+        let layouts: Vec<vk::DescriptorSetLayout> = vec![self.layouts.material; material_count];
+
+        let material_sets: Vec<vk::DescriptorSet> = if material_count > 0 {
+            let alloc_info = vk::DescriptorSetAllocateInfo::default()
+                .descriptor_pool(self.material_descriptor_pool)
+                .set_layouts(&layouts);
+
+            unsafe { self.device.allocate_descriptor_sets(&alloc_info)? }
+        } else {
+            Vec::new()
+        };
+
+        // Write the base-colour sampler into each set that has one
+        for (i, mat) in model.materials().iter().enumerate() {
+            let Some(&tex_idx) = mat.base_color_texture().as_ref() else {
+                continue; // leave this set in its default (null) state
+            };
+
+            let tex = &textures[tex_idx];
+
+            let image_info = vk::DescriptorImageInfo::default()
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image_view(tex.view)
+                .sampler(tex.sampler);
+
+            let write = vk::WriteDescriptorSet::default()
+                .dst_set(material_sets[i])
+                .dst_binding(2) // matches layouts.material
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .image_info(std::slice::from_ref(&image_info));
+
+            unsafe { self.device.update_descriptor_sets(&[write], &[]) };
+        }
 
         self.models.insert(
             model.name().to_string(),
@@ -793,6 +845,7 @@ impl Renderer {
                 primitives,
                 textures,
                 materials: model.materials().to_vec(),
+                material_sets,
             },
         );
         Ok(self.models.get(model.name()).unwrap())
@@ -1361,6 +1414,8 @@ impl Drop for Renderer {
         self.layouts.destroy(&self.device);
 
         unsafe {
+            self.device
+                .destroy_descriptor_pool(self.material_descriptor_pool, None);
             self.device.destroy_command_pool(self.command_pool, None);
             self.device.destroy_device(None);
 

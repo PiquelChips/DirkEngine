@@ -7,6 +7,9 @@ pub struct Model {
     pub primitives: Vec<Primitive>,
     pub textures: Vec<Texture>,
     pub materials: Vec<resource_manager::Material>,
+    /// One descriptor set per entry in `materials`.
+    /// `vk::DescriptorSet::null()` if the material has no base-colour texture.
+    pub material_sets: Vec<vk::DescriptorSet>,
 }
 
 impl Model {

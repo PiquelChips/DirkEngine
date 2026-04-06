@@ -220,23 +220,24 @@ impl Scene {
         ];
 
         for proxy in &self.proxies {
-            descriptor_sets[1] = proxy.sets[renderer.current_frame];
-            // TODO: material descriptpor set
-            // descriptor_sets[2] = material_desc_set;
-
-            unsafe {
-                device.cmd_bind_descriptor_sets(
-                    cmd,
-                    vk::PipelineBindPoint::GRAPHICS,
-                    renderer.graphics_pipeline.layout(),
-                    0,
-                    &descriptor_sets,
-                    &[],
-                )
-            };
-
             for prim in &proxy.model.primitives {
+                let mat_set = prim
+                    .material
+                    .and_then(|idx| proxy.model.material_sets.get(idx).copied())
+                    .unwrap_or(vk::DescriptorSet::null());
+
+                descriptor_sets[1] = proxy.sets[renderer.current_frame];
+                descriptor_sets[2] = mat_set;
+
                 unsafe {
+                    device.cmd_bind_descriptor_sets(
+                        cmd,
+                        vk::PipelineBindPoint::GRAPHICS,
+                        renderer.graphics_pipeline.layout(),
+                        0,
+                        &descriptor_sets,
+                        &[],
+                    );
                     device.cmd_bind_vertex_buffers(cmd, 0, &[prim.vertex_buffer], &[0]);
                     device.cmd_bind_index_buffer(cmd, prim.index_buffer, 0, vk::IndexType::UINT32);
                     device.cmd_draw_indexed(cmd, prim.index_count, 1, 0, 0, 0);
