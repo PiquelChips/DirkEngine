@@ -38,16 +38,32 @@ impl Engine {
             last_tick: Instant::now(),
         })
     }
-    /// Engine tick.
-    /// Returns if the engine should continue ticking.
     pub fn tick(&mut self) -> anyhow::Result<bool> {
         if self.is_requesting_exit() {
             return Ok(false);
         }
 
         let delta_time = self.capture_delta_time();
+        std::thread::sleep(std::time::Duration::from_millis(10));
 
-        self.platform.tick(delta_time).context("ticking platform")?;
+        // Process platform events and react to each one.
+        let events = self.platform.tick().context("ticking platform")?;
+        for event in events {
+            match event {
+                PlatformEvent::WindowCloseRequested { .. } => {
+                    self.exit(None);
+                    return Ok(false);
+                }
+                PlatformEvent::WindowResized { id, width, height } => {
+                    self.renderer
+                        .resize_window(id.into_raw(), width, height)
+                        .context("resizing window")?;
+                }
+                PlatformEvent::WindowFocusChanged { .. } => { /* pause/unpause logic */ }
+                PlatformEvent::WindowOccluded { .. } => { /* skip rendering */ }
+            }
+        }
+
         if self.is_requesting_exit() {
             return Ok(false);
         }
@@ -59,8 +75,10 @@ impl Engine {
          * Main Viewport tick
          * Render
          */
-        Ok(self.is_requesting_exit())
+        self.render().context("tick: render")?;
+        Ok(true)
     }
+
     pub fn render(&self) -> anyhow::Result<()> {
         /* Renderer::render
          *

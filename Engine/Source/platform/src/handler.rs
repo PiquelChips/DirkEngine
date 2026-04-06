@@ -8,13 +8,14 @@ use winit::{
     window::{WindowAttributes, WindowId},
 };
 
-use crate::window::Window;
+use crate::{Window, event::PlatformEvent};
 
-/// The object with actual platform state. It handles responding to platform events.
 pub struct PlatformHandler {
     can_create_surfaces: bool,
     windows: HashMap<WindowId, Window>,
-    main_window: WindowId,
+    main_window: Option<WindowId>,
+    /// Events accumulated during this tick, drained by Platform::tick.
+    pub pending_events: Vec<PlatformEvent>,
 }
 
 impl PlatformHandler {
@@ -34,7 +35,11 @@ impl PlatformHandler {
     }
     pub fn main_window(&self) -> &Window {
         self.windows
-            .get(&self.main_window)
+            .get(
+                &self
+                    .main_window
+                    .expect("there should always be a main window"),
+            )
             .expect("there should always be a main window")
     }
     pub fn is_initialized(&self) -> bool {
@@ -52,56 +57,64 @@ impl Default for PlatformHandler {
         Self {
             can_create_surfaces: false,
             windows: HashMap::new(),
-            main_window: WindowId::from_raw(0),
+            main_window: None,
+            pending_events: Vec::new(),
         }
     }
 }
 
 impl ApplicationHandler for PlatformHandler {
-    fn can_create_surfaces(&mut self, event_loop: &dyn winit::event_loop::ActiveEventLoop) {
-        self.main_window = self
+    fn can_create_surfaces(&mut self, event_loop: &dyn ActiveEventLoop) {
+        let id = self
             .create_window(event_loop)
             .expect("failed to create main window");
-        self.can_create_surfaces = true
+        self.main_window = Some(id);
+        self.can_create_surfaces = true;
     }
-    fn window_event(
-        &mut self,
-        _event_loop: &dyn winit::event_loop::ActiveEventLoop,
-        window_id: winit::window::WindowId,
-        event: WindowEvent,
-    ) {
-        let window = match self.windows.get_mut(&window_id) {
-            Some(window) => window,
-            None => return,
-        };
 
+    fn window_event(&mut self, _loop: &dyn ActiveEventLoop, id: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::CloseRequested | WindowEvent::Destroyed => {
-                debug!("Closing Window={window_id:?}");
-                self.windows.remove(&window_id);
-                todo!("if main window: shut down the engine")
+                debug!("Close requested for Window={id:?}");
+                self.windows.remove(&id);
+                // Push an event — let the engine decide what to do.
+                self.pending_events
+                    .push(PlatformEvent::WindowCloseRequested { id });
             }
             WindowEvent::SurfaceResized(size) => {
-                window.resize(size);
-            }
-            WindowEvent::Focused(focused) => {
-                if focused {
-                    trace!("Window={window_id:?} focused");
-                } else {
-                    trace!("Window={window_id:?} unfocused");
+                if let Some(window) = self.windows.get_mut(&id) {
+                    window.resize(size);
                 }
-                window.focused(focused);
+                self.pending_events.push(PlatformEvent::WindowResized {
+                    id,
+                    width: size.width,
+                    height: size.height,
+                });
             }
             WindowEvent::ThemeChanged(theme) => {
-                trace!("Theme changed to {theme:?}");
-                window.set_draw_theme(theme);
+                if let Some(window) = self.windows.get_mut(&id) {
+                    window.set_draw_theme(theme);
+                }
+            }
+            WindowEvent::Focused(focused) => {
+                if let Some(w) = self.windows.get_mut(&id) {
+                    w.focused(focused);
+                }
+                self.pending_events
+                    .push(PlatformEvent::WindowFocusChanged { id, focused });
             }
             WindowEvent::Occluded(occluded) => {
-                window.set_occluded(occluded);
-            }
-            WindowEvent::ModifiersChanged(modifiers) => {
+                if let Some(w) = self.windows.get_mut(&id) {
+                    w.set_occluded(occluded);
+                }
+                self.pending_events
+                    .push(PlatformEvent::WindowOccluded { id, occluded });
+                }
+            WindowEvent::ModifiersChanged(_modifiers) => {
+            /*
                 window.set_modifiers(modifiers.state());
                 trace!("Modifiers changed to {:?}", window.get_modifiers());
+            */
             }
             WindowEvent::MouseWheel { delta: _, .. } => {}
             /* TODO: input events
@@ -151,7 +164,7 @@ impl ApplicationHandler for PlatformHandler {
                 */
             }
             WindowEvent::PointerLeft { .. } => {
-                trace!("Pointer left Window={window_id:?}");
+                trace!("Pointer left Window={id:?}");
                 // TODO: input events: window.cursor_left();
             }
             WindowEvent::PointerMoved { position, .. } => {
@@ -185,7 +198,7 @@ impl ApplicationHandler for PlatformHandler {
             // are thus ignored.
             | WindowEvent::RedrawRequested
             | WindowEvent::Ime(_)
-            | WindowEvent::Moved(_) => (),
+            | WindowEvent::Moved(_) => {},
         }
     }
 }
