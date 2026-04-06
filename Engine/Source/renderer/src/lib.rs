@@ -106,6 +106,8 @@ impl Frame {
         unsafe {
             device.destroy_fence(self.fence, None);
             device.destroy_command_pool(self.command_pool, None);
+            device.destroy_semaphore(self.image_available_semaphore, None);
+            device.destroy_semaphore(self.render_finished_semaphore, None);
         }
     }
 }
@@ -1428,6 +1430,7 @@ impl Drop for Renderer {
         self.scenes
             .iter()
             .for_each(|(_, s)| s.destroy(&self.device));
+        self.models.values().for_each(|m| m.destroy(&self.device));
         self.windows
             .values()
             .for_each(|w| w.destroy(&self.device, &self.surface_loader, &self.swapchain_loader));
