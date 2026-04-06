@@ -1312,7 +1312,7 @@ impl Drop for Renderer {
         unsafe {
             self.device.device_wait_idle().ok();
         }
-        log::info!("cleaning up renderer");
+        info!("cleaning up renderer");
 
         self.scenes
             .iter()

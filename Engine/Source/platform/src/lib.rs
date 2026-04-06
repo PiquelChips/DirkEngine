@@ -70,3 +70,14 @@ impl Platform {
         self.handler.main_window()
     }
 }
+
+impl Drop for Platform {
+    fn drop(&mut self) {
+        info!("Shutting down platform");
+        self.handler.shutdown();
+        // One final pump so winit can process the window destruction
+        // events before we tear everything down.
+        self.event_loop
+            .pump_app_events(Some(Duration::ZERO), &mut self.handler);
+    }
+}

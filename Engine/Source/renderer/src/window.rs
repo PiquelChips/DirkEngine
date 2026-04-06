@@ -14,9 +14,10 @@ pub struct SwapchainImage {
 }
 impl SwapchainImage {
     pub fn destroy(&self, device: &Device) {
+        // don't destroy image as it is owned
+        // by swap chain
         unsafe {
             device.destroy_image_view(self.view, None);
-            device.destroy_image(self.image, None);
         }
     }
 }
@@ -71,10 +72,10 @@ impl Window {
         surface: &surface::Instance,
         swapchain: &swapchain::Device,
     ) {
+        self.images.iter().for_each(|i| i.destroy(device));
         unsafe {
             swapchain.destroy_swapchain(self.swapchain, None);
             surface.destroy_surface(self.surface, None);
         }
-        self.images.iter().for_each(|i| i.destroy(device));
     }
 }

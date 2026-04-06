@@ -6,8 +6,9 @@ use world::{World, WorldId};
 
 /// This is the main struct that holds global engine state.
 pub struct Engine {
-    platform: platform::Platform,
+    // order is important as renderer should be dropped before platform
     renderer: renderer::Renderer,
+    platform: platform::Platform,
 
     next_world_id: WorldId,
     worlds: HashMap<WorldId, World>,

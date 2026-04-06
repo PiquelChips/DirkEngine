@@ -40,6 +40,11 @@ impl PlatformHandler {
     pub fn is_initialized(&self) -> bool {
         self.can_create_surfaces
     }
+    pub fn shutdown(&mut self) {
+        let count = self.windows.len();
+        self.windows.clear();
+        debug!("Closed {count} window(s) during platform shutdown");
+    }
 }
 
 impl Default for PlatformHandler {
