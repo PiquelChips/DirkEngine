@@ -104,7 +104,29 @@ impl Scene {
             .collect::<Result<Vec<_>>>()?;
         let ubo: [UboData; MAX_FRAMES_IN_FLIGHT] = ubo.try_into().unwrap();
 
-        // TODO: write descriptor sets
+        let buffer_infos: [vk::DescriptorBufferInfo; MAX_FRAMES_IN_FLIGHT] =
+            std::array::from_fn(|i| {
+                vk::DescriptorBufferInfo::default()
+                    .buffer(ubo[i].buffer)
+                    .range(size_of::<SceneUbo>() as u64)
+                    .offset(0)
+            });
+
+        let descriptor_writes: [vk::WriteDescriptorSet; MAX_FRAMES_IN_FLIGHT] =
+            std::array::from_fn(|i| {
+                vk::WriteDescriptorSet::default()
+                    .dst_set(scene_desc_sets[i])
+                    .dst_binding(0)
+                    .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                    .buffer_info(std::slice::from_ref(&buffer_infos[i]))
+            });
+
+        unsafe {
+            renderer
+                .device
+                .update_descriptor_sets(&descriptor_writes, &[])
+        };
+
         // TODO: build proxies
 
         Ok(Self {

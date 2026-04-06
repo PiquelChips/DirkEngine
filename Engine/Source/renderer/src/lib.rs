@@ -489,7 +489,7 @@ impl Renderer {
                 let binding = vk::DescriptorSetLayoutBinding::default()
                     .binding(0)
                     .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
-                    .descriptor_count(2)
+                    .descriptor_count(1)
                     .stage_flags(vk::ShaderStageFlags::VERTEX);
 
                 let info = vk::DescriptorSetLayoutCreateInfo::default()
