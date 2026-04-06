@@ -37,6 +37,7 @@ use pipeline::GraphicsPipeline;
 mod command_pool;
 use command_pool::{CommandBuffer, CommandPool, Graphics, Transfer};
 
+mod layouts;
 mod render_pass;
 
 #[repr(C)]
@@ -1042,114 +1043,6 @@ impl Renderer {
         unsafe { self.device.bind_image_memory(image, memory, 0)? };
 
         Ok((image, memory))
-    }
-    fn transition_image_layout(
-        &self,
-        cmd: &CommandBuffer,
-        image: vk::Image,
-        old_layout: vk::ImageLayout,
-        new_layout: vk::ImageLayout,
-        mip_levels: u32,
-        base_mip: u32,
-    ) -> Result<()> {
-        let (src_access, dst_access, src_stage, dst_stage) = match (old_layout, new_layout) {
-            (vk::ImageLayout::UNDEFINED, vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL) => (
-                vk::AccessFlags::empty(),
-                vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
-                vk::PipelineStageFlags::TOP_OF_PIPE,
-                vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
-            ),
-            (vk::ImageLayout::UNDEFINED, vk::ImageLayout::TRANSFER_DST_OPTIMAL) => (
-                vk::AccessFlags::empty(),
-                vk::AccessFlags::TRANSFER_WRITE,
-                vk::PipelineStageFlags::TOP_OF_PIPE,
-                vk::PipelineStageFlags::TRANSFER,
-            ),
-            (vk::ImageLayout::TRANSFER_DST_OPTIMAL, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL) => (
-                vk::AccessFlags::TRANSFER_WRITE,
-                vk::AccessFlags::SHADER_READ,
-                vk::PipelineStageFlags::TRANSFER,
-                vk::PipelineStageFlags::FRAGMENT_SHADER,
-            ),
-            (vk::ImageLayout::UNDEFINED, vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL) => (
-                vk::AccessFlags::empty(),
-                vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_READ
-                    | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
-                vk::PipelineStageFlags::TOP_OF_PIPE,
-                vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
-            ),
-            (vk::ImageLayout::PRESENT_SRC_KHR, vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL) => (
-                vk::AccessFlags::empty(),
-                vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
-                vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
-                vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
-            ),
-            (vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL, vk::ImageLayout::PRESENT_SRC_KHR) => (
-                vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
-                vk::AccessFlags::empty(),
-                vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
-                vk::PipelineStageFlags::BOTTOM_OF_PIPE,
-            ),
-            (vk::ImageLayout::TRANSFER_DST_OPTIMAL, vk::ImageLayout::TRANSFER_SRC_OPTIMAL) => (
-                vk::AccessFlags::TRANSFER_WRITE,
-                vk::AccessFlags::TRANSFER_READ,
-                vk::PipelineStageFlags::TRANSFER,
-                vk::PipelineStageFlags::TRANSFER,
-            ),
-            (vk::ImageLayout::TRANSFER_SRC_OPTIMAL, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL) => (
-                vk::AccessFlags::TRANSFER_READ,
-                vk::AccessFlags::SHADER_READ,
-                vk::PipelineStageFlags::TRANSFER,
-                vk::PipelineStageFlags::FRAGMENT_SHADER,
-            ),
-            (vk::ImageLayout::UNDEFINED, vk::ImageLayout::PRESENT_SRC_KHR) => (
-                vk::AccessFlags::empty(),
-                vk::AccessFlags::empty(),
-                vk::PipelineStageFlags::BOTTOM_OF_PIPE,
-                vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
-            ),
-            (vk::ImageLayout::UNDEFINED, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL) => (
-                vk::AccessFlags::empty(),
-                vk::AccessFlags::SHADER_READ,
-                vk::PipelineStageFlags::TOP_OF_PIPE,
-                vk::PipelineStageFlags::FRAGMENT_SHADER,
-            ),
-            _ => {
-                return Err(Error::UnsupportedImageLayoutTransition {
-                    old: old_layout,
-                    new: new_layout,
-                });
-            }
-        };
-
-        let barrier = vk::ImageMemoryBarrier::default()
-            .old_layout(old_layout)
-            .new_layout(new_layout)
-            .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
-            .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
-            .src_access_mask(src_access)
-            .dst_access_mask(dst_access)
-            .image(image)
-            .subresource_range(vk::ImageSubresourceRange {
-                aspect_mask: vk::ImageAspectFlags::COLOR,
-                base_mip_level: base_mip,
-                level_count: mip_levels,
-                base_array_layer: 0,
-                layer_count: 1,
-            });
-
-        unsafe {
-            self.device.cmd_pipeline_barrier(
-                cmd.raw(),
-                src_stage,
-                dst_stage,
-                vk::DependencyFlags::empty(),
-                &[],
-                &[],
-                &[barrier],
-            )
-        };
-        Ok(())
     }
     fn generate_mipmaps(
         &self,

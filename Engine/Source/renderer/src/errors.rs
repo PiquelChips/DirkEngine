@@ -28,11 +28,10 @@ pub enum Error {
     #[error("validation layer {0} not found")]
     ValidationLayerNotFound(String),
 
-    #[error("unsupported image layout transition {old:?} --> {new:?}")]
-    UnsupportedImageLayoutTransition {
-        old: vk::ImageLayout,
-        new: vk::ImageLayout,
-    },
+    #[error("the layout {0:?} is not supported as a source. implement it")]
+    UnsupportedSourceLayout(vk::ImageLayout),
+    #[error("the layout {0:?} is not supported as a destination. implement it")]
+    UnsupportedDesinationLayout(vk::ImageLayout),
 
     #[error("suboptimal surface")]
     SuboptimalSurface,
