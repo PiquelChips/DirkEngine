@@ -99,7 +99,7 @@ impl RenderPass {
 
         unsafe { renderer.device.cmd_begin_rendering(cmd, &rendering_info) };
     }
-    pub fn end(renderer: &Renderer, cmd: vk::CommandBuffer) {
+    pub fn end(&self, renderer: &Renderer, cmd: vk::CommandBuffer) {
         unsafe { renderer.device.cmd_end_rendering(cmd) }
     }
 }

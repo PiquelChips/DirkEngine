@@ -21,6 +21,7 @@ pub struct Scene {
     descriptor_pool: vk::DescriptorPool,
     ubo: [UboData; MAX_FRAMES_IN_FLIGHT],
     descriptor_sets: [vk::DescriptorSet; MAX_FRAMES_IN_FLIGHT],
+    render_pass: RenderPass,
 }
 
 struct SceneUbo {
@@ -129,6 +130,9 @@ impl Scene {
 
         // TODO: build proxies
 
+        let window = renderer.windows.get(&renderer.main_window).unwrap();
+        let render_pass = RenderPass::build(renderer, window.extent())?;
+
         Ok(Self {
             proxies: Self::make_scene_proxies(renderer, world)?,
             view: camera_trans.view(),
@@ -136,6 +140,7 @@ impl Scene {
             descriptor_pool,
             ubo,
             descriptor_sets: scene_desc_sets,
+            render_pass,
         })
     }
     // TODO: on tick, worlds should be sent to update scenes
@@ -170,42 +175,49 @@ impl Scene {
         )
     }
     pub fn render(&self, renderer: &Renderer, cmd: vk::CommandBuffer) {
-        let frame = renderer.frames[renderer.current_frame];
         let device = &renderer.device;
 
-        RenderPass::begin(renderer, cmd);
+        let window = renderer.windows.get(&renderer.main_window).unwrap();
+
+        self.render_pass
+            .begin(renderer, cmd, window.extent(), window.next_image().view);
         renderer.graphics_pipeline.bind(renderer, cmd);
 
-        // TODO: bind scene sets
-        // TODO: for each proxy: record cmds
-        // TODO: end render pass
+        let viewport = vk::Viewport::default()
+            .width(window.extent().width as f32)
+            .height(window.extent().height as f32)
+            .min_depth(0.)
+            .max_depth(1.);
+        unsafe { renderer.device.cmd_set_viewport(cmd, 1, &[viewport]) };
+
+        let scissor = vk::Rect2D::default()
+            .offset(vk::Offset2D::default())
+            .extent(window.extent());
+        unsafe { renderer.device.cmd_set_scissor(cmd, 1, &[scissor]) };
+
+        let mut descriptor_sets = [
+            self.descriptor_sets[renderer.current_frame],
+            vk::DescriptorSet::null(),
+            vk::DescriptorSet::null(),
+        ];
 
         for proxy in &self.proxies {
-            // Assuming you've built a descriptor set layout with combined image samplers:
+            descriptor_sets[1] = proxy.sets[renderer.current_frame];
+            // TODO: material descriptpor set
+            // descriptor_sets[2] = material_desc_set;
+
+            unsafe {
+                device.cmd_bind_descriptor_sets(
+                    cmd,
+                    vk::PipelineBindPoint::GRAPHICS,
+                    renderer.graphics_pipeline.layout(),
+                    0,
+                    &descriptor_sets,
+                    &[],
+                )
+            };
+
             for prim in &proxy.model.primitives {
-                if let Some(mat_idx) = prim.material {
-                    // from GpuPrimitive
-                    let mat = &proxy.model.materials[mat_idx];
-
-                    if let Some(tex_idx) = mat.base_color_texture() {
-                        let tex = &proxy.model.textures[*tex_idx];
-
-                        let image_info = vk::DescriptorImageInfo::default()
-                            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                            .image_view(tex.view)
-                            .sampler(tex.sampler);
-
-                        let write = vk::WriteDescriptorSet::default()
-                            // TODO: setup descriptor sets for the textures
-                            //.dst_set(descriptor_set)
-                            .dst_binding(0)
-                            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                            .image_info(std::slice::from_ref(&image_info));
-
-                        unsafe { device.update_descriptor_sets(&[write], &[]) };
-                    }
-                }
-
                 unsafe {
                     device.cmd_bind_vertex_buffers(cmd, 0, &[prim.vertex_buffer], &[0]);
                     device.cmd_bind_index_buffer(cmd, prim.index_buffer, 0, vk::IndexType::UINT32);
@@ -213,6 +225,8 @@ impl Scene {
                 }
             }
         }
+
+        self.render_pass.end(renderer, cmd);
     }
 }
 
@@ -227,6 +241,7 @@ pub struct SceneProxy {
     /// [world::components::Transform] of the entity.
     model_matrix: glam::Mat4,
     ubo: [UboData; MAX_FRAMES_IN_FLIGHT],
+    sets: [vk::DescriptorSet; MAX_FRAMES_IN_FLIGHT],
 }
 
 impl SceneProxy {

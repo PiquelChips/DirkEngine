@@ -115,4 +115,7 @@ impl GraphicsPipeline {
             )
         }
     }
+    pub fn layout(&self) -> vk::PipelineLayout {
+        self.pipeline_layout
+    }
 }
