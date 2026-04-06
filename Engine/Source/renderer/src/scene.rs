@@ -259,7 +259,9 @@ pub struct SceneProxy {
     sets: [vk::DescriptorSet; MAX_FRAMES_IN_FLIGHT],
 }
 
-type ProxyUbo = glam::Mat4;
+struct ProxyUbo {
+    model: glam::Mat4,
+}
 
 impl SceneProxy {
     pub fn build(
