@@ -2,10 +2,6 @@ use std::time::Instant;
 
 use anyhow::Context;
 
-use crate::errors::{InitResult, RenderResult, ShutdownResult};
-
-mod errors;
-
 /// This is the main struct that holds global engine state.
 pub struct Engine {
     platform: platform::Platform,
@@ -15,11 +11,11 @@ pub struct Engine {
 }
 
 impl Engine {
-    pub fn init() -> InitResult<Self> {
+    pub fn init() -> anyhow::Result<Self> {
         let logger = logging::Logger::new(true, true, true);
         logging::init(logger);
 
-        let platform = platform::Platform::init();
+        let platform = platform::Platform::init().context("platform init")?;
 
         /* A rough idea of the flow of the C++ Engine
          *
@@ -65,7 +61,7 @@ impl Engine {
          */
         Ok(self.is_requesting_exit())
     }
-    pub fn render(&self) -> RenderResult<()> {
+    pub fn render(&self) -> anyhow::Result<()> {
         /* Renderer::render
          *
          * ImGui:
@@ -78,7 +74,7 @@ impl Engine {
          */
         Ok(())
     }
-    pub fn shutdown(&self) -> ShutdownResult<()> {
+    pub fn shutdown(&self) -> anyhow::Result<()> {
         /*
          * Shutdown ImGui (renderer then platform)
          *
