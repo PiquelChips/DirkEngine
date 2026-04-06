@@ -40,6 +40,12 @@ impl Window {
     pub fn id(&self) -> WindowId {
         self.id
     }
+    pub fn extent(&self) -> vk::Extent2D {
+        self.extent
+    }
+    pub fn next_image(&self) -> SwapchainImage {
+        todo!("implement getting the next swap chain image")
+    }
     pub fn resize(&mut self, renderer: &Renderer, in_size: vk::Extent2D) -> Result<()> {
         let (swapchain, extent, images) = renderer.create_swap_chain(self.surface, in_size)?;
         self.swapchain = swapchain;
