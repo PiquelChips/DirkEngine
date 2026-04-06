@@ -836,8 +836,8 @@ impl Renderer {
             image,
             vk::ImageLayout::UNDEFINED,
             vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-            0,
             mip_levels, // all mip levels start undefined
+            0,
         )?;
 
         let region = vk::BufferImageCopy::default()
@@ -1066,8 +1066,8 @@ impl Renderer {
                 image,
                 vk::ImageLayout::TRANSFER_DST_OPTIMAL,
                 vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-                level - 1,
                 1,
+                0,
             )?;
 
             let next_w = (mip_width / 2).max(1);
@@ -1121,8 +1121,8 @@ impl Renderer {
                 image,
                 vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
                 vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-                level - 1,
                 1,
+                0,
             )?;
 
             mip_width = next_w;
