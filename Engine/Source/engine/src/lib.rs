@@ -1,7 +1,6 @@
 use std::{collections::HashMap, f32::consts::PI, ffi::CString, str::FromStr, time::Instant};
 
 use anyhow::Context;
-use log::info;
 use world::{World, WorldId};
 
 /// This is the main struct that holds global engine state.
@@ -165,7 +164,7 @@ impl Engine {
 
         self.render().context("tick: render")?;
 
-        Ok(self.is_requesting_exit())
+        Ok(!self.is_requesting_exit())
     }
     pub fn render(&mut self) -> anyhow::Result<()> {
         self.renderer.render()?;

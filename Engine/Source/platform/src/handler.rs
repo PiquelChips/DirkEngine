@@ -79,6 +79,7 @@ impl ApplicationHandler for PlatformHandler {
             WindowEvent::CloseRequested | WindowEvent::Destroyed => {
                 debug!("Closing Window={window_id:?}");
                 self.windows.remove(&window_id);
+                todo!("if main window: shut down the engine")
             }
             WindowEvent::SurfaceResized(size) => {
                 window.resize(size);
