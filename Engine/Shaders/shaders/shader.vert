@@ -1,11 +1,11 @@
 #version 450
 
-layout(binding = 0) uniform SceneUbo {
+layout(set = 0, binding = 0) uniform SceneUbo {
     mat4 view;
     mat4 proj;
 } scene;
 
-layout(binding = 1) uniform ProxyUbo {
+layout(set = 1, binding = 1) uniform ProxyUbo {
     mat4 model;
 } proxy;
 
