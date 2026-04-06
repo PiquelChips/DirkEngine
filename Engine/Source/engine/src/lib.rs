@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ffi::CString, str::FromStr, time::Instant};
+use std::{collections::HashMap, f32::consts::PI, ffi::CString, str::FromStr, time::Instant};
 
 use anyhow::Context;
 use world::{World, WorldId};
@@ -61,7 +61,65 @@ impl Engine {
             last_tick: Instant::now(),
         };
 
-        engine.create_world()?;
+        let world_id = engine.create_world()?;
+
+        // THIS IS JUST TEMPORARY FOR TESTING
+        {
+            use world::components;
+            let world = engine.worlds.get_mut(&world_id).unwrap();
+
+            let player = world.spawn();
+            world.insert(
+                player,
+                components::Transform {
+                    location: glam::vec3(0., 1000., 1000.),
+                    rotation: glam::vec3(0., PI / 2., PI / 2.),
+                    scale: glam::Vec3::splat(1.),
+                },
+            );
+            world.insert(
+                player,
+                components::Camera {
+                    fov: (45_f32).to_radians(),
+                    near_clip: 0.1,
+                    far_clip: 100000.,
+                    width: 100.,
+                    height: 100.,
+                },
+            );
+
+            let shrek = world.spawn();
+            world.insert(
+                shrek,
+                components::Transform {
+                    location: glam::Vec3::ZERO,
+                    rotation: glam::Vec3::ZERO,
+                    scale: glam::Vec3::splat(1.),
+                },
+            );
+            world.insert(
+                shrek,
+                components::Renderable {
+                    model: "Shrek".to_string(),
+                },
+            );
+
+            let duck = world.spawn();
+            world.insert(
+                duck,
+                components::Transform {
+                    location: glam::vec3(100., 0., 0.),
+                    rotation: glam::Vec3::ZERO,
+                    scale: glam::Vec3::splat(1.),
+                },
+            );
+            world.insert(
+                shrek,
+                components::Renderable {
+                    model: "Duck".to_string(),
+                },
+            );
+        }
 
         Ok(engine)
     }
