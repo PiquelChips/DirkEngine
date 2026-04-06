@@ -718,7 +718,7 @@ impl Renderer {
 
     // UPLOADING TO THE RENDERER
 
-    pub fn upload_model(&mut self, model: resource_manager::Model) -> Result<&Model> {
+    fn upload_model(&mut self, model: resource_manager::Model) -> Result<&Model> {
         let primitives = model
             .meshes()
             .iter()
