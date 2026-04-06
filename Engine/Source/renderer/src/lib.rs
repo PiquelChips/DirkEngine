@@ -667,7 +667,17 @@ impl Renderer {
         }
 
         let indices = &self.properties.queue_family_indices;
-        let indices_array = [indices.graphics, indices.present, indices.transfer];
+        // Deduplicate — concurrent mode requires unique family indices
+        let mut unique_indices: Vec<u32> =
+            vec![indices.graphics, indices.present, indices.transfer];
+        unique_indices.sort_unstable();
+        unique_indices.dedup();
+
+        let (sharing_mode, indices_slice): (vk::SharingMode, &[u32]) = if unique_indices.len() > 1 {
+            (vk::SharingMode::CONCURRENT, &unique_indices)
+        } else {
+            (vk::SharingMode::EXCLUSIVE, &[])
+        };
 
         let create_info = vk::SwapchainCreateInfoKHR::default()
             .surface(surface)
@@ -677,8 +687,8 @@ impl Renderer {
             .image_extent(extent)
             .image_array_layers(1)
             .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)
-            .image_sharing_mode(vk::SharingMode::CONCURRENT)
-            .queue_family_indices(&indices_array)
+            .image_sharing_mode(sharing_mode)
+            .queue_family_indices(indices_slice)
             .pre_transform(capabilities.current_transform)
             .composite_alpha(vk::CompositeAlphaFlagsKHR::OPAQUE)
             .present_mode(self.properties.present_mode)
