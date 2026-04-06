@@ -14,6 +14,9 @@ fn run() -> anyhow::Result<()> {
 fn main() {
     match run() {
         Ok(_) => {}
-        Err(err) => panic!("Error: {err:#}"),
+        Err(err) => {
+            error!("{err:#}");
+            panic!("fatal error. see logs for details")
+        }
     }
 }
