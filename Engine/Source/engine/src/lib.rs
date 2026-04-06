@@ -62,6 +62,14 @@ impl Engine {
             last_tick: Instant::now(),
         };
 
+        // TODO: this should be initialized when needed, not now
+        engine
+            .renderer
+            .upload_model(resource_manager::ResourceManager::load_model("Shrek")?)?;
+        engine
+            .renderer
+            .upload_model(resource_manager::ResourceManager::load_model("Duck")?)?;
+
         let world_id = engine.create_world()?;
 
         // THIS IS JUST TEMPORARY FOR TESTING

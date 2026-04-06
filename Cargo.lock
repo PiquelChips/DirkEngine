@@ -424,6 +424,7 @@ dependencies = [
  "logging",
  "platform",
  "renderer",
+ "resource_manager",
  "thiserror 2.0.18",
  "utils",
  "world",

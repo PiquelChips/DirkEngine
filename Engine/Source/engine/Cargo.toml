@@ -16,5 +16,6 @@ utils.workspace = true
 platform.workspace = true
 renderer.workspace = true
 world.workspace = true
+resource_manager.workspace = true
 
 glam.workspace = true
