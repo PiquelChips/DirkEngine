@@ -1,4 +1,8 @@
-use ash::vk;
+use ash::{
+    Device,
+    khr::{surface, swapchain},
+    vk,
+};
 
 use crate::{Renderer, Result};
 
@@ -7,6 +11,14 @@ pub type WindowId = usize;
 pub struct SwapchainImage {
     pub image: vk::Image,
     pub view: vk::ImageView,
+}
+impl SwapchainImage {
+    pub fn destroy(&self, device: &Device) {
+        unsafe {
+            device.destroy_image_view(self.view, None);
+            device.destroy_image(self.image, None);
+        }
+    }
 }
 
 /// The renderer's representation of a platform window.
@@ -52,5 +64,17 @@ impl Window {
         self.extent = extent;
         self.images = images;
         Ok(())
+    }
+    pub fn destroy(
+        &self,
+        device: &Device,
+        surface: &surface::Instance,
+        swapchain: &swapchain::Device,
+    ) {
+        unsafe {
+            swapchain.destroy_swapchain(self.swapchain, None);
+            surface.destroy_surface(self.surface, None);
+        }
+        self.images.iter().for_each(|i| i.destroy(device));
     }
 }

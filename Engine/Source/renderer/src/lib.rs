@@ -97,6 +97,15 @@ struct Frame {
     // there is a change in scene count. If not reallocated, reset.
 }
 
+impl Frame {
+    fn destroy(&self, device: &Device) {
+        unsafe {
+            device.destroy_fence(self.fence, None);
+            device.destroy_command_pool(self.command_pool, None);
+        }
+    }
+}
+
 /// This struct is owned by [Renderer] and stores
 /// all the different descriptor set layouts used by
 /// the renderer.
@@ -110,6 +119,16 @@ struct DescriptorLayouts {
     object: vk::DescriptorSetLayout,
     /// Per material layout. For texture descriptor.
     material: vk::DescriptorSetLayout,
+}
+
+impl DescriptorLayouts {
+    fn destroy(&self, device: &Device) {
+        unsafe {
+            device.destroy_descriptor_set_layout(self.scene, None);
+            device.destroy_descriptor_set_layout(self.object, None);
+            device.destroy_descriptor_set_layout(self.material, None);
+        }
+    }
 }
 
 pub struct RendererCreateInfo {
@@ -1298,6 +1317,12 @@ impl Drop for Renderer {
         self.scenes
             .iter()
             .for_each(|(_, s)| s.destroy(&self.device));
+        self.windows
+            .values()
+            .for_each(|w| w.destroy(&self.device, &self.surface_loader, &self.swapchain_loader));
+        self.frames.iter().for_each(|f| f.destroy(&self.device));
+        self.graphics_pipeline.destroy(&self.device);
+        self.layouts.destroy(&self.device);
 
         unsafe {
             self.device.destroy_command_pool(self.command_pool, None);

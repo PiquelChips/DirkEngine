@@ -107,6 +107,11 @@ impl GraphicsPipeline {
                 .map_err(|(_, err)| err)?[0]
         };
 
+        unsafe {
+            device.destroy_shader_module(vert, None);
+            device.destroy_shader_module(frag, None);
+        }
+
         Ok(Self {
             graphics_pipeline,
             pipeline_layout,
@@ -123,5 +128,11 @@ impl GraphicsPipeline {
     }
     pub fn layout(&self) -> vk::PipelineLayout {
         self.pipeline_layout
+    }
+    pub fn destroy(&self, device: &Device) {
+        unsafe {
+            device.destroy_pipeline_layout(self.pipeline_layout, None);
+            device.destroy_pipeline(self.graphics_pipeline, None);
+        }
     }
 }
