@@ -136,7 +136,6 @@ impl Engine {
                 },
             );
 
-            info!("world: {:?}", world);
             // TODO: see engine::create_world
             engine.renderer.create_scene(world)?;
         }

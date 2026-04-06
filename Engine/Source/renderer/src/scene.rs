@@ -325,7 +325,7 @@ impl SceneProxy {
             std::array::from_fn(|i| {
                 vk::WriteDescriptorSet::default()
                     .dst_set(sets[i])
-                    .dst_binding(0)
+                    .dst_binding(1)
                     .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
                     .buffer_info(std::slice::from_ref(&buffer_infos[i]))
             });
