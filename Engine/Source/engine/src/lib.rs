@@ -1,6 +1,7 @@
 use std::{collections::HashMap, f32::consts::PI, ffi::CString, str::FromStr, time::Instant};
 
 use anyhow::Context;
+use log::info;
 use world::{World, WorldId};
 
 /// This is the main struct that holds global engine state.
@@ -119,6 +120,10 @@ impl Engine {
                     model: "Duck".to_string(),
                 },
             );
+
+            info!("world: {:?}", world);
+            // TODO: see engine::create_world
+            engine.renderer.create_scene(world)?;
         }
 
         Ok(engine)
@@ -196,9 +201,10 @@ impl Engine {
         self.next_world_id += 1;
 
         let world = World::new(id);
-        self.renderer
-            .create_scene(&world)
-            .context("create renderer scene")?;
+        // TODO: have the world submitted here, once not having camera doesn't panic.
+        // self.renderer
+        //     .create_scene(&world)
+        //     .context("create renderer scene")?;
         self.worlds.insert(id, world);
         Ok(id)
     }
