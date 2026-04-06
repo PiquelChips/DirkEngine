@@ -150,6 +150,10 @@ impl Engine {
 
         let delta_time = self.capture_delta_time();
 
+        // TODO: renders too fast and semaphores have problem.
+        // remove when rendering takes longer
+        std::thread::sleep(std::time::Duration::from_millis(10));
+
         self.platform.tick(delta_time).context("ticking platform")?;
         if self.is_requesting_exit() {
             return Ok(false);
