@@ -61,14 +61,14 @@ impl Vertex {
                 offset: std::mem::offset_of!(Self, position) as u32,
             },
             vk::VertexInputAttributeDescription {
-                location: 0,
-                binding: 1,
+                location: 1,
+                binding: 0,
                 format: vk::Format::R32G32B32_SFLOAT,
                 offset: std::mem::offset_of!(Self, normal) as u32,
             },
             vk::VertexInputAttributeDescription {
-                location: 0,
-                binding: 2,
+                location: 2,
+                binding: 0,
                 format: vk::Format::R32G32_SFLOAT,
                 offset: std::mem::offset_of!(Self, texcoord) as u32,
             },

@@ -69,7 +69,7 @@ impl GraphicsPipeline {
             .color_write_mask(vk::ColorComponentFlags::RGBA);
 
         let color_blending = vk::PipelineColorBlendStateCreateInfo::default()
-            .logic_op_enable(true)
+            .logic_op_enable(false)
             .attachments(std::slice::from_ref(&color_blend_attachment));
 
         let depth_test_info = vk::PipelineDepthStencilStateCreateInfo::default()
