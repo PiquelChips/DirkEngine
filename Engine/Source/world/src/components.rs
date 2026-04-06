@@ -50,6 +50,7 @@ impl From<Transform> for glam::Mat4 {
     }
 }
 
+#[derive(Debug)]
 pub struct Camera {
     /// In radians
     pub fov: f32,

@@ -30,7 +30,7 @@ macro_rules! define_components {
     ( $( $C:ident ),* $(,)? ) => {
 
         #[allow(non_snake_case)]
-        #[derive(Default)]
+        #[derive(Debug, Default)]
         pub struct Components {
             $( $C: HashMap<Entity, $C>, )*
         }
@@ -58,6 +58,7 @@ define_components!(Transform, Renderable, Camera);
 
 /// Stores all the entities and their components. Handles state
 /// of all the entities in the world.
+#[derive(Debug)]
 pub struct World {
     id: WorldId,
     next_id: Entity,
