@@ -1,6 +1,7 @@
 use ash::{Device, vk};
 
 /// Complete GPU model.
+#[derive(Clone)]
 pub struct Model {
     pub name: String,
     pub primitives: Vec<Primitive>,
