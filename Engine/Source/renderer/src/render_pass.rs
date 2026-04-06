@@ -1,6 +1,6 @@
 use ash::{Device, vk};
 
-use crate::{Renderer, Result};
+use crate::{Renderer, Result, command_pool::CommandBuffer};
 
 /// This struct holds the graphics pipeline & stuff.
 /// It can be called on to begin the pass (begin rendering,
@@ -69,7 +69,7 @@ impl RenderPass {
     pub fn begin(
         &self,
         renderer: &Renderer,
-        cmd: vk::CommandBuffer,
+        cmd: &CommandBuffer,
         size: vk::Extent2D,
         out: vk::ImageView,
     ) {
@@ -108,9 +108,13 @@ impl RenderPass {
             .depth_attachment(&depth_info)
             .layer_count(1);
 
-        unsafe { renderer.device.cmd_begin_rendering(cmd, &rendering_info) };
+        unsafe {
+            renderer
+                .device
+                .cmd_begin_rendering(cmd.raw(), &rendering_info)
+        };
     }
-    pub fn end(&self, renderer: &Renderer, cmd: vk::CommandBuffer) {
-        unsafe { renderer.device.cmd_end_rendering(cmd) }
+    pub fn end(&self, renderer: &Renderer, cmd: &CommandBuffer) {
+        unsafe { renderer.device.cmd_end_rendering(cmd.raw()) }
     }
 }

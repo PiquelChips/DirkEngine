@@ -3,7 +3,10 @@ use std::ffi::c_void;
 use ash::{Device, vk};
 use world::{World, components};
 
-use crate::{MAX_FRAMES_IN_FLIGHT, Renderer, Result, model, render_pass::RenderPass};
+use crate::{
+    MAX_FRAMES_IN_FLIGHT, Renderer, Result, command_pool::CommandBuffer, model,
+    render_pass::RenderPass,
+};
 
 /// This scene is created from a [world::World].
 /// It should then be updated whenever the world is updated.
@@ -192,7 +195,7 @@ impl Scene {
     pub fn render(
         &self,
         renderer: &Renderer,
-        cmd: vk::CommandBuffer,
+        cmd: &CommandBuffer,
         size: vk::Extent2D,
         view: vk::ImageView,
     ) -> Result<()> {
@@ -206,12 +209,12 @@ impl Scene {
             .height(size.height as f32)
             .min_depth(0.)
             .max_depth(1.);
-        unsafe { renderer.device.cmd_set_viewport(cmd, 0, &[viewport]) };
+        unsafe { renderer.device.cmd_set_viewport(cmd.raw(), 0, &[viewport]) };
 
         let scissor = vk::Rect2D::default()
             .offset(vk::Offset2D::default())
             .extent(size);
-        unsafe { renderer.device.cmd_set_scissor(cmd, 0, &[scissor]) };
+        unsafe { renderer.device.cmd_set_scissor(cmd.raw(), 0, &[scissor]) };
 
         let mut descriptor_sets = [
             self.descriptor_sets[renderer.current_frame],
@@ -231,16 +234,21 @@ impl Scene {
 
                 unsafe {
                     device.cmd_bind_descriptor_sets(
-                        cmd,
+                        cmd.raw(),
                         vk::PipelineBindPoint::GRAPHICS,
                         renderer.graphics_pipeline.layout(),
                         0,
                         &descriptor_sets,
                         &[],
                     );
-                    device.cmd_bind_vertex_buffers(cmd, 0, &[prim.vertex_buffer], &[0]);
-                    device.cmd_bind_index_buffer(cmd, prim.index_buffer, 0, vk::IndexType::UINT32);
-                    device.cmd_draw_indexed(cmd, prim.index_count, 1, 0, 0, 0);
+                    device.cmd_bind_vertex_buffers(cmd.raw(), 0, &[prim.vertex_buffer], &[0]);
+                    device.cmd_bind_index_buffer(
+                        cmd.raw(),
+                        prim.index_buffer,
+                        0,
+                        vk::IndexType::UINT32,
+                    );
+                    device.cmd_draw_indexed(cmd.raw(), prim.index_count, 1, 0, 0, 0);
                 }
             }
         }

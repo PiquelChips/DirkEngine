@@ -31,9 +31,12 @@ use scene::Scene;
 mod window;
 use window::{Window, WindowId};
 
-use crate::pipeline::GraphicsPipeline;
-
 mod pipeline;
+use pipeline::GraphicsPipeline;
+
+mod command_pool;
+use command_pool::{CommandBuffer, CommandPool, Graphics, Transfer};
+
 mod render_pass;
 
 #[repr(C)]
@@ -89,7 +92,7 @@ const VALIDATION_LAYERS: &[*const i8] = &[c"VK_LAYER_KHRONOS_validation".as_ptr(
 #[derive(Debug)]
 struct Frame {
     /// Command pool to allocate command buffers on every frame
-    command_pool: vk::CommandPool,
+    command_pool: CommandPool<Graphics>,
     /// Main synchronization fence
     fence: vk::Fence,
     // TODO: have one primary command buffer that is allocated once and
@@ -99,9 +102,9 @@ struct Frame {
 
 impl Frame {
     fn destroy(&self, device: &Device) {
+        self.command_pool.destroy(device);
         unsafe {
             device.destroy_fence(self.fence, None);
-            device.destroy_command_pool(self.command_pool, None);
         }
     }
 }
@@ -166,10 +169,12 @@ pub struct Renderer {
     device: Device,
     queues: Queues,
     physical_device: vk::PhysicalDevice,
-    /// Transient command pool used for one shot command buffers.
+    /// For single use buffers.
     /// Used for texture uploads and layout transitions.
-    /// Not meant for any of the main rendering stuff.
-    command_pool: vk::CommandPool,
+    transfer_pool: CommandPool<Transfer>,
+    /// For single use buffers.
+    /// Used for mip generation.
+    graphics_pool: CommandPool<Graphics>,
 
     properties: RendererProperties,
     /// The ID of the main window in [Renderer::windows] field.
@@ -473,28 +478,15 @@ impl Renderer {
         // SWAP CHAIN
         let swapchain_loader = swapchain::Device::new(&instance, &device);
 
-        // COMMAND POOL
-        let command_pool = {
-            let pool_info = vk::CommandPoolCreateInfo::default()
-                // TODO: also need a transfer command pool for uploads
-                // a graphics pool should be reserved for mip generation
-                // maybe create multiple
-                .queue_family_index(properties.queue_family_indices.graphics)
-                .flags(vk::CommandPoolCreateFlags::TRANSIENT);
-
-            unsafe { device.create_command_pool(&pool_info, None)? }
-        };
-
         // IN FLIGHT FRAMES
         let frames: Result<Vec<Frame>> = (0..MAX_FRAMES_IN_FLIGHT)
             .map(|_| {
-                let command_pool = {
-                    let pool_info = vk::CommandPoolCreateInfo::default()
-                        .queue_family_index(properties.queue_family_indices.graphics)
-                        .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER);
-
-                    unsafe { device.create_command_pool(&pool_info, None)? }
-                };
+                let command_pool = CommandPool::build(
+                    &device,
+                    &queues,
+                    &properties.queue_family_indices,
+                    vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
+                )?;
                 let fence = unsafe {
                     device.create_fence(
                         &vk::FenceCreateInfo::default().flags(vk::FenceCreateFlags::SIGNALED),
@@ -566,6 +558,19 @@ impl Renderer {
             unsafe { device.create_descriptor_pool(&pool_info, None)? }
         };
 
+        let transfer_pool = CommandPool::build(
+            &device,
+            &queues,
+            &properties.queue_family_indices,
+            vk::CommandPoolCreateFlags::TRANSIENT,
+        )?;
+        let graphics_pool = CommandPool::build(
+            &device,
+            &queues,
+            &properties.queue_family_indices,
+            vk::CommandPoolCreateFlags::TRANSIENT,
+        )?;
+
         let mut renderer = Self {
             entry,
             instance,
@@ -573,7 +578,8 @@ impl Renderer {
             queues,
             physical_device,
             properties,
-            command_pool,
+            transfer_pool,
+            graphics_pool,
             main_window: window.id().into_raw(),
             windows: HashMap::new(),
             models: HashMap::new(),
@@ -617,19 +623,15 @@ impl Renderer {
                 .reset_fences(std::slice::from_ref(&frame.fence))?;
         }
 
-        let allocate_info = vk::CommandBufferAllocateInfo::default()
-            .command_pool(frame.command_pool)
-            .level(vk::CommandBufferLevel::PRIMARY)
-            .command_buffer_count(1);
-        let cmd = unsafe { self.device.allocate_command_buffers(&allocate_info)?[0] };
+        let cmd = frame.command_pool.allocate_buffer(&self.device)?;
 
         unsafe {
             self.device
-                .begin_command_buffer(cmd, &vk::CommandBufferBeginInfo::default())?
+                .begin_command_buffer(cmd.raw(), &vk::CommandBufferBeginInfo::default())?
         }
 
         self.transition_image_layout(
-            cmd,
+            &cmd,
             swapchain_img.image,
             vk::ImageLayout::UNDEFINED,
             vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
@@ -638,11 +640,11 @@ impl Renderer {
         )?;
 
         for scene in self.scenes.values() {
-            scene.render(self, cmd, size, swapchain_img.view)?;
+            scene.render(self, &cmd, size, swapchain_img.view)?;
         }
 
         self.transition_image_layout(
-            cmd,
+            &cmd,
             swapchain_img.image,
             vk::ImageLayout::UNDEFINED,
             vk::ImageLayout::PRESENT_SRC_KHR,
@@ -650,7 +652,7 @@ impl Renderer {
             0,
         )?;
 
-        unsafe { self.device.end_command_buffer(cmd)? }
+        unsafe { self.device.end_command_buffer(cmd.raw())? }
 
         let submit_info = vk::SubmitInfo::default()
             .wait_dst_stage_mask(std::slice::from_ref(
@@ -924,10 +926,10 @@ impl Renderer {
             (mip_levels, vk::SampleCountFlags::TYPE_1),
         )?;
 
-        let cmd = self.begin_single_time_commands()?;
+        let cmd = self.graphics_pool.begin_single_time(&self.device)?;
 
         self.transition_image_layout(
-            cmd,
+            &cmd,
             image,
             vk::ImageLayout::UNDEFINED,
             vk::ImageLayout::TRANSFER_DST_OPTIMAL,
@@ -950,7 +952,7 @@ impl Renderer {
 
         unsafe {
             self.device.cmd_copy_buffer_to_image(
-                cmd,
+                cmd.raw(),
                 staging_buf,
                 image,
                 vk::ImageLayout::TRANSFER_DST_OPTIMAL,
@@ -958,8 +960,8 @@ impl Renderer {
             );
         }
 
-        self.generate_mipmaps(cmd, image, *tex.width(), *tex.height(), mip_levels)?;
-        self.end_single_time_commands(cmd, self.queues.graphics)?;
+        self.generate_mipmaps(&cmd, image, *tex.width(), *tex.height(), mip_levels)?;
+        cmd.submit_default(&self.device)?;
 
         unsafe {
             self.device.destroy_buffer(staging_buf, None);
@@ -1043,7 +1045,7 @@ impl Renderer {
     }
     fn transition_image_layout(
         &self,
-        cmd: vk::CommandBuffer,
+        cmd: &CommandBuffer,
         image: vk::Image,
         old_layout: vk::ImageLayout,
         new_layout: vk::ImageLayout,
@@ -1138,7 +1140,7 @@ impl Renderer {
 
         unsafe {
             self.device.cmd_pipeline_barrier(
-                cmd,
+                cmd.raw(),
                 src_stage,
                 dst_stage,
                 vk::DependencyFlags::empty(),
@@ -1151,7 +1153,7 @@ impl Renderer {
     }
     fn generate_mipmaps(
         &self,
-        cmd: vk::CommandBuffer,
+        cmd: &CommandBuffer,
         image: vk::Image,
         width: u32,
         height: u32,
@@ -1207,7 +1209,7 @@ impl Renderer {
 
             unsafe {
                 self.device.cmd_blit_image(
-                    cmd,
+                    cmd.raw(),
                     image,
                     vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
                     image,
@@ -1306,16 +1308,17 @@ impl Renderer {
         Ok((device_buf, device_mem))
     }
     fn copy_buffer(&self, src: vk::Buffer, dst: vk::Buffer, size: vk::DeviceSize) -> Result<()> {
-        let cmd = self.begin_single_time_commands()?;
+        let cmd = self.transfer_pool.begin_single_time(&self.device)?;
 
         let region = vk::BufferCopy {
             src_offset: 0,
             dst_offset: 0,
             size,
         };
-        unsafe { self.device.cmd_copy_buffer(cmd, src, dst, &[region]) };
+        unsafe { self.device.cmd_copy_buffer(cmd.raw(), src, dst, &[region]) };
 
-        self.end_single_time_commands(cmd, self.queues.graphics)
+        cmd.submit_default(&self.device)?;
+        Ok(())
     }
     fn create_buffer(
         &self,
@@ -1341,36 +1344,6 @@ impl Renderer {
         unsafe { self.device.bind_buffer_memory(buffer, memory, 0)? };
 
         Ok((buffer, memory))
-    }
-
-    // COMMAND BUFFERS
-
-    fn begin_single_time_commands(&self) -> Result<vk::CommandBuffer> {
-        let alloc_info = vk::CommandBufferAllocateInfo::default()
-            .command_pool(self.command_pool)
-            .level(vk::CommandBufferLevel::PRIMARY)
-            .command_buffer_count(1);
-
-        let cmd = unsafe { self.device.allocate_command_buffers(&alloc_info)?[0] };
-
-        let begin_info = vk::CommandBufferBeginInfo::default()
-            .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
-
-        unsafe { self.device.begin_command_buffer(cmd, &begin_info)? };
-        Ok(cmd)
-    }
-    fn end_single_time_commands(&self, cmd: vk::CommandBuffer, queue: vk::Queue) -> Result<()> {
-        unsafe { self.device.end_command_buffer(cmd)? };
-
-        let submit_info = vk::SubmitInfo::default().command_buffers(std::slice::from_ref(&cmd));
-
-        unsafe {
-            self.device
-                .queue_submit(queue, &[submit_info], vk::Fence::null())?;
-            self.device.queue_wait_idle(queue)?;
-        };
-
-        Ok(())
     }
 
     // EXTRA UTILS
@@ -1427,10 +1400,11 @@ impl Drop for Renderer {
         self.graphics_pipeline.destroy(&self.device);
         self.layouts.destroy(&self.device);
 
+        self.graphics_pool.destroy(&self.device);
+        self.transfer_pool.destroy(&self.device);
         unsafe {
             self.device
                 .destroy_descriptor_pool(self.material_descriptor_pool, None);
-            self.device.destroy_command_pool(self.command_pool, None);
             self.device.destroy_device(None);
 
             #[cfg(validation)]

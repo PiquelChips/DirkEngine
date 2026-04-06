@@ -1,6 +1,8 @@
 use ash::{Device, vk};
 
-use crate::{DescriptorLayouts, Renderer, RendererProperties, Result, Vertex};
+use crate::{
+    DescriptorLayouts, Renderer, RendererProperties, Result, Vertex, command_pool::CommandBuffer,
+};
 
 /// This struct holds the graphics pipeline & stuff.
 pub struct GraphicsPipeline {
@@ -117,10 +119,10 @@ impl GraphicsPipeline {
             pipeline_layout,
         })
     }
-    pub fn bind(&self, renderer: &Renderer, cmd: vk::CommandBuffer) {
+    pub fn bind(&self, renderer: &Renderer, cmd: &CommandBuffer) {
         unsafe {
             renderer.device.cmd_bind_pipeline(
-                cmd,
+                cmd.raw(),
                 vk::PipelineBindPoint::GRAPHICS,
                 self.graphics_pipeline,
             )
