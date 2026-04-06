@@ -4,7 +4,7 @@ use ash::{
     vk,
 };
 
-use crate::{Renderer, Result};
+use crate::{Error, Renderer, Result};
 
 pub type WindowId = usize;
 
@@ -56,8 +56,23 @@ impl Window {
     pub fn extent(&self) -> vk::Extent2D {
         self.extent
     }
-    pub fn next_image(&self) -> SwapchainImage {
-        todo!("implement getting the next swap chain image")
+    pub fn next_image(&self, renderer: &Renderer) -> Result<&SwapchainImage> {
+        let frame = renderer.get_current_frame();
+
+        let (image_index, suboptimal) = unsafe {
+            renderer.swapchain_loader.acquire_next_image(
+                self.swapchain,
+                u64::MAX,
+                frame.image_available_semaphore,
+                vk::Fence::null(),
+            )?
+        };
+
+        if suboptimal {
+            return Err(Error::SuboptimalSurface);
+        }
+
+        Ok(&self.images[image_index as usize])
     }
     pub fn resize(&mut self, renderer: &Renderer, in_size: vk::Extent2D) -> Result<()> {
         let (swapchain, extent, images) = renderer.create_swap_chain(self.surface, in_size)?;

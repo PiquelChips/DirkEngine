@@ -33,6 +33,9 @@ pub enum Error {
         old: vk::ImageLayout,
         new: vk::ImageLayout,
     },
+
+    #[error("suboptimal surface")]
+    SuboptimalSurface,
 }
 
 impl From<HandleError> for Error {

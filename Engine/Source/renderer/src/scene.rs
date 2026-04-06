@@ -189,13 +189,17 @@ impl Scene {
             world.get::<components::Transform>(camera_entity).unwrap(),
         )
     }
-    pub fn render(&self, renderer: &Renderer, cmd: vk::CommandBuffer) {
+    pub fn render(&self, renderer: &Renderer, cmd: vk::CommandBuffer) -> Result<()> {
         let device = &renderer.device;
 
         let window = renderer.windows.get(&renderer.main_window).unwrap();
 
-        self.render_pass
-            .begin(renderer, cmd, window.extent(), window.next_image().view);
+        self.render_pass.begin(
+            renderer,
+            cmd,
+            window.extent(),
+            window.next_image(renderer)?.view,
+        );
         renderer.graphics_pipeline.bind(renderer, cmd);
 
         let viewport = vk::Viewport::default()
@@ -242,6 +246,7 @@ impl Scene {
         }
 
         self.render_pass.end(renderer, cmd);
+        Ok(())
     }
 }
 

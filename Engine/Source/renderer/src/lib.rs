@@ -95,6 +95,10 @@ struct Frame {
     // TODO: have one primary command buffer that is allocated once and
     // secondary command for each scene. Should be allocated every time
     // there is a change in scene count. If not reallocated, reset.
+    /// semaphore that is signaled when the swapchain image is available
+    image_available_semaphore: vk::Semaphore,
+    /// semaphore that is signaled when rendering finished
+    render_finished_semaphore: vk::Semaphore,
 }
 
 impl Frame {
@@ -499,9 +503,16 @@ impl Renderer {
                         None,
                     )?
                 };
+                let image_available_semaphore =
+                    unsafe { device.create_semaphore(&vk::SemaphoreCreateInfo::default(), None)? };
+                let render_finished_semaphore =
+                    unsafe { device.create_semaphore(&vk::SemaphoreCreateInfo::default(), None)? };
+
                 Ok(Frame {
                     command_pool,
                     fence,
+                    image_available_semaphore,
+                    render_finished_semaphore,
                 })
             })
             .collect();
@@ -584,7 +595,7 @@ impl Renderer {
     }
 
     pub fn render(&mut self) -> Result<()> {
-        let frame = &self.frames[self.current_frame];
+        let frame = self.get_current_frame();
 
         unsafe {
             self.device
@@ -626,6 +637,9 @@ impl Renderer {
 
         self.current_frame = (self.current_frame + 1) % MAX_FRAMES_IN_FLIGHT;
         Ok(())
+    }
+    fn get_current_frame(&self) -> &Frame {
+        &self.frames[self.current_frame]
     }
 
     // SCENES
