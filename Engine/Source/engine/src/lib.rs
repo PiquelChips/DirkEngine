@@ -3,8 +3,6 @@ use std::{collections::HashMap, ffi::CString, str::FromStr, time::Instant};
 use anyhow::Context;
 use world::{World, WorldId};
 
-mod errors;
-
 /// This is the main struct that holds global engine state.
 pub struct Engine {
     platform: platform::Platform,
