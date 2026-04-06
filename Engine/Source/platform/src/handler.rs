@@ -11,10 +11,10 @@ use winit::{
 use crate::window::Window;
 
 /// The object with actual platform state. It handles responding to platform events.
-#[derive(Default)]
 pub struct PlatformHandler {
     can_create_surfaces: bool,
     windows: HashMap<WindowId, Window>,
+    main_window: WindowId,
 }
 
 impl PlatformHandler {
@@ -32,11 +32,35 @@ impl PlatformHandler {
         self.windows.insert(window_id, window);
         Ok(window_id)
     }
+    pub fn main_window(&self) -> &Window {
+        self.windows
+            .get(&self.main_window)
+            .expect("there should always be a main window")
+    }
+    pub fn is_initialized(&self) -> bool {
+        self.can_create_surfaces
+    }
+    pub fn shutdown(&mut self) {
+        let count = self.windows.len();
+        self.windows.clear();
+        debug!("Closed {count} window(s) during platform shutdown");
+    }
+}
+
+impl Default for PlatformHandler {
+    fn default() -> Self {
+        Self {
+            can_create_surfaces: false,
+            windows: HashMap::new(),
+            main_window: WindowId::from_raw(0),
+        }
+    }
 }
 
 impl ApplicationHandler for PlatformHandler {
     fn can_create_surfaces(&mut self, event_loop: &dyn winit::event_loop::ActiveEventLoop) {
-        self.create_window(event_loop)
+        self.main_window = self
+            .create_window(event_loop)
             .expect("failed to create main window");
         self.can_create_surfaces = true
     }
@@ -55,6 +79,7 @@ impl ApplicationHandler for PlatformHandler {
             WindowEvent::CloseRequested | WindowEvent::Destroyed => {
                 debug!("Closing Window={window_id:?}");
                 self.windows.remove(&window_id);
+                todo!("if main window: shut down the engine")
             }
             WindowEvent::SurfaceResized(size) => {
                 window.resize(size);
