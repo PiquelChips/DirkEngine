@@ -128,20 +128,20 @@ impl Scene {
                 .update_descriptor_sets(&descriptor_writes, &[])
         };
 
-        // TODO: build proxies
-
         let window = renderer.windows.get(&renderer.main_window).unwrap();
         let render_pass = RenderPass::build(renderer, window.extent())?;
 
-        Ok(Self {
-            proxies: Self::make_scene_proxies(renderer, world)?,
+        let mut scene = Self {
+            proxies: Vec::new(),
             view: camera_trans.view(),
             proj: camera.projection(),
             descriptor_pool,
             ubo,
             descriptor_sets: scene_desc_sets,
             render_pass,
-        })
+        };
+        scene.proxies = scene.make_scene_proxies(renderer, world)?;
+        Ok(scene)
     }
     // TODO: on tick, worlds should be sent to update scenes
     #[allow(unused)]
@@ -149,12 +149,12 @@ impl Scene {
     /// This includes: [SceneProxy]s, view matrix & projection matrix.
     pub fn rebuild(&mut self, renderer: &Renderer, world: &World) -> Result<()> {
         let (camera, camera_trans) = Self::get_camera(world);
-        self.proxies = Self::make_scene_proxies(renderer, world)?;
+        self.proxies = self.make_scene_proxies(renderer, world)?;
         self.view = camera_trans.view();
         self.proj = camera.projection();
         Ok(())
     }
-    fn make_scene_proxies(renderer: &Renderer, world: &World) -> Result<Vec<SceneProxy>> {
+    fn make_scene_proxies(&self, renderer: &Renderer, world: &World) -> Result<Vec<SceneProxy>> {
         Ok(world
             .query_double::<components::Renderable, components::Transform>()
             .iter()
@@ -162,7 +162,7 @@ impl Scene {
                 // already made sure the entity has the component
                 let renderable = world.get::<components::Renderable>(entity).unwrap();
                 let transform = world.get::<components::Transform>(entity).unwrap();
-                SceneProxy::build(renderer, &renderable.model, transform.matrix())
+                SceneProxy::build(renderer, self, &renderable.model, transform.matrix())
             })
             .collect::<Result<Vec<_>>>()?)
     }
@@ -244,16 +244,23 @@ pub struct SceneProxy {
     sets: [vk::DescriptorSet; MAX_FRAMES_IN_FLIGHT],
 }
 
+type ProxyUbo = glam::Mat4;
+
 impl SceneProxy {
-    pub fn build(renderer: &Renderer, model: &str, model_matrix: glam::Mat4) -> Result<Self> {
+    pub fn build(
+        renderer: &Renderer,
+        scene: &Scene,
+        model: &str,
+        model_matrix: glam::Mat4,
+    ) -> Result<Self> {
         let model = renderer
             .get_model(model)
             .expect("should have the model")
             .clone();
 
+        let size = size_of::<ProxyUbo>() as u64;
         let ubo: Vec<UboData> = (0..MAX_FRAMES_IN_FLIGHT)
             .map(|_| {
-                let size = size_of::<glam::Mat4>() as u64;
                 let (buffer, memory) = renderer.create_buffer(
                     size,
                     vk::BufferUsageFlags::UNIFORM_BUFFER,
@@ -275,10 +282,48 @@ impl SceneProxy {
             .collect::<Result<Vec<_>>>()?;
         let ubo: [UboData; MAX_FRAMES_IN_FLIGHT] = ubo.try_into().unwrap();
 
+        // Allocate scene-level sets (one per frame)
+        let layouts = [renderer.layouts.object; MAX_FRAMES_IN_FLIGHT];
+        let alloc_info = vk::DescriptorSetAllocateInfo::default()
+            .descriptor_pool(scene.descriptor_pool)
+            .set_layouts(&layouts);
+
+        let sets: [vk::DescriptorSet; MAX_FRAMES_IN_FLIGHT] = unsafe {
+            renderer
+                .device
+                .allocate_descriptor_sets(&alloc_info)?
+                .try_into()
+                .unwrap()
+        };
+
+        let buffer_infos: [vk::DescriptorBufferInfo; MAX_FRAMES_IN_FLIGHT] =
+            std::array::from_fn(|i| {
+                vk::DescriptorBufferInfo::default()
+                    .buffer(ubo[i].buffer)
+                    .range(size)
+                    .offset(0)
+            });
+
+        let descriptor_writes: [vk::WriteDescriptorSet; MAX_FRAMES_IN_FLIGHT] =
+            std::array::from_fn(|i| {
+                vk::WriteDescriptorSet::default()
+                    .dst_set(sets[i])
+                    .dst_binding(0)
+                    .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                    .buffer_info(std::slice::from_ref(&buffer_infos[i]))
+            });
+
+        unsafe {
+            renderer
+                .device
+                .update_descriptor_sets(&descriptor_writes, &[])
+        };
+
         Ok(Self {
             model,
             model_matrix,
             ubo,
+            sets,
         })
     }
 }
