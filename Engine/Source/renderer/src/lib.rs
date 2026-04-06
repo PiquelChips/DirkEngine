@@ -33,6 +33,7 @@ use window::{Window, WindowId};
 
 use crate::{pipeline::GraphicsPipeline, render_pass::RenderPass};
 
+mod image;
 mod pipeline;
 mod render_pass;
 
@@ -784,7 +785,10 @@ impl Renderer {
         }
 
         let (image, memory) = self.create_image(
-            (*tex.width(), *tex.height()),
+            vk::Extent2D {
+                width: *tex.width(),
+                height: *tex.height(),
+            },
             format,
             vk::ImageTiling::OPTIMAL,
             // TRANSFER_SRC needed for mip creation
@@ -875,7 +879,7 @@ impl Renderer {
     }
     fn create_image(
         &self,
-        (width, height): (u32, u32),
+        size: vk::Extent2D,
         format: vk::Format,
         tiling: vk::ImageTiling,
         usage: vk::ImageUsageFlags,
@@ -886,8 +890,8 @@ impl Renderer {
             .image_type(vk::ImageType::TYPE_2D)
             .format(format)
             .extent(vk::Extent3D {
-                width,
-                height,
+                width: size.width,
+                height: size.height,
                 depth: 1,
             })
             .mip_levels(mip_levels)
