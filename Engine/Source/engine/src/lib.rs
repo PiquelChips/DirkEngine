@@ -66,10 +66,16 @@ impl Engine {
         // TODO: this should be initialized when needed, not now
         engine
             .renderer
-            .upload_model(resource_manager::ResourceManager::load_model("Shrek")?)?;
+            .upload_model(
+                resource_manager::ResourceManager::load_model("Shrek").context("loading shrek")?,
+            )
+            .context("uploading shrek")?;
         engine
             .renderer
-            .upload_model(resource_manager::ResourceManager::load_model("Duck")?)?;
+            .upload_model(
+                resource_manager::ResourceManager::load_model("Duck").context("loading duck")?,
+            )
+            .context("uploading duck")?;
 
         let world_id = engine.create_world()?;
 
