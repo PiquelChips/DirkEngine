@@ -471,9 +471,13 @@ impl Renderer {
         // SWAP CHAIN
         let swapchain_loader = swapchain::Device::new(&instance, &device);
 
+        // COMMAND POOL
         let command_pool = {
             let pool_info = vk::CommandPoolCreateInfo::default()
-                .queue_family_index(properties.queue_family_indices.transfer)
+                // TODO: also need a transfer command pool for uploads
+                // a graphics pool should be reserved for mip generation
+                // maybe create multiple
+                .queue_family_index(properties.queue_family_indices.graphics)
                 .flags(vk::CommandPoolCreateFlags::TRANSIENT);
 
             unsafe { device.create_command_pool(&pool_info, None)? }
@@ -864,7 +868,7 @@ impl Renderer {
         }
 
         self.generate_mipmaps(cmd, image, *tex.width(), *tex.height(), mip_levels)?;
-        self.end_single_time_commands(cmd, self.queues.transfer)?;
+        self.end_single_time_commands(cmd, self.queues.graphics)?;
 
         unsafe {
             self.device.destroy_buffer(staging_buf, None);
@@ -1213,7 +1217,7 @@ impl Renderer {
         };
         unsafe { self.device.cmd_copy_buffer(cmd, src, dst, &[region]) };
 
-        self.end_single_time_commands(cmd, self.queues.transfer)
+        self.end_single_time_commands(cmd, self.queues.graphics)
     }
     fn create_buffer(
         &self,
