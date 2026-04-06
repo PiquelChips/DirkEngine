@@ -117,6 +117,7 @@ impl Frame {
 /// propper comment explain what the layout is and where
 /// it is used.
 struct DescriptorLayouts {
+    // TODO: much better comments for descriptor set layouts
     /// Per scene layout. Holds view & proj matrices for rendering.
     scene: vk::DescriptorSetLayout,
     /// Per object layout. For model matrix.
