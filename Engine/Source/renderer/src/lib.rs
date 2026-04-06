@@ -95,10 +95,6 @@ struct Frame {
     // TODO: have one primary command buffer that is allocated once and
     // secondary command for each scene. Should be allocated every time
     // there is a change in scene count. If not reallocated, reset.
-    /// semaphore that is signaled when the swapchain image is available
-    image_available_semaphore: vk::Semaphore,
-    /// semaphore that is signaled when rendering finished
-    render_finished_semaphore: vk::Semaphore,
 }
 
 impl Frame {
@@ -106,8 +102,6 @@ impl Frame {
         unsafe {
             device.destroy_fence(self.fence, None);
             device.destroy_command_pool(self.command_pool, None);
-            device.destroy_semaphore(self.image_available_semaphore, None);
-            device.destroy_semaphore(self.render_finished_semaphore, None);
         }
     }
 }
@@ -507,16 +501,10 @@ impl Renderer {
                         None,
                     )?
                 };
-                let image_available_semaphore =
-                    unsafe { device.create_semaphore(&vk::SemaphoreCreateInfo::default(), None)? };
-                let render_finished_semaphore =
-                    unsafe { device.create_semaphore(&vk::SemaphoreCreateInfo::default(), None)? };
 
                 Ok(Frame {
                     command_pool,
                     fence,
-                    image_available_semaphore,
-                    render_finished_semaphore,
                 })
             })
             .collect();
@@ -614,12 +602,13 @@ impl Renderer {
     }
 
     pub fn render(&mut self) -> Result<()> {
-        let frame = self.get_current_frame();
-
-        let window = self.windows.get(&self.main_window).unwrap();
+        let window = self.windows.get_mut(&self.main_window).unwrap();
+        let (swapchain_img, idx) = window.next_image(&self.swapchain_loader)?;
+        let (render_finished_semaphore, image_available_semaphore) = window.current_semaphores();
         let size = window.extent();
         let swapchain = window.swapchain();
-        let (swapchain_img, idx) = window.next_image(self)?;
+
+        let frame = self.get_current_frame();
 
         unsafe {
             self.device
@@ -668,8 +657,8 @@ impl Renderer {
                 &vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
             ))
             .command_buffers(std::slice::from_ref(&cmd))
-            .wait_semaphores(std::slice::from_ref(&frame.image_available_semaphore))
-            .signal_semaphores(std::slice::from_ref(&frame.render_finished_semaphore));
+            .wait_semaphores(std::slice::from_ref(&image_available_semaphore))
+            .signal_semaphores(std::slice::from_ref(&render_finished_semaphore));
 
         unsafe {
             self.device.queue_submit(
@@ -680,7 +669,7 @@ impl Renderer {
         }
 
         let present_info = vk::PresentInfoKHR::default()
-            .wait_semaphores(std::slice::from_ref(&frame.render_finished_semaphore))
+            .wait_semaphores(std::slice::from_ref(&render_finished_semaphore))
             .swapchains(std::slice::from_ref(&swapchain))
             .image_indices(std::slice::from_ref(&idx));
 

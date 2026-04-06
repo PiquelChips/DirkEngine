@@ -8,6 +8,7 @@ use crate::{Error, Renderer, Result};
 
 pub type WindowId = usize;
 
+#[derive(Clone)]
 pub struct SwapchainImage {
     pub image: vk::Image,
     pub view: vk::ImageView,
@@ -31,6 +32,11 @@ pub struct Window {
     swapchain: vk::SwapchainKHR,
     images: Vec<SwapchainImage>,
     extent: vk::Extent2D,
+
+    /// The semaphores associated with each swapchain image
+    semaphores: Vec<(vk::Semaphore, vk::Semaphore)>,
+    /// The current index of the semaphores
+    semaphore_count: usize,
 }
 
 impl Window {
@@ -41,12 +47,24 @@ impl Window {
         size: vk::Extent2D,
     ) -> Result<Self> {
         let (swapchain, extent, images) = renderer.create_swap_chain(surface, size)?;
+
+        let semaphore_info = vk::SemaphoreCreateInfo::default();
+        let create_semaphore = || unsafe {
+            Ok::<vk::Semaphore, Error>(renderer.device.create_semaphore(&semaphore_info, None)?)
+        };
+
+        let semaphores = (0..images.len())
+            .map(|_| Ok((create_semaphore()?, create_semaphore()?)))
+            .collect::<Result<Vec<_>>>()?;
+
         Ok(Self {
             id,
             surface,
             swapchain,
             extent,
             images,
+            semaphores,
+            semaphore_count: 0,
         })
     }
     /// Returns the window's ID
@@ -59,14 +77,22 @@ impl Window {
     pub fn swapchain(&self) -> vk::SwapchainKHR {
         self.swapchain
     }
-    pub fn next_image(&self, renderer: &Renderer) -> Result<(&SwapchainImage, u32)> {
-        let frame = renderer.get_current_frame();
+    /// (render_finished_semaphore, image_available_semaphore)
+    pub fn current_semaphores(&self) -> (vk::Semaphore, vk::Semaphore) {
+        self.semaphores[self.semaphore_count]
+    }
+    pub fn next_image(
+        &mut self,
+        swapchain_loader: &swapchain::Device,
+    ) -> Result<(SwapchainImage, u32)> {
+        let (_, image_available_semaphore) = self.semaphores[self.semaphore_count];
+        self.semaphore_count = (self.semaphore_count + 1) % self.semaphores.len();
 
         let (image_index, suboptimal) = unsafe {
-            renderer.swapchain_loader.acquire_next_image(
+            swapchain_loader.acquire_next_image(
                 self.swapchain,
                 u64::MAX,
-                frame.image_available_semaphore,
+                image_available_semaphore,
                 vk::Fence::null(),
             )?
         };
@@ -75,7 +101,7 @@ impl Window {
             return Err(Error::SuboptimalSurface);
         }
 
-        Ok((&self.images[image_index as usize], image_index))
+        Ok((self.images[image_index as usize].clone(), image_index))
     }
     pub fn resize(&mut self, renderer: &Renderer, in_size: vk::Extent2D) -> Result<()> {
         let (swapchain, extent, images) = renderer.create_swap_chain(self.surface, in_size)?;
@@ -92,6 +118,10 @@ impl Window {
     ) {
         self.images.iter().for_each(|i| i.destroy(device));
         unsafe {
+            self.semaphores.iter().for_each(|&(s1, s2)| {
+                device.destroy_semaphore(s1, None);
+                device.destroy_semaphore(s2, None);
+            });
             swapchain.destroy_swapchain(self.swapchain, None);
             surface.destroy_surface(self.surface, None);
         }
