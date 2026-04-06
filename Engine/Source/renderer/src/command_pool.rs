@@ -9,6 +9,7 @@ pub struct Graphics;
 #[derive(Debug)]
 pub struct Transfer;
 #[derive(Debug)]
+#[allow(unused)]
 pub struct Compute;
 
 /// Wrapper for [vk::CommandPool].

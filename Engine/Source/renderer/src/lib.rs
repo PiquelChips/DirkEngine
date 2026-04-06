@@ -145,7 +145,6 @@ pub struct RendererCreateInfo {
 
 struct Queues {
     graphics: vk::Queue,
-    #[allow(unused)]
     compute: vk::Queue,
     transfer: vk::Queue,
     present: vk::Queue,
@@ -153,6 +152,7 @@ struct Queues {
 
 pub struct RendererProperties {
     msaa_samples: vk::SampleCountFlags,
+    #[allow(unused)]
     anisotropy: bool,
     surface_format: vk::SurfaceFormatKHR,
     queue_family_indices: physical_device::QueueFamilyIndices,
