@@ -718,6 +718,17 @@ impl Renderer {
         self.windows.insert(window.id(), window);
         Ok(plat_window.id().into_raw())
     }
+    // TODO: resize window
+    /*
+    pub fn resize_window(&mut self, id: WindowId, width: u32, height: u32) -> Result<()> {
+        if let Some(window) = self.windows.get_mut(&id) {
+            // Wait for the GPU to be idle before touching the swapchain.
+            unsafe { self.device.device_wait_idle()? };
+            window.resize(self, vk::Extent2D { width, height })?;
+        }
+        Ok(())
+    }
+    */
 
     fn create_swap_chain(
         &self,
