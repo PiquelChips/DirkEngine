@@ -35,16 +35,6 @@ jobs:
         toolchain: [stable] #, beta, nightly]
     steps:
       - uses: actions/checkout@v6
-
-      - name: Install glslc
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y glslang-tools
-          # glslc from Google's shaderc binaries:
-          wget https://storage.googleapis.com/shaderc/artifacts/prod/graphics_shader_compiler/shaderc/linux/continuous_clang_release/latest/install.tgz
-          tar -xf install.tgz
-          sudo cp install/bin/glslc /usr/local/bin/glslc
-
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
