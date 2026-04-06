@@ -31,8 +31,9 @@ use scene::Scene;
 mod window;
 use window::{Window, WindowId};
 
-use crate::render_pass::RenderPass;
+use crate::{pipeline::GraphicsPipeline, render_pass::RenderPass};
 
+mod pipeline;
 mod render_pass;
 
 #[repr(C)]
@@ -173,7 +174,7 @@ pub struct Renderer {
     #[cfg(validation)]
     debug_messenger: vk::DebugUtilsMessengerEXT,
 
-    render_pass: RenderPass,
+    graphics_pipeline: GraphicsPipeline,
 }
 
 impl Renderer {
@@ -523,7 +524,7 @@ impl Renderer {
             },
         };
 
-        let render_pass = RenderPass::build(&device, &layouts, &properties)?;
+        let graphics_pipeline = GraphicsPipeline::build(&device, &layouts, &properties)?;
 
         let mut renderer = Self {
             entry,
@@ -545,7 +546,7 @@ impl Renderer {
             debug_utils_loader,
             debug_messenger,
 
-            render_pass,
+            graphics_pipeline,
         };
 
         let window_size = window.size();
