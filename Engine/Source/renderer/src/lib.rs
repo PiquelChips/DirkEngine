@@ -637,9 +637,27 @@ impl Renderer {
                 .begin_command_buffer(cmd, &vk::CommandBufferBeginInfo::default())?
         }
 
+        self.transition_image_layout(
+            cmd,
+            swapchain_img.image,
+            vk::ImageLayout::UNDEFINED,
+            vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+            1,
+            0,
+        )?;
+
         for scene in self.scenes.values() {
             scene.render(self, cmd, size, swapchain_img.view)?;
         }
+
+        self.transition_image_layout(
+            cmd,
+            swapchain_img.image,
+            vk::ImageLayout::UNDEFINED,
+            vk::ImageLayout::PRESENT_SRC_KHR,
+            1,
+            0,
+        )?;
 
         unsafe { self.device.end_command_buffer(cmd)? }
 
@@ -771,18 +789,15 @@ impl Renderer {
         let swap_images = images
             .into_iter()
             .map(|image| {
-                let view = self
-                    .create_image_view(
-                        image,
-                        self.properties.surface_format.format,
-                        vk::ImageAspectFlags::COLOR,
-                        1,
-                    )
-                    .unwrap();
-
-                window::SwapchainImage { image, view }
+                let view = self.create_image_view(
+                    image,
+                    self.properties.surface_format.format,
+                    vk::ImageAspectFlags::COLOR,
+                    1,
+                )?;
+                Ok(window::SwapchainImage { image, view })
             })
-            .collect();
+            .collect::<Result<Vec<_>>>()?;
 
         Ok((swapchain, extent, swap_images))
     }
@@ -1045,6 +1060,12 @@ impl Renderer {
         base_mip: u32,
     ) -> Result<()> {
         let (src_access, dst_access, src_stage, dst_stage) = match (old_layout, new_layout) {
+            (vk::ImageLayout::UNDEFINED, vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL) => (
+                vk::AccessFlags::empty(),
+                vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
+                vk::PipelineStageFlags::TOP_OF_PIPE,
+                vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+            ),
             (vk::ImageLayout::UNDEFINED, vk::ImageLayout::TRANSFER_DST_OPTIMAL) => (
                 vk::AccessFlags::empty(),
                 vk::AccessFlags::TRANSFER_WRITE,
