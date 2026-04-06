@@ -8,9 +8,11 @@ pub struct Shader {
 }
 
 impl Shader {
+    /// Returns the shader code
     pub const fn code(&self) -> &[u8] {
         self.code
     }
+    /// Returns the entrypoint of this shader
     pub const fn entrypoint(&self) -> &str {
         self.entrypoint
     }
