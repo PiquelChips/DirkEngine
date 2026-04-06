@@ -15,6 +15,7 @@ utils.workspace = true
 platform.workspace = true
 resource_manager.workspace = true
 world.workspace = true
+shaders.workspace = true
 
 ash.workspace = true
 ash-window.workspace = true

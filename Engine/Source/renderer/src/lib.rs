@@ -1268,6 +1268,14 @@ impl Renderer {
             })
             .ok_or(Error::NoSuitableMemoryType)
     }
+    fn create_shader_module(
+        device: &Device,
+        shader: &'static shaders::Shader,
+    ) -> Result<vk::ShaderModule> {
+        let code = shader.code_as_u32();
+        let info = vk::ShaderModuleCreateInfo::default().code(code.as_slice());
+        Ok(unsafe { device.create_shader_module(&info, None)? })
+    }
 }
 
 impl Drop for Renderer {

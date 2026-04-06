@@ -1205,6 +1205,7 @@ dependencies = [
  "platform",
  "raw-window-handle",
  "resource_manager",
+ "shaders",
  "thiserror 2.0.18",
  "utils",
  "world",
