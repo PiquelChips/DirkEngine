@@ -37,7 +37,7 @@ impl RenderPass {
             vk::ImageTiling::OPTIMAL,
             vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
-            (1, vk::SampleCountFlags::TYPE_1),
+            (1, renderer.properties.msaa_samples),
         )?;
         let depth = renderer.create_image_view(
             depth_image,

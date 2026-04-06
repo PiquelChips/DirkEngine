@@ -616,7 +616,7 @@ impl Renderer {
         }
 
         for scene in self.scenes.values() {
-            scene.render(self, cmd);
+            scene.render(self, cmd)?;
         }
 
         unsafe { self.device.end_command_buffer(cmd)? }

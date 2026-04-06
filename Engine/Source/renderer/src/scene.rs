@@ -207,12 +207,12 @@ impl Scene {
             .height(window.extent().height as f32)
             .min_depth(0.)
             .max_depth(1.);
-        unsafe { renderer.device.cmd_set_viewport(cmd, 1, &[viewport]) };
+        unsafe { renderer.device.cmd_set_viewport(cmd, 0, &[viewport]) };
 
         let scissor = vk::Rect2D::default()
             .offset(vk::Offset2D::default())
             .extent(window.extent());
-        unsafe { renderer.device.cmd_set_scissor(cmd, 1, &[scissor]) };
+        unsafe { renderer.device.cmd_set_scissor(cmd, 0, &[scissor]) };
 
         let mut descriptor_sets = [
             self.descriptor_sets[renderer.current_frame],
