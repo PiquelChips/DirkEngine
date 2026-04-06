@@ -1,4 +1,4 @@
-use ash::vk::{self};
+use ash::{Device, vk};
 
 use crate::{Renderer, Result};
 
@@ -54,6 +54,17 @@ impl RenderPass {
             depth_image,
             depth_memory,
         })
+    }
+    pub fn destroy(&self, device: &Device) {
+        unsafe {
+            device.destroy_image_view(self.color, None);
+            device.destroy_image(self.color_image, None);
+            device.free_memory(self.color_memory, None);
+
+            device.destroy_image_view(self.depth, None);
+            device.destroy_image(self.depth_image, None);
+            device.free_memory(self.depth_memory, None);
+        }
     }
     pub fn begin(
         &self,

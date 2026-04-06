@@ -31,9 +31,8 @@ use scene::Scene;
 mod window;
 use window::{Window, WindowId};
 
-use crate::{pipeline::GraphicsPipeline, render_pass::RenderPass};
+use crate::pipeline::GraphicsPipeline;
 
-mod image;
 mod pipeline;
 mod render_pass;
 
@@ -582,7 +581,9 @@ impl Renderer {
                 .begin_command_buffer(cmd, &vk::CommandBufferBeginInfo::default())?
         }
 
-        // TODO: render all scenes
+        for (_, scene) in &self.scenes {
+            scene.render(self, cmd);
+        }
 
         unsafe { self.device.end_command_buffer(cmd)? }
 
@@ -1273,8 +1274,14 @@ impl Drop for Renderer {
     fn drop(&mut self) {
         unsafe {
             self.device.device_wait_idle().ok();
-            log::info!("cleaning up renderer");
+        }
+        log::info!("cleaning up renderer");
 
+        self.scenes
+            .iter()
+            .for_each(|(_, s)| s.destroy(&self.device));
+
+        unsafe {
             self.device.destroy_command_pool(self.command_pool, None);
             self.device.destroy_device(None);
 

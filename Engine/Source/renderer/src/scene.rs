@@ -1,6 +1,6 @@
 use std::ffi::c_void;
 
-use ash::vk::{self};
+use ash::{Device, vk};
 use world::{World, components};
 
 use crate::{MAX_FRAMES_IN_FLIGHT, Renderer, Result, model, render_pass::RenderPass};
@@ -34,6 +34,15 @@ struct UboData {
     buffer: vk::Buffer,
     memory: vk::DeviceMemory,
     mapped: *mut c_void,
+}
+
+impl UboData {
+    fn destroy(&self, device: &Device) {
+        unsafe {
+            device.destroy_buffer(self.buffer, None);
+            device.free_memory(self.memory, None);
+        }
+    }
 }
 
 impl Scene {
@@ -142,6 +151,12 @@ impl Scene {
         };
         scene.proxies = scene.make_scene_proxies(renderer, world)?;
         Ok(scene)
+    }
+    pub fn destroy(&self, device: &Device) {
+        self.proxies.iter().for_each(|proxy| proxy.destroy(device));
+        self.render_pass.destroy(device);
+        self.ubo.iter().for_each(|ubo| ubo.destroy(device));
+        unsafe { device.destroy_descriptor_pool(self.descriptor_pool, None) };
     }
     // TODO: on tick, worlds should be sent to update scenes
     #[allow(unused)]
@@ -325,5 +340,8 @@ impl SceneProxy {
             ubo,
             sets,
         })
+    }
+    fn destroy(&self, device: &Device) {
+        self.ubo.iter().for_each(|ubo| ubo.destroy(device));
     }
 }
