@@ -625,7 +625,9 @@ impl Renderer {
             .wait_dst_stage_mask(std::slice::from_ref(
                 &vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
             ))
-            .command_buffers(std::slice::from_ref(&cmd));
+            .command_buffers(std::slice::from_ref(&cmd))
+            .wait_semaphores(std::slice::from_ref(&frame.image_available_semaphore))
+            .signal_semaphores(std::slice::from_ref(&frame.render_finished_semaphore));
 
         unsafe {
             self.device.queue_submit(
