@@ -18,12 +18,10 @@ pub struct CommandPool<Type: Pool> {
     pool: vk::CommandPool,
     /// The queue commands will be submitted to
     queue: vk::Queue,
-    /// The flags used to create the command pool
-    flags: vk::CommandPoolCreateFlags,
     pool_type: PhantomData<Type>,
 }
 
-trait Pool {
+pub trait Pool {
     fn get_index(families: &QueueFamilyIndices) -> u32;
     fn get_queue(queues: &Queues) -> vk::Queue;
 }
@@ -77,7 +75,6 @@ impl<Type: Pool> CommandPool<Type> {
         Ok(Self {
             pool,
             queue,
-            flags,
             pool_type: PhantomData,
         })
     }
@@ -139,9 +136,12 @@ impl CommandBuffer {
         unsafe { device.queue_submit(self.queue, std::slice::from_ref(&submit_info), fence)? };
         Ok(())
     }
-    pub fn submit_default(&self, device: &Device) -> Result<()> {
+    pub fn end_and_submit(&self, device: &Device) -> Result<()> {
         let info = vk::SubmitInfo::default().command_buffers(std::slice::from_ref(&self.buff));
-        unsafe { device.queue_submit(self.queue, std::slice::from_ref(&info), vk::Fence::null())? };
+        unsafe {
+            device.end_command_buffer(self.buff)?;
+            device.queue_submit(self.queue, std::slice::from_ref(&info), vk::Fence::null())?;
+        };
         Ok(())
     }
 }

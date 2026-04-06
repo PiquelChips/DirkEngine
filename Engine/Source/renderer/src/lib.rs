@@ -962,7 +962,7 @@ impl Renderer {
         }
 
         self.generate_mipmaps(&cmd, image, *tex.width(), *tex.height(), mip_levels)?;
-        cmd.submit_default(&self.device)?;
+        cmd.end_and_submit(&self.device)?;
 
         unsafe {
             self.device.destroy_buffer(staging_buf, None);
@@ -1210,7 +1210,7 @@ impl Renderer {
         };
         unsafe { self.device.cmd_copy_buffer(cmd.raw(), src, dst, &[region]) };
 
-        cmd.submit_default(&self.device)?;
+        cmd.end_and_submit(&self.device)?;
         Ok(())
     }
     fn create_buffer(
