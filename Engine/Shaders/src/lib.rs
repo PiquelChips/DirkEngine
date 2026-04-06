@@ -17,7 +17,7 @@ impl Shader {
     /// Returns the code but in blocks of u32
     pub fn code_as_u32(&self) -> Vec<u32> {
         assert!(
-            self.code.len() % 4 == 0,
+            self.code.len().is_multiple_of(4),
             "SPIR-V size must be a multiple of 4"
         );
         self.code
