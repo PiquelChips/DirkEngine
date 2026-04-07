@@ -125,7 +125,7 @@ impl<T: Event> Consumer<T> {
     }
 
     /// Returns an iterator that drains all currently pending events.
-    pub fn consume_all(&self) -> impl Iterator<Item = T> + '_ {
+    pub fn consume_all(&self) -> impl Iterator<Item = T> {
         std::iter::from_fn(|| self.receiver.try_recv().ok())
     }
 }
