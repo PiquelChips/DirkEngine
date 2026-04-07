@@ -1,7 +1,9 @@
+use events::Event;
+use macros::Event;
 use winit::window::WindowId;
 
 /// All platform events the engine may need to react to.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Event)]
 pub enum PlatformEvent {
     /// The OS is asking us to close this window.
     WindowCloseRequested { id: WindowId },

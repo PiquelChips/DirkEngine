@@ -10,16 +10,24 @@ use winit::{
 
 use crate::{Window, event::PlatformEvent};
 
-#[derive(Default)]
 pub struct PlatformHandler {
     can_create_surfaces: bool,
     windows: HashMap<WindowId, Window>,
     main_window: Option<WindowId>,
-    /// Events accumulated during this tick, drained by Platform::tick.
-    pub pending_events: Vec<PlatformEvent>,
+
+    pub dispatcher: events::Dispatcher<PlatformEvent>,
 }
 
 impl PlatformHandler {
+    pub fn new(events: &mut events::EventManager) -> Self {
+        let dispatcher = events.register();
+        Self {
+            can_create_surfaces: false,
+            windows: HashMap::new(),
+            main_window: None,
+            dispatcher,
+        }
+    }
     fn create_window(&mut self, event_loop: &dyn ActiveEventLoop) -> anyhow::Result<WindowId> {
         #[allow(unused_mut)]
         let mut window_attributes = WindowAttributes::default()
@@ -68,14 +76,14 @@ impl ApplicationHandler for PlatformHandler {
                 debug!("Close requested for Window={id:?}");
                 self.windows.remove(&id);
                 // Push an event — let the engine decide what to do.
-                self.pending_events
-                    .push(PlatformEvent::WindowCloseRequested { id });
+                self.dispatcher
+                    .dispatch(PlatformEvent::WindowCloseRequested { id });
             }
             WindowEvent::SurfaceResized(size) => {
                 if let Some(window) = self.windows.get_mut(&id) {
                     window.resize(size);
                 }
-                self.pending_events.push(PlatformEvent::WindowResized {
+                self.dispatcher.dispatch(PlatformEvent::WindowResized {
                     id,
                     width: size.width,
                     height: size.height,
@@ -90,15 +98,13 @@ impl ApplicationHandler for PlatformHandler {
                 if let Some(w) = self.windows.get_mut(&id) {
                     w.focused(focused);
                 }
-                self.pending_events
-                    .push(PlatformEvent::WindowFocusChanged { id, focused });
+                self.dispatcher.dispatch(PlatformEvent::WindowFocusChanged { id, focused });
             }
             WindowEvent::Occluded(occluded) => {
                 if let Some(w) = self.windows.get_mut(&id) {
                     w.set_occluded(occluded);
                 }
-                self.pending_events
-                    .push(PlatformEvent::WindowOccluded { id, occluded });
+                self.dispatcher.dispatch(PlatformEvent::WindowOccluded { id, occluded });
                 }
             WindowEvent::ModifiersChanged(_modifiers) => {
             /*

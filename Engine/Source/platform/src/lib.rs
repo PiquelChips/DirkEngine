@@ -31,9 +31,9 @@ pub struct Platform {
 }
 
 impl Platform {
-    pub fn init() -> Result<Self> {
+    pub fn init(events: &mut events::EventManager) -> Result<Self> {
         let mut platform = Self {
-            handler: PlatformHandler::default(),
+            handler: PlatformHandler::new(events),
             event_loop: EventLoop::new().expect("failed to create winit event loop"),
         };
 
@@ -55,7 +55,7 @@ impl Platform {
     }
     /// Process pending OS events without blocking.
     /// Returns the events that occurred this tick for the engine to handle.
-    pub fn tick(&mut self, _delta_time: f32) -> Result<Vec<PlatformEvent>> {
+    pub fn tick(&mut self, _delta_time: f32) {
         match self
             .event_loop
             .pump_app_events(Some(Duration::ZERO), &mut self.handler)
@@ -63,14 +63,13 @@ impl Platform {
             PumpStatus::Exit(code) => {
                 info!("Event loop exited with code {code}");
                 // Treat a forced OS exit like a window close.
-                Ok(vec![PlatformEvent::WindowCloseRequested {
-                    id: self.handler.main_window().id(),
-                }])
+                self.handler
+                    .dispatcher
+                    .dispatch(PlatformEvent::WindowCloseRequested {
+                        id: self.handler.main_window().id(),
+                    })
             }
-            PumpStatus::Continue => {
-                // Drain and return whatever the handler collected.
-                Ok(std::mem::take(&mut self.handler.pending_events))
-            }
+            PumpStatus::Continue => {}
         }
     }
 

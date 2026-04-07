@@ -17,8 +17,8 @@ impl Engine {
         let logger = logging::Logger::new(true, true, true);
         logging::init(logger);
 
-        let event_manager = events::EventManager::new();
-        let platform = platform::Platform::init().context("platform init")?;
+        let mut event_manager = events::EventManager::new();
+        let platform = platform::Platform::init(&mut event_manager).context("platform init")?;
 
         /* A rough idea of the flow of the C++ Engine
          *
@@ -42,29 +42,15 @@ impl Engine {
         })
     }
     pub fn tick(&mut self) -> anyhow::Result<bool> {
+        let delta_time = self.capture_delta_time();
+
         if self.is_requesting_exit() {
             return Ok(false);
         }
+
         self.event_manager.dispatch_all();
 
-        let delta_time = self.capture_delta_time();
-        std::thread::sleep(std::time::Duration::from_millis(10));
-
-        // Process platform events and react to each one.
-        let events = self.platform.tick(delta_time).context("ticking platform")?;
-        for event in events {
-            match event {
-                PlatformEvent::WindowCloseRequested { .. } => {
-                    self.exit(None);
-                    return Ok(false);
-                }
-                PlatformEvent::WindowResized { .. } => {
-                    // TODO: renderer resize window
-                }
-                PlatformEvent::WindowFocusChanged { .. } => { /* pause/unpause logic */ }
-                PlatformEvent::WindowOccluded { .. } => { /* skip rendering */ }
-            }
-        }
+        self.platform.tick(delta_time);
 
         if self.is_requesting_exit() {
             return Ok(false);
