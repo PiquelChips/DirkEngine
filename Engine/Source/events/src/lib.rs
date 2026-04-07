@@ -43,6 +43,14 @@ impl EventManager {
         );
         Consumer { receiver }
     }
+    /// Drains all producers and forwards their pending events to matching subscribers.
+    /// Call this once per frame / tick in your engine loop.
+    pub fn dispatch_all(&self) {
+        for producer in &self.producers {
+            producer.forward_pending(&self.subscribers);
+        }
+    }
+}
 
 /// The Type Erasure Trait
 /// Allows the EventManager to forward pending events without knowing `T`.
@@ -64,6 +72,17 @@ struct TypedProducer<T: Event> {
 
 impl<T: Event> AnyProducer for TypedProducer<T> {
     fn forward_pending(&self, subscribers: &HashMap<TypeId, Subscriber>) {
+        let Some(sub) = subscribers.get(&self.type_id) else {
+            return;
+        };
+        let Some(sender) = sub.sender.downcast_ref::<Sender<T>>() else {
+            return;
+        };
+
+        while let Ok(event) = self.receiver.try_recv() {
+            // Ignore send errors: it just means the Consumer was dropped.
+            let _ = sender.send(event);
+        }
     }
 }
 
@@ -80,8 +99,28 @@ pub struct Dispatcher<T: Event> {
     sender: Sender<T>,
 }
 
+impl<T: Event> Dispatcher<T> {
+    /// Queues an event to be forwarded to subscribers.
+    pub fn dispatch(&self, event: T) {
+        // Ignore send errors: it just means the EventManager was dropped.
+        let _ = self.sender.send(event);
+    }
+}
+
 /// This struct is created by the event manager.
 /// It can consume events that are sent by the event manager.
 pub struct Consumer<T: Event> {
     receiver: Receiver<T>,
+}
+
+impl<T: Event> Consumer<T> {
+    /// Returns the next pending event, or `None` if the queue is empty.
+    pub fn try_consume(&self) -> Option<T> {
+        self.receiver.try_recv().ok()
+    }
+
+    /// Returns an iterator that drains all currently pending events.
+    pub fn consume_all(&self) -> impl Iterator<Item = T> + '_ {
+        std::iter::from_fn(|| self.receiver.try_recv().ok())
+    }
 }
