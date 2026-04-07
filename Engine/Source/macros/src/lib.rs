@@ -29,6 +29,7 @@ fn derive_event_enum(input: &DeriveInput, data: &DataEnum) -> proc_macro::TokenS
                 // Get all field names: { system, source, .. }
                 let idents = fields.named.iter().map(|f| &f.ident);
                 quote! {
+                    #[allow(unused_variables)]
                     Self::#var_name { #(#idents,)* .. } => format!(#message_format),
                 }
             }
@@ -43,11 +44,13 @@ fn derive_event_enum(input: &DeriveInput, data: &DataEnum) -> proc_macro::TokenS
 
                 // This requires the user to use {0} in their message string
                 quote! {
+                    #[allow(unused_variables)]
                     Self::#var_name ( #(#idents,)* .. ) => format!(#message_format),
                 }
             }
             Fields::Unit => {
                 quote! {
+                    #[allow(unused_variables)]
                     Self::#var_name => format!(#message_format),
                 }
             }
@@ -78,6 +81,7 @@ fn derive_event_struct(input: &DeriveInput, data: &DataStruct) -> proc_macro::To
             // Get all field names: { system, source, .. }
             let idents = fields.named.iter().map(|f| &f.ident);
             quote! {
+                #[allow(unused_variables)]
                 let Self { #(#idents,)* .. } = self;
                 format!(#message_format)
             }
@@ -93,6 +97,7 @@ fn derive_event_struct(input: &DeriveInput, data: &DataStruct) -> proc_macro::To
 
             // This requires the user to use {0} in their message string
             quote! {
+                #[allow(unused_variables)]
                 let ( #(#idents,)* .. ) = self;
                 format!(#message_format)
             }
