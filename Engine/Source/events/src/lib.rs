@@ -7,12 +7,12 @@ use std::{
 };
 
 /// The trait that should be implemented by every event type.
-pub trait Event: Send + 'static {}
+pub trait Event: Send + Clone + 'static {}
 
 /// The event manager struct.
 pub struct EventManager {
     producers: Vec<Box<dyn AnyProducer>>,
-    subscribers: HashMap<TypeId, Subscriber>,
+    subscribers: HashMap<TypeId, Vec<Subscriber>>,
 }
 
 impl EventManager {
@@ -35,12 +35,17 @@ impl EventManager {
     pub fn subscribe<T: Event>(&mut self) -> Consumer<T> {
         let (sender, receiver) = mpsc::channel::<T>();
 
-        self.subscribers.insert(
-            TypeId::of::<T>(),
-            Subscriber {
-                sender: Box::new(sender),
-            },
-        );
+        let type_id = TypeId::of::<T>();
+
+        if !self.subscribers.contains_key(&type_id) {
+            self.subscribers.insert(type_id, Vec::new());
+        }
+
+        let subscribers = self.subscribers.get_mut(&type_id).unwrap();
+
+        subscribers.push(Subscriber {
+            sender: Box::new(sender),
+        });
         Consumer { receiver }
     }
     /// Drains all producers and forwards their pending events to matching subscribers.
@@ -55,7 +60,7 @@ impl EventManager {
 /// The Type Erasure Trait
 /// Allows the EventManager to forward pending events without knowing `T`.
 trait AnyProducer: Send {
-    fn forward_pending(&self, subscribers: &HashMap<TypeId, Subscriber>);
+    fn forward_pending(&self, subscribers: &HashMap<TypeId, Vec<Subscriber>>);
 }
 
 /// A producer is an object that will be queried for events.
@@ -71,17 +76,19 @@ struct TypedProducer<T: Event> {
 }
 
 impl<T: Event> AnyProducer for TypedProducer<T> {
-    fn forward_pending(&self, subscribers: &HashMap<TypeId, Subscriber>) {
-        let Some(sub) = subscribers.get(&self.type_id) else {
-            return;
-        };
-        let Some(sender) = sub.sender.downcast_ref::<Sender<T>>() else {
+    fn forward_pending(&self, subscribers: &HashMap<TypeId, Vec<Subscriber>>) {
+        let Some(subscribers) = subscribers.get(&self.type_id) else {
             return;
         };
 
         while let Ok(event) = self.receiver.try_recv() {
-            // Ignore send errors: it just means the Consumer was dropped.
-            let _ = sender.send(event);
+            subscribers.iter().for_each(|sub| {
+                let Some(sender) = sub.sender.downcast_ref::<Sender<T>>() else {
+                    return;
+                };
+                // Ignore send errors: it just means the Consumer was dropped.
+                let _ = sender.send(event.clone());
+            });
         }
     }
 }
