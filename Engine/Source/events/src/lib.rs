@@ -26,7 +26,7 @@ impl EventManager {
 
         self.producers.push(Box::new(TypedProducer {
             type_id: TypeId::of::<T>(),
-            receiver: receiver,
+            receiver,
         }));
         Dispatcher { sender }
     }
