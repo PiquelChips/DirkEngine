@@ -10,6 +10,7 @@ use winit::{
 
 use crate::{Window, event::PlatformEvent};
 
+#[derive(Default)]
 pub struct PlatformHandler {
     can_create_surfaces: bool,
     windows: HashMap<WindowId, Window>,
@@ -49,17 +50,6 @@ impl PlatformHandler {
         let count = self.windows.len();
         self.windows.clear();
         debug!("Closed {count} window(s) during platform shutdown");
-    }
-}
-
-impl Default for PlatformHandler {
-    fn default() -> Self {
-        Self {
-            can_create_surfaces: false,
-            windows: HashMap::new(),
-            main_window: None,
-            pending_events: Vec::new(),
-        }
     }
 }
 

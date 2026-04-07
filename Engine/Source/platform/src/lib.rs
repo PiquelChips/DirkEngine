@@ -18,12 +18,11 @@ mod event;
 mod handler;
 mod window;
 pub use errors::Error;
+pub use event::PlatformEvent;
 pub use window::Window;
 
 use errors::Result;
 use handler::PlatformHandler;
-
-use crate::event::PlatformEvent;
 
 /// The main Platform struct that is initialized by the engine.
 pub struct Platform {
@@ -56,7 +55,7 @@ impl Platform {
     }
     /// Process pending OS events without blocking.
     /// Returns the events that occurred this tick for the engine to handle.
-    pub fn tick(&mut self) -> Result<Vec<PlatformEvent>> {
+    pub fn tick(&mut self, _delta_time: f32) -> Result<Vec<PlatformEvent>> {
         match self
             .event_loop
             .pump_app_events(Some(Duration::ZERO), &mut self.handler)

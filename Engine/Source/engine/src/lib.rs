@@ -1,6 +1,7 @@
 use std::time::Instant;
 
 use anyhow::Context;
+use platform::PlatformEvent;
 
 /// This is the main struct that holds global engine state.
 pub struct Engine {
@@ -47,17 +48,15 @@ impl Engine {
         std::thread::sleep(std::time::Duration::from_millis(10));
 
         // Process platform events and react to each one.
-        let events = self.platform.tick().context("ticking platform")?;
+        let events = self.platform.tick(delta_time).context("ticking platform")?;
         for event in events {
             match event {
                 PlatformEvent::WindowCloseRequested { .. } => {
                     self.exit(None);
                     return Ok(false);
                 }
-                PlatformEvent::WindowResized { id, width, height } => {
-                    self.renderer
-                        .resize_window(id.into_raw(), width, height)
-                        .context("resizing window")?;
+                PlatformEvent::WindowResized { .. } => {
+                    // TODO: renderer resize window
                 }
                 PlatformEvent::WindowFocusChanged { .. } => { /* pause/unpause logic */ }
                 PlatformEvent::WindowOccluded { .. } => { /* skip rendering */ }
