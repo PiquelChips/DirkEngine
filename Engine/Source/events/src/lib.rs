@@ -1,13 +1,13 @@
 //! This crate the engine's event system.
 
 use std::{
-    any::TypeId,
+    any::{Any, TypeId},
     collections::HashMap,
     sync::mpsc::{self, Receiver, Sender},
 };
 
 /// The trait that should be implemented by every event type.
-pub trait Event {}
+pub trait Event: Send + 'static {}
 
 /// The event manager struct.
 pub struct EventManager {
@@ -23,17 +23,23 @@ impl EventManager {
         }
     }
 
-    pub fn register<T: Event>(&self) -> Dispatcher<T> {
+    pub fn register<T: Event>(&mut self) -> Dispatcher<T> {
         let (sender, receiver) = mpsc::channel::<T>();
 
-        self.producers.push(Producer { receiver });
+        self.producers.push(Producer {
+            receiver: Box::new(receiver),
+        });
         Dispatcher { sender }
     }
-    pub fn subscribe<T: Event>(&self) -> Consumer<T> {
+    pub fn subscribe<T: Event>(&mut self) -> Consumer<T> {
         let (sender, receiver) = mpsc::channel::<T>();
 
-        self.subscribers
-            .insert(TypeId::of::<T>(), Subscriber { sender });
+        self.subscribers.insert(
+            TypeId::of::<T>(),
+            Subscriber {
+                sender: Box::new(sender),
+            },
+        );
         Consumer { receiver }
     }
 }
@@ -42,14 +48,14 @@ impl EventManager {
 /// On event collection, the event manager loops through every
 /// producer and collects pending events.
 struct Producer {
-    receiver: Receiver,
+    receiver: Box<dyn Any + Send>,
 }
 
 /// A subscriber is a sender for events.
 /// On event dispatching, will send the events through the
 /// channels of every subscriber.
 struct Subscriber {
-    sender: Sender,
+    sender: Box<dyn Any + Send>,
 }
 
 /// This struct is created by the envent manager.
