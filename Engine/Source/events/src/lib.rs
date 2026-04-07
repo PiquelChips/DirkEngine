@@ -35,11 +35,7 @@ impl EventManager {
 
         let type_id = TypeId::of::<T>();
 
-        if !self.subscribers.contains_key(&type_id) {
-            self.subscribers.insert(type_id, Vec::new());
-        }
-
-        let subscribers = self.subscribers.get_mut(&type_id).unwrap();
+        let subscribers = self.subscribers.entry(type_id).or_default();
 
         subscribers.push(Subscriber {
             sender: Box::new(sender),
