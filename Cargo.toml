@@ -4,6 +4,7 @@ members = [
     "Engine/Source/build",
     "Engine/Source/engine",
     "Engine/Source/events",
+    "Engine/Source/macros",
     "Engine/Source/logging",
     "Engine/Source/platform",
     "Engine/Source/run",
@@ -33,6 +34,7 @@ build = { path = "Engine/Source/build" }
 logging = { path = "Engine/Source/logging" }
 engine = { path = "Engine/Source/engine" }
 events = { path = "Engine/Source/events" }
+macros = { path = "Engine/Source/macros" }
 platform = { path = "Engine/Source/platform" }
 resource_manager = { path = "Engine/Source/resource_manager" }
 world = { path = "Engine/Source/world" }
@@ -43,3 +45,7 @@ winit = "0.31.0-beta.2"
 glam = "0.32"
 gltf = "1"
 shaderc = "0.10"
+
+# Macro dependencies
+syn = "2.0"
+quote = "1.0"
