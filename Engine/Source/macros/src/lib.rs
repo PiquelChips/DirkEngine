@@ -1,6 +1,9 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{Attribute, Data, DataEnum, DataStruct, DeriveInput, Fields, LitStr, parse_macro_input};
+use syn::{
+    Attribute, Data, DataEnum, DataStruct, DeriveInput, Fields, FieldsUnnamed, Ident, LitStr,
+    parse_macro_input,
+};
 
 #[proc_macro_derive(Event, attributes(event))]
 pub fn derive_event(input: TokenStream) -> TokenStream {
@@ -34,15 +37,7 @@ fn derive_event_enum(input: &DeriveInput, data: &DataEnum) -> proc_macro::TokenS
                 }
             }
             Fields::Unnamed(fields) => {
-                // For tuple variants like Error(String), we map them to 0, 1, etc.
-                let idents: Vec<_> = fields
-                    .unnamed
-                    .iter()
-                    .enumerate()
-                    .map(|(i, _)| quote::format_ident!("{}", i))
-                    .collect();
-
-                // This requires the user to use {0} in their message string
+                let idents = get_idents_from_unnamed(&message_format, fields);
                 quote! {
                     #[allow(unused_variables)]
                     Self::#var_name ( #(#idents,)* .. ) => format!(#message_format),
@@ -87,19 +82,11 @@ fn derive_event_struct(input: &DeriveInput, data: &DataStruct) -> proc_macro::To
             }
         }
         Fields::Unnamed(fields) => {
-            // For tuple variants like Error(String), we map them to 0, 1, etc.
-            let idents: Vec<_> = fields
-                .unnamed
-                .iter()
-                .enumerate()
-                .map(|(i, _)| quote::format_ident!("{}", i))
-                .collect();
-
-            // This requires the user to use {0} in their message string
+            let idents = get_idents_from_unnamed(&message_format, fields);
             quote! {
                 #[allow(unused_variables)]
                 let ( #(#idents,)* .. ) = self;
-                format!(#message_format)
+                format!(#message_format, #(#idents),*)
             }
         }
         Fields::Unit => {
@@ -133,4 +120,25 @@ fn get_message_format_from_attrs(attrs: &Vec<Attribute>) -> String {
         }
     }
     String::from("{self:?}")
+}
+
+fn get_idents_from_unnamed(format: &str, fields: &FieldsUnnamed) -> Vec<Ident> {
+    // Create the list of potential variables (_0, _1, etc.)
+    let all_idents: Vec<_> = fields
+        .unnamed
+        .iter()
+        .enumerate()
+        .map(|(i, _)| quote::format_ident!("_{}", i))
+        .collect();
+
+    // ONLY include the identifier if "{index}" appears in the message string
+    let mut idents = Vec::new();
+    for (i, ident) in all_idents.iter().enumerate() {
+        let search_pattern = format!("{{{}}}", i); // e.g., "{0}"
+        if format.contains(&search_pattern) {
+            idents.push(ident.clone());
+        }
+    }
+
+    idents
 }
