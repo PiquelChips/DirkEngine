@@ -9,7 +9,9 @@ use std::{
 mod tests;
 
 /// The trait that should be implemented by every event type.
-pub trait Event: Send + Clone + 'static {}
+pub trait Event: Send + Clone + 'static {
+    fn debug(&self) -> String;
+}
 
 /// The event manager struct.
 #[derive(Default)]
