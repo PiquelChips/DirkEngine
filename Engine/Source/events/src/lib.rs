@@ -6,6 +6,8 @@ use std::{
     sync::mpsc::{self, Receiver, Sender},
 };
 
+mod tests;
+
 /// The trait that should be implemented by every event type.
 pub trait Event: Send + Clone + 'static {}
 
