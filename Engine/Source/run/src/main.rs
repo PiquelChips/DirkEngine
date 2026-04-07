@@ -7,7 +7,7 @@ fn run() -> anyhow::Result<()> {
     engine.shutdown().context("engine shutdown")?;
 
     if let Some(err) = engine.get_exit_error() {
-        return Err(err);
+        error!("{err:?}");
     }
     Ok(())
 }
