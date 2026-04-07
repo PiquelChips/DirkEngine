@@ -10,6 +10,7 @@ use std::{
 pub trait Event: Send + Clone + 'static {}
 
 /// The event manager struct.
+#[derive(Default)]
 pub struct EventManager {
     producers: Vec<Box<dyn AnyProducer>>,
     subscribers: HashMap<TypeId, Vec<Subscriber>>,
@@ -17,10 +18,7 @@ pub struct EventManager {
 
 impl EventManager {
     pub fn new() -> Self {
-        Self {
-            producers: Vec::new(),
-            subscribers: HashMap::new(),
-        }
+        Self::default()
     }
 
     pub fn register<T: Event>(&mut self) -> Dispatcher<T> {
