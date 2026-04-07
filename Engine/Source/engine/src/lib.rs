@@ -5,6 +5,7 @@ use platform::PlatformEvent;
 
 /// This is the main struct that holds global engine state.
 pub struct Engine {
+    event_manager: events::EventManager,
     platform: platform::Platform,
     is_requesting_exit: bool,
     exit_error: Option<anyhow::Error>,
@@ -16,12 +17,12 @@ impl Engine {
         let logger = logging::Logger::new(true, true, true);
         logging::init(logger);
 
+        let event_manager = events::EventManager::new();
         let platform = platform::Platform::init().context("platform init")?;
 
         /* A rough idea of the flow of the C++ Engine
          *
          * Intialize Main Engine Objects:
-         * - EventManager
          * - Renderer
          * - World
          *
@@ -35,6 +36,7 @@ impl Engine {
         Ok(Self {
             is_requesting_exit: false,
             platform,
+            event_manager,
             exit_error: None,
             last_tick: Instant::now(),
         })
@@ -43,6 +45,7 @@ impl Engine {
         if self.is_requesting_exit() {
             return Ok(false);
         }
+        self.event_manager.dispatch_all();
 
         let delta_time = self.capture_delta_time();
         std::thread::sleep(std::time::Duration::from_millis(10));
@@ -68,8 +71,6 @@ impl Engine {
         }
 
         /*
-         * EventManager dispatch events
-         *
          * World Tick
          * Main Viewport tick
          * Render
