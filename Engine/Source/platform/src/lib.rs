@@ -65,9 +65,7 @@ impl Platform {
                 // Treat a forced OS exit like a window close.
                 self.handler
                     .dispatcher
-                    .dispatch(PlatformEvent::WindowCloseRequested {
-                        id: self.handler.main_window().id(),
-                    })
+                    .dispatch(PlatformEvent::AppExit(code))
             }
             PumpStatus::Continue => {}
         }
