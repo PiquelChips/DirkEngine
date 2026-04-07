@@ -3,6 +3,7 @@ resolver = "3"
 members = [
     "Engine/Source/build",
     "Engine/Source/engine",
+    "Engine/Source/events",
     "Engine/Source/logging",
     "Engine/Source/platform",
     "Engine/Source/run",
@@ -31,6 +32,7 @@ derive-getters = "0.5"
 build = { path = "Engine/Source/build" }
 logging = { path = "Engine/Source/logging" }
 engine = { path = "Engine/Source/engine" }
+events = { path = "Engine/Source/events" }
 platform = { path = "Engine/Source/platform" }
 resource_manager = { path = "Engine/Source/resource_manager" }
 world = { path = "Engine/Source/world" }
