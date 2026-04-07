@@ -7,7 +7,7 @@ fn run() -> anyhow::Result<()> {
     engine.shutdown().context("engine shutdown")?;
 
     if let Some(err) = engine.get_exit_error() {
-        error!("{err:?}");
+        error!("{err:#}");
     }
     Ok(())
 }
@@ -16,7 +16,7 @@ fn main() {
     match run() {
         Ok(_) => {}
         Err(err) => {
-            error!("{err:?}");
+            error!("{err:#}");
             panic!("Error: {err:#}");
         }
     }
