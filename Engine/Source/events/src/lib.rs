@@ -11,7 +11,7 @@ pub trait Event: Send + 'static {}
 
 /// The event manager struct.
 pub struct EventManager {
-    producers: Vec<Producer>,
+    producers: Vec<Box<dyn AnyProducer>>,
     subscribers: HashMap<TypeId, Subscriber>,
 }
 
@@ -26,9 +26,10 @@ impl EventManager {
     pub fn register<T: Event>(&mut self) -> Dispatcher<T> {
         let (sender, receiver) = mpsc::channel::<T>();
 
-        self.producers.push(Producer {
-            receiver: Box::new(receiver),
-        });
+        self.producers.push(Box::new(TypedProducer {
+            type_id: TypeId::of::<T>(),
+            receiver: receiver,
+        }));
         Dispatcher { sender }
     }
     pub fn subscribe<T: Event>(&mut self) -> Consumer<T> {
@@ -42,13 +43,28 @@ impl EventManager {
         );
         Consumer { receiver }
     }
+
+/// The Type Erasure Trait
+/// Allows the EventManager to forward pending events without knowing `T`.
+trait AnyProducer: Send {
+    fn forward_pending(&self, subscribers: &HashMap<TypeId, Subscriber>);
 }
 
 /// A producer is an object that will be queried for events.
 /// On event collection, the event manager loops through every
 /// producer and collects pending events.
-struct Producer {
-    receiver: Box<dyn Any + Send>,
+///
+/// This is a typed producer as it stores the actual type of the
+/// event it is producing. It is then wrapped by the [AnyProducer]
+/// trait to hide the event type from the event manager.
+struct TypedProducer<T: Event> {
+    type_id: TypeId,
+    receiver: Receiver<T>,
+}
+
+impl<T: Event> AnyProducer for TypedProducer<T> {
+    fn forward_pending(&self, subscribers: &HashMap<TypeId, Subscriber>) {
+    }
 }
 
 /// A subscriber is a sender for events.
