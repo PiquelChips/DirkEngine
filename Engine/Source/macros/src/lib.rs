@@ -8,8 +8,8 @@ pub fn derive_event(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
     match input.data {
-        Data::Enum(ref data) => derive_event_enum(&input, &data),
-        Data::Struct(ref data) => derive_event_struct(&input, &data),
+        Data::Enum(ref data) => derive_event_enum(&input, data),
+        Data::Struct(ref data) => derive_event_struct(&input, data),
         _ => panic!("can only derive event from struct or enum"),
     }
 }
