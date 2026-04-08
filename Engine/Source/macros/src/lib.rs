@@ -37,7 +37,7 @@ fn derive_event_enum(input: &DeriveInput, data: &DataEnum) -> proc_macro::TokenS
                 }
             }
             Fields::Unnamed(fields) => {
-                let idents = get_idents_from_unnamed(&message_format, fields);
+                let idents = get_idents_for_unnamed(&message_format, fields);
                 quote! {
                     #[allow(unused_variables)]
                     Self::#var_name ( #(#idents,)* .. ) => format!(#message_format),
@@ -82,7 +82,7 @@ fn derive_event_struct(input: &DeriveInput, data: &DataStruct) -> proc_macro::To
             }
         }
         Fields::Unnamed(fields) => {
-            let idents = get_idents_from_unnamed(&message_format, fields);
+            let idents = get_idents_for_unnamed(&message_format, fields);
             quote! {
                 #[allow(unused_variables)]
                 let ( #(#idents,)* .. ) = self;
@@ -122,7 +122,7 @@ fn get_message_format_from_attrs(attrs: &Vec<Attribute>) -> String {
     String::from("{self:?}")
 }
 
-fn get_idents_from_unnamed(format: &str, fields: &FieldsUnnamed) -> Vec<Ident> {
+fn get_idents_for_unnamed(format: &str, fields: &FieldsUnnamed) -> Vec<Ident> {
     // Create the list of potential variables (_0, _1, etc.)
     let all_idents: Vec<_> = fields
         .unnamed
