@@ -48,9 +48,9 @@ impl EventManager {
     }
     /// Drains all producers and forwards their pending events to matching subscribers.
     /// Call this once per frame / tick in your engine loop.
-    pub fn dispatch_all(&self) {
+    pub fn dispatch_all(&mut self) {
         for producer in &self.producers {
-            producer.forward_pending(&self.subscribers);
+            producer.forward_pending(&mut self.subscribers);
         }
     }
 }
@@ -58,7 +58,7 @@ impl EventManager {
 /// The Type Erasure Trait
 /// Allows the EventManager to forward pending events without knowing `T`.
 trait AnyProducer: Send {
-    fn forward_pending(&self, subscribers: &HashMap<TypeId, Vec<Subscriber>>);
+    fn forward_pending(&self, subscribers: &mut HashMap<TypeId, Vec<Subscriber>>);
 }
 
 /// A producer is an object that will be queried for events.
@@ -74,18 +74,17 @@ struct TypedProducer<T: Event> {
 }
 
 impl<T: Event> AnyProducer for TypedProducer<T> {
-    fn forward_pending(&self, subscribers: &HashMap<TypeId, Vec<Subscriber>>) {
-        let Some(subscribers) = subscribers.get(&self.type_id) else {
+    fn forward_pending(&self, subscribers: &mut HashMap<TypeId, Vec<Subscriber>>) {
+        let Some(subscribers) = subscribers.get_mut(&self.type_id) else {
             return;
         };
 
         while let Ok(event) = self.receiver.try_recv() {
-            subscribers.iter().for_each(|sub| {
+            subscribers.retain(|sub| {
                 let Some(sender) = sub.sender.downcast_ref::<Sender<T>>() else {
-                    return;
+                    return true;
                 };
-                // Ignore send errors: it just means the Consumer was dropped.
-                let _ = sender.send(event.clone());
+                sender.send(event.clone()).is_ok()
             });
         }
     }
