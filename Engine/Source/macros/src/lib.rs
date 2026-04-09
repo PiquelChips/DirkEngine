@@ -85,7 +85,7 @@ fn derive_event_struct(input: &DeriveInput, data: &DataStruct) -> proc_macro::To
             let idents = get_idents_from_unnamed(&message_format, fields);
             quote! {
                 #[allow(unused_variables)]
-                let ( #(#idents,)* .. ) = self;
+                let Self ( #(#idents,)* .. ) = self;
                 format!(#message_format, #(#idents),*)
             }
         }
