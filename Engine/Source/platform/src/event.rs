@@ -44,3 +44,14 @@ pub enum WindowEvent {
         theme: winit::window::Theme,
     },
 }
+
+impl WindowEvent {
+    pub fn id(&self) -> &WindowId {
+        match self {
+            Self::Resized { id, .. } => id,
+            Self::Occluded { id, .. } => id,
+            Self::FocusChanged { id, .. } => id,
+            Self::ThemeChanged { id, .. } => id,
+        }
+    }
+}
