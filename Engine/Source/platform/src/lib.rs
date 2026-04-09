@@ -18,7 +18,7 @@ mod event;
 mod handler;
 mod window;
 pub use errors::Error;
-pub use event::PlatformEvent;
+pub use event::*;
 pub use window::Window;
 
 use errors::Result;
@@ -28,6 +28,8 @@ use handler::PlatformHandler;
 pub struct Platform {
     handler: PlatformHandler,
     event_loop: EventLoop,
+
+    exit_dispatcher: events::Dispatcher<event::AppExit>,
 }
 
 impl Platform {
@@ -35,6 +37,7 @@ impl Platform {
         let mut platform = Self {
             handler: PlatformHandler::new(events),
             event_loop: EventLoop::new().expect("failed to create winit event loop"),
+            exit_dispatcher: events.register(),
         };
 
         // Pump until `can_create_surfaces` fires and the main window exists.
@@ -63,9 +66,7 @@ impl Platform {
             PumpStatus::Exit(code) => {
                 info!("Event loop exited with code {code}");
                 // Treat a forced OS exit like a window close.
-                self.handler
-                    .dispatcher
-                    .dispatch(PlatformEvent::AppExit(code))
+                self.exit_dispatcher.dispatch(event::AppExit(code))
             }
             PumpStatus::Continue => {}
         }

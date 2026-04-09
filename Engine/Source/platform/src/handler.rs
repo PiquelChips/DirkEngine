@@ -15,7 +15,7 @@ pub struct PlatformHandler {
     windows: HashMap<WindowId, Window>,
     main_window: Option<WindowId>,
 
-    pub dispatcher: events::Dispatcher<PlatformEvent>,
+    dispatcher: events::Dispatcher<PlatformEvent>,
 }
 
 impl PlatformHandler {

@@ -1,7 +1,6 @@
 use std::time::Instant;
 
 use anyhow::Context;
-use platform::PlatformEvent;
 
 /// This is the main struct that holds global engine state.
 pub struct Engine {
@@ -11,7 +10,7 @@ pub struct Engine {
     exit_error: Option<anyhow::Error>,
     last_tick: Instant,
 
-    platform_consumer: events::Consumer<platform::PlatformEvent>,
+    exit_consumer: events::Consumer<platform::AppExit>,
 }
 
 impl Engine {
@@ -22,7 +21,7 @@ impl Engine {
         let mut event_manager = events::EventManager::new();
         let platform = platform::Platform::init(&mut event_manager).context("platform init")?;
 
-        let platform_consumer = event_manager.subscribe();
+        let exit_consumer = event_manager.subscribe();
 
         /* A rough idea of the flow of the C++ Engine
          *
@@ -44,7 +43,7 @@ impl Engine {
             exit_error: None,
             last_tick: Instant::now(),
 
-            platform_consumer,
+            exit_consumer,
         })
     }
     pub fn tick(&mut self) -> anyhow::Result<bool> {
@@ -90,12 +89,7 @@ impl Engine {
         Ok(())
     }
     fn process_events(&mut self) {
-        let exit = self
-            .platform_consumer
-            .consume_all()
-            .find(|event| matches!(event, PlatformEvent::AppExit(_)));
-
-        if let Some(PlatformEvent::AppExit(_)) = exit {
+        if let Some(platform::AppExit(_)) = self.exit_consumer.try_consume() {
             self.exit(None);
         }
     }
