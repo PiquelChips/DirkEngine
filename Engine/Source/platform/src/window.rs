@@ -1,4 +1,3 @@
-use log::debug;
 use winit::{
     dpi::PhysicalSize,
     raw_window_handle::{HasDisplayHandle, HasWindowHandle},

@@ -15,7 +15,7 @@ use crate::{
 
 pub struct PlatformHandler {
     can_create_surfaces: bool,
-    windows: HashMap<WindowId, Window>,
+    pub windows: HashMap<WindowId, Window>,
     main_window: Option<WindowId>,
 
     /// Dispatch [PlatformEvent]

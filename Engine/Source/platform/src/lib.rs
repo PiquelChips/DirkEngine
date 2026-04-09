@@ -58,7 +58,7 @@ impl Platform {
     }
     /// Process pending OS events without blocking.
     /// Returns the events that occurred this tick for the engine to handle.
-    pub fn tick(&mut self, _delta_time: f32) {
+    pub fn tick(&mut self, delta_time: f32) {
         match self
             .event_loop
             .pump_app_events(Some(Duration::ZERO), &mut self.handler)
@@ -66,10 +66,16 @@ impl Platform {
             PumpStatus::Exit(code) => {
                 info!("Event loop exited with code {code}");
                 // Treat a forced OS exit like a window close.
-                self.exit_dispatcher.dispatch(event::AppExit(code))
+                self.exit_dispatcher.dispatch(event::AppExit(code));
+                return;
             }
             PumpStatus::Continue => {}
         }
+
+        self.handler
+            .windows
+            .iter_mut()
+            .for_each(|(_, window)| window.tick(delta_time));
     }
 
     pub fn main_window(&self) -> &Window {
