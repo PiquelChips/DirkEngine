@@ -8,24 +8,30 @@ use winit::{
     window::{WindowAttributes, WindowId},
 };
 
-use crate::{Window, event::PlatformEvent};
+use crate::{
+    Window,
+    event::{PlatformEvent, WindowEvent as PlatformWindowEvent},
+};
 
 pub struct PlatformHandler {
     can_create_surfaces: bool,
     windows: HashMap<WindowId, Window>,
     main_window: Option<WindowId>,
 
-    dispatcher: events::Dispatcher<PlatformEvent>,
+    /// Dispatch [PlatformEvent]
+    platform_dispatcher: events::Dispatcher<PlatformEvent>,
+    /// Dispatch [PlatformWindowEvent]
+    window_dispatcher: events::Dispatcher<PlatformWindowEvent>,
 }
 
 impl PlatformHandler {
     pub fn new(events: &mut events::EventManager) -> Self {
-        let dispatcher = events.register();
         Self {
             can_create_surfaces: false,
             windows: HashMap::new(),
             main_window: None,
-            dispatcher,
+            platform_dispatcher: events.register(),
+            window_dispatcher: events.register(),
         }
     }
     fn create_window(&mut self, event_loop: &dyn ActiveEventLoop) -> anyhow::Result<WindowId> {
@@ -72,39 +78,30 @@ impl ApplicationHandler for PlatformHandler {
 
     fn window_event(&mut self, _loop: &dyn ActiveEventLoop, id: WindowId, event: WindowEvent) {
         match event {
-            WindowEvent::CloseRequested | WindowEvent::Destroyed => {
+            WindowEvent::CloseRequested => {
                 debug!("Close requested for Window={id:?}");
                 self.windows.remove(&id);
-                // Push an event — let the engine decide what to do.
-                self.dispatcher
-                    .dispatch(PlatformEvent::WindowCloseRequested { id });
+                self.platform_dispatcher.dispatch(PlatformEvent::WindowCloseRequested { id });
+            }
+            WindowEvent::Destroyed => {
+                debug!("Window {id:?} destroyed");
+                self.platform_dispatcher .dispatch(PlatformEvent::WindowDestroyed { id });
             }
             WindowEvent::SurfaceResized(size) => {
-                if let Some(window) = self.windows.get_mut(&id) {
-                    window.resize(size);
-                }
-                self.dispatcher.dispatch(PlatformEvent::WindowResized {
+                self.window_dispatcher.dispatch(PlatformWindowEvent::Resized {
                     id,
                     width: size.width,
                     height: size.height,
                 });
             }
             WindowEvent::ThemeChanged(theme) => {
-                if let Some(window) = self.windows.get_mut(&id) {
-                    window.set_draw_theme(theme);
-                }
+                self.window_dispatcher.dispatch(PlatformWindowEvent::ThemeChanged { id, theme });
             }
             WindowEvent::Focused(focused) => {
-                if let Some(w) = self.windows.get_mut(&id) {
-                    w.focused(focused);
-                }
-                self.dispatcher.dispatch(PlatformEvent::WindowFocusChanged { id, focused });
+                self.window_dispatcher.dispatch(PlatformWindowEvent::FocusChanged { id, focused });
             }
             WindowEvent::Occluded(occluded) => {
-                if let Some(w) = self.windows.get_mut(&id) {
-                    w.set_occluded(occluded);
-                }
-                self.dispatcher.dispatch(PlatformEvent::WindowOccluded { id, occluded });
+                self.window_dispatcher.dispatch(PlatformWindowEvent::Occluded { id, occluded });
                 }
             WindowEvent::ModifiersChanged(_modifiers) => {
             /*

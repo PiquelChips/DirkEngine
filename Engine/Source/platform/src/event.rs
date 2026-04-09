@@ -6,19 +6,41 @@ use winit::window::WindowId;
 #[event("App Exit with code {0}")]
 pub struct AppExit(pub i32);
 
-/// All platform events the engine may need to react to.
+/// All platform events.
+/// These are specific to global platform stuff. No input or window
+/// specific events are listed here.
+/// The only exeptions are window closing and creating events.
 #[derive(Debug, Clone, Event)]
 pub enum PlatformEvent {
+    /// Window created event.
+    WindowCreated { id: WindowId },
     /// The OS is asking us to close this window.
+    /// This should be when the renderer window is destroyed.
     WindowCloseRequested { id: WindowId },
-    /// The window surface was resized (e.g. user dragged the edge).
-    WindowResized {
+    /// The window has been finally destroyed. This event should not be
+    /// used as all window related objects should have been destroyed on
+    /// [Self::WindowCloseRequested].
+    WindowDestroyed { id: WindowId },
+}
+
+/// All window specific events.
+#[derive(Debug, Clone, Event)]
+pub enum WindowEvent {
+    Resized {
         id: WindowId,
         width: u32,
         height: u32,
     },
-    /// The window gained or lost focus.
-    WindowFocusChanged { id: WindowId, focused: bool },
-    /// The window is hidden or fully covered.
-    WindowOccluded { id: WindowId, occluded: bool },
+    FocusChanged {
+        id: WindowId,
+        focused: bool,
+    },
+    Occluded {
+        id: WindowId,
+        occluded: bool,
+    },
+    ThemeChanged {
+        id: WindowId,
+        theme: winit::window::Theme,
+    },
 }
