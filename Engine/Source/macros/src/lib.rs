@@ -40,7 +40,7 @@ fn derive_event_enum(input: &DeriveInput, data: &DataEnum) -> proc_macro::TokenS
                 let idents = get_idents_for_unnamed(&message_format, fields);
                 quote! {
                     #[allow(unused_variables)]
-                    Self::#var_name ( #(#idents,)* .. ) => format!(#message_format),
+                    Self::#var_name ( #(#idents,)* .. ) => format!(#message_format, #(#idents),*),
                 }
             }
             Fields::Unit => {
