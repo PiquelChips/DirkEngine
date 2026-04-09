@@ -100,6 +100,7 @@ struct Subscriber {
 
 /// This struct is created by the envent manager.
 /// It allows dispatching of events to subscribers.
+#[derive(Clone)]
 pub struct Dispatcher<T: Event> {
     sender: Sender<T>,
 }
