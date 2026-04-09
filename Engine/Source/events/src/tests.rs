@@ -168,6 +168,10 @@ enum NoAttrEnum {
     Beta(i32),
 }
 
+#[derive(Debug, Clone, Event)]
+#[event("empty enum")]
+enum EmptyEnum {}
+
 // =========================================================================
 // Section 2 – Derive-macro: `debug()` output assertions
 // =========================================================================

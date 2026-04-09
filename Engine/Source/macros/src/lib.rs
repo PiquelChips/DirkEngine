@@ -52,12 +52,22 @@ fn derive_event_enum(input: &DeriveInput, data: &DataEnum) -> proc_macro::TokenS
         }
     });
 
+    let mut content = quote! {
+        match self {
+            #(#arms)*
+        }
+    };
+
+    if data.variants.len() == 0 {
+        content = quote! {
+            format!("{self:?}")
+        }
+    }
+
     let expanded = quote! {
         impl Event for #name {
             fn debug(&self) -> String {
-                match self {
-                    #(#arms)*
-                }
+                #content
             }
         }
     };
