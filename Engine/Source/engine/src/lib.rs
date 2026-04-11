@@ -1,22 +1,25 @@
 use std::time::Instant;
 
 use anyhow::Context;
+use logging::Logger;
 
 /// This is the main struct that holds global engine state.
 pub struct Engine {
+    exit_consumer: events::Consumer<platform::AppExit>,
     event_manager: events::EventManager,
+
     platform: platform::Platform,
     is_requesting_exit: bool,
     exit_error: Option<anyhow::Error>,
     last_tick: Instant,
 
-    exit_consumer: events::Consumer<platform::AppExit>,
+    #[allow(unused)]
+    logger: Logger,
 }
 
 impl Engine {
     pub fn init() -> anyhow::Result<Self> {
-        let logger = logging::Logger::new(true, true, true);
-        logging::init(logger);
+        let logger = logging::Logger::new(true).context("initialising logger")?;
 
         let mut event_manager = events::EventManager::new();
         let platform = platform::Platform::init(&mut event_manager).context("platform init")?;
@@ -44,6 +47,7 @@ impl Engine {
             last_tick: Instant::now(),
 
             exit_consumer,
+            logger,
         })
     }
     pub fn tick(&mut self) -> anyhow::Result<bool> {
