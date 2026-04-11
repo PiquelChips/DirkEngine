@@ -32,6 +32,7 @@ derive-getters = "0.5"
 
 # Engine modules
 build = { path = "Engine/Source/build" }
+utils = { path = "Engine/Source/utils" }
 logging = { path = "Engine/Source/logging" }
 engine = { path = "Engine/Source/engine" }
 events = { path = "Engine/Source/events" }
