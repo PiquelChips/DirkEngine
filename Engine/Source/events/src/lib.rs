@@ -117,6 +117,14 @@ pub struct Consumer<T: Event> {
     receiver: Receiver<T>,
 }
 
+impl<T: Event> Clone for Consumer<T> {
+    /// Calls on the event manager to create a new consumer.
+    /// Returns that.
+    fn clone(&self) -> Self {
+        todo!("Clone Consumer")
+    }
+}
+
 impl<T: Event> Consumer<T> {
     /// Returns the next pending event, or `None` if the queue is empty.
     pub fn try_consume(&self) -> Option<T> {
