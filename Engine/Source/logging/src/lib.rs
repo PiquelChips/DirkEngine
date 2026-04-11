@@ -4,25 +4,9 @@
 //!
 //! ## Usage
 //!
-//! **Game build** (no `editor` feature):
 //! ```rust
-//! logging::Logger::builder()
-//!     .verbose(false)
-//!     .with_files("logs/")
-//!     .init()
-//!     .expect("failed to init logger");
-//!
-//! tracing::info!(target: "Engine", "Engine started");
-//! tracing::warn!(target: "Rendering", "Shader recompile triggered");
-//! ```
-//!
-//! **Editor build** (`editor` feature enabled):
-//! ```rust
-//! let logger = logging::Logger::builder()
-//!     .verbose(true)
-//!     .with_files("logs/")
-//!     .init()
-//!     .expect("failed to init logger");
+//! // create verbose logger
+//! let logger = logging::Logger::new(true).unwrap();
 //!
 //! // Later, in the log-panel UI:
 //! let render_errors = logger
@@ -165,7 +149,7 @@ impl Logger {
     /// # Example
     /// ```rust
     /// # use logging::LogLevel;
-    /// # let logger = logging::Logger::builder().init().unwrap();
+    /// # let logger = logging::Logger::new(false).unwrap();
     /// let recent_errors = logger
     ///     .query()
     ///     .min_level(LogLevel::Error)

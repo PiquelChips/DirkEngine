@@ -19,7 +19,7 @@ type Filter = Box<dyn Fn(&LogEntry) -> bool + Send + Sync>;
 /// # Example
 /// ```rust
 /// # use logging::LogLevel;
-/// # let logger = logging::Logger::builder().init().unwrap();
+/// # let logger = logging::Logger::new(false).unwrap();
 /// # let start_of_frame = time::OffsetDateTime::UNIX_EPOCH;
 /// let errors = logger
 ///     .query()
