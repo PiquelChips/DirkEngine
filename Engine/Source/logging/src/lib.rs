@@ -72,7 +72,7 @@ mod store;
 #[cfg(test)]
 mod tests;
 
-pub use filter::LogFilter as Filter;
+pub use filter::{LogFilter as Filter, StoreFilter};
 use thiserror::Error;
 use tracing_subscriber::{
     Registry, filter::LevelFilter, layer::SubscriberExt, util::SubscriberInitExt,
@@ -83,7 +83,7 @@ use time::OffsetDateTime;
 
 use crate::layers::{console::ConsoleLayer, file::FileLayer, storage::StorageLayer};
 #[cfg(editor)]
-use crate::{filter::StoreFilter, store::LogStore};
+use crate::store::LogStore;
 #[cfg(editor)]
 use std::sync::Arc;
 

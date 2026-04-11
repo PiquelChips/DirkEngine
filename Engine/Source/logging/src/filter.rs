@@ -261,16 +261,6 @@ impl LogFilter {
     /// execute the query against the live log store.
     ///
     /// Typically called indirectly via [`Logger::query`](crate::Logger::query).
-    ///
-    /// # Example
-    /// ```rust,ignore
-    /// use std::sync::Arc;
-    /// use logging::{Filter, LogLevel};
-    /// let results = Filter::new()
-    ///     .min_level(LogLevel::Error)
-    ///     .with_store(Arc::clone(&store))
-    ///     .execute();
-    /// ```
     #[cfg(editor)]
     pub fn with_store(self, store: Arc<LogStore>) -> StoreFilter {
         StoreFilter {
