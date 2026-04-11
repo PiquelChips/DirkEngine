@@ -9,6 +9,7 @@ version.workspace = true
 
 [dependencies]
 tracing.workspace = true
+tracing-log.workspace = true
 anyhow.workspace = true
 
 engine.workspace = true

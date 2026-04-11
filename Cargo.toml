@@ -26,6 +26,7 @@ version = "0.1.0"
 time = { version = "0.3", features = ["formatting", "macros"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["registry", "std"] }
+tracing-log = "0.2"
 parking_lot = "0.12"
 
 thiserror = "2"
