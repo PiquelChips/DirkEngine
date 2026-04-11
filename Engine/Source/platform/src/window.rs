@@ -18,13 +18,16 @@ pub struct Window {
 }
 
 impl Window {
-    pub fn new(window: Box<dyn winit::window::Window>) -> Self {
+    pub fn new(
+        window_consumer: events::Consumer<WindowEvent>,
+        window: Box<dyn winit::window::Window>,
+    ) -> Self {
         Self {
             focused: false,
             theme: window.theme().unwrap_or(Theme::Dark),
             occluded: false,
             window,
-            // TODO: window_consumer
+            window_consumer,
         }
     }
     pub fn id(&self) -> WindowId {
