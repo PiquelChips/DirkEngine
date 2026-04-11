@@ -2,6 +2,7 @@
 resolver = "3"
 members = [
     "Engine/Source/build",
+    "Engine/Source/utils",
     "Engine/Source/engine",
     "Engine/Source/events",
     "Engine/Source/macros",
