@@ -1,5 +1,5 @@
 use anyhow::Context;
-use log::error;
+use tracing::error;
 
 fn run() -> anyhow::Result<()> {
     let mut engine = engine::Engine::init().context("engine init")?;

@@ -318,7 +318,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "events",
- "log",
  "logging",
  "platform",
  "thiserror 2.0.18",
@@ -671,7 +670,6 @@ name = "logging"
 version = "0.1.0"
 dependencies = [
  "build",
- "log",
  "parking_lot",
  "thiserror 2.0.18",
  "time",
@@ -973,9 +971,9 @@ dependencies = [
  "anyhow",
  "build",
  "events",
- "log",
  "macros",
  "thiserror 2.0.18",
+ "tracing",
  "winit",
 ]
 
@@ -1106,7 +1104,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "engine",
- "log",
+ "tracing",
 ]
 
 [[package]]
