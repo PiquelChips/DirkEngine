@@ -1,15 +1,13 @@
+#![cfg(editor)]
+
 use std::sync::Arc;
 
 use time::OffsetDateTime;
 
 use crate::{
-    entry::{LogEntry, LogLevel},
     store::LogStore,
+    {LogEntry, LogLevel},
 };
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// QueryBuilder
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 type Filter = Box<dyn Fn(&LogEntry) -> bool + Send + Sync>;
 
@@ -43,7 +41,7 @@ impl QueryBuilder {
         }
     }
 
-    // ── Category ─────────────────────────────────────────────────────────────
+    // Filters
 
     /// Only include entries whose category exactly matches `category`.
     pub fn of_category(mut self, category: impl Into<String>) -> Self {
@@ -60,8 +58,6 @@ impl QueryBuilder {
         self
     }
 
-    // ── Level ─────────────────────────────────────────────────────────────────
-
     /// Only include entries with exactly this level.
     pub fn of_level(mut self, level: LogLevel) -> Self {
         self.filters.push(Box::new(move |e| e.level == level));
@@ -74,8 +70,6 @@ impl QueryBuilder {
         self.filters.push(Box::new(move |e| e.level <= level));
         self
     }
-
-    // ── Time ──────────────────────────────────────────────────────────────────
 
     /// Only include entries recorded at or after `time`.
     pub fn since(mut self, time: OffsetDateTime) -> Self {
@@ -95,8 +89,6 @@ impl QueryBuilder {
         self.since(cutoff)
     }
 
-    // ── Message ───────────────────────────────────────────────────────────────
-
     /// Only include entries whose message contains `pattern` (case-sensitive).
     pub fn matching(mut self, pattern: impl Into<String>) -> Self {
         let pat = pattern.into();
@@ -105,7 +97,7 @@ impl QueryBuilder {
         self
     }
 
-    // ── Terminal operations ───────────────────────────────────────────────────
+    // Actual query operations
 
     /// Run all accumulated filters and return matching entries in
     /// chronological order (oldest first).

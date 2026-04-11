@@ -1,3 +1,5 @@
+#![cfg(editor)]
+
 use std::sync::Arc;
 
 use tracing::{Event, Subscriber};
@@ -5,13 +7,9 @@ use tracing_subscriber::{Layer, layer::Context};
 
 use super::format::extract_event_data;
 use crate::{
-    entry::{LogEntry, LogLevel},
     store::LogStore,
+    {LogEntry, LogLevel},
 };
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// StorageLayer
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 /// A [`tracing_subscriber::Layer`] that captures every event into the shared
 /// [`LogStore`], making them available to the Editor's log panel via

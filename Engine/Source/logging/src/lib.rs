@@ -133,8 +133,6 @@ impl Logger {
         LoggerBuilder::default()
     }
 
-    // ── Query API (editor only) ───────────────────────────────────────────────
-
     /// Start building a query against the captured log entries.
     ///
     /// Only available with the `editor` feature. Panics at compile time in

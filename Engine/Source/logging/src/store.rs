@@ -1,10 +1,6 @@
 use parking_lot::RwLock;
 
-use crate::entry::LogEntry;
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// LogStore
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+use crate::LogEntry;
 
 /// Thread-safe append-only store for captured [`LogEntry`] values.
 ///
