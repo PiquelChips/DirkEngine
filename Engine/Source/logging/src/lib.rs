@@ -5,7 +5,7 @@
 //! ## Usage
 //!
 //! **Game build** (no `editor` feature):
-//! ```rust,ignore
+//! ```rust
 //! logging::Logger::builder()
 //!     .verbose(false)
 //!     .with_files("logs/")
@@ -17,11 +17,11 @@
 //! ```
 //!
 //! **Editor build** (`editor` feature enabled):
-//! ```rust,ignore
+//! ```rust
 //! let logger = logging::Logger::builder()
 //!     .verbose(true)
 //!     .with_files("logs/")
-//!     .init_editor()
+//!     .init()
 //!     .expect("failed to init logger");
 //!
 //! // Later, in the log-panel UI:
@@ -35,11 +35,12 @@
 //! ## Category convention
 //!
 //! Use the `target:` tracing directive to assign a category:
-//! ```rust,ignore
+//! ```rust
 //! tracing::error!(target: "Physics", "Broad-phase overflow");
 //! ```
 //! Alternatively, set a `category` field (takes precedence over `target`):
-//! ```rust,ignore
+//! ```rust
+//! # let n = 5;
 //! tracing::info!(category = "Audio", "Loaded {} sounds", n);
 //! ```
 //! If neither is set the Rust module path is used as a fallback.
@@ -159,7 +160,9 @@ impl Logger {
     /// game builds (the method simply doesn't exist).
     ///
     /// # Example
-    /// ```rust,ignore
+    /// ```rust
+    /// # use logging::LogLevel;
+    /// # let logger = logging::Logger::builder().init().unwrap();
     /// let recent_errors = logger
     ///     .query()
     ///     .min_level(LogLevel::Error)

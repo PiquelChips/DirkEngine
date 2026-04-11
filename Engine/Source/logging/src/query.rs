@@ -19,7 +19,10 @@ type Filter = Box<dyn Fn(&LogEntry) -> bool + Send + Sync>;
 /// [`execute`](Self::execute) or [`last`](Self::last) is called.
 ///
 /// # Example
-/// ```rust,ignore
+/// ```rust
+/// # use logging::LogLevel;
+/// # let logger = logging::Logger::builder().init().unwrap();
+/// # let start_of_frame = time::OffsetDateTime::UNIX_EPOCH;
 /// let errors = logger
 ///     .query()
 ///     .of_category("Rendering")
