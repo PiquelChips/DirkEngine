@@ -117,7 +117,7 @@ pub struct StoreFilter {
 impl StoreFilter {
     /// Run all accumulated filters and return matching entries in
     /// chronological order (oldest first).
-    pub fn filter(self) -> Vec<LogEntry> {
+    pub fn execute(self) -> Vec<LogEntry> {
         self.store.with_entries(|entries| {
             entries
                 .iter()
@@ -130,7 +130,7 @@ impl StoreFilter {
     /// Return the most recent `n` matching entries (still in chronological
     /// order). Equivalent to `execute()` then taking the tail.
     pub fn last(self, n: usize) -> Vec<LogEntry> {
-        let mut results = self.filter();
+        let mut results = self.execute();
         let len = results.len();
         if n < len {
             results.drain(..len - n);

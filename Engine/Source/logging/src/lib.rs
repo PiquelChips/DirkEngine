@@ -29,14 +29,12 @@
 //! ```
 //! If neither is set the Rust module path is used as a fallback.
 
-mod layers;
 mod filter;
-mod query;
+mod layers;
 mod store;
 #[cfg(test)]
 mod tests;
 
-pub use query::QueryBuilder;
 pub use filter::LogFilter as Filter;
 use thiserror::Error;
 use tracing_subscriber::{
@@ -48,7 +46,7 @@ use time::OffsetDateTime;
 
 use crate::layers::{console::ConsoleLayer, file::FileLayer, storage::StorageLayer};
 #[cfg(editor)]
-use crate::store::LogStore;
+use crate::{filter::StoreFilter, store::LogStore};
 #[cfg(editor)]
 use std::sync::Arc;
 
@@ -143,24 +141,9 @@ impl Logger {
         })
     }
 
-    /// Start building a query against the captured log entries.
-    ///
-    /// Only available with the `editor` feature. Panics at compile time in
-    /// game builds (the method simply doesn't exist).
-    ///
-    /// # Example
-    /// ```rust
-    /// # use logging::LogLevel;
-    /// # let logger = logging::Logger::new(false).unwrap();
-    /// let recent_errors = logger
-    ///     .query()
-    ///     .min_level(LogLevel::Error)
-    ///     .within_last_seconds(60)
-    ///     .execute();
-    /// ```
     #[cfg(editor)]
-    pub fn query(&self) -> QueryBuilder {
-        QueryBuilder::new(Arc::clone(&self.store))
+    pub fn query(&self, filter: Filter) -> StoreFilter {
+        filter.with_store(Arc::clone(&self.store))
     }
 }
 
