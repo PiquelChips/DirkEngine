@@ -1,109 +1,287 @@
-use log::{Level, Metadata, Record};
-use time::{self, OffsetDateTime};
+//! # logging
+//!
+//! Engine logging built on [`tracing`].
+//!
+//! ## Usage
+//!
+//! **Game build** (no `editor` feature):
+//! ```rust,ignore
+//! logging::Logger::builder()
+//!     .verbose(false)
+//!     .with_files("logs/")
+//!     .init()
+//!     .expect("failed to init logger");
+//!
+//! tracing::info!(target: "Engine", "Engine started");
+//! tracing::warn!(target: "Rendering", "Shader recompile triggered");
+//! ```
+//!
+//! **Editor build** (`editor` feature enabled):
+//! ```rust,ignore
+//! let logger = logging::Logger::builder()
+//!     .verbose(true)
+//!     .with_files("logs/")
+//!     .init_editor()
+//!     .expect("failed to init logger");
+//!
+//! // Later, in the log-panel UI:
+//! let render_errors = logger
+//!     .query()
+//!     .of_category("Rendering")
+//!     .min_level(logging::LogLevel::Warn)
+//!     .last(50);
+//! ```
+//!
+//! ## Category convention
+//!
+//! Use the `target:` tracing directive to assign a category:
+//! ```rust,ignore
+//! tracing::error!(target: "Physics", "Broad-phase overflow");
+//! ```
+//! Alternatively, set a `category` field (takes precedence over `target`):
+//! ```rust,ignore
+//! tracing::info!(category = "Audio", "Loaded {} sounds", n);
+//! ```
+//! If neither is set the Rust module path is used as a fallback.
 
+mod entry;
+mod layers;
+mod query;
+mod store;
+
+pub use entry::{LogEntry, LogLevel};
+pub use query::QueryBuilder;
+
+use layers::{console::ConsoleLayer, file::FileLayer};
+#[cfg(editor)]
+use {layers::storage::StorageLayer, store::LogStore};
+
+#[cfg(editor)]
+use std::sync::Arc;
+
+use tracing_subscriber::{
+    Registry, filter::LevelFilter, layer::SubscriberExt, util::SubscriberInitExt,
+};
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// LoggerBuilder
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/// Fluent builder for the engine logger. Obtain one via [`Logger::builder`].
+#[derive(Default)]
+pub struct LoggerBuilder {
+    verbose: bool,
+    log_dir: Option<String>,
+}
+
+impl LoggerBuilder {
+    /// Enable `TRACE` / `DEBUG` levels (default: only `INFO` and above).
+    pub fn verbose(mut self, verbose: bool) -> Self {
+        self.verbose = verbose;
+        self
+    }
+
+    /// Write log files into `log_dir` (created automatically if absent).
+    /// If not set no files are written.
+    pub fn with_files(mut self, log_dir: impl Into<String>) -> Self {
+        self.log_dir = Some(log_dir.into());
+        self
+    }
+
+    // ── Shared setup ──────────────────────────────────────────────────────────
+
+    fn max_level(&self) -> LevelFilter {
+        if self.verbose {
+            LevelFilter::TRACE
+        } else {
+            LevelFilter::INFO
+        }
+    }
+
+    fn build_file_layer(&self) -> Result<Option<FileLayer>, std::io::Error> {
+        self.log_dir.as_deref().map(FileLayer::new).transpose()
+    }
+
+    // ── Game init ─────────────────────────────────────────────────────────────
+
+    /// Initialise the global tracing subscriber for a **game** build.
+    ///
+    /// Installs:
+    /// - [`ConsoleLayer`] – colored terminal output
+    /// - [`FileLayer`] – dual-file plain-text output (if [`with_files`](Self::with_files) was set)
+    ///
+    /// Returns an opaque [`Logger`] handle. In game builds this handle carries
+    /// no state; it exists only for API symmetry with the editor path.
+    pub fn init(self) -> Result<Logger, InitError> {
+        let file_layer = self.build_file_layer()?;
+
+        Registry::default()
+            .with(self.max_level())
+            .with(ConsoleLayer)
+            .with(file_layer)
+            .try_init()
+            .map_err(|_| InitError::AlreadyInitialised)?;
+
+        Ok(Logger {})
+    }
+
+    // ── Editor init ───────────────────────────────────────────────────────────
+
+    /// Initialise the global tracing subscriber for an **editor** build.
+    ///
+    /// Installs everything from [`init`](Self::init) **plus**:
+    /// - [`StorageLayer`] – captures every event into an in-memory store
+    ///
+    /// The returned [`Logger`] exposes a [`query`](Logger::query) method for
+    /// filtering stored events in the log panel UI.
+    ///
+    /// Only available with the `editor` feature.
+    #[cfg(editor)]
+    pub fn init_editor(self) -> Result<Logger, InitError> {
+        let file_layer = self.build_file_layer()?;
+        let store = Arc::new(LogStore::new());
+
+        Registry::default()
+            .with(self.max_level())
+            .with(ConsoleLayer)
+            .with(file_layer)
+            .with(StorageLayer::new(Arc::clone(&store)))
+            .try_init()
+            .map_err(|_| InitError::AlreadyInitialised)?;
+
+        Ok(Logger { store })
+    }
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Logger
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/// Handle returned after the global subscriber has been installed.
+///
+/// In **game** builds this is a zero-sized type.
+/// In **editor** builds it holds an `Arc` to the shared [`LogStore`] and
+/// exposes a rich query API.
 pub struct Logger {
-    enable: bool,
-    max_level: Level,
-    prefix: bool,
+    /// Shared with the [`StorageLayer`]; only present in editor builds.
+    #[cfg(editor)]
+    store: Arc<LogStore>,
 }
 
 impl Logger {
-    pub fn new(enable: bool, verbose: bool, prefix: bool) -> Box<Logger> {
-        let max_level = if verbose { Level::Trace } else { Level::Info };
-        Box::new(Logger {
-            enable,
-            max_level,
-            prefix,
-        })
+    /// Create a [`LoggerBuilder`].
+    pub fn builder() -> LoggerBuilder {
+        LoggerBuilder::default()
     }
-    pub fn max_level(&self) -> Level {
-        self.max_level
+
+    // ── Query API (editor only) ───────────────────────────────────────────────
+
+    /// Start building a query against the captured log entries.
+    ///
+    /// Only available with the `editor` feature. Panics at compile time in
+    /// game builds (the method simply doesn't exist).
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// let recent_errors = logger
+    ///     .query()
+    ///     .min_level(LogLevel::Error)
+    ///     .within_last_seconds(60)
+    ///     .execute();
+    /// ```
+    #[cfg(editor)]
+    pub fn query(&self) -> QueryBuilder {
+        QueryBuilder::new(Arc::clone(&self.store))
     }
 }
 
-pub fn init(logger: Box<Logger>) {
-    let max_level = logger.max_level().to_level_filter();
-    log::set_boxed_logger(logger).unwrap(); // logger should not have already been set
-    log::set_max_level(max_level);
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Error types
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+#[derive(Debug)]
+pub enum InitError {
+    /// `init` / `init_editor` was called more than once. The global subscriber
+    /// can only be set once per process.
+    AlreadyInitialised,
+    /// A log-file directory could not be created, or a log file could not be
+    /// opened.
+    Io(std::io::Error),
 }
 
-impl log::Log for Logger {
-    fn enabled(&self, metadata: &Metadata) -> bool {
-        if !self.enable {
-            return false;
-        }
-
-        metadata.level() <= self.max_level
-    }
-    fn log(&self, record: &Record) {
-        if !self.enabled(record.metadata()) {
-            return;
-        }
-
-        let now = OffsetDateTime::now_utc();
-        let fmt = date_time_format();
-
-        let timestamp = now.format(&fmt).unwrap();
-        let log_level = format_log_level(record.level());
-
-        let prefix = format!("{} {}", timestamp, log_level);
-
-        let msg = if self.prefix {
-            format!("{} {}", prefix, record.args())
-        } else {
-            record.args().to_string()
-        };
-
-        if record.level() == Level::Error {
-            println!("{msg}");
-        } else {
-            eprintln!("{msg}");
-        }
-    }
-    fn flush(&self) {}
-}
-
-fn format_log_level(level: Level) -> String {
-    format!(
-        "[{}]",
-        make_colored_message(level.into(), &level.to_string())
-    )
-}
-
-impl From<Level> for Color {
-    fn from(level: Level) -> Self {
-        match level {
-            Level::Error => Color::Red,
-            Level::Warn => Color::Yellow,
-            Level::Info => Color::Green,
-            Level::Debug => Color::Blue,
-            Level::Trace => Color::Cyan,
+impl std::fmt::Display for InitError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::AlreadyInitialised => f.write_str("logger has already been initialised"),
+            Self::Io(e) => write!(f, "log-file I/O error: {e}"),
         }
     }
 }
 
-enum Color {
-    Cyan = 36,
-    //Magenta = 35,
-    Blue = 34,
-    Yellow = 33,
-    Green = 32,
-    Red = 31,
+impl std::error::Error for InitError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Io(e) => Some(e),
+            _ => None,
+        }
+    }
 }
 
-fn make_colored_message(color: Color, message: &str) -> String {
-    format!("\x1b[{}m{}\x1b[0m", color as usize, message)
+impl From<std::io::Error> for InitError {
+    fn from(e: std::io::Error) -> Self {
+        Self::Io(e)
+    }
 }
 
-fn date_time_format() -> Vec<time::format_description::BorrowedFormatItem<'static>> {
-    time::format_description::parse("[year]/[month]/[day] [hour]:[minute]:[second]").unwrap()
-}
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Tests
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 #[cfg(test)]
 mod tests {
-    /// Making sure the unwrap doesn't crash
+    use super::*;
+
+    /// Verify that the timestamp format string compiles without panicking.
     #[test]
-    fn date_time_format() {
-        super::date_time_format();
+    fn timestamp_format_compiles() {
+        let ts = time::OffsetDateTime::now_utc();
+        let s = layers::format::format_timestamp(&ts);
+        assert!(!s.is_empty());
+    }
+
+    /// Verify the level-bracket format without colors.
+    #[test]
+    fn level_format_plain() {
+        let s = layers::format::format_level(&tracing::Level::WARN, false);
+        assert_eq!(s, "[WARN]");
+    }
+
+    /// Verify the level-bracket format with colors contains the level name.
+    #[test]
+    fn level_format_colored() {
+        let s = layers::format::format_level(&tracing::Level::ERROR, true);
+        assert!(s.contains("ERROR"));
+        assert!(s.contains('\x1b'));
+    }
+
+    /// Verify the assembled log line structure.
+    #[test]
+    fn format_line_structure() {
+        let line = layers::format::format_line(
+            "2024/01/15 12:34:56",
+            "[INFO]",
+            "Rendering",
+            "Mesh loaded",
+        );
+        assert_eq!(line, "2024/01/15 12:34:56 [INFO] [Rendering] Mesh loaded");
+    }
+
+    /// Smoke test: `LogLevel` ordering (`Error` < `Warn` < … < `Trace`).
+    #[test]
+    fn log_level_ordering() {
+        assert!(LogLevel::Error < LogLevel::Warn);
+        assert!(LogLevel::Warn < LogLevel::Info);
+        assert!(LogLevel::Info < LogLevel::Debug);
+        assert!(LogLevel::Debug < LogLevel::Trace);
     }
 }
