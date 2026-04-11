@@ -19,7 +19,7 @@ pub struct Renderable {
 
 /// Spatial transform for an entity: position, orientation, and scale.
 ///
-/// Rotation is stored as **Euler angles in degrees** using the **YXZ** convention
+/// Rotation is stored as **Euler angles in radians** using the **YXZ** convention
 /// (yaw → pitch → roll), which matches a typical first-person camera setup.
 ///
 /// # Examples
@@ -40,7 +40,7 @@ pub struct Renderable {
 pub struct Transform {
     /// World-space position.
     pub location: Vec3,
-    /// Euler angles **in degrees**, applied in YXZ order (yaw, pitch, roll).
+    /// Euler angles **in radians**, applied in YXZ order (yaw, pitch, roll).
     pub rotation: Vec3,
     /// Per-axis scale factor. `Vec3::ONE` is the identity scale.
     pub scale: Vec3,
@@ -66,9 +66,9 @@ impl Transform {
         let translation = Mat4::from_translation(self.location);
         let scale = Mat4::from_scale(self.scale);
         // NOTE: previously rot_x/rot_y had their axes swapped — corrected here.
-        let rot_x = Mat4::from_rotation_x(self.rotation.x.to_radians());
-        let rot_y = Mat4::from_rotation_y(self.rotation.y.to_radians());
-        let rot_z = Mat4::from_rotation_z(self.rotation.z.to_radians());
+        let rot_x = Mat4::from_rotation_x(self.rotation.x);
+        let rot_y = Mat4::from_rotation_y(self.rotation.y);
+        let rot_z = Mat4::from_rotation_z(self.rotation.z);
 
         translation * scale * rot_y * rot_x * rot_z
     }
@@ -77,9 +77,9 @@ impl Transform {
     pub fn rotation_quat(&self) -> glam::Quat {
         glam::Quat::from_euler(
             glam::EulerRot::YXZ,
-            self.rotation.y.to_radians(),
-            self.rotation.x.to_radians(),
-            self.rotation.z.to_radians(),
+            self.rotation.y,
+            self.rotation.x,
+            self.rotation.z,
         )
     }
 
