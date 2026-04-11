@@ -7,24 +7,53 @@ use crate::{LogEntry, LogLevel};
 
 type Filter = Box<dyn Fn(&LogEntry) -> bool + Send + Sync>;
 
-/// Fluent filter builder.
+/// Fluent, composable filter builder for [`LogEntry`] values.
 ///
-/// Filters are composed with AND semantics and evaluated lazily
-/// when [`filter`](Self::filter) is called.
+/// Predicates are accumulated with **AND** semantics: every predicate that has
+/// been added must hold for an entry to pass. Filters are evaluated lazily
+/// when [`filter`](Self::filter) (or a [`StoreFilter`] terminal) is called, so
+/// building a `LogFilter` is always allocation-free beyond the closure storage.
 ///
-/// # Example
+/// # Quick start
+///
 /// ```rust
-/// # use logging::{LogLevel, Filter, LogEntry};
-/// # let entry = LogEntry {
-/// #     level: LogLevel::Warn,
-/// #     category: "Test".to_string(),
-/// #     timestamp: time::OffsetDateTime::now_utc(),
-/// #     message: "Test".to_string(),
-/// # };
-/// let errors_filter = Filter::new()
+/// use logging::{Filter, LogLevel, LogEntry};
+/// use time::OffsetDateTime;
+///
+/// let entry = LogEntry {
+///     level:     LogLevel::Error,
+///     category:  "Rendering".to_string(),
+///     timestamp: OffsetDateTime::now_utc(),
+///     message:   "GPU fence timeout".to_string(),
+/// };
+///
+/// // A filter that passes only Rendering errors:
+/// let passes = Filter::new()
 ///     .of_category("Rendering")
-///     .min_level(LogLevel::Warn)
+///     .min_level(LogLevel::Warn)   // Error < Warn, so Error passes
 ///     .filter(&entry);
+///
+/// assert!(passes);
+/// ```
+///
+/// # Combining with a [`StoreFilter`]
+///
+/// In editor builds the filter can be applied to the live [`LogStore`] via
+/// [`Logger::query`](crate::Logger::query), which returns a [`StoreFilter`]
+/// with terminal methods ([`execute`](StoreFilter::execute),
+/// [`last`](StoreFilter::last), [`count`](StoreFilter::count)).
+///
+/// ```rust
+/// # use logging::{Filter, LogLevel};
+/// # let logger = logging::Logger::new(false).unwrap();
+/// let recent_render_errors = logger
+///     .query(
+///         Filter::new()
+///             .of_category("Rendering")
+///             .min_level(LogLevel::Error)
+///             .within_last_seconds(60),
+///     )
+///     .last(25);
 /// ```
 #[derive(Default)]
 pub struct LogFilter {
@@ -32,20 +61,52 @@ pub struct LogFilter {
 }
 
 impl LogFilter {
+    /// Create a new, empty filter that matches every [`LogEntry`].
     pub fn new() -> Self {
         Self::default()
     }
 
-    // Filters
+    // ── Predicate builders ────────────────────────────────────────────────
 
-    /// Only include entries whose category exactly matches `category`.
+    /// Only include entries whose category **exactly** matches `category`.
+    ///
+    /// # Example
+    /// ```rust
+    /// # use logging::{Filter, LogLevel, LogEntry};
+    /// # use time::OffsetDateTime;
+    /// # fn make(cat: &str) -> LogEntry {
+    /// #     LogEntry { level: LogLevel::Info, category: cat.to_string(),
+    /// #                timestamp: OffsetDateTime::now_utc(), message: String::new() }
+    /// # }
+    /// let f = Filter::new().of_category("Audio");
+    /// assert!( f.filter(&make("Audio")));
+    /// assert!(!f.filter(&make("AudioManager"))); // substring — does not match
+    /// assert!(!f.filter(&make("Rendering")));
+    /// ```
     pub fn of_category(mut self, category: impl Into<String>) -> Self {
         let cat = category.into();
         self.filters.push(Box::new(move |e| e.category == cat));
         self
     }
 
-    /// Only include entries whose category contains `substring`.
+    /// Only include entries whose category **contains** `substring`.
+    ///
+    /// Useful when categories follow a hierarchical naming scheme
+    /// (e.g. `"Rendering/Shadows"`, `"Rendering/PostFX"`).
+    ///
+    /// # Example
+    /// ```rust
+    /// # use logging::{Filter, LogLevel, LogEntry};
+    /// # use time::OffsetDateTime;
+    /// # fn make(cat: &str) -> LogEntry {
+    /// #     LogEntry { level: LogLevel::Info, category: cat.to_string(),
+    /// #                timestamp: OffsetDateTime::now_utc(), message: String::new() }
+    /// # }
+    /// let f = Filter::new().category_contains("Render");
+    /// assert!(f.filter(&make("Rendering")));
+    /// assert!(f.filter(&make("Rendering/Shadows")));
+    /// assert!(!f.filter(&make("Physics")));
+    /// ```
     pub fn category_contains(mut self, substring: impl Into<String>) -> Self {
         let sub = substring.into();
         self.filters
@@ -53,38 +114,132 @@ impl LogFilter {
         self
     }
 
-    /// Only include entries with exactly this level.
+    /// Only include entries with **exactly** this level.
+    ///
+    /// Prefer [`min_level`](Self::min_level) when you want all entries at or
+    /// above a given severity.
+    ///
+    /// # Example
+    /// ```rust
+    /// # use logging::{Filter, LogLevel, LogEntry};
+    /// # use time::OffsetDateTime;
+    /// # fn make(lvl: LogLevel) -> LogEntry {
+    /// #     LogEntry { level: lvl, category: String::new(),
+    /// #                timestamp: OffsetDateTime::now_utc(), message: String::new() }
+    /// # }
+    /// let f = Filter::new().of_level(LogLevel::Warn);
+    /// assert!( f.filter(&make(LogLevel::Warn)));
+    /// assert!(!f.filter(&make(LogLevel::Error))); // more severe — excluded
+    /// assert!(!f.filter(&make(LogLevel::Info)));  // less severe — excluded
+    /// ```
     pub fn of_level(mut self, level: LogLevel) -> Self {
         self.filters.push(Box::new(move |e| e.level == level));
         self
     }
 
-    /// Only include entries at or above this severity
-    /// (`Error` is most severe; `Trace` is least).
+    /// Only include entries at or **above** this severity.
+    ///
+    /// Severity ordering (most → least severe):
+    /// `Error` > `Warn` > `Info` > `Debug` > `Trace`
+    ///
+    /// # Example
+    /// ```rust
+    /// # use logging::{Filter, LogLevel, LogEntry};
+    /// # use time::OffsetDateTime;
+    /// # fn make(lvl: LogLevel) -> LogEntry {
+    /// #     LogEntry { level: lvl, category: String::new(),
+    /// #                timestamp: OffsetDateTime::now_utc(), message: String::new() }
+    /// # }
+    /// let f = Filter::new().min_level(LogLevel::Warn);
+    ///
+    /// assert!( f.filter(&make(LogLevel::Error))); // more severe  ✓
+    /// assert!( f.filter(&make(LogLevel::Warn)));  // exact match  ✓
+    /// assert!(!f.filter(&make(LogLevel::Info)));  // less severe  ✗
+    /// assert!(!f.filter(&make(LogLevel::Debug))); //              ✗
+    /// assert!(!f.filter(&make(LogLevel::Trace))); //              ✗
+    /// ```
     pub fn min_level(mut self, level: LogLevel) -> Self {
         self.filters.push(Box::new(move |e| e.level <= level));
         self
     }
 
-    /// Only include entries recorded at or after `time`.
+    /// Only include entries recorded **at or after** `time`.
+    ///
+    /// # Example
+    /// ```rust
+    /// # use logging::{Filter, LogLevel, LogEntry};
+    /// # use time::OffsetDateTime;
+    /// let cutoff = OffsetDateTime::now_utc();
+    /// let f = Filter::new().since(cutoff);
+    ///
+    /// // An entry stamped before the cutoff is excluded.
+    /// let old = LogEntry {
+    ///     level:     LogLevel::Info,
+    ///     category:  String::new(),
+    ///     timestamp: cutoff - time::Duration::seconds(1),
+    ///     message:   String::new(),
+    /// };
+    /// assert!(!f.filter(&old));
+    /// ```
     pub fn since(mut self, time: OffsetDateTime) -> Self {
         self.filters.push(Box::new(move |e| e.timestamp >= time));
         self
     }
 
-    /// Only include entries recorded at or before `time`.
+    /// Only include entries recorded **at or before** `time`.
+    ///
+    /// Combine with [`since`](Self::since) to create a time window.
+    ///
+    /// # Example
+    /// ```rust
+    /// # use logging::{Filter, LogLevel, LogEntry};
+    /// # use time::OffsetDateTime;
+    /// let now = OffsetDateTime::now_utc();
+    /// // Entries from the last 10 seconds only:
+    /// let f = Filter::new()
+    ///     .since(now - time::Duration::seconds(10))
+    ///     .until(now);
+    /// ```
     pub fn until(mut self, time: OffsetDateTime) -> Self {
         self.filters.push(Box::new(move |e| e.timestamp <= time));
         self
     }
 
-    /// Only include entries recorded within the last `seconds` seconds.
+    /// Only include entries recorded within the **last `seconds` seconds**.
+    ///
+    /// The cutoff is fixed at the moment this method is called, so the window
+    /// does not slide as time passes.
+    ///
+    /// # Example
+    /// ```rust
+    /// # use logging::{Filter, LogLevel, LogEntry};
+    /// # use time::OffsetDateTime;
+    /// // Keep only entries from the last minute:
+    /// let f = Filter::new()
+    ///     .of_category("Physics")
+    ///     .within_last_seconds(60);
+    /// ```
     pub fn within_last_seconds(self, seconds: i64) -> Self {
         let cutoff = OffsetDateTime::now_utc() - time::Duration::seconds(seconds);
         self.since(cutoff)
     }
 
     /// Only include entries whose message contains `pattern` (case-sensitive).
+    ///
+    /// # Example
+    /// ```rust
+    /// # use logging::{Filter, LogLevel, LogEntry};
+    /// # use time::OffsetDateTime;
+    /// # fn make(msg: &str) -> LogEntry {
+    /// #     LogEntry { level: LogLevel::Error, category: String::new(),
+    /// #                timestamp: OffsetDateTime::now_utc(), message: msg.to_string() }
+    /// # }
+    /// let f = Filter::new().matching("overflow");
+    ///
+    /// assert!( f.filter(&make("Broad-phase overflow detected")));
+    /// assert!(!f.filter(&make("Broad-phase Overflow detected"))); // case-sensitive
+    /// assert!(!f.filter(&make("All contacts resolved")));
+    /// ```
     pub fn matching(mut self, pattern: impl Into<String>) -> Self {
         let pat = pattern.into();
         self.filters
@@ -92,12 +247,30 @@ impl LogFilter {
         self
     }
 
-    // Using the filter
+    // ── Terminals ─────────────────────────────────────────────────────────
 
+    /// Test `entry` against all accumulated predicates.
+    ///
+    /// Returns `true` only when **all** predicates pass (AND semantics).
+    /// An empty filter (no predicates added) always returns `true`.
     pub fn filter(&self, entry: &LogEntry) -> bool {
         self.filters.iter().all(|f| f(entry))
     }
 
+    /// Attach this filter to `store`, returning a [`StoreFilter`] that can
+    /// execute the query against the live log store.
+    ///
+    /// Typically called indirectly via [`Logger::query`](crate::Logger::query).
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// use std::sync::Arc;
+    /// use logging::{Filter, LogLevel};
+    /// let results = Filter::new()
+    ///     .min_level(LogLevel::Error)
+    ///     .with_store(Arc::clone(&store))
+    ///     .execute();
+    /// ```
     #[cfg(editor)]
     pub fn with_store(self, store: Arc<LogStore>) -> StoreFilter {
         StoreFilter {
@@ -107,6 +280,19 @@ impl LogFilter {
     }
 }
 
+/// A [`LogFilter`] bound to a [`LogStore`], ready to execute a query.
+///
+/// Obtain one via [`Logger::query`](crate::Logger::query) or
+/// [`LogFilter::with_store`].
+///
+/// # Example
+/// ```rust
+/// # let logger = logging::Logger::new(false).unwrap();
+/// # use logging::{Filter, LogLevel};
+/// let errors = logger
+///     .query(Filter::new().min_level(LogLevel::Error))
+///     .last(100);
+/// ```
 #[cfg(editor)]
 pub struct StoreFilter {
     filter: LogFilter,
@@ -115,8 +301,17 @@ pub struct StoreFilter {
 
 #[cfg(editor)]
 impl StoreFilter {
-    /// Run all accumulated filters and return matching entries in
-    /// chronological order (oldest first).
+    /// Run the filter and return **all** matching entries in chronological
+    /// order (oldest first).
+    ///
+    /// # Example
+    /// ```rust
+    /// # let logger = logging::Logger::new(false).unwrap();
+    /// # use logging::{LogEntry, LogLevel, Filter};
+    /// let all_warnings: Vec<LogEntry> = logger
+    ///     .query(Filter::new().min_level(LogLevel::Warn))
+    ///     .execute();
+    /// ```
     pub fn execute(self) -> Vec<LogEntry> {
         self.store.with_entries(|entries| {
             entries
@@ -127,8 +322,20 @@ impl StoreFilter {
         })
     }
 
-    /// Return the most recent `n` matching entries (still in chronological
-    /// order). Equivalent to `execute()` then taking the tail.
+    /// Return the **most recent `n`** matching entries, still in chronological
+    /// order (oldest of the `n` first).
+    ///
+    /// If fewer than `n` entries match, all matching entries are returned.
+    ///
+    /// # Example
+    /// ```rust
+    /// // Show the 50 most recent Rendering entries in the log panel:
+    /// # let logger = logging::Logger::new(false).unwrap();
+    /// # use logging::{LogEntry, LogLevel, Filter};
+    /// let recent: Vec<LogEntry> = logger
+    ///     .query(Filter::new().of_category("Rendering"))
+    ///     .last(50);
+    /// ```
     pub fn last(self, n: usize) -> Vec<LogEntry> {
         let mut results = self.execute();
         let len = results.len();
@@ -138,7 +345,19 @@ impl StoreFilter {
         results
     }
 
-    /// Return the count of matching entries without cloning them.
+    /// Return the **count** of matching entries without cloning them.
+    ///
+    /// More efficient than `execute().len()` as it avoids the overhead
+    /// of cloning log entries.
+    ///
+    /// # Example
+    /// ```rust
+    /// # let logger = logging::Logger::new(false).unwrap();
+    /// # use logging::{LogEntry, LogLevel, Filter};
+    /// let error_count: usize = logger
+    ///     .query(Filter::new().of_level(LogLevel::Error))
+    ///     .count();
+    /// ```
     pub fn count(self) -> usize {
         self.store
             .with_entries(|entries| entries.iter().filter(|e| self.filter.filter(e)).count())
