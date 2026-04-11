@@ -211,12 +211,15 @@ impl Logger {
             LevelFilter::INFO
         };
 
-        Registry::default()
+        let registry = Registry::default()
             .with(max_level)
             .with(ConsoleLayer)
-            .with(FileLayer::new()?)
-            // TODO: only add this layer in editor builds
-            .with(StorageLayer::new(Arc::clone(&store)))
+            .with(FileLayer::new()?);
+
+        #[cfg(editor)]
+        let registry = registry.with(StorageLayer::new(Arc::clone(&store)));
+
+        registry
             .try_init()
             .map_err(|_| InitError::AlreadyInitialised)?;
 
