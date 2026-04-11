@@ -11,7 +11,6 @@ use super::format::{
     extract_event_data, format_level, format_line, format_timestamp, format_timestamp_filename,
 };
 
-// TODO: add compile time var with proper path
 const LOG_PATH: &str = env!("LOG_PATH");
 
 /// A [`tracing_subscriber::Layer`] that writes **plain-text** (no ANSI codes)

@@ -7,8 +7,8 @@ use super::format::{extract_event_data, format_level, format_line, format_timest
 /// prints them to the terminal with ANSI color codes.
 ///
 /// Output routing (preserved from the original logger):
-/// - `ERROR` → **stdout** (`println!`)
-/// - All other levels → **stderr** (`eprintln!`)
+/// - `ERROR` → **stderr** (`eprintln!`)
+/// - All other levels → **stdout** (`println!`)
 pub struct ConsoleLayer;
 
 impl<S: Subscriber> Layer<S> for ConsoleLayer {
@@ -20,13 +20,10 @@ impl<S: Subscriber> Layer<S> for ConsoleLayer {
         let level_str = format_level(level, /* colored = */ true);
         let line = format_line(&ts_str, &level_str, &category, &message);
 
-        // TODO: not this:
-        // Errors go to stdout so they can be piped/captured separately;
-        // everything else goes to stderr to avoid polluting stdout.
         if *level == Level::ERROR {
-            println!("{line}");
-        } else {
             eprintln!("{line}");
+        } else {
+            println!("{line}");
         }
     }
 }
