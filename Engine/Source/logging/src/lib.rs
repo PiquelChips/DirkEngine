@@ -30,6 +30,7 @@
 //! If neither is set the Rust module path is used as a fallback.
 
 mod layers;
+mod filter;
 mod query;
 mod store;
 #[cfg(test)]
