@@ -12,7 +12,7 @@
 //!
 //! ```rust
 //! // Verbose mode enables DEBUG and TRACE levels; pass `false` for INFO+.
-//! let logger = logging::Logger::new(true).expect("logger init failed");
+//! let logger = logging::Logger::new(true, false).expect("logger init failed");
 //! ```
 //!
 //! ## Emitting log events
@@ -42,7 +42,7 @@
 //! captures every event. Use [`Logger::query`] with a [`Filter`] to search it:
 //!
 //! ```rust
-//! # let logger = logging::Logger::new(false).unwrap();
+//! # let logger = logging::Logger::new(false, false).unwrap();
 //! use logging::{Filter, LogLevel};
 //!
 //! // The 50 most recent warnings or worse from the Rendering category:
@@ -196,12 +196,12 @@ impl Logger {
     /// # Example
     ///
     /// ```rust
-    /// let logger = logging::Logger::new(/* verbose = */ true)
+    /// let logger = logging::Logger::new(/* verbose = */ true, /* fs_out */ false)
     ///     .expect("failed to initialise logger");
     ///
     /// tracing::info!(target: "Engine", "Logger ready");
     /// ```
-    pub fn new(verbose: bool) -> Result<Logger, InitError> {
+    pub fn new(verbose: bool, fs_out: bool) -> Result<Logger, InitError> {
         #[cfg(editor)]
         let store = Arc::new(LogStore::new());
 
@@ -214,7 +214,11 @@ impl Logger {
         let registry = Registry::default()
             .with(max_level)
             .with(ConsoleLayer)
-            .with(FileLayer::new()?);
+            .with(if fs_out {
+                Some(FileLayer::new()?)
+            } else {
+                None
+            });
 
         #[cfg(editor)]
         let registry = registry.with(StorageLayer::new(Arc::clone(&store)));
@@ -241,7 +245,7 @@ impl Logger {
     /// # Example
     ///
     /// ```rust
-    /// # let logger = logging::Logger::new(false).unwrap();
+    /// # let logger = logging::Logger::new(false, false).unwrap();
     /// use logging::{Filter, LogLevel};
     ///
     /// // All errors across every category:

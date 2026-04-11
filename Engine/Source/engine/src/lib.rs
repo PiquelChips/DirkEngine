@@ -19,7 +19,7 @@ pub struct Engine {
 
 impl Engine {
     pub fn init() -> anyhow::Result<Self> {
-        let logger = logging::Logger::new(true).context("initialising logger")?;
+        let logger = logging::Logger::new(true, true).context("initialising logger")?;
 
         let mut event_manager = events::EventManager::new();
         let platform = platform::Platform::init(&mut event_manager).context("platform init")?;
