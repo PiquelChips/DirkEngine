@@ -112,6 +112,18 @@ pub enum LogLevel {
     Trace = 4,
 }
 
+impl From<LogLevel> for LevelFilter {
+    fn from(level: LogLevel) -> Self {
+        match level {
+            LogLevel::Error => Self::ERROR,
+            LogLevel::Warn => Self::WARN,
+            LogLevel::Info => Self::INFO,
+            LogLevel::Debug => Self::DEBUG,
+            LogLevel::Trace => Self::TRACE,
+        }
+    }
+}
+
 impl From<&tracing::Level> for LogLevel {
     fn from(level: &tracing::Level) -> Self {
         match *level {
