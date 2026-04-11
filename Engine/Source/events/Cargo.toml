@@ -1,5 +1,5 @@
 [package]
-name = "platform"
+name = "events"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -7,13 +7,4 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
-log.workspace = true
-anyhow.workspace = true
-thiserror.workspace = true
-winit.workspace = true
-
-events.workspace = true
 macros.workspace = true
-
-[build-dependencies]
-build.workspace = true

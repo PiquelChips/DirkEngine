@@ -14,9 +14,11 @@ use winit::event_loop::{
 };
 
 mod errors;
+mod event;
 mod handler;
 mod window;
 pub use errors::Error;
+pub use event::*;
 pub use window::Window;
 
 use errors::Result;
@@ -26,13 +28,18 @@ use handler::PlatformHandler;
 pub struct Platform {
     handler: PlatformHandler,
     event_loop: EventLoop,
+
+    exit_dispatcher: events::Dispatcher<event::AppExit>,
+    window_consumer: events::Consumer<WindowEvent>,
 }
 
 impl Platform {
-    pub fn init() -> Result<Self> {
+    pub fn init(events: &mut events::EventManager) -> Result<Self> {
         let mut platform = Self {
-            handler: PlatformHandler::default(),
+            handler: PlatformHandler::new(events),
             event_loop: EventLoop::new().expect("failed to create winit event loop"),
+            exit_dispatcher: events.register(),
+            window_consumer: events.subscribe(),
         };
 
         // Pump until `can_create_surfaces` fires and the main window exists.
@@ -51,19 +58,27 @@ impl Platform {
         info!("initialized platform");
         Ok(platform)
     }
-    /// Process all pending OS events without blocking. Returns `Ok(true)`
-    /// when the application has requested to exit (e.g. last window closed).
-    pub fn tick(&mut self, _delta_time: f32) -> Result<bool> {
+    /// Process pending OS events without blocking.
+    /// Returns the events that occurred this tick for the engine to handle.
+    pub fn tick(&mut self, _delta_time: f32) {
         match self
             .event_loop
             .pump_app_events(Some(Duration::ZERO), &mut self.handler)
         {
             PumpStatus::Exit(code) => {
                 info!("Event loop exited with code {code}");
-                Ok(true)
+                // Treat a forced OS exit like a window close.
+                self.exit_dispatcher.dispatch(event::AppExit(code));
+                return;
             }
-            PumpStatus::Continue => Ok(false),
+            PumpStatus::Continue => {}
         }
+
+        self.window_consumer.consume_all().for_each(|event| {
+            if let Some(window) = self.handler.windows.get_mut(event.id()) {
+                window.handle_event(event.clone());
+            }
+        });
     }
 
     pub fn main_window(&self) -> &Window {

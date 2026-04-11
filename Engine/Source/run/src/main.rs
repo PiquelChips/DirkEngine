@@ -1,12 +1,13 @@
+use anyhow::Context;
 use log::error;
 
 fn run() -> anyhow::Result<()> {
-    let mut engine = engine::Engine::init()?;
-    while engine.tick()? {}
-    engine.shutdown()?;
+    let mut engine = engine::Engine::init().context("engine init")?;
+    while engine.tick().context("engine tick ")? {}
+    engine.shutdown().context("engine shutdown")?;
 
     if let Some(err) = engine.get_exit_error() {
-        error!("{:#}", err);
+        error!("{err:#}");
     }
     Ok(())
 }
@@ -16,7 +17,7 @@ fn main() {
         Ok(_) => {}
         Err(err) => {
             error!("{err:#}");
-            panic!("fatal error. see logs for details")
+            panic!("Error: {err:#}");
         }
     }
 }

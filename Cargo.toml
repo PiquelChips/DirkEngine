@@ -2,7 +2,10 @@
 resolver = "3"
 members = [
     "Engine/Source/build",
+    "Engine/Source/utils",
     "Engine/Source/engine",
+    "Engine/Source/events",
+    "Engine/Source/macros",
     "Engine/Source/logging",
     "Engine/Source/platform",
     "Engine/Source/run",
@@ -34,6 +37,8 @@ build = { path = "Engine/Source/build" }
 utils = { path = "Engine/Source/utils" }
 logging = { path = "Engine/Source/logging" }
 engine = { path = "Engine/Source/engine" }
+events = { path = "Engine/Source/events" }
+macros = { path = "Engine/Source/macros" }
 platform = { path = "Engine/Source/platform" }
 renderer = { path = "Engine/Source/renderer" }
 resource_manager = { path = "Engine/Source/resource_manager" }
@@ -48,3 +53,7 @@ raw-window-handle = "0.6"
 glam = "0.32"
 gltf = "1"
 shaderc = "0.10"
+
+# Macro dependencies
+syn = "2.0"
+quote = "1.0"

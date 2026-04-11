@@ -13,6 +13,7 @@ log.workspace = true
 
 logging.workspace = true
 utils.workspace = true
+events.workspace = true
 platform.workspace = true
 renderer.workspace = true
 world.workspace = true

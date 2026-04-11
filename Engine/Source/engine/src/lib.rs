@@ -9,12 +9,16 @@ pub struct Engine {
     renderer: renderer::Renderer,
     platform: platform::Platform,
 
+    event_manager: events::EventManager,
+
     next_world_id: WorldId,
     worlds: HashMap<WorldId, World>,
 
     is_requesting_exit: bool,
     exit_error: Option<anyhow::Error>,
     last_tick: Instant,
+
+    exit_consumer: events::Consumer<platform::AppExit>,
 }
 
 impl Engine {
@@ -22,10 +26,13 @@ impl Engine {
         let logger = logging::Logger::new(true, true, true);
         logging::init(logger);
 
+        let mut event_manager = events::EventManager::new();
+        let exit_consumer = event_manager.subscribe();
+
         let version = utils::Version::from_str(env!("CARGO_PKG_VERSION"))?;
         let name = "DirkEngine";
 
-        let platform = platform::Platform::init().context("platform init")?;
+        let platform = platform::Platform::init(&mut event_manager).context("platform init")?;
         let renderer = renderer::Renderer::init(
             renderer::RendererCreateInfo {
                 engine_name: CString::from_str(name)?,
@@ -39,10 +46,6 @@ impl Engine {
 
         /* A rough idea of the flow of the C++ Engine
          *
-         * Intialize Main Engine Objects:
-         * - EventManager
-         * - World
-         *
          * ImGui:
          * - Configure ImGui
          * - Init ImGui platform
@@ -52,6 +55,9 @@ impl Engine {
          */
         let mut engine = Self {
             platform,
+            event_manager,
+            exit_consumer,
+
             renderer,
 
             next_world_id: 0,
@@ -141,50 +147,34 @@ impl Engine {
 
         Ok(engine)
     }
-    /// Engine tick.
-    /// Returns if the engine should continue ticking.
     pub fn tick(&mut self) -> anyhow::Result<bool> {
-        if self.is_requesting_exit() {
-            return Ok(false);
-        }
-
         let delta_time = self.capture_delta_time();
+        self.event_manager.dispatch_all();
 
         // TODO: renders too fast and semaphores have problem.
         // remove when rendering takes longer
         std::thread::sleep(std::time::Duration::from_millis(10));
 
-        self.platform.tick(delta_time).context("ticking platform")?;
+        self.process_events();
         if self.is_requesting_exit() {
             return Ok(false);
         }
 
+        self.platform.tick(delta_time);
+
         /*
-         * EventManager dispatch events
-         *
          * World Tick
          * Main Viewport tick
          */
 
-        self.render().context("tick: render")?;
-
+        self.render().context("render")?;
         Ok(!self.is_requesting_exit())
     }
-    pub fn render(&mut self) -> anyhow::Result<()> {
+    pub fn render(&self) -> anyhow::Result<()> {
         self.renderer.render()?;
-        /* Renderer::render
-         *
-         * ImGui:
-         * - update delta time
-         * - Renderer begin frame
-         * - ImGui::NewFrame()
-         * - engine renderImGui
-         * - ImGui::Render()
-         * - Renderer render ImGui
-         */
         Ok(())
     }
-    pub fn shutdown(&mut self) -> anyhow::Result<()> {
+    pub fn shutdown(&self) -> anyhow::Result<()> {
         /*
          * Shutdown ImGui (renderer then platform)
          *
@@ -192,6 +182,11 @@ impl Engine {
          * - Should cleanup and close all the log files
          */
         Ok(())
+    }
+    fn process_events(&mut self) {
+        if let Some(platform::AppExit(_)) = self.exit_consumer.try_consume() {
+            self.exit(None);
+        }
     }
     pub fn is_requesting_exit(&self) -> bool {
         self.is_requesting_exit || self.exit_error.is_some()
