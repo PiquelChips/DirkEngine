@@ -25,6 +25,7 @@ version = "0.1.0"
 # Basic stuff
 log  = { version = "0.4", features = ["std"] }
 time = { version = "0.3", features = ["formatting"] }
+tracing = "0.1"
 
 thiserror = "2"
 anyhow = "1"
