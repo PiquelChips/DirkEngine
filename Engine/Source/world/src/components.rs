@@ -65,7 +65,6 @@ impl Transform {
     pub fn matrix(&self) -> Mat4 {
         let translation = Mat4::from_translation(self.location);
         let scale = Mat4::from_scale(self.scale);
-        // NOTE: previously rot_x/rot_y had their axes swapped — corrected here.
         let rot_x = Mat4::from_rotation_x(self.rotation.x);
         let rot_y = Mat4::from_rotation_y(self.rotation.y);
         let rot_z = Mat4::from_rotation_z(self.rotation.z);
