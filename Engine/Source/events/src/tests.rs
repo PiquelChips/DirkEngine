@@ -168,6 +168,9 @@ enum NoAttrEnum {
     Beta(i32),
 }
 
+// can't really be tested as it doesn't have any fields.
+// just an easy feature to have when in development
+#[allow(unused)]
 #[derive(Debug, Clone, Event)]
 #[event("empty enum")]
 enum EmptyEnum {}
