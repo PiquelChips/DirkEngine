@@ -58,7 +58,7 @@ fn derive_event_enum(input: &DeriveInput, data: &DataEnum) -> proc_macro::TokenS
         }
     };
 
-    if data.variants.len() == 0 {
+    if data.variants.is_empty() {
         content = quote! {
             format!("{self:?}")
         }
