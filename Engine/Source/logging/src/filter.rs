@@ -45,7 +45,7 @@ type Filter = Box<dyn Fn(&LogEntry) -> bool + Send + Sync>;
 ///
 /// ```rust
 /// # use logging::{Filter, LogLevel};
-/// # let logger = logging::Logger::new(false, false).unwrap();
+/// # let logger = logging::Logger::new().init().unwrap();
 /// let recent_render_errors = logger
 ///     .query(
 ///         Filter::new()
@@ -277,7 +277,7 @@ impl LogFilter {
 ///
 /// # Example
 /// ```rust
-/// # let logger = logging::Logger::new(false, false).unwrap();
+/// # let logger = logging::Logger::new().init().unwrap();
 /// # use logging::{Filter, LogLevel};
 /// let errors = logger
 ///     .query(Filter::new().min_level(LogLevel::Error))
@@ -296,7 +296,7 @@ impl StoreFilter {
     ///
     /// # Example
     /// ```rust
-    /// # let logger = logging::Logger::new(false, false).unwrap();
+    /// # let logger = logging::Logger::new().init().unwrap();
     /// # use logging::{LogEntry, LogLevel, Filter};
     /// let all_warnings: Vec<LogEntry> = logger
     ///     .query(Filter::new().min_level(LogLevel::Warn))
@@ -320,7 +320,7 @@ impl StoreFilter {
     /// # Example
     /// ```rust
     /// // Show the 50 most recent Rendering entries in the log panel:
-    /// # let logger = logging::Logger::new(false, false).unwrap();
+    /// # let logger = logging::Logger::new().init().unwrap();
     /// # use logging::{LogEntry, LogLevel, Filter};
     /// let recent: Vec<LogEntry> = logger
     ///     .query(Filter::new().of_category("Rendering"))
@@ -342,7 +342,7 @@ impl StoreFilter {
     ///
     /// # Example
     /// ```rust
-    /// # let logger = logging::Logger::new(false, false).unwrap();
+    /// # let logger = logging::Logger::new().init().unwrap();
     /// # use logging::{LogEntry, LogLevel, Filter};
     /// let error_count: usize = logger
     ///     .query(Filter::new().of_level(LogLevel::Error))

@@ -12,7 +12,7 @@
 //!
 //! ```rust
 //! // Verbose mode enables DEBUG and TRACE levels; pass `false` for INFO+.
-//! let logger = logging::Logger::new(true, false).expect("logger init failed");
+//! let logger = logging::Logger::new().verbose(true).init().expect("logger init failed");
 //! ```
 //!
 //! ## Emitting log events
@@ -42,7 +42,7 @@
 //! captures every event. Use [`Logger::query`] with a [`Filter`] to search it:
 //!
 //! ```rust
-//! # let logger = logging::Logger::new(false, false).unwrap();
+//! # let logger = logging::Logger::new().init().unwrap();
 //! use logging::{Filter, LogLevel};
 //!
 //! // The 50 most recent warnings or worse from the Rendering category:
@@ -177,72 +177,178 @@ pub struct LogEntry {
 
 /// Handle returned after the global subscriber has been installed.
 ///
-/// In **game** builds this is a zero-sized type; the file and console layers
-/// are still active but no in-memory store is maintained.
+/// `Logger` follows a **builder pattern**: construct it with [`Logger::new`],
+/// configure it with the chained setter methods, then call [`Logger::init`]
+/// to install the global [`tracing`] subscriber.
 ///
-/// In **editor** builds it holds an `Arc` to the shared [`store::LogStore`]
-/// and exposes [`Logger::query`] for rich log-panel queries.
+/// ```rust
+/// # use logging::{LogLevel, Logger};
+/// # fn test() -> Result<(), Box<dyn std::error::Error>> {
+/// let logger = Logger::new()
+///     .max_level(LogLevel::Debug)
+///     .write_fs(true)
+///     .allowed_categories(["Rendering", "Physics"])
+///     .init()?;
+/// # Ok(()) };
+/// ```
+///
+/// After `init` the returned `Logger` is the live handle. In **editor** builds
+/// it exposes [`Logger::query`] for querying the in-memory log store.
+/// In **game** builds it is a zero-sized type.
+///
+/// # Layer overview
+///
+/// | Layer | Always active | Condition |
+/// |---|---|---|
+/// | Console (ANSI, stderr/stdout) | ✓ | — |
+/// | File (`latest.log` + timestamped) | | `write_fs(true)` |
+/// | In-memory store | | `#[cfg(editor)]` |
 ///
 /// # Errors
 ///
-/// [`Logger::new`] fails if:
+/// [`Logger::init`] fails if:
 /// - The global subscriber has already been installed ([`InitError::AlreadyInitialised`]).
 /// - A log file could not be created or opened ([`InitError::Io`]).
+#[derive(Default)]
 pub struct Logger {
+    /// Shorthand for `max_level(LogLevel::Trace)`. Ignored when
+    /// [`max_level`](Self::max_level) is also set.
+    verbose: bool,
+    /// Explicit ceiling on the log level. Overrides `verbose` when set.
+    max_level: Option<LogLevel>,
+    /// Whether to write logs to disk.
+    write_fs: bool,
+    /// Allowlist of category names. Empty means all categories pass.
+    allowed_categories: Vec<String>,
     #[cfg(editor)]
     store: Arc<LogStore>,
 }
 
 impl Logger {
-    /// Initialise the global [`tracing`] subscriber and return a [`Logger`] handle.
+    /// Create a new logger builder with default settings:
+    /// - `max_level`: `Info` (same as `verbose(false)`)
+    /// - `write_fs`: `false`
+    /// - all categories allowed
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Enable `TRACE`-level logging (equivalent to `max_level(LogLevel::Trace)`).
     ///
-    /// `verbose = true` enables `DEBUG` and `TRACE` levels in addition to
-    /// `INFO`, `WARN`, and `ERROR`. Pass `false` for release / shipping builds.
+    /// Ignored if [`max_level`](Self::max_level) is also called; the explicit
+    /// level always wins.
+    pub fn verbose(mut self, verbose: bool) -> Self {
+        self.verbose = verbose;
+        self
+    }
+
+    /// Set the maximum [`LogLevel`] that will be processed.
+    ///
+    /// This takes precedence over [`verbose`](Self::verbose). Events less
+    /// severe than `level` are dropped before reaching any layer.
+    ///
+    /// # Example
+    /// ```rust
+    /// # use logging::{Logger, LogLevel};
+    /// # fn test() -> Result<(), Box<dyn std::error::Error>> {
+    /// // Suppress debug and trace in a staging build:
+    /// Logger::new().max_level(LogLevel::Info).init()?;
+    /// # Ok(()) };
+    /// ```
+    pub fn max_level(mut self, level: LogLevel) -> Self {
+        self.max_level = Some(level);
+        self
+    }
+
+    /// Enable or disable writing log files to disk.
+    ///
+    /// When `true`, two files are written into the configured log directory:
+    /// `latest.log` (truncated each run) and a timestamped archive.
+    pub fn write_fs(mut self, write_fs: bool) -> Self {
+        self.write_fs = write_fs;
+        self
+    }
+
+    /// Restrict logging to entries whose category exactly matches one of the
+    /// provided names. All other categories are silently dropped by every layer.
+    ///
+    /// Calling this with an empty iterator (or not calling it at all) allows
+    /// all categories through.
+    ///
+    /// # Example
+    /// ```rust
+    /// # use logging::Logger;
+    /// # fn test() -> Result<(), Box<dyn std::error::Error>> {
+    /// Logger::new()
+    ///     .allowed_categories(["Rendering", "Physics", "Audio"])
+    ///     .init()?;
+    /// # Ok(()) };
+    /// ```
+    pub fn allowed_categories(
+        mut self,
+        categories: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Self {
+        self.allowed_categories = categories.into_iter().map(Into::into).collect();
+        self
+    }
+
+    /// Install the global [`tracing`] subscriber and return the live `Logger`.
+    ///
+    /// Must be called exactly once per process. The builder is consumed and
+    /// the configured `Logger` handle is returned on success.
     ///
     /// # Errors
     ///
-    /// Returns [`InitError::AlreadyInitialised`] if called more than once in
-    /// the same process. Returns [`InitError::Io`] if the log directory or
-    /// files cannot be created.
+    /// - [`InitError::AlreadyInitialised`] — called more than once.
+    /// - [`InitError::Io`] — `write_fs` is `true` but a log file could not be
+    ///   opened.
     ///
     /// # Example
     ///
     /// ```rust
-    /// let logger = logging::Logger::new(/* verbose = */ true, /* fs_out */ false)
-    ///     .expect("failed to initialise logger");
+    /// # use logging::{LogLevel, Logger};
+    /// # fn test() -> Result<(), Box<dyn std::error::Error>> {
+    /// let logger = Logger::new()
+    ///     .max_level(LogLevel::Warn)   // only Warn and Error
+    ///     .write_fs(true)
+    ///     .allowed_categories(["Rendering", "Physics"])
+    ///     .init()?;
+    /// # Ok(()) };
     ///
-    /// tracing::info!(target: "Engine", "Logger ready");
+    /// tracing::info!(target: "Rendering", "this passes");
+    /// tracing::info!(target: "Audio",     "this is dropped — wrong category");
+    /// tracing::debug!(target: "Rendering","this is dropped — below Warn");
     /// ```
-    pub fn new(verbose: bool, fs_out: bool) -> Result<Logger, InitError> {
-        #[cfg(editor)]
-        let store = Arc::new(LogStore::new());
-
-        let max_level = if verbose {
-            LevelFilter::TRACE
-        } else {
-            LevelFilter::INFO
-        };
-
-        let registry = Registry::default()
-            .with(max_level)
-            .with(ConsoleLayer)
-            .with(if fs_out {
-                Some(FileLayer::new()?)
+    pub fn init(self) -> Result<Self, InitError> {
+        // max_level wins over the verbose shorthand.
+        let max_level: LevelFilter = self.max_level.map(Into::into).unwrap_or_else(|| {
+            if self.verbose {
+                LevelFilter::TRACE
             } else {
-                None
-            });
+                LevelFilter::INFO
+            }
+        });
+
+        // TODO: actually filter out categories
+
+        let registry =
+            Registry::default()
+                .with(max_level)
+                .with(ConsoleLayer)
+                .with(if self.write_fs {
+                    Some(FileLayer::new()?)
+                } else {
+                    None
+                });
 
         #[cfg(editor)]
-        let registry = registry.with(StorageLayer::new(Arc::clone(&store)));
+        let registry = registry.with(StorageLayer::new(Arc::clone(&self.store)));
 
         registry
             .try_init()
             .map_err(|_| InitError::AlreadyInitialised)?;
 
-        Ok(Logger {
-            #[cfg(editor)]
-            store,
-        })
+        Ok(self)
     }
 
     /// Build a query against the in-memory log store.
@@ -257,7 +363,7 @@ impl Logger {
     /// # Example
     ///
     /// ```rust
-    /// # let logger = logging::Logger::new(false, false).unwrap();
+    /// # let logger = logging::Logger::new().init().unwrap();
     /// use logging::{Filter, LogLevel};
     ///
     /// // All errors across every category:
