@@ -14,17 +14,17 @@ type Filter = Box<dyn Fn(&LogEntry) -> bool + Send + Sync>;
 ///
 /// # Example
 /// ```rust
-/// # use logging::{LogLevel, Filter};
+/// # use logging::{LogLevel, Filter, LogEntry};
 /// # let entry = LogEntry {
 /// #     level: LogLevel::Warn,
 /// #     category: "Test".to_string(),
-/// #     timestamp: OffsetDateTime::now_utc(),
+/// #     timestamp: time::OffsetDateTime::now_utc(),
 /// #     message: "Test".to_string(),
 /// # };
 /// let errors_filter = Filter::new()
 ///     .of_category("Rendering")
 ///     .min_level(LogLevel::Warn)
-///     .filter(entry);
+///     .filter(&entry);
 /// ```
 #[derive(Default)]
 pub struct LogFilter {

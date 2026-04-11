@@ -4,11 +4,12 @@
 //!
 //! ## Usage
 //!
-//! ```rust
+//! ```rust,ignore
 //! // create verbose logger
 //! let logger = logging::Logger::new(true).unwrap();
 //!
 //! // Later, in the log-panel UI:
+//! // TODO: this is the old API
 //! let render_errors = logger
 //!     .query()
 //!     .of_category("Rendering")
