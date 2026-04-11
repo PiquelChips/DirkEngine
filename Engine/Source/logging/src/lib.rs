@@ -45,95 +45,74 @@
 //! ```
 //! If neither is set the Rust module path is used as a fallback.
 
-mod entry;
+mod builder;
 mod layers;
 mod query;
 mod store;
 
-pub use entry::{LogEntry, LogLevel};
+pub use builder::LoggerBuilder;
 pub use query::QueryBuilder;
 
-use layers::{console::ConsoleLayer, file::FileLayer};
-use thiserror::Error;
-#[cfg(editor)]
-use {layers::storage::StorageLayer, store::LogStore};
+use std::fmt;
+use time::OffsetDateTime;
 
+#[cfg(editor)]
+use crate::store::LogStore;
 #[cfg(editor)]
 use std::sync::Arc;
 
-use tracing_subscriber::{
-    Registry, filter::LevelFilter, layer::SubscriberExt, util::SubscriberInitExt,
-};
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// LoggerBuilder
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-/// Fluent builder for the engine logger. Obtain one via [`Logger::builder`].
-#[derive(Default)]
-pub struct LoggerBuilder {
-    verbose: bool,
-    log_dir: Option<String>,
+/// Mirrors `tracing::Level` with an owned, filterable representation.
+/// The discriminant ordering matches severity: `Error = 0` is most severe.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum LogLevel {
+    Error = 0,
+    Warn = 1,
+    Info = 2,
+    Debug = 3,
+    Trace = 4,
 }
 
-impl LoggerBuilder {
-    /// Enable `TRACE` / `DEBUG` levels (default: only `INFO` and above).
-    pub fn verbose(mut self, verbose: bool) -> Self {
-        self.verbose = verbose;
-        self
-    }
-
-    /// Write log files into `log_dir` (created automatically if absent).
-    /// If not set no files are written.
-    pub fn with_files(mut self, log_dir: impl Into<String>) -> Self {
-        self.log_dir = Some(log_dir.into());
-        self
-    }
-
-    // ── Shared setup ──────────────────────────────────────────────────────────
-
-    fn max_level(&self) -> LevelFilter {
-        if self.verbose {
-            LevelFilter::TRACE
-        } else {
-            LevelFilter::INFO
+impl From<&tracing::Level> for LogLevel {
+    fn from(level: &tracing::Level) -> Self {
+        match *level {
+            tracing::Level::ERROR => Self::Error,
+            tracing::Level::WARN => Self::Warn,
+            tracing::Level::INFO => Self::Info,
+            tracing::Level::DEBUG => Self::Debug,
+            tracing::Level::TRACE => Self::Trace,
         }
     }
+}
 
-    fn build_file_layer(&self) -> Result<Option<FileLayer>, std::io::Error> {
-        self.log_dir.as_deref().map(FileLayer::new).transpose()
-    }
-
-    /// Initialise the global tracing subscriber.
-    ///
-    /// Installs:
-    /// - [`ConsoleLayer`] – colored terminal output
-    /// - [`FileLayer`] – dual-file plain-text output (if [`with_files`](Self::with_files) was set)
-    /// - [`StorageLayer`] – captures every event into an in-memory store
-    pub fn init(self) -> Result<Logger, InitError> {
-        let file_layer = self.build_file_layer()?;
-        #[cfg(editor)]
-        let store = Arc::new(LogStore::new());
-
-        Registry::default()
-            .with(self.max_level())
-            .with(ConsoleLayer)
-            .with(file_layer)
-            // TODO: only add this layer in editor builds
-            .with(StorageLayer::new(Arc::clone(&store)))
-            .try_init()
-            .map_err(|_| InitError::AlreadyInitialised)?;
-
-        Ok(Logger {
-            #[cfg(editor)]
-            store,
-        })
+impl fmt::Display for LogLevel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Error => "ERROR",
+                Self::Warn => "WARN",
+                Self::Info => "INFO",
+                Self::Debug => "DEBUG",
+                Self::Trace => "TRACE",
+            }
+        )
     }
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// Logger
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+/// A single captured log event with full metadata.
+#[derive(Debug, Clone)]
+pub struct LogEntry {
+    /// Severity level.
+    pub level: LogLevel,
+    /// Category (from the `target:` directive or a `category` field; falls back
+    /// to the tracing target, which defaults to the Rust module path).
+    pub category: String,
+    /// UTC timestamp at the moment the event was recorded.
+    pub timestamp: OffsetDateTime,
+    /// Formatted log message.
+    pub message: String,
+}
 
 /// Handle returned after the global subscriber has been installed.
 ///
@@ -174,30 +153,6 @@ impl Logger {
         QueryBuilder::new(Arc::clone(&self.store))
     }
 }
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// Error types
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-#[derive(Debug, Error)]
-pub enum InitError {
-    /// `init` / `init_editor` was called more than once. The global subscriber
-    /// can only be set once per process.
-    #[error("logger has already been initialised")]
-    AlreadyInitialised,
-    /// A log-file directory could not be created, or a log file could not be
-    /// opened.
-    #[error("log-file I/O error: {0}")]
-    Io(
-        #[from]
-        #[source]
-        std::io::Error,
-    ),
-}
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// Tests
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 #[cfg(test)]
 mod tests {
