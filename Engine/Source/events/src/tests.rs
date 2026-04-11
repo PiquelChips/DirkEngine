@@ -425,16 +425,16 @@ mod event_manager {
         let dispatcher = mgr.register::<CounterEvent>();
         let consumer = mgr.subscribe::<CounterEvent>();
 
+        // Each tick delivers one event.
         dispatcher.dispatch(CounterEvent(1));
         mgr.dispatch_all();
 
-        dispatcher.dispatch(CounterEvent(2));
-        mgr.dispatch_all();
-
-        // Each tick delivers one event.
         let first = collect(&consumer);
         assert_eq!(first.len(), 1);
         assert_eq!(first[0].0, 1);
+
+        dispatcher.dispatch(CounterEvent(2));
+        mgr.dispatch_all();
 
         let second = collect(&consumer);
         assert_eq!(second.len(), 1);
