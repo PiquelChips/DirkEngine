@@ -30,15 +30,9 @@ impl Window {
     pub fn size(&self) -> PhysicalSize<u32> {
         self.window.surface_size()
     }
-
-    pub fn tick(&mut self, _delta_time: f32, events: Vec<WindowEvent>) {
-        for event in events {
-            self.handle_event(event);
-        }
-    }
     /// Handles [WindowEvent]. These should first be proccessed
     /// and accepted by the window.
-    fn handle_event(&mut self, event: WindowEvent) {
+    pub fn handle_event(&mut self, event: WindowEvent) {
         if *event.id() != self.id() {
             return;
         }

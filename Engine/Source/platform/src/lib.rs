@@ -30,6 +30,7 @@ pub struct Platform {
     event_loop: EventLoop,
 
     exit_dispatcher: events::Dispatcher<event::AppExit>,
+    window_consumer: events::Consumer<WindowEvent>,
 }
 
 impl Platform {
@@ -38,6 +39,7 @@ impl Platform {
             handler: PlatformHandler::new(events),
             event_loop: EventLoop::new().expect("failed to create winit event loop"),
             exit_dispatcher: events.register(),
+            window_consumer: events.subscribe(),
         };
 
         // Pump until `can_create_surfaces` fires and the main window exists.
@@ -58,7 +60,7 @@ impl Platform {
     }
     /// Process pending OS events without blocking.
     /// Returns the events that occurred this tick for the engine to handle.
-    pub fn tick(&mut self, delta_time: f32) {
+    pub fn tick(&mut self, _delta_time: f32) {
         match self
             .event_loop
             .pump_app_events(Some(Duration::ZERO), &mut self.handler)
@@ -72,10 +74,11 @@ impl Platform {
             PumpStatus::Continue => {}
         }
 
-        self.handler
-            .windows
-            .iter_mut()
-            .for_each(|(_, window)| window.tick(delta_time));
+        self.window_consumer.consume_all().for_each(|event| {
+            if let Some(window) = self.handler.windows.get_mut(event.id()) {
+                window.handle_event(event.clone());
+            }
+        });
     }
 
     pub fn main_window(&self) -> &Window {
