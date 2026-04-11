@@ -102,54 +102,30 @@ impl LoggerBuilder {
         self.log_dir.as_deref().map(FileLayer::new).transpose()
     }
 
-    // ── Game init ─────────────────────────────────────────────────────────────
-
-    /// Initialise the global tracing subscriber for a **game** build.
+    /// Initialise the global tracing subscriber.
     ///
     /// Installs:
     /// - [`ConsoleLayer`] – colored terminal output
     /// - [`FileLayer`] – dual-file plain-text output (if [`with_files`](Self::with_files) was set)
-    ///
-    /// Returns an opaque [`Logger`] handle. In game builds this handle carries
-    /// no state; it exists only for API symmetry with the editor path.
+    /// - [`StorageLayer`] – captures every event into an in-memory store
     pub fn init(self) -> Result<Logger, InitError> {
         let file_layer = self.build_file_layer()?;
-
-        Registry::default()
-            .with(self.max_level())
-            .with(ConsoleLayer)
-            .with(file_layer)
-            .try_init()
-            .map_err(|_| InitError::AlreadyInitialised)?;
-
-        Ok(Logger {})
-    }
-
-    // ── Editor init ───────────────────────────────────────────────────────────
-
-    /// Initialise the global tracing subscriber for an **editor** build.
-    ///
-    /// Installs everything from [`init`](Self::init) **plus**:
-    /// - [`StorageLayer`] – captures every event into an in-memory store
-    ///
-    /// The returned [`Logger`] exposes a [`query`](Logger::query) method for
-    /// filtering stored events in the log panel UI.
-    ///
-    /// Only available with the `editor` feature.
-    #[cfg(editor)]
-    pub fn init_editor(self) -> Result<Logger, InitError> {
-        let file_layer = self.build_file_layer()?;
+        #[cfg(editor)]
         let store = Arc::new(LogStore::new());
 
         Registry::default()
             .with(self.max_level())
             .with(ConsoleLayer)
             .with(file_layer)
+            // TODO: only add this layer in editor builds
             .with(StorageLayer::new(Arc::clone(&store)))
             .try_init()
             .map_err(|_| InitError::AlreadyInitialised)?;
 
-        Ok(Logger { store })
+        Ok(Logger {
+            #[cfg(editor)]
+            store,
+        })
     }
 }
 
