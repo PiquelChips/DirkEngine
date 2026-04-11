@@ -1,11 +1,175 @@
-/// Holds the visual description of an entity.
-#[derive(Debug, Clone)]
-// TODO: actually renderable
-pub struct Renderable;
+use glam::{Mat4, Vec3};
 
+/// Marks an entity as having a renderable mesh.
+///
+/// The `model` field is resolved at render time against the engine's asset
+/// registry. If no matching asset is found the entity is silently skipped.
+///
+/// # Examples
+/// ```
+/// # use world::components::Renderable;
+/// let r = Renderable { model: "meshes/cube.glb".into() };
+/// assert_eq!(r.model, "meshes/cube.glb");
+/// ```
+#[derive(Debug, Clone)]
+pub struct Renderable {
+    /// Asset-registry key for the mesh to render (e.g. `"meshes/cube.glb"`).
+    pub model: String,
+}
+
+/// Spatial transform for an entity: position, orientation, and scale.
+///
+/// Rotation is stored as **Euler angles in radians** using the **YXZ** convention
+/// (yaw → pitch → roll), which matches a typical first-person camera setup.
+///
+/// # Examples
+/// ```
+/// # use world::components::Transform;
+/// # use glam::Vec3;
+/// let t = Transform {
+///     location: Vec3::new(1.0, 0.0, 0.0),
+///     rotation: Vec3::ZERO,
+///     scale:    Vec3::ONE,
+/// };
+/// // The forward vector of an un-rotated transform points along the engine's
+/// // canonical forward axis.
+/// let fwd = t.forward();
+/// assert!((fwd.length() - 1.0).abs() < 1e-5);
+/// ```
 #[derive(Debug, Clone)]
 pub struct Transform {
-    pub position: glam::Vec3,
-    pub rotation: glam::Vec3,
-    pub scale: glam::Vec3,
+    /// World-space position.
+    pub location: Vec3,
+    /// Euler angles **in radians**, applied in YXZ order (yaw, pitch, roll).
+    pub rotation: Vec3,
+    /// Per-axis scale factor. `Vec3::ONE` is the identity scale.
+    pub scale: Vec3,
+}
+
+impl Default for Transform {
+    /// Returns the identity transform: origin, no rotation, unit scale.
+    fn default() -> Self {
+        Self {
+            location: Vec3::ZERO,
+            rotation: Vec3::ZERO,
+            scale: Vec3::ONE,
+        }
+    }
+}
+
+impl Transform {
+    /// Builds the full model matrix (`T × S × R`) for this transform.
+    ///
+    /// Rotation is applied in **YXZ** order (yaw around Y, then pitch around X,
+    /// then roll around Z).
+    pub fn matrix(&self) -> Mat4 {
+        let translation = Mat4::from_translation(self.location);
+        let scale = Mat4::from_scale(self.scale);
+        let rot_x = Mat4::from_rotation_x(self.rotation.x);
+        let rot_y = Mat4::from_rotation_y(self.rotation.y);
+        let rot_z = Mat4::from_rotation_z(self.rotation.z);
+
+        translation * scale * rot_y * rot_x * rot_z
+    }
+
+    /// Returns the orientation as a unit quaternion (YXZ Euler decomposition).
+    pub fn rotation_quat(&self) -> glam::Quat {
+        glam::Quat::from_euler(
+            glam::EulerRot::YXZ,
+            self.rotation.y,
+            self.rotation.x,
+            self.rotation.z,
+        )
+    }
+
+    /// Returns the unit vector pointing "forward" from this transform.
+    ///
+    /// The result is obtained by rotating the engine's canonical forward
+    /// direction ([`utils::FORWARD_DIRECTION`]) by the current orientation.
+    pub fn forward(&self) -> Vec3 {
+        self.rotation_quat() * utils::FORWARD_DIRECTION
+    }
+
+    /// Builds a **left-handed** view matrix for a camera placed at this
+    /// transform, looking in the [`forward`](Self::forward) direction.
+    pub fn view(&self) -> Mat4 {
+        Mat4::look_at_lh(
+            self.location,
+            self.location + self.forward(),
+            utils::UP_DIRECTION,
+        )
+    }
+}
+
+impl From<Transform> for Mat4 {
+    /// Converts the transform to its model matrix via [`Transform::matrix`].
+    fn from(transform: Transform) -> Self {
+        transform.matrix()
+    }
+}
+
+/// Perspective camera parameters attached to an entity.
+///
+/// Combine with a [`Transform`] component to obtain a complete view-projection
+/// matrix. The projection uses a **right-handed** coordinate system with the
+/// Y axis flipped to match Vulkan / wgpu NDC conventions (Y points downward
+/// in clip space).
+///
+/// # Examples
+/// ```
+/// # use world::components::Camera;
+/// let cam = Camera::default();
+/// let proj = cam.projection();
+/// // The matrix must be finite.
+/// assert!(proj.to_cols_array().iter().all(|v| v.is_finite()));
+/// ```
+#[derive(Debug)]
+pub struct Camera {
+    /// Vertical field of view **in radians**.
+    pub fov: f32,
+    /// Near clip plane distance (must be > 0).
+    pub near_clip: f32,
+    /// Far clip plane distance (must be > `near_clip`).
+    pub far_clip: f32,
+    /// Viewport width in pixels, used to compute the aspect ratio.
+    pub width: f32,
+    /// Viewport height in pixels, used to compute the aspect ratio.
+    pub height: f32,
+}
+
+impl Camera {
+    /// Computes a perspective projection matrix.
+    ///
+    /// The Y axis of the resulting matrix is negated so that clip-space Y
+    /// increases *downward*, matching Vulkan / wgpu NDC conventions.
+    pub fn projection(&self) -> Mat4 {
+        let mut proj = Mat4::perspective_rh(
+            self.fov,
+            self.width / self.height,
+            self.near_clip,
+            self.far_clip,
+        );
+        // Vulkan NDC has Y pointing down; flip the projection accordingly.
+        proj.y_axis.y *= -1.0;
+        proj
+    }
+
+    /// Returns the aspect ratio (`width / height`).
+    pub fn aspect_ratio(&self) -> f32 {
+        self.width / self.height
+    }
+}
+
+impl Default for Camera {
+    /// Returns a camera with a 45° FoV, near = 1, far = 100, and a square
+    /// 100 × 100 viewport.
+    fn default() -> Self {
+        Self {
+            fov: 45_f32.to_radians(),
+            near_clip: 1.0,
+            far_clip: 100.0,
+            width: 100.0,
+            height: 100.0,
+        }
+    }
 }

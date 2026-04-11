@@ -8,3 +8,5 @@ version.workspace = true
 
 [dependencies]
 glam.workspace = true
+
+utils.workspace = true
