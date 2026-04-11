@@ -37,6 +37,7 @@ mod store;
 mod tests;
 
 pub use query::QueryBuilder;
+pub use filter::LogFilter as Filter;
 use thiserror::Error;
 use tracing_subscriber::{
     Registry, filter::LevelFilter, layer::SubscriberExt, util::SubscriberInitExt,
