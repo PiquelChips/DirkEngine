@@ -45,19 +45,22 @@
 //! ```
 //! If neither is set the Rust module path is used as a fallback.
 
-mod builder;
 mod layers;
 mod query;
 mod store;
 #[cfg(test)]
 mod tests;
 
-pub use builder::LoggerBuilder;
 pub use query::QueryBuilder;
+use thiserror::Error;
+use tracing_subscriber::{
+    Registry, filter::LevelFilter, layer::SubscriberExt, util::SubscriberInitExt,
+};
 
 use std::fmt;
 use time::OffsetDateTime;
 
+use crate::layers::{console::ConsoleLayer, file::FileLayer, storage::StorageLayer};
 #[cfg(editor)]
 use crate::store::LogStore;
 #[cfg(editor)]
@@ -129,8 +132,29 @@ pub struct Logger {
 
 impl Logger {
     /// Create a [`LoggerBuilder`].
-    pub fn builder() -> LoggerBuilder {
-        LoggerBuilder::default()
+    pub fn new(verbose: bool) -> Result<Logger, InitError> {
+        #[cfg(editor)]
+        let store = Arc::new(LogStore::new());
+
+        let max_level = if verbose {
+            LevelFilter::TRACE
+        } else {
+            LevelFilter::INFO
+        };
+
+        Registry::default()
+            .with(max_level)
+            .with(ConsoleLayer)
+            .with(FileLayer::new()?)
+            // TODO: only add this layer in editor builds
+            .with(StorageLayer::new(Arc::clone(&store)))
+            .try_init()
+            .map_err(|_| InitError::AlreadyInitialised)?;
+
+        Ok(Logger {
+            #[cfg(editor)]
+            store,
+        })
     }
 
     /// Start building a query against the captured log entries.
@@ -152,4 +176,20 @@ impl Logger {
     pub fn query(&self) -> QueryBuilder {
         QueryBuilder::new(Arc::clone(&self.store))
     }
+}
+
+#[derive(Debug, Error)]
+pub enum InitError {
+    /// `init` / `init_editor` was called more than once. The global subscriber
+    /// can only be set once per process.
+    #[error("logger has already been initialised")]
+    AlreadyInitialised,
+    /// A log-file directory could not be created, or a log file could not be
+    /// opened.
+    #[error("log-file I/O error: {0}")]
+    Io(
+        #[from]
+        #[source]
+        std::io::Error,
+    ),
 }
