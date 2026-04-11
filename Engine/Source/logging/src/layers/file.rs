@@ -12,7 +12,7 @@ use super::format::{
 };
 
 // TODO: add compile time var with proper path
-const LOG_PATH: &str = "LOG_PATH";
+const LOG_PATH: &str = env!("LOG_PATH");
 
 /// A [`tracing_subscriber::Layer`] that writes **plain-text** (no ANSI codes)
 /// log lines to two files simultaneously:
