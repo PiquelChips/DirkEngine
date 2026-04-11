@@ -1,6 +1,9 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{Attribute, Data, DataEnum, DataStruct, DeriveInput, Fields, LitStr, parse_macro_input};
+use syn::{
+    Attribute, Data, DataEnum, DataStruct, DeriveInput, Fields, FieldsUnnamed, Ident, LitStr,
+    parse_macro_input,
+};
 
 #[proc_macro_derive(Event, attributes(event))]
 pub fn derive_event(input: TokenStream) -> TokenStream {
@@ -29,37 +32,42 @@ fn derive_event_enum(input: &DeriveInput, data: &DataEnum) -> proc_macro::TokenS
                 // Get all field names: { system, source, .. }
                 let idents = fields.named.iter().map(|f| &f.ident);
                 quote! {
+                    #[allow(unused_variables)]
                     Self::#var_name { #(#idents,)* .. } => format!(#message_format),
                 }
             }
             Fields::Unnamed(fields) => {
-                // For tuple variants like Error(String), we map them to 0, 1, etc.
-                let idents: Vec<_> = fields
-                    .unnamed
-                    .iter()
-                    .enumerate()
-                    .map(|(i, _)| quote::format_ident!("{}", i))
-                    .collect();
-
-                // This requires the user to use {0} in their message string
+                let (message_format, idents) = get_idents_for_unnamed(&message_format, fields);
                 quote! {
+                    #[allow(unused_variables)]
                     Self::#var_name ( #(#idents,)* .. ) => format!(#message_format),
                 }
             }
             Fields::Unit => {
                 quote! {
+                    #[allow(unused_variables)]
                     Self::#var_name => format!(#message_format),
                 }
             }
         }
     });
 
+    let mut content = quote! {
+        match self {
+            #(#arms)*
+        }
+    };
+
+    if data.variants.is_empty() {
+        content = quote! {
+            format!("{self:?}")
+        }
+    }
+
     let expanded = quote! {
         impl Event for #name {
             fn debug(&self) -> String {
-                match self {
-                    #(#arms)*
-                }
+                #content
             }
         }
     };
@@ -78,22 +86,16 @@ fn derive_event_struct(input: &DeriveInput, data: &DataStruct) -> proc_macro::To
             // Get all field names: { system, source, .. }
             let idents = fields.named.iter().map(|f| &f.ident);
             quote! {
+                #[allow(unused_variables)]
                 let Self { #(#idents,)* .. } = self;
                 format!(#message_format)
             }
         }
         Fields::Unnamed(fields) => {
-            // For tuple variants like Error(String), we map them to 0, 1, etc.
-            let idents: Vec<_> = fields
-                .unnamed
-                .iter()
-                .enumerate()
-                .map(|(i, _)| quote::format_ident!("{}", i))
-                .collect();
-
-            // This requires the user to use {0} in their message string
+            let (message_format, idents) = get_idents_for_unnamed(&message_format, fields);
             quote! {
-                let ( #(#idents,)* .. ) = self;
+                #[allow(unused_variables)]
+                let Self ( #(#idents,)* .. ) = self;
                 format!(#message_format)
             }
         }
@@ -128,4 +130,25 @@ fn get_message_format_from_attrs(attrs: &Vec<Attribute>) -> String {
         }
     }
     String::from("{self:?}")
+}
+
+fn get_idents_for_unnamed(format: &str, fields: &FieldsUnnamed) -> (String, Vec<Ident>) {
+    // Create the list of potential variables (_0, _1, etc.)
+    let idents: Vec<_> = fields
+        .unnamed
+        .iter()
+        .enumerate()
+        .map(|(i, _)| quote::format_ident!("_{}", i))
+        .collect();
+
+    let mut new_format = format.to_string();
+    for i in 0..idents.len() {
+        let search_pattern = format!("{{{i}}}"); // e.g., "{0}"
+        let new_pattern = format!("{{_{i}}}"); // e.g., "{_0}"
+        if format.contains(&search_pattern) {
+            new_format = new_format.replace(&search_pattern, &new_pattern);
+        }
+    }
+
+    (new_format, idents)
 }
