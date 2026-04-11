@@ -3,10 +3,6 @@ use std::fmt;
 use time::OffsetDateTime;
 use tracing::field::{Field, Visit};
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// Field extraction
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 /// Visitor that extracts the `message` and optional `category` fields from a
 /// tracing [`Event`](tracing::Event).
 #[derive(Default)]
@@ -36,10 +32,6 @@ impl Visit for EventVisitor {
         }
     }
 }
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// Formatting helpers
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 const TS_FORMAT: &[time::format_description::BorrowedFormatItem<'static>] =
     time::macros::format_description!("[year]/[month]/[day] [hour]:[minute]:[second]");
@@ -73,16 +65,16 @@ fn ansi_wrap(code: u8, text: &str) -> String {
     format!("\x1b[{code}m{text}\x1b[0m")
 }
 
-/// Format the log level bracket, optionally with ANSI color codes.
+/// Format the log level, optionally with ANSI color codes.
 ///
-/// `colored = true`  → `\x1b[32m[INFO]\x1b[0m`
-/// `colored = false` → `[INFO]`
+/// `colored = true`  → `\x1b[32mINFO\x1b[0m`
+/// `colored = false` → `INFO`
 pub(crate) fn format_level(level: &tracing::Level, colored: bool) -> String {
     let name = level.to_string(); // "ERROR" | "WARN" | "INFO" | "DEBUG" | "TRACE"
     if colored {
-        format!("[{}]", ansi_wrap(level_color_code(level), &name))
+        format!("{}", ansi_wrap(level_color_code(level), &name))
     } else {
-        format!("[{name}]")
+        format!("{name}")
     }
 }
 
@@ -95,7 +87,7 @@ pub(crate) fn format_line(
     category: &str,
     message: &str,
 ) -> String {
-    format!("{timestamp} {level_str} [{category}] {message}")
+    format!("{timestamp} [{level_str}] [{category}] {message}")
 }
 
 /// Extract all relevant fields from a tracing event, returning
