@@ -1,10 +1,6 @@
 use std::fmt;
 use time::OffsetDateTime;
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// LogLevel
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 /// Mirrors `tracing::Level` with an owned, filterable representation.
 /// The discriminant ordering matches severity: `Error = 0` is most severe.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -30,20 +26,19 @@ impl From<&tracing::Level> for LogLevel {
 
 impl fmt::Display for LogLevel {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let s = match self {
-            Self::Error => "ERROR",
-            Self::Warn => "WARN",
-            Self::Info => "INFO",
-            Self::Debug => "DEBUG",
-            Self::Trace => "TRACE",
-        };
-        f.write_str(s)
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Error => "ERROR",
+                Self::Warn => "WARN",
+                Self::Info => "INFO",
+                Self::Debug => "DEBUG",
+                Self::Trace => "TRACE",
+            }
+        )
     }
 }
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// LogEntry
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 /// A single captured log event with full metadata.
 #[derive(Debug, Clone)]
