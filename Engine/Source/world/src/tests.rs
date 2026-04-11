@@ -87,10 +87,9 @@ mod entity {
 
 // ---------------------------------------------------------------------------
 
-#[cfg(test)]
 mod components {
+    use crate::components::{Camera, Renderable, Transform};
     use glam::Vec3;
-    use world::components::{Camera, Renderable, Transform};
 
     // --- Transform default --------------------------------------------------
 
@@ -248,13 +247,12 @@ mod components {
 
 // ---------------------------------------------------------------------------
 
-#[cfg(test)]
 mod queries {
-    use glam::Vec3;
-    use world::{
+    use crate::{
         World,
         components::{Camera, Renderable, Transform},
     };
+    use glam::Vec3;
 
     fn make_world() -> World {
         World::new(0)
