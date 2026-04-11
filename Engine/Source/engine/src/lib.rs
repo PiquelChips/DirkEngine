@@ -170,7 +170,7 @@ impl Engine {
         self.render().context("render")?;
         Ok(!self.is_requesting_exit())
     }
-    pub fn render(&self) -> anyhow::Result<()> {
+    pub fn render(&mut self) -> anyhow::Result<()> {
         self.renderer.render()?;
         Ok(())
     }
