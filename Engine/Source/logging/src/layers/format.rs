@@ -72,9 +72,9 @@ fn ansi_wrap(code: u8, text: &str) -> String {
 pub(crate) fn format_level(level: &tracing::Level, colored: bool) -> String {
     let name = level.to_string(); // "ERROR" | "WARN" | "INFO" | "DEBUG" | "TRACE"
     if colored {
-        format!("{}", ansi_wrap(level_color_code(level), &name))
+        ansi_wrap(level_color_code(level), &name).to_string()
     } else {
-        format!("{name}")
+        name
     }
 }
 
