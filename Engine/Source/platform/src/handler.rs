@@ -22,8 +22,6 @@ pub struct PlatformHandler {
     platform_dispatcher: events::Dispatcher<PlatformEvent>,
     /// Dispatch [PlatformWindowEvent]
     window_dispatcher: events::Dispatcher<PlatformWindowEvent>,
-    /// Consume [PlatformWindowEvent]. Cloned into created windows.
-    window_consumer: events::Consumer<PlatformWindowEvent>,
 }
 
 impl PlatformHandler {
@@ -34,7 +32,6 @@ impl PlatformHandler {
             main_window: None,
             platform_dispatcher: events.register(),
             window_dispatcher: events.register(),
-            window_consumer: events.subscribe(),
         }
     }
     fn create_window(&mut self, event_loop: &dyn ActiveEventLoop) -> anyhow::Result<WindowId> {
@@ -45,7 +42,7 @@ impl PlatformHandler {
 
         let window = event_loop.create_window(window_attributes)?;
 
-        let window = Window::new(self.window_consumer.clone(), window);
+        let window = Window::new(window);
         let window_id = window.id();
         debug!("Created new window with id={window_id:?}");
         self.windows.insert(window_id, window);

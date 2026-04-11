@@ -13,21 +13,15 @@ pub struct Window {
     /// If the window is completely hidden (minized or covered by another
     /// window)
     occluded: bool,
-
-    window_consumer: events::Consumer<WindowEvent>,
 }
 
 impl Window {
-    pub fn new(
-        window_consumer: events::Consumer<WindowEvent>,
-        window: Box<dyn winit::window::Window>,
-    ) -> Self {
+    pub fn new(window: Box<dyn winit::window::Window>) -> Self {
         Self {
             focused: false,
             theme: window.theme().unwrap_or(Theme::Dark),
             occluded: false,
             window,
-            window_consumer,
         }
     }
     pub fn id(&self) -> WindowId {
@@ -37,9 +31,7 @@ impl Window {
         self.window.surface_size()
     }
 
-    pub fn tick(&mut self, _delta_time: f32) {
-        let events: Vec<WindowEvent> = self.window_consumer.consume_all().collect();
-
+    pub fn tick(&mut self, _delta_time: f32, events: Vec<WindowEvent>) {
         for event in events {
             self.handle_event(event);
         }
