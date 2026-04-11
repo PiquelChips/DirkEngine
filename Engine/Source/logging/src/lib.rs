@@ -53,6 +53,7 @@ pub use entry::{LogEntry, LogLevel};
 pub use query::QueryBuilder;
 
 use layers::{console::ConsoleLayer, file::FileLayer};
+use thiserror::Error;
 #[cfg(editor)]
 use {layers::storage::StorageLayer, store::LogStore};
 
@@ -175,38 +176,20 @@ impl Logger {
 // Error types
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum InitError {
     /// `init` / `init_editor` was called more than once. The global subscriber
     /// can only be set once per process.
+    #[error("logger has already been initialised")]
     AlreadyInitialised,
     /// A log-file directory could not be created, or a log file could not be
     /// opened.
-    Io(std::io::Error),
-}
-
-impl std::fmt::Display for InitError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::AlreadyInitialised => f.write_str("logger has already been initialised"),
-            Self::Io(e) => write!(f, "log-file I/O error: {e}"),
-        }
-    }
-}
-
-impl std::error::Error for InitError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Io(e) => Some(e),
-            _ => None,
-        }
-    }
-}
-
-impl From<std::io::Error> for InitError {
-    fn from(e: std::io::Error) -> Self {
-        Self::Io(e)
-    }
+    #[error("log-file I/O error: {0}")]
+    Io(
+        #[from]
+        #[source]
+        std::io::Error,
+    ),
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

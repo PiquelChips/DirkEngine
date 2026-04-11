@@ -673,6 +673,7 @@ dependencies = [
  "build",
  "log",
  "parking_lot",
+ "thiserror 2.0.18",
  "time",
  "tracing",
  "tracing-subscriber",
