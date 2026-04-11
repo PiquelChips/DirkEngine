@@ -14,7 +14,7 @@ fn timestamp_format_compiles() {
 #[test]
 fn level_format_plain() {
     let s = layers::format::format_level(&tracing::Level::WARN, false);
-    assert_eq!(s, "[WARN]");
+    assert_eq!(s, "WARN");
 }
 
 /// Verify the level-bracket format with colors contains the level name.
@@ -29,7 +29,7 @@ fn level_format_colored() {
 #[test]
 fn format_line_structure() {
     let line =
-        layers::format::format_line("2024/01/15 12:34:56", "[INFO]", "Rendering", "Mesh loaded");
+        layers::format::format_line("2024/01/15 12:34:56", "INFO", "Rendering", "Mesh loaded");
     assert_eq!(line, "2024/01/15 12:34:56 [INFO] [Rendering] Mesh loaded");
 }
 
