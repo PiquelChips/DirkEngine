@@ -8,16 +8,32 @@ use winit::{
     window::{WindowAttributes, WindowId},
 };
 
-use crate::window::Window;
+use crate::{
+    Window,
+    event::{PlatformEvent, WindowEvent as PlatformWindowEvent},
+};
 
-/// The object with actual platform state. It handles responding to platform events.
-#[derive(Default)]
 pub struct PlatformHandler {
     can_create_surfaces: bool,
-    windows: HashMap<WindowId, Window>,
+    pub windows: HashMap<WindowId, Window>,
+    main_window: Option<WindowId>,
+
+    /// Dispatch [PlatformEvent]
+    platform_dispatcher: events::Dispatcher<PlatformEvent>,
+    /// Dispatch [PlatformWindowEvent]
+    window_dispatcher: events::Dispatcher<PlatformWindowEvent>,
 }
 
 impl PlatformHandler {
+    pub fn new(events: &mut events::EventManager) -> Self {
+        Self {
+            can_create_surfaces: false,
+            windows: HashMap::new(),
+            main_window: None,
+            platform_dispatcher: events.register(),
+            window_dispatcher: events.register(),
+        }
+    }
     fn create_window(&mut self, event_loop: &dyn ActiveEventLoop) -> anyhow::Result<WindowId> {
         #[allow(unused_mut)]
         let mut window_attributes = WindowAttributes::default()
@@ -32,51 +48,66 @@ impl PlatformHandler {
         self.windows.insert(window_id, window);
         Ok(window_id)
     }
+    pub fn main_window(&self) -> &Window {
+        self.windows
+            .get(
+                &self
+                    .main_window
+                    .expect("there should always be a main window"),
+            )
+            .expect("there should always be a main window")
+    }
+    pub fn is_initialized(&self) -> bool {
+        self.can_create_surfaces
+    }
+    pub fn shutdown(&mut self) {
+        let count = self.windows.len();
+        self.windows.clear();
+        debug!("Closed {count} window(s) during platform shutdown");
+    }
 }
 
 impl ApplicationHandler for PlatformHandler {
-    fn can_create_surfaces(&mut self, event_loop: &dyn winit::event_loop::ActiveEventLoop) {
-        self.create_window(event_loop)
+    fn can_create_surfaces(&mut self, event_loop: &dyn ActiveEventLoop) {
+        let id = self
+            .create_window(event_loop)
             .expect("failed to create main window");
-        self.can_create_surfaces = true
+        self.main_window = Some(id);
+        self.can_create_surfaces = true;
     }
-    fn window_event(
-        &mut self,
-        _event_loop: &dyn winit::event_loop::ActiveEventLoop,
-        window_id: winit::window::WindowId,
-        event: WindowEvent,
-    ) {
-        let window = match self.windows.get_mut(&window_id) {
-            Some(window) => window,
-            None => return,
-        };
 
+    fn window_event(&mut self, _loop: &dyn ActiveEventLoop, id: WindowId, event: WindowEvent) {
         match event {
-            WindowEvent::CloseRequested | WindowEvent::Destroyed => {
-                debug!("Closing Window={window_id:?}");
-                self.windows.remove(&window_id);
+            WindowEvent::CloseRequested => {
+                debug!("Close requested for Window={id:?}");
+                self.windows.remove(&id);
+                self.platform_dispatcher.dispatch(PlatformEvent::WindowCloseRequested { id });
+            }
+            WindowEvent::Destroyed => {
+                debug!("Window {id:?} destroyed");
+                self.platform_dispatcher .dispatch(PlatformEvent::WindowDestroyed { id });
             }
             WindowEvent::SurfaceResized(size) => {
-                window.resize(size);
-            }
-            WindowEvent::Focused(focused) => {
-                if focused {
-                    trace!("Window={window_id:?} focused");
-                } else {
-                    trace!("Window={window_id:?} unfocused");
-                }
-                window.focused(focused);
+                self.window_dispatcher.dispatch(PlatformWindowEvent::Resized {
+                    id,
+                    width: size.width,
+                    height: size.height,
+                });
             }
             WindowEvent::ThemeChanged(theme) => {
-                trace!("Theme changed to {theme:?}");
-                window.set_draw_theme(theme);
+                self.window_dispatcher.dispatch(PlatformWindowEvent::ThemeChanged { id, theme });
+            }
+            WindowEvent::Focused(focused) => {
+                self.window_dispatcher.dispatch(PlatformWindowEvent::FocusChanged { id, focused });
             }
             WindowEvent::Occluded(occluded) => {
-                window.set_occluded(occluded);
-            }
-            WindowEvent::ModifiersChanged(modifiers) => {
+                self.window_dispatcher.dispatch(PlatformWindowEvent::Occluded { id, occluded });
+                }
+            WindowEvent::ModifiersChanged(_modifiers) => {
+            /*
                 window.set_modifiers(modifiers.state());
                 trace!("Modifiers changed to {:?}", window.get_modifiers());
+            */
             }
             WindowEvent::MouseWheel { delta: _, .. } => {}
             /* TODO: input events
@@ -126,7 +157,7 @@ impl ApplicationHandler for PlatformHandler {
                 */
             }
             WindowEvent::PointerLeft { .. } => {
-                trace!("Pointer left Window={window_id:?}");
+                trace!("Pointer left Window={id:?}");
                 // TODO: input events: window.cursor_left();
             }
             WindowEvent::PointerMoved { position, .. } => {
@@ -160,7 +191,7 @@ impl ApplicationHandler for PlatformHandler {
             // are thus ignored.
             | WindowEvent::RedrawRequested
             | WindowEvent::Ime(_)
-            | WindowEvent::Moved(_) => (),
+            | WindowEvent::Moved(_) => {},
         }
     }
 }

@@ -2,10 +2,6 @@ use std::time::Instant;
 
 use anyhow::Context;
 
-use crate::errors::{InitResult, RenderResult, ShutdownResult};
-
-mod errors;
-
 /// This is the main struct that holds global engine state.
 pub struct Engine {
     event_manager: events::EventManager,
@@ -13,15 +9,19 @@ pub struct Engine {
     is_requesting_exit: bool,
     exit_error: Option<anyhow::Error>,
     last_tick: Instant,
+
+    exit_consumer: events::Consumer<platform::AppExit>,
 }
 
 impl Engine {
-    pub fn init() -> InitResult<Self> {
+    pub fn init() -> anyhow::Result<Self> {
         let logger = logging::Logger::new(true, true, true);
         logging::init(logger);
 
-        let event_manager = events::EventManager::new();
-        let platform = platform::Platform::init();
+        let mut event_manager = events::EventManager::new();
+        let platform = platform::Platform::init(&mut event_manager).context("platform init")?;
+
+        let exit_consumer = event_manager.subscribe();
 
         /* A rough idea of the flow of the C++ Engine
          *
@@ -42,31 +42,31 @@ impl Engine {
             event_manager,
             exit_error: None,
             last_tick: Instant::now(),
+
+            exit_consumer,
         })
     }
-    /// Engine tick.
-    /// Returns if the engine should continue ticking.
     pub fn tick(&mut self) -> anyhow::Result<bool> {
-        if self.is_requesting_exit() {
-            return Ok(false);
-        }
+        let delta_time = self.capture_delta_time();
         self.event_manager.dispatch_all();
 
-        let delta_time = self.capture_delta_time();
-
-        self.platform.tick(delta_time).context("ticking platform")?;
+        self.process_events();
         if self.is_requesting_exit() {
             return Ok(false);
         }
+
+        self.platform.tick(delta_time);
 
         /*
          * World Tick
          * Main Viewport tick
          * Render
          */
-        Ok(self.is_requesting_exit())
+        self.render().context("render")?;
+        Ok(!self.is_requesting_exit())
     }
-    pub fn render(&self) -> RenderResult<()> {
+
+    pub fn render(&self) -> anyhow::Result<()> {
         /* Renderer::render
          *
          * ImGui:
@@ -79,7 +79,7 @@ impl Engine {
          */
         Ok(())
     }
-    pub fn shutdown(&self) -> ShutdownResult<()> {
+    pub fn shutdown(&self) -> anyhow::Result<()> {
         /*
          * Shutdown ImGui (renderer then platform)
          *
@@ -87,6 +87,11 @@ impl Engine {
          * - Should cleanup and close all the log files
          */
         Ok(())
+    }
+    fn process_events(&mut self) {
+        if let Some(platform::AppExit(_)) = self.exit_consumer.try_consume() {
+            self.exit(None);
+        }
     }
     pub fn is_requesting_exit(&self) -> bool {
         self.is_requesting_exit || self.exit_error.is_some()

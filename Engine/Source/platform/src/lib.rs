@@ -5,11 +5,21 @@
 //!
 //! The DirkEngine's platform API is build on the winit crate.
 
-use winit::event_loop::{EventLoop, run_on_demand::EventLoopExtRunOnDemand};
+use std::time::Duration;
+
+use log::info;
+use winit::event_loop::{
+    EventLoop,
+    pump_events::{EventLoopExtPumpEvents, PumpStatus},
+};
 
 mod errors;
+mod event;
 mod handler;
 mod window;
+pub use errors::Error;
+pub use event::*;
+pub use window::Window;
 
 use errors::Result;
 use handler::PlatformHandler;
@@ -18,17 +28,71 @@ use handler::PlatformHandler;
 pub struct Platform {
     handler: PlatformHandler,
     event_loop: EventLoop,
+
+    exit_dispatcher: events::Dispatcher<event::AppExit>,
+    window_consumer: events::Consumer<WindowEvent>,
 }
 
 impl Platform {
-    pub fn init() -> Self {
-        Self {
-            handler: handler::PlatformHandler::default(),
-            event_loop: EventLoop::new().expect("failed to create empty winit event loop"),
+    pub fn init(events: &mut events::EventManager) -> Result<Self> {
+        let mut platform = Self {
+            handler: PlatformHandler::new(events),
+            event_loop: EventLoop::new().expect("failed to create winit event loop"),
+            exit_dispatcher: events.register(),
+            window_consumer: events.subscribe(),
+        };
+
+        // Pump until `can_create_surfaces` fires and the main window exists.
+        // Each call returns quickly; the OS dispatches the startup events
+        // within the first few iterations.
+        while !platform.handler.is_initialized() {
+            match platform
+                .event_loop
+                .pump_app_events(Some(Duration::ZERO), &mut platform.handler)
+            {
+                PumpStatus::Exit(code) => return Err(Error::AppExited(code)),
+                PumpStatus::Continue => {}
+            }
         }
+
+        info!("initialized platform");
+        Ok(platform)
     }
-    pub fn tick(&mut self, _delta_time: f32) -> Result<()> {
-        // TODO: maybe listen on a separate thread in the future
-        Ok(self.event_loop.run_app_on_demand(&mut self.handler)?)
+    /// Process pending OS events without blocking.
+    /// Returns the events that occurred this tick for the engine to handle.
+    pub fn tick(&mut self, _delta_time: f32) {
+        match self
+            .event_loop
+            .pump_app_events(Some(Duration::ZERO), &mut self.handler)
+        {
+            PumpStatus::Exit(code) => {
+                info!("Event loop exited with code {code}");
+                // Treat a forced OS exit like a window close.
+                self.exit_dispatcher.dispatch(event::AppExit(code));
+                return;
+            }
+            PumpStatus::Continue => {}
+        }
+
+        self.window_consumer.consume_all().for_each(|event| {
+            if let Some(window) = self.handler.windows.get_mut(event.id()) {
+                window.handle_event(event.clone());
+            }
+        });
+    }
+
+    pub fn main_window(&self) -> &Window {
+        self.handler.main_window()
+    }
+}
+
+impl Drop for Platform {
+    fn drop(&mut self) {
+        info!("Shutting down platform");
+        self.handler.shutdown();
+        // One final pump so winit can process the window destruction
+        // events before we tear everything down.
+        self.event_loop
+            .pump_app_events(Some(Duration::ZERO), &mut self.handler);
     }
 }
