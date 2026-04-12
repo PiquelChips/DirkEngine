@@ -42,7 +42,6 @@ use world::{components, events::WorldEvent};
 mod layouts;
 
 mod render_pass;
-use render_pass::RenderPass;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -216,6 +215,8 @@ pub struct Renderer {
     // TODO: these are temporary while we get rendering to work
     // render graph should fix this
     graphics_pipeline: GraphicsPipeline,
+    /// The size of the output
+    extent: vk::Extent2D,
 }
 
 impl Renderer {
@@ -590,6 +591,14 @@ impl Renderer {
             vk::CommandPoolCreateFlags::TRANSIENT,
         )?;
 
+        let extent = {
+            let size = window.size();
+            vk::Extent2D {
+                width: size.width,
+                height: size.height,
+            }
+        };
+
         Ok(Self {
             entry,
             instance,
@@ -599,7 +608,6 @@ impl Renderer {
             properties,
             transfer_pool,
             graphics_pool,
-            main_window: window.id(),
             windows: HashMap::new(),
             models: HashMap::new(),
             scenes: HashMap::new(),
@@ -613,6 +621,7 @@ impl Renderer {
             debug_messenger,
 
             graphics_pipeline,
+            extent,
 
             window_consumer: event_manager.subscribe(),
             platform_consumer: event_manager.subscribe(),
