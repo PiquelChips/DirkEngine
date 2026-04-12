@@ -1,36 +1,11 @@
-use std::ffi::c_void;
+use std::{collections::HashMap, ffi::c_void};
 
 use ash::{Device, vk};
-use world::{World, components};
 
 use crate::{
-    MAX_FRAMES_IN_FLIGHT, Renderer, Result, command_pool::CommandBuffer, model,
+    MAX_FRAMES_IN_FLIGHT, MAX_RENDERABLES, Renderer, Result, command_pool::CommandBuffer, model,
     render_pass::RenderPass,
 };
-
-/// This scene is created from a [world::World].
-/// It should then be updated whenever the world is updated.
-///
-/// Handles rendering all the [world::components::Renderable] objects
-/// of the world.
-pub struct Scene {
-    /// The entities to render.
-    proxies: Vec<SceneProxy>,
-    /// View matrix calculated from camera position.
-    view: glam::Mat4,
-    /// Projection matrix calculated from screen settings.
-    proj: glam::Mat4,
-
-    descriptor_pool: vk::DescriptorPool,
-    ubo: [UboData; MAX_FRAMES_IN_FLIGHT],
-    descriptor_sets: [vk::DescriptorSet; MAX_FRAMES_IN_FLIGHT],
-    render_pass: RenderPass,
-}
-
-struct SceneUbo {
-    view: glam::Mat4,
-    proj: glam::Mat4,
-}
 
 #[derive(Debug)]
 struct UboData {
@@ -48,33 +23,57 @@ impl UboData {
     }
 }
 
+/// This scene is created from a [world::World].
+/// It should then be updated whenever the world is updated.
+///
+/// Handles rendering all the [world::components::Renderable] objects
+/// of the world.
+pub struct Scene {
+    id: world::WorldId,
+    /// The entities to render.
+    proxies: HashMap<world::Entity, SceneProxy>,
+    camera: Option<CameraProxy>,
+
+    descriptor_pool: vk::DescriptorPool,
+    ubo: [UboData; MAX_FRAMES_IN_FLIGHT],
+    descriptor_sets: [vk::DescriptorSet; MAX_FRAMES_IN_FLIGHT],
+    render_pass: RenderPass,
+}
+
+struct SceneUbo {
+    view: glam::Mat4,
+    proj: glam::Mat4,
+}
+
+struct CameraProxy {
+    entity: world::Entity,
+    /// View matrix calculated from camera position.
+    view: glam::Mat4,
+    /// Projection matrix calculated from camera settings.
+    proj: glam::Mat4,
+}
+
 impl Scene {
     /// Builds a [Scene].
     /// Constructs the renderer stuff like command pools, descriptor sets, ... from
-    /// the [Renderer] and all world proxy stuff from [World].
-    pub fn build(renderer: &mut Renderer, world: &World) -> Result<Self> {
-        let (camera, camera_trans) = Self::get_camera(world);
-
-        let proxy_count = world
-            .query_double::<components::Renderable, components::Transform>()
-            .len() as u32;
-
+    /// the [Renderer].
+    pub fn build(renderer: &Renderer, world: world::WorldId) -> Result<Self> {
         let pool_sizes = [
             vk::DescriptorPoolSize {
                 ty: vk::DescriptorType::UNIFORM_BUFFER,
                 // scene UBOs + object UBOs, all × frames in flight
-                descriptor_count: (1 + proxy_count) * MAX_FRAMES_IN_FLIGHT as u32,
+                descriptor_count: (1 + MAX_RENDERABLES) * MAX_FRAMES_IN_FLIGHT as u32,
             },
             vk::DescriptorPoolSize {
                 ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
                 // rough upper bound on material textures
-                descriptor_count: proxy_count * MAX_FRAMES_IN_FLIGHT as u32,
+                descriptor_count: MAX_RENDERABLES * MAX_FRAMES_IN_FLIGHT as u32,
             },
         ];
 
         let pool_info = vk::DescriptorPoolCreateInfo::default()
             .pool_sizes(&pool_sizes)
-            .max_sets((1 + proxy_count * 2) * MAX_FRAMES_IN_FLIGHT as u32);
+            .max_sets((1 + MAX_RENDERABLES * 2) * MAX_FRAMES_IN_FLIGHT as u32);
 
         let descriptor_pool = unsafe { renderer.device.create_descriptor_pool(&pool_info, None)? };
 
@@ -142,47 +141,23 @@ impl Scene {
         let window = renderer.windows.get(&renderer.main_window).unwrap();
         let render_pass = RenderPass::build(renderer, window.extent())?;
 
-        let mut scene = Self {
-            proxies: Vec::new(),
-            view: camera_trans.view(),
-            proj: camera.projection(),
+        Ok(Self {
+            id: world,
+            proxies: HashMap::new(),
             descriptor_pool,
             ubo,
             descriptor_sets: scene_desc_sets,
             render_pass,
-        };
-        scene.proxies = scene.make_scene_proxies(renderer, world)?;
-        Ok(scene)
+            camera: None,
+        })
     }
     pub fn destroy(&self, device: &Device) {
-        self.proxies.iter().for_each(|proxy| proxy.destroy(device));
+        self.proxies
+            .iter()
+            .for_each(|(_, proxy)| proxy.destroy(device));
         self.render_pass.destroy(device);
         self.ubo.iter().for_each(|ubo| ubo.destroy(device));
         unsafe { device.destroy_descriptor_pool(self.descriptor_pool, None) };
-    }
-    fn make_scene_proxies(
-        &self,
-        renderer: &mut Renderer,
-        world: &World,
-    ) -> Result<Vec<SceneProxy>> {
-        world
-            .query_double::<components::Renderable, components::Transform>()
-            .iter()
-            .map(|&entity| {
-                // already made sure the entity has the component
-                let renderable = world.get::<components::Renderable>(entity).unwrap();
-                let transform = world.get::<components::Transform>(entity).unwrap();
-                SceneProxy::build(renderer, self, &renderable.model, transform.matrix())
-            })
-            .collect::<Result<Vec<_>>>()
-    }
-    fn get_camera(world: &World) -> (&components::Camera, &components::Transform) {
-        // TODO: don't just get the first camera + error handling if no camera
-        let camera_entity = world.query_double::<components::Transform, components::Camera>()[0];
-        (
-            world.get::<components::Camera>(camera_entity).unwrap(),
-            world.get::<components::Transform>(camera_entity).unwrap(),
-        )
     }
     pub fn render(
         &self,
@@ -214,7 +189,7 @@ impl Scene {
             vk::DescriptorSet::null(),
         ];
 
-        for proxy in &self.proxies {
+        for proxy in self.proxies.values() {
             for prim in &proxy.model.primitives {
                 let mat_set = prim
                     .material
@@ -248,6 +223,27 @@ impl Scene {
         self.render_pass.end(renderer, cmd);
         Ok(())
     }
+    pub fn add_proxy(&mut self, entity: world::Entity, proxy: SceneProxy) -> Result<()> {
+        self.proxies.insert(entity, proxy);
+        Ok(())
+    }
+    pub fn update_proxy(
+        &mut self,
+        entity: world::Entity,
+        model: &model::Model,
+        model_matrix: glam::Mat4,
+    ) -> Result<()> {
+        if let Some(proxy) = self.proxies.get_mut(&entity) {
+            proxy.set_model(model);
+            proxy.set_model_matrix(model_matrix);
+        }
+        Ok(())
+    }
+    pub fn remove_proxy(&mut self, device: &Device, entity: world::Entity) {
+        if let Some(proxy) = self.proxies.remove(&entity) {
+            proxy.destroy(device);
+        }
+    }
 }
 
 /// A renderable entity's representation for the renderer.
@@ -270,12 +266,12 @@ struct ProxyUbo {
 
 impl SceneProxy {
     pub fn build(
-        renderer: &mut Renderer,
+        renderer: &Renderer,
         scene: &Scene,
-        model: &str,
+        model: &model::Model,
         model_matrix: glam::Mat4,
     ) -> Result<Self> {
-        let model = renderer.get_model(model)?.clone();
+        let model = model.clone();
 
         let size = size_of::<ProxyUbo>() as u64;
         let ubo: Vec<UboData> = (0..MAX_FRAMES_IN_FLIGHT)
@@ -338,6 +334,8 @@ impl SceneProxy {
                 .update_descriptor_sets(&descriptor_writes, &[])
         };
 
+        // TODO: write model_matrix to UBOs
+
         Ok(Self {
             model,
             model_matrix,
@@ -347,5 +345,11 @@ impl SceneProxy {
     }
     fn destroy(&self, device: &Device) {
         self.ubo.iter().for_each(|ubo| ubo.destroy(device));
+    }
+    fn set_model(&mut self, model: &model::Model) {
+        self.model = model.clone();
+    }
+    fn set_model_matrix(&mut self, mat: glam::Mat4) {
+        self.model_matrix = mat
     }
 }

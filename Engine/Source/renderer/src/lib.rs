@@ -36,7 +36,9 @@ use pipeline::GraphicsPipeline;
 
 mod command_pool;
 use command_pool::{CommandBuffer, CommandPool, Graphics, Transfer};
-use world::WorldId;
+use world::{components, events::WorldEvent};
+
+use crate::scene::SceneProxy;
 
 mod layouts;
 mod render_pass;
@@ -84,6 +86,11 @@ impl Vertex {
 fn make_version(version: utils::Version) -> u32 {
     vk::make_api_version(0, version.major(), version.minor(), version.patch())
 }
+
+/// The maximum numer of renderables in a scene.
+/// Used to construct Ubo samples.
+/// TODO: find a way to set this limit dynamically or have a error when the limit is reached.
+const MAX_RENDERABLES: u32 = 100;
 
 const MAX_FRAMES_IN_FLIGHT: usize = 2;
 const DEVICE_EXTENSIONS: &[&str] =
@@ -625,41 +632,76 @@ impl Renderer {
         _delta_time: f32,
         worlds: &HashMap<world::WorldId, world::World>,
     ) -> Result<()> {
-        let world_events = self.world_consumer.consume_all();
-
-        let get_world = |id| {
-            worlds
-                .get(&id)
-                .expect("world created event should mean the world exists")
-        };
-        let mut build_worlds = HashSet::new();
-
+        let world_events: Vec<_> = self.world_consumer.consume_all().collect();
         for event in world_events {
             match event {
-                world::events::WorldEvent::Created(id) => {
-                    build_worlds.insert(id);
+                WorldEvent::Created(id) => {
+                    self.scenes.insert(id, Scene::build(self, id)?);
                 }
-                world::events::WorldEvent::Destroyed(id) => {
+                WorldEvent::Destroyed(id) => {
                     if let Some(scene) = self.scenes.remove(&id) {
                         scene.destroy(&self.device);
                     }
                 }
-                world::events::WorldEvent::EntitySpawn { world, .. } => {
-                    build_worlds.insert(world);
+                WorldEvent::EntitySpawn { world, entity } => {
+                    let Some(world) = worlds.get(&world) else {
+                        continue;
+                    };
+                    let Some(renderable) = world.get::<components::Renderable>(entity) else {
+                        continue;
+                    };
+                    let Some(transform) = world.get::<components::Transform>(entity) else {
+                        continue;
+                    };
+                    self.get_or_upload_model(&renderable.model)?;
+
+                    let Some(scene) = self.scenes.get(&world.id()) else {
+                        continue;
+                    };
+                    let proxy = SceneProxy::build(
+                        self,
+                        scene,
+                        self.get_model(&renderable.model)
+                            .expect("model should have been loaded"),
+                        transform.matrix(),
+                    )?;
+
+                    let Some(scene) = self.scenes.get_mut(&world.id()) else {
+                        continue;
+                    };
+                    scene.add_proxy(entity, proxy)?;
                 }
-                world::events::WorldEvent::EntityUpdate { world, .. } => {
-                    build_worlds.insert(world);
+                WorldEvent::EntityUpdate { world, entity } => {
+                    let Some(world) = worlds.get(&world) else {
+                        continue;
+                    };
+                    let Some(renderable) = world.get::<components::Renderable>(entity) else {
+                        continue;
+                    };
+                    let Some(transform) = world.get::<components::Transform>(entity) else {
+                        continue;
+                    };
+                    self.get_or_upload_model(&renderable.model)?;
+                    let Some(scene) = self.scenes.get_mut(&world.id()) else {
+                        continue;
+                    };
+                    scene.update_proxy(
+                        entity,
+                        self.models
+                            .get(&renderable.model)
+                            .expect("model should have been loaded"),
+                        transform.matrix(),
+                    )?;
                 }
-                world::events::WorldEvent::EntityDespawn { world, .. } => {
-                    build_worlds.insert(world);
+                WorldEvent::EntityDespawn { world, entity } => {
+                    let Some(scene) = self.scenes.get_mut(&world) else {
+                        continue;
+                    };
+                    scene.remove_proxy(&self.device, entity);
                 }
             }
         }
 
-        for world in build_worlds {
-            let new_scene = Scene::build(self, get_world(world))?;
-            self.scenes.insert(world, new_scene);
-        }
         Ok(())
     }
 
@@ -920,9 +962,16 @@ impl Renderer {
         Ok(self.models.get(model.name()).unwrap())
     }
 
-    fn get_model(&mut self, name: &str) -> Result<&Model> {
-        self.upload_model(resource_manager::ResourceManager::load_model("Shrek")?)?;
-        Ok(self.models.get(name).unwrap())
+    fn get_or_upload_model(&mut self, name: &str) -> Result<&Model> {
+        if self.models.contains_key(name) {
+            return Ok(self.models.get(name).unwrap());
+        }
+
+        self.upload_model(resource_manager::ResourceManager::load_model(name)?)
+    }
+
+    fn get_model(&self, name: &str) -> Option<&Model> {
+        self.models.get(name)
     }
 
     fn upload_primitive(&self, prim: &resource_manager::Primitive) -> Result<Primitive> {
