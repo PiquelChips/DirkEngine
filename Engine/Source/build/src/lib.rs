@@ -20,3 +20,9 @@ pub fn configure_editor() {
     // always build as editor for now
     println!("cargo:rustc-cfg=editor");
 }
+
+/// Gets the path where all runtime generated files are
+/// stored (cache, logs, ...).
+pub fn get_run_dir() -> String {
+    String::from("Saved")
+}

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use log::{debug, trace};
+use tracing::{debug, trace};
 use winit::{
     application::ApplicationHandler,
     event::WindowEvent,

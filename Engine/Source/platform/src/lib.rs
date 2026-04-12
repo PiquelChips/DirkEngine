@@ -7,7 +7,7 @@
 
 use std::time::Duration;
 
-use log::info;
+use tracing::info;
 use winit::event_loop::{
     EventLoop,
     pump_events::{EventLoopExtPumpEvents, PumpStatus},

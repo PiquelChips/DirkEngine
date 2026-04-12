@@ -7,7 +7,7 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
-log.workspace = true
+tracing.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 winit.workspace = true
