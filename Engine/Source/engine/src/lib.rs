@@ -50,15 +50,6 @@ impl Engine {
         )
         .context("renderer init")?;
 
-        /* A rough idea of the flow of the C++ Engine
-         *
-         * ImGui:
-         * - Configure ImGui
-         * - Init ImGui platform
-         * - Init ImGui for renderer
-         *
-         * Create main viewport
-         */
         let mut engine = Self {
             event_manager,
             exit_consumer,
@@ -169,10 +160,7 @@ impl Engine {
 
         self.platform.tick(delta_time);
 
-        /*
-         * World Tick
-         * Main Viewport tick
-         */
+        // TODO: world::tick (run tick on every tickable object)
 
         self.render().context("render")?;
         Ok(!self.is_requesting_exit())
@@ -182,12 +170,6 @@ impl Engine {
         Ok(())
     }
     pub fn shutdown(&self) -> anyhow::Result<()> {
-        /*
-         * Shutdown ImGui (renderer then platform)
-         *
-         * logger.cleanup():
-         * - Should cleanup and close all the log files
-         */
         Ok(())
     }
     fn process_events(&mut self) {

@@ -1329,7 +1329,6 @@ extern "system" fn debug_callback(
 ) -> vk::Bool32 {
     let message = unsafe { CStr::from_ptr((*callback_data).p_message).to_string_lossy() };
 
-    // TODO: logging should be better (see tracing crate)
     match severity {
         vk::DebugUtilsMessageSeverityFlagsEXT::ERROR => {
             error!(target: "vulkan::validation", "{}", message)
