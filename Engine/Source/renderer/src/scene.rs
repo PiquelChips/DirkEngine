@@ -70,7 +70,6 @@ struct SceneUbo {
 }
 
 struct CameraProxy {
-    entity: world::Entity,
     /// View matrix calculated from camera position.
     view: glam::Mat4,
     /// Projection matrix calculated from camera settings.
@@ -300,14 +299,16 @@ impl Scene {
         RenderPass::end(renderer, cmd);
         Ok(())
     }
-    pub fn set_camera(&mut self, entity: world::Entity, view: glam::Mat4, proj: glam::Mat4) {
-        self.camera = Some(CameraProxy { entity, view, proj });
+    pub fn set_camera(&mut self, view: glam::Mat4, proj: glam::Mat4) {
+        self.camera = Some(CameraProxy { view, proj });
     }
 
     pub fn update_camera(&mut self, view: glam::Mat4, proj: glam::Mat4) {
         if let Some(camera) = &mut self.camera {
             camera.view = view;
             camera.proj = proj;
+        } else {
+            self.set_camera(view, proj);
         }
     }
     pub fn add_proxy(&mut self, entity: world::Entity, proxy: SceneProxy) -> Result<()> {
