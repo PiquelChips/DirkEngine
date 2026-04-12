@@ -83,9 +83,9 @@ pub(crate) fn format_level(level: &tracing::Level, colored: bool) -> String {
 
 /// Assemble the final log line from its parts.
 ///
-/// Format: `YYYY/MM/DD HH:MM:SS [LEVEL] [Category] message`
+/// Format: `YYYY/MM/DD HH:MM:SS [LEVEL] target: message`
 pub(crate) fn format_line(timestamp: &str, level_str: &str, target: &str, message: &str) -> String {
-    format!("{timestamp} {level_str} [{target}] {message}")
+    format!("{timestamp} {level_str} {target}: {message}")
 }
 
 /// Extract all relevant fields from a tracing event, returning
@@ -94,9 +94,8 @@ pub(crate) fn extract_event_data(event: &tracing::Event<'_>) -> (String, String,
     let mut visitor = EventVisitor::default();
     event.record(&mut visitor);
 
-    // Category priority: explicit `target` field > tracing `target`
-    // (target defaults to the Rust module path but can be set via
-    //  `tracing::info!(target: "Rendering", "msg")`)
+    // Target defaults to the Rust module path but can be set via
+    //  `tracing::info!(target: "Rendering", "msg")`
     let target = event.metadata().target().to_owned();
 
     let timestamp = OffsetDateTime::now_utc();

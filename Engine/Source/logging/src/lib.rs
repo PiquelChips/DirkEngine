@@ -52,11 +52,11 @@
 //!     .count();
 //! ```
 //!
-//! ## Category convention
+//! ## Target convention
 //!
 //! Prefer short, stable target names that map to engine subsystems
 //! (`"Rendering"`, `"Physics"`, `"Audio"`, …). Hierarchical names like
-//! `"Rendering/Shadows"` work well with [`Filter::target_contains`].
+//! `"Rendering::Shadows"` work well with [`Filter::target_contains`].
 
 mod filter;
 mod layers;
@@ -320,7 +320,7 @@ impl Logger {
             }
         });
 
-        let cats_filter = if self.allowed_targets.is_empty() {
+        let targets_filter = if self.allowed_targets.is_empty() {
             None
         } else {
             let targets = self.allowed_targets.to_vec();
@@ -343,7 +343,7 @@ impl Logger {
         let registry = registry.with(StorageLayer::new(Arc::clone(&self.store)));
 
         // always add the filter last
-        let registry = registry.with(cats_filter);
+        let registry = registry.with(targets_filter);
 
         registry
             .try_init()

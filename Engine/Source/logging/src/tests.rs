@@ -87,7 +87,7 @@ mod log_filter {
     #[test]
     fn empty_filter_passes_every_entry() {
         let f = LogFilter::new();
-        // Representative sample of each level and a variety of categories.
+        // Representative sample of each level and a variety of targets.
         for level in [
             LogLevel::Error,
             LogLevel::Warn,
@@ -95,7 +95,7 @@ mod log_filter {
             LogLevel::Debug,
             LogLevel::Trace,
         ] {
-            assert!(f.filter(&make_entry(level, "AnyCategory", "any message")));
+            assert!(f.filter(&make_entry(level, "AnyTarget", "any message")));
         }
     }
 

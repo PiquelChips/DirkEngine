@@ -13,12 +13,12 @@ pub struct ConsoleLayer;
 
 impl<S: Subscriber> Layer<S> for ConsoleLayer {
     fn on_event(&self, event: &Event<'_>, _ctx: Context<'_, S>) {
-        let (message, category, timestamp) = extract_event_data(event);
+        let (message, target, timestamp) = extract_event_data(event);
         let level = event.metadata().level();
 
         let ts_str = format_timestamp(&timestamp);
         let level_str = format_level(level, /* colored = */ true);
-        let line = format_line(&ts_str, &level_str, &category, &message);
+        let line = format_line(&ts_str, &level_str, &target, &message);
 
         if *level == Level::ERROR {
             eprintln!("{line}");
