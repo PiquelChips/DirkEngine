@@ -683,23 +683,28 @@ impl Renderer {
                     let Some(world) = worlds.get(&world) else {
                         continue;
                     };
-                    let Some(renderable) = world.get::<components::Renderable>(entity) else {
-                        continue;
-                    };
                     let Some(transform) = world.get::<components::Transform>(entity) else {
                         continue;
                     };
-                    self.get_or_upload_model(&renderable.model)?;
-                    let Some(scene) = self.scenes.get_mut(&world.id()) else {
-                        continue;
+                    if let Some(renderable) = world.get::<components::Renderable>(entity) {
+                        self.get_or_upload_model(&renderable.model)?;
+                        let Some(scene) = self.scenes.get_mut(&world.id()) else {
+                            continue;
+                        };
+                        scene.update_proxy(
+                            entity,
+                            self.models
+                                .get(&renderable.model)
+                                .expect("model should have been loaded"),
+                            transform.matrix(),
+                        )?;
                     };
-                    scene.update_proxy(
-                        entity,
-                        self.models
-                            .get(&renderable.model)
-                            .expect("model should have been loaded"),
-                        transform.matrix(),
-                    )?;
+                    if let Some(camera) = world.get::<components::Camera>(entity) {
+                        let Some(scene) = self.scenes.get_mut(&world.id()) else {
+                            continue;
+                        };
+                        scene.update_camera(transform.view(), camera.projection());
+                    }
                 }
                 WorldEvent::EntityDespawn { world, entity } => {
                     let Some(scene) = self.scenes.get_mut(&world) else {
