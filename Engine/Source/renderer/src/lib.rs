@@ -27,7 +27,7 @@ mod model;
 use model::*;
 
 mod scene;
-use scene::Scene;
+use scene::{Scene, SceneProxy};
 
 mod window;
 use window::Window;
@@ -39,10 +39,10 @@ mod command_pool;
 use command_pool::{CommandBuffer, CommandPool, Graphics, Transfer};
 use world::{components, events::WorldEvent};
 
-use crate::scene::SceneProxy;
-
 mod layouts;
+
 mod render_pass;
+use render_pass::RenderPass;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
