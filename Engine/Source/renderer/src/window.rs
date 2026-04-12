@@ -49,7 +49,8 @@ impl Window {
         surface: vk::SurfaceKHR,
         size: vk::Extent2D,
     ) -> Result<Self> {
-        let (swapchain, extent, images) = renderer.create_swap_chain(surface, size)?;
+        let (swapchain, extent, images) =
+            renderer.create_swap_chain(surface, size, vk::SwapchainKHR::null())?;
 
         let semaphore_info = vk::SemaphoreCreateInfo::default();
         let create_semaphore = || unsafe {

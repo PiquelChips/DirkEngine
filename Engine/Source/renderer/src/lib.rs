@@ -731,6 +731,8 @@ impl Renderer {
 
                     let window = window::Window::build(plat_window.id(), self, surface, size)?;
                     self.windows.insert(window.id(), window);
+
+                    debug!("created renderer window with id {}", id.into_raw());
                 }
                 PlatformEvent::WindowDestroyed { id } => {
                     // in case the window was not destroyed by WindowCloseRequested
@@ -754,10 +756,11 @@ impl Renderer {
                         continue;
                     };
                     let surface = window.surface();
-                    let (swapchain, extent, images) =
-                        self.create_swap_chain(surface, vk::Extent2D { width, height })?;
-                    // Wait for the GPU to be idle before touching the swapchain.
-                    unsafe { self.device.device_wait_idle()? };
+                    let (swapchain, extent, images) = self.create_swap_chain(
+                        surface,
+                        vk::Extent2D { width, height },
+                        window.swapchain(),
+                    )?;
                     let Some(window) = self.windows.get_mut(&id) else {
                         continue;
                     };
@@ -868,6 +871,7 @@ impl Renderer {
         &self,
         surface: vk::SurfaceKHR,
         window_size: vk::Extent2D,
+        old_swapchain: vk::SwapchainKHR,
     ) -> Result<(vk::SwapchainKHR, vk::Extent2D, Vec<window::SwapchainImage>)> {
         let capabilities = unsafe {
             self.surface_loader
@@ -920,7 +924,8 @@ impl Renderer {
             .pre_transform(capabilities.current_transform)
             .composite_alpha(vk::CompositeAlphaFlagsKHR::OPAQUE)
             .present_mode(self.properties.present_mode)
-            .clipped(true);
+            .clipped(true)
+            .old_swapchain(old_swapchain);
 
         let swapchain = unsafe { self.swapchain_loader.create_swapchain(&create_info, None)? };
         let images = unsafe { self.swapchain_loader.get_swapchain_images(swapchain)? };
