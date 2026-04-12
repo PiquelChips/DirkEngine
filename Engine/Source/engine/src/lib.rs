@@ -13,8 +13,6 @@ pub struct Engine {
     renderer: renderer::Renderer,
     platform: platform::Platform,
 
-    event_manager: events::EventManager,
-
     next_world_id: WorldId,
     worlds: HashMap<WorldId, World>,
 
