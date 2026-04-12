@@ -81,68 +81,7 @@ impl Engine {
             )
             .context("uploading duck")?;
 
-        let world_id = engine.create_world()?;
-
-        // THIS IS JUST TEMPORARY FOR TESTING
-        {
-            use world::components;
-            let world = engine.worlds.get_mut(&world_id).unwrap();
-
-            let player = world.spawn();
-            world.insert(
-                player,
-                components::Transform {
-                    location: glam::vec3(0., 1000., 1000.),
-                    rotation: glam::vec3(0., PI / 2., PI / 2.),
-                    scale: glam::Vec3::splat(1.),
-                },
-            );
-            world.insert(
-                player,
-                components::Camera {
-                    fov: (45_f32).to_radians(),
-                    near_clip: 0.1,
-                    far_clip: 100000.,
-                    width: 100.,
-                    height: 100.,
-                },
-            );
-
-            let shrek = world.spawn();
-            world.insert(
-                shrek,
-                components::Transform {
-                    location: glam::Vec3::ZERO,
-                    rotation: glam::Vec3::ZERO,
-                    scale: glam::Vec3::splat(1.),
-                },
-            );
-            world.insert(
-                shrek,
-                components::Renderable {
-                    model: "Shrek".to_string(),
-                },
-            );
-
-            let duck = world.spawn();
-            world.insert(
-                duck,
-                components::Transform {
-                    location: glam::vec3(100., 0., 0.),
-                    rotation: glam::Vec3::ZERO,
-                    scale: glam::Vec3::splat(1.),
-                },
-            );
-            world.insert(
-                shrek,
-                components::Renderable {
-                    model: "Duck".to_string(),
-                },
-            );
-
-            // TODO: see engine::create_world
-            engine.renderer.create_scene(world)?;
-        }
+        engine.create_test_world()?;
 
         Ok(engine)
     }
@@ -215,5 +154,65 @@ impl Engine {
     fn destroy_world(&mut self, id: WorldId) {
         // TODO: delete renderer scene
         self.worlds.remove(&id);
+    }
+
+    fn create_test_world(&mut self) -> anyhow::Result<()> {
+        let world_id = self.create_world().context("creating test world")?;
+        use world::components;
+        let world = self.worlds.get_mut(&world_id).unwrap();
+
+        let player = world.spawn();
+        world.insert(
+            player,
+            components::Transform {
+                location: glam::vec3(0., 1000., 1000.),
+                rotation: glam::vec3(0., PI / 2., PI / 2.),
+                scale: glam::Vec3::splat(1.),
+            },
+        );
+        world.insert(
+            player,
+            components::Camera {
+                fov: (45_f32).to_radians(),
+                near_clip: 0.1,
+                far_clip: 100000.,
+                width: 100.,
+                height: 100.,
+            },
+        );
+
+        let shrek = world.spawn();
+        world.insert(
+            shrek,
+            components::Transform {
+                location: glam::Vec3::ZERO,
+                rotation: glam::Vec3::ZERO,
+                scale: glam::Vec3::splat(1.),
+            },
+        );
+        world.insert(
+            shrek,
+            components::Renderable {
+                model: "Shrek".to_string(),
+            },
+        );
+
+        let duck = world.spawn();
+        world.insert(
+            duck,
+            components::Transform {
+                location: glam::vec3(100., 0., 0.),
+                rotation: glam::Vec3::ZERO,
+                scale: glam::Vec3::splat(1.),
+            },
+        );
+        world.insert(
+            shrek,
+            components::Renderable {
+                model: "Duck".to_string(),
+            },
+        );
+
+        Ok(())
     }
 }
