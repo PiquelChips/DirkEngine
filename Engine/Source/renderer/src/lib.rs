@@ -14,7 +14,7 @@ use ash::{
     khr::{surface, swapchain},
     vk,
 };
-use log::{debug, error, info, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 
 mod errors;
 pub use errors::{Error, Result};

@@ -9,7 +9,6 @@ version.workspace = true
 [dependencies]
 anyhow.workspace = true
 thiserror.workspace = true
-log.workspace = true
 
 logging.workspace = true
 utils.workspace = true

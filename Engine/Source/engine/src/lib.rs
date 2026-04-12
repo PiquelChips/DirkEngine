@@ -3,9 +3,13 @@ use std::{collections::HashMap, f32::consts::PI, ffi::CString, str::FromStr, tim
 use anyhow::Context;
 use world::{World, WorldId};
 
+use logging::Logger;
+
 /// This is the main struct that holds global engine state.
 pub struct Engine {
-    // order is important as renderer should be dropped before platform
+    exit_consumer: events::Consumer<platform::AppExit>,
+    event_manager: events::EventManager,
+
     renderer: renderer::Renderer,
     platform: platform::Platform,
 
@@ -18,13 +22,17 @@ pub struct Engine {
     exit_error: Option<anyhow::Error>,
     last_tick: Instant,
 
-    exit_consumer: events::Consumer<platform::AppExit>,
+    #[allow(unused)]
+    logger: Logger,
 }
 
 impl Engine {
     pub fn init() -> anyhow::Result<Self> {
-        let logger = logging::Logger::new(true, true, true);
-        logging::init(logger);
+        let logger = logging::Logger::new()
+            .write_fs(true)
+            .verbose(true)
+            .init()
+            .context("initialising logger")?;
 
         let mut event_manager = events::EventManager::new();
         let exit_consumer = event_manager.subscribe();
@@ -54,10 +62,11 @@ impl Engine {
          * Create main viewport
          */
         let mut engine = Self {
-            platform,
             event_manager,
             exit_consumer,
+            logger,
 
+            platform,
             renderer,
 
             next_world_id: 0,

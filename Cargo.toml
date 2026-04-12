@@ -25,8 +25,11 @@ version = "0.1.0"
 
 [workspace.dependencies]
 # Basic stuff
-log  = { version = "0.4", features = ["std"] }
-time = { version = "0.3", features = ["formatting"] }
+time = { version = "0.3", features = ["formatting", "macros"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["registry", "std"] }
+tracing-log = "0.2"
+parking_lot = "0.12"
 
 thiserror = "2"
 anyhow = "1"
