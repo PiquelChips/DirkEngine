@@ -67,20 +67,6 @@ impl Engine {
             last_tick: Instant::now(),
         };
 
-        // TODO: this should be initialized when needed, not now
-        engine
-            .renderer
-            .upload_model(
-                resource_manager::ResourceManager::load_model("Shrek").context("loading shrek")?,
-            )
-            .context("uploading shrek")?;
-        engine
-            .renderer
-            .upload_model(
-                resource_manager::ResourceManager::load_model("Duck").context("loading duck")?,
-            )
-            .context("uploading duck")?;
-
         engine.create_test_world()?;
 
         Ok(engine)

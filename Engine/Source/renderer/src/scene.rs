@@ -52,7 +52,7 @@ impl Scene {
     /// Builds a [Scene].
     /// Constructs the renderer stuff like command pools, descriptor sets, ... from
     /// the [Renderer] and all world proxy stuff from [World].
-    pub fn build(renderer: &Renderer, world: &World) -> Result<Self> {
+    pub fn build(renderer: &mut Renderer, world: &World) -> Result<Self> {
         let (camera, camera_trans) = Self::get_camera(world);
 
         let proxy_count = world
@@ -160,7 +160,7 @@ impl Scene {
         self.ubo.iter().for_each(|ubo| ubo.destroy(device));
         unsafe { device.destroy_descriptor_pool(self.descriptor_pool, None) };
     }
-    fn make_scene_proxies(&self, renderer: &Renderer, world: &World) -> Result<Vec<SceneProxy>> {
+    fn make_scene_proxies(&self, renderer: &mut Renderer, world: &World) -> Result<Vec<SceneProxy>> {
         world
             .query_double::<components::Renderable, components::Transform>()
             .iter()
@@ -266,15 +266,12 @@ struct ProxyUbo {
 
 impl SceneProxy {
     pub fn build(
-        renderer: &Renderer,
+        renderer: &mut Renderer,
         scene: &Scene,
         model: &str,
         model_matrix: glam::Mat4,
     ) -> Result<Self> {
-        let model = renderer
-            .get_model(model)
-            .expect("should have the model")
-            .clone();
+        let model = renderer.get_model(model)?.clone();
 
         let size = size_of::<ProxyUbo>() as u64;
         let ubo: Vec<UboData> = (0..MAX_FRAMES_IN_FLIGHT)

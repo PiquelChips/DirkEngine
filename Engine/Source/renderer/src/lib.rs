@@ -657,8 +657,8 @@ impl Renderer {
         }
 
         for world in build_worlds {
-            self.scenes
-                .insert(world, Scene::build(self, get_world(world))?);
+            let new_scene = Scene::build(self, get_world(world))?;
+            self.scenes.insert(world, new_scene);
         }
         Ok(())
     }
@@ -920,8 +920,9 @@ impl Renderer {
         Ok(self.models.get(model.name()).unwrap())
     }
 
-    fn get_model(&self, name: &str) -> Option<&Model> {
-        self.models.get(name)
+    fn get_model(&mut self, name: &str) -> Result<&Model> {
+        self.upload_model(resource_manager::ResourceManager::load_model("Shrek")?)?;
+        Ok(self.models.get(name).unwrap())
     }
 
     fn upload_primitive(&self, prim: &resource_manager::Primitive) -> Result<Primitive> {
