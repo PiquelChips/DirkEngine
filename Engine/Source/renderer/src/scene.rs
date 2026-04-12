@@ -63,7 +63,7 @@ impl Scene {
     /// Builds a [Scene].
     /// Constructs the renderer stuff like command pools, descriptor sets, ... from
     /// the [Renderer].
-    pub fn build(renderer: &Renderer, world: world::WorldId) -> Result<Self> {
+    pub fn build(renderer: &Renderer, world: world::WorldId, size: vk::Extent2D) -> Result<Self> {
         let pool_sizes = [
             vk::DescriptorPoolSize {
                 ty: vk::DescriptorType::UNIFORM_BUFFER,
@@ -207,7 +207,7 @@ impl Scene {
     ) -> Result<()> {
         let device = &renderer.device;
 
-        RenderPass::begin(renderer, cmd, size, view, color, depth);
+        RenderPass::begin(renderer, cmd, size, view, self.color, self.depth);
         renderer.graphics_pipeline.bind(renderer, cmd);
 
         let viewport = vk::Viewport::default()

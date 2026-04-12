@@ -639,7 +639,7 @@ impl Renderer {
         for event in world_events {
             match event {
                 WorldEvent::Created(id) => {
-                    self.scenes.insert(id, Scene::build(self, id)?);
+                    self.scenes.insert(id, Scene::build(self, id, self.extent)?);
                 }
                 WorldEvent::Destroyed(id) => {
                     if let Some(scene) = self.scenes.remove(&id) {
