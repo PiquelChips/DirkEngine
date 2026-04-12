@@ -14,6 +14,7 @@ use ash::{
     khr::{surface, swapchain},
     vk,
 };
+use platform::{PlatformEvent, WindowEvent};
 use tracing::{debug, error, info, trace, warn};
 
 mod errors;
@@ -213,6 +214,7 @@ pub struct Renderer {
 
     // Events
     window_consumer: events::Consumer<platform::WindowEvent>,
+    platform_consumer: events::Consumer<platform::PlatformEvent>,
     world_consumer: events::Consumer<world::events::WorldEvent>,
 }
 
@@ -588,7 +590,7 @@ impl Renderer {
             vk::CommandPoolCreateFlags::TRANSIENT,
         )?;
 
-        let mut renderer = Self {
+        Ok(Self {
             entry,
             instance,
             device,
@@ -613,24 +615,16 @@ impl Renderer {
             graphics_pipeline,
 
             window_consumer: event_manager.subscribe(),
+            platform_consumer: event_manager.subscribe(),
             world_consumer: event_manager.subscribe(),
-        };
-
-        let window_size = window.size();
-        let size = vk::Extent2D {
-            width: window_size.width,
-            height: window_size.height,
-        };
-        let window = window::Window::build(window.id().into_raw(), &renderer, surface, size)?;
-        renderer.windows.insert(window.id(), window);
-
-        Ok(renderer)
+        })
     }
 
     pub fn tick(
         &mut self,
         _delta_time: f32,
         worlds: &HashMap<world::WorldId, world::World>,
+        windows: &HashMap<WindowId, platform::Window>,
     ) -> Result<()> {
         let world_events: Vec<_> = self.world_consumer.consume_all().collect();
         for event in world_events {
@@ -698,6 +692,48 @@ impl Renderer {
                         continue;
                     };
                     scene.remove_proxy(&self.device, entity);
+                }
+            }
+        }
+
+        let platform_events: Vec<_> = self.platform_consumer.consume_all().collect();
+        for event in platform_events {
+            match event {
+                PlatformEvent::WindowCreated { id } => {
+                    let Some(plat_window) = windows.get(&id.into_raw()) else {
+                        continue;
+                    };
+
+                    let surface = unsafe {
+                        ash_window::create_surface(
+                            &self.entry,
+                            &self.instance,
+                            plat_window.display_handle()?.as_raw(),
+                            plat_window.window_handle()?.as_raw(),
+                            None,
+                        )?
+                    };
+
+                    let window_size = plat_window.size();
+                    let size = vk::Extent2D {
+                        width: window_size.width,
+                        height: window_size.height,
+                    };
+
+                    let window =
+                        window::Window::build(plat_window.id().into_raw(), self, surface, size)?;
+                    self.windows.insert(window.id(), window);
+                }
+                PlatformEvent::WindowDestroyed { id } => {
+                    // in case the window was not destroyed by WindowCloseRequested
+                    if let Some(window) = self.windows.remove(&id.into_raw()) {
+                        window.destroy(&self.device, &self.surface_loader, &self.swapchain_loader);
+                    }
+                }
+                PlatformEvent::WindowCloseRequested { id } => {
+                    if let Some(window) = self.windows.remove(&id.into_raw()) {
+                        window.destroy(&self.device, &self.surface_loader, &self.swapchain_loader);
+                    }
                 }
             }
         }
@@ -787,29 +823,6 @@ impl Renderer {
 
     // WINDOW MANAGEMENT
 
-    pub fn create_window(&mut self, plat_window: &platform::Window) -> Result<WindowId> {
-        let surface = unsafe {
-            ash_window::create_surface(
-                &self.entry,
-                &self.instance,
-                plat_window.display_handle()?.as_raw(),
-                plat_window.window_handle()?.as_raw(),
-                None,
-            )?
-        };
-
-        let window_size = plat_window.size();
-        let size = vk::Extent2D {
-            width: window_size.width,
-            height: window_size.height,
-        };
-
-        let window = window::Window::build(plat_window.id().into_raw(), self, surface, size)?;
-        self.windows.insert(window.id(), window);
-        Ok(plat_window.id().into_raw())
-    }
-    // TODO: resize window
-    /*
     pub fn resize_window(&mut self, id: WindowId, width: u32, height: u32) -> Result<()> {
         if let Some(window) = self.windows.get_mut(&id) {
             // Wait for the GPU to be idle before touching the swapchain.
@@ -818,7 +831,6 @@ impl Renderer {
         }
         Ok(())
     }
-    */
 
     fn create_swap_chain(
         &self,
