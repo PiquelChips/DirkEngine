@@ -10,7 +10,9 @@
 //! use world::{World, components::{Transform, Renderable}};
 //! use glam::Vec3;
 //!
-//! let mut world = World::new(0);
+//! let mut event_manager = events::EventManager::new();
+//!
+//! let mut world = World::new(0, &mut event_manager);
 //!
 //! // Spawn an entity and attach components.
 //! let player = world.spawn();
@@ -118,7 +120,9 @@ define_components!(Transform, Renderable, Camera);
 /// ```
 /// use world::World;
 ///
-/// let mut w = World::new(1);
+/// let mut event_manager = events::EventManager::new();
+///
+/// let mut w = World::new(1, &mut event_manager);
 /// let e = w.spawn();
 /// assert!(w.alive().contains(&e));
 ///
@@ -258,7 +262,8 @@ impl World {
     /// ```
     /// # use world::{World, components::{Transform, Renderable}};
     /// # use glam::Vec3;
-    /// # let mut w = World::new(0);
+    /// # let mut event_manager = events::EventManager::new();
+    /// # let mut w = World::new(0, &mut event_manager);
     /// # let e = w.spawn();
     /// # w.insert(e, Transform::default());
     /// let results = w.query_single::<Transform>();

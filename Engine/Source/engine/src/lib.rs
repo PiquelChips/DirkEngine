@@ -201,7 +201,7 @@ impl Engine {
         let id = self.next_world_id;
         self.next_world_id += 1;
 
-        let world = World::new(id);
+        let world = World::new(id, &mut self.event_manager);
         // TODO: have the world submitted here, once not having camera doesn't panic.
         // self.renderer
         //     .create_scene(&world)
