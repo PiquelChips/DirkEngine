@@ -21,6 +21,22 @@ impl UboData {
             device.free_memory(self.memory, None);
         }
     }
+
+    /// Copies `data` into the persistently-mapped host-visible memory.
+    ///
+    /// # Safety
+    /// The mapped pointer must be valid and the allocation must cover at least
+    /// `size_of::<T>()` bytes — both invariants are guaranteed by every
+    /// `UboData` constructed in this module.
+    fn write<T: Copy>(&self, data: &T) {
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                data as *const T as *const u8,
+                self.mapped as *mut u8,
+                size_of::<T>(),
+            )
+        };
+    }
 }
 
 /// This scene is created from a [world::World].
@@ -29,7 +45,6 @@ impl UboData {
 /// Handles rendering all the [world::components::Renderable] objects
 /// of the world.
 pub struct Scene {
-    id: world::WorldId,
     /// The entities to render.
     proxies: HashMap<world::Entity, SceneProxy>,
     camera: Option<CameraProxy>,
@@ -46,6 +61,9 @@ pub struct Scene {
     depth_memory: vk::DeviceMemory,
 }
 
+#[derive(Clone, Copy)]
+// fields are read by Vulkan, not us
+#[allow(unused)]
 struct SceneUbo {
     view: glam::Mat4,
     proj: glam::Mat4,
@@ -63,7 +81,7 @@ impl Scene {
     /// Builds a [Scene].
     /// Constructs the renderer stuff like command pools, descriptor sets, ... from
     /// the [Renderer].
-    pub fn build(renderer: &Renderer, world: world::WorldId, size: vk::Extent2D) -> Result<Self> {
+    pub fn build(renderer: &Renderer, size: vk::Extent2D) -> Result<Self> {
         let pool_sizes = [
             vk::DescriptorPoolSize {
                 ty: vk::DescriptorType::UNIFORM_BUFFER,
@@ -176,7 +194,6 @@ impl Scene {
         )?;
 
         Ok(Self {
-            id: world,
             proxies: HashMap::new(),
             descriptor_pool,
             ubo,
@@ -214,6 +231,19 @@ impl Scene {
         view: vk::ImageView,
     ) -> Result<()> {
         let device = &renderer.device;
+
+        let frame = renderer.current_frame;
+        if let Some(camera) = &self.camera {
+            let scene_ubo = SceneUbo {
+                view: camera.view,
+                proj: camera.proj,
+            };
+            self.ubo[frame].write(&scene_ubo);
+        }
+
+        for proxy in self.proxies.values() {
+            proxy.write_ubo(frame);
+        }
 
         RenderPass::begin(renderer, cmd, size, view, self.color, self.depth);
         renderer.graphics_pipeline.bind(renderer, cmd);
@@ -270,6 +300,16 @@ impl Scene {
         RenderPass::end(renderer, cmd);
         Ok(())
     }
+    pub fn set_camera(&mut self, entity: world::Entity, view: glam::Mat4, proj: glam::Mat4) {
+        self.camera = Some(CameraProxy { entity, view, proj });
+    }
+
+    pub fn update_camera(&mut self, view: glam::Mat4, proj: glam::Mat4) {
+        if let Some(camera) = &mut self.camera {
+            camera.view = view;
+            camera.proj = proj;
+        }
+    }
     pub fn add_proxy(&mut self, entity: world::Entity, proxy: SceneProxy) -> Result<()> {
         self.proxies.insert(entity, proxy);
         Ok(())
@@ -307,6 +347,9 @@ pub struct SceneProxy {
     sets: [vk::DescriptorSet; MAX_FRAMES_IN_FLIGHT],
 }
 
+#[derive(Clone, Copy)]
+// fields are read by Vulkan, not us
+#[allow(unused)]
 struct ProxyUbo {
     model: glam::Mat4,
 }
@@ -381,7 +424,12 @@ impl SceneProxy {
                 .update_descriptor_sets(&descriptor_writes, &[])
         };
 
-        // TODO: write model_matrix to UBOs
+        let proxy_ubo = ProxyUbo {
+            model: model_matrix,
+        };
+        for ubo in &ubo {
+            ubo.write(&proxy_ubo);
+        }
 
         Ok(Self {
             model,
@@ -398,5 +446,11 @@ impl SceneProxy {
     }
     fn set_model_matrix(&mut self, mat: glam::Mat4) {
         self.model_matrix = mat
+    }
+    fn write_ubo(&self, frame: usize) {
+        let data = ProxyUbo {
+            model: self.model_matrix,
+        };
+        self.ubo[frame].write(&data);
     }
 }
