@@ -38,6 +38,7 @@
 //! use logging::{Filter, LogLevel};
 //!
 //! // The 50 most recent warnings or worse from the Rendering target:
+//! # #[cfg(editor)]
 //! let entries = logger
 //!     .query(
 //!         Filter::new()
@@ -47,6 +48,7 @@
 //!     .last(50);
 //!
 //! // Count all errors since the session started:
+//! # #[cfg(editor)]
 //! let error_count = logger
 //!     .query(Filter::new().of_level(LogLevel::Error))
 //!     .count();
@@ -64,7 +66,16 @@ mod store;
 #[cfg(test)]
 mod tests;
 
-pub use filter::{LogFilter as Filter, StoreFilter};
+#[cfg(editor)]
+pub use filter::StoreFilter;
+#[cfg(editor)]
+use {
+    crate::{layers::storage::StorageLayer, store::LogStore},
+    std::sync::Arc,
+};
+
+pub use filter::LogFilter as Filter;
+
 use thiserror::Error;
 use tracing_subscriber::{
     Registry,
@@ -76,11 +87,7 @@ use tracing_subscriber::{
 use std::fmt;
 use time::OffsetDateTime;
 
-use crate::layers::{console::ConsoleLayer, file::FileLayer, storage::StorageLayer};
-#[cfg(editor)]
-use crate::store::LogStore;
-#[cfg(editor)]
-use std::sync::Arc;
+use crate::layers::{console::ConsoleLayer, file::FileLayer};
 
 /// Severity level of a log entry.
 ///

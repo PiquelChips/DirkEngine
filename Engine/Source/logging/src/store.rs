@@ -1,3 +1,5 @@
+#![cfg(editor)]
+
 use parking_lot::RwLock;
 
 use crate::LogEntry;

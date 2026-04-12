@@ -46,6 +46,7 @@ type Filter = Box<dyn Fn(&LogEntry) -> bool + Send + Sync>;
 /// ```rust
 /// # use logging::{Filter, LogLevel};
 /// # let logger = logging::Logger::new().init().unwrap();
+/// # #[cfg(editor)]
 /// let recent_render_errors = logger
 ///     .query(
 ///         Filter::new()

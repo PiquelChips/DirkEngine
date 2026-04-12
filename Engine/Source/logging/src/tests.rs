@@ -387,8 +387,9 @@ mod log_filter {
     }
 }
 
-// ── LogStore ──────────────────────────────────────────────────────────────────
+// ── LogStore (editor only) ────────────────────────────────────────────────────
 
+#[cfg(editor)]
 mod log_store {
     use super::*;
     use crate::store::LogStore;
