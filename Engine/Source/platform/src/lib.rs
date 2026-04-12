@@ -8,11 +8,9 @@
 use std::{collections::HashMap, time::Duration};
 
 use tracing::info;
-use winit::{
-    event_loop::{
-        EventLoop,
-        pump_events::{EventLoopExtPumpEvents, PumpStatus},
-    },
+use winit::event_loop::{
+    EventLoop,
+    pump_events::{EventLoopExtPumpEvents, PumpStatus},
 };
 
 mod errors;
