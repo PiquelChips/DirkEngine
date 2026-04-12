@@ -44,7 +44,8 @@ impl PlatformHandler {
 
         let window = Window::new(window);
         let window_id = window.id();
-        debug!("Created new window with id={window_id:?}");
+        self.platform_dispatcher
+            .dispatch(PlatformEvent::WindowCreated { id: window_id });
         self.windows.insert(window_id, window);
         Ok(window_id)
     }
