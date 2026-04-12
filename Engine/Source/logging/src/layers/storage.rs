@@ -28,12 +28,12 @@ impl StorageLayer {
 
 impl<S: Subscriber> Layer<S> for StorageLayer {
     fn on_event(&self, event: &Event<'_>, _ctx: Context<'_, S>) {
-        let (message, category, timestamp) = extract_event_data(event);
+        let (message, target, timestamp) = extract_event_data(event);
         let level = LogLevel::from(event.metadata().level());
 
         self.store.push(LogEntry {
             level,
-            category,
+            target,
             timestamp,
             message,
         });

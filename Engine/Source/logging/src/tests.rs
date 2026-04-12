@@ -15,10 +15,10 @@ use crate::{LogEntry, LogLevel, filter::LogFilter};
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /// Build a `LogEntry` stamped at `now_utc()`.
-fn make_entry(level: LogLevel, category: &str, message: &str) -> LogEntry {
+fn make_entry(level: LogLevel, target: &str, message: &str) -> LogEntry {
     LogEntry {
         level,
-        category: category.to_string(),
+        target: target.to_string(),
         timestamp: OffsetDateTime::now_utc(),
         message: message.to_string(),
     }
@@ -27,13 +27,13 @@ fn make_entry(level: LogLevel, category: &str, message: &str) -> LogEntry {
 /// Build a `LogEntry` with an explicit timestamp.
 fn make_entry_at(
     level: LogLevel,
-    category: &str,
+    target: &str,
     message: &str,
     timestamp: OffsetDateTime,
 ) -> LogEntry {
     LogEntry {
         level,
-        category: category.to_string(),
+        target: target.to_string(),
         timestamp,
         message: message.to_string(),
     }
@@ -99,51 +99,51 @@ mod log_filter {
         }
     }
 
-    // ── of_category ───────────────────────────────────────────────────────
+    // ── of_target ───────────────────────────────────────────────────────
 
     #[test]
-    fn of_category_exact_match_passes() {
-        let f = LogFilter::new().of_category("Rendering");
+    fn of_target_exact_match_passes() {
+        let f = LogFilter::new().of_target("Rendering");
         assert!(f.filter(&make_entry(LogLevel::Info, "Rendering", "msg")));
     }
 
     #[test]
-    fn of_category_different_category_fails() {
-        let f = LogFilter::new().of_category("Rendering");
+    fn of_target_different_target_fails() {
+        let f = LogFilter::new().of_target("Rendering");
         assert!(!f.filter(&make_entry(LogLevel::Info, "Audio", "msg")));
     }
 
     #[test]
-    fn of_category_substring_does_not_match() {
-        // "Render" is a substring of "Rendering" but of_category requires exact equality.
-        let f = LogFilter::new().of_category("Render");
+    fn of_target_substring_does_not_match() {
+        // "Render" is a substring of "Rendering" but of_target requires exact equality.
+        let f = LogFilter::new().of_target("Render");
         assert!(!f.filter(&make_entry(LogLevel::Info, "Rendering", "msg")));
     }
 
     #[test]
-    fn of_category_superstring_does_not_match() {
-        let f = LogFilter::new().of_category("RenderingSystem");
+    fn of_target_superstring_does_not_match() {
+        let f = LogFilter::new().of_target("RenderingSystem");
         assert!(!f.filter(&make_entry(LogLevel::Info, "Rendering", "msg")));
     }
 
-    // ── category_contains ─────────────────────────────────────────────────
+    // ── target_contains ─────────────────────────────────────────────────
 
     #[test]
-    fn category_contains_exact_passes() {
-        let f = LogFilter::new().category_contains("Rendering");
+    fn target_contains_exact_passes() {
+        let f = LogFilter::new().target_contains("Rendering");
         assert!(f.filter(&make_entry(LogLevel::Info, "Rendering", "msg")));
     }
 
     #[test]
-    fn category_contains_prefix_passes() {
-        let f = LogFilter::new().category_contains("Render");
+    fn target_contains_prefix_passes() {
+        let f = LogFilter::new().target_contains("Render");
         assert!(f.filter(&make_entry(LogLevel::Info, "Rendering", "msg")));
         assert!(f.filter(&make_entry(LogLevel::Info, "Rendering/Shadows", "msg")));
     }
 
     #[test]
-    fn category_contains_unrelated_fails() {
-        let f = LogFilter::new().category_contains("Physics");
+    fn target_contains_unrelated_fails() {
+        let f = LogFilter::new().target_contains("Physics");
         assert!(!f.filter(&make_entry(LogLevel::Info, "Rendering", "msg")));
     }
 
@@ -342,14 +342,14 @@ mod log_filter {
     #[test]
     fn composed_filter_requires_all_predicates() {
         let f = LogFilter::new()
-            .of_category("Rendering")
+            .of_target("Rendering")
             .min_level(LogLevel::Warn);
 
         // Both predicates pass → included.
         assert!(f.filter(&make_entry(LogLevel::Error, "Rendering", "GPU fault")));
         assert!(f.filter(&make_entry(LogLevel::Warn, "Rendering", "slow frame")));
 
-        // Wrong category → excluded.
+        // Wrong target → excluded.
         assert!(!f.filter(&make_entry(LogLevel::Error, "Audio", "clip")));
 
         // Level too low → excluded.
@@ -360,7 +360,7 @@ mod log_filter {
     fn many_predicates_all_must_pass() {
         let now = OffsetDateTime::now_utc();
         let f = LogFilter::new()
-            .of_category("Physics")
+            .of_target("Physics")
             .min_level(LogLevel::Warn)
             .matching("stack")
             .since(now - time::Duration::seconds(5));
@@ -368,7 +368,7 @@ mod log_filter {
         let passing = make_entry_at(LogLevel::Error, "Physics", "stack overflow in solver", now);
         assert!(f.filter(&passing));
 
-        // Fails the category predicate.
+        // Fails the target predicate.
         let wrong_cat = make_entry_at(LogLevel::Error, "Audio", "stack overflow", now);
         assert!(!f.filter(&wrong_cat));
 
@@ -407,7 +407,7 @@ mod log_store {
         store.with_entries(|entries| {
             assert_eq!(entries.len(), 1);
             assert_eq!(entries[0].message, "hello");
-            assert_eq!(entries[0].category, "Cat");
+            assert_eq!(entries[0].target, "Cat");
             assert_eq!(entries[0].level, LogLevel::Info);
         });
     }
@@ -516,15 +516,15 @@ mod store_filter {
     }
 
     #[test]
-    fn execute_filters_by_category() {
+    fn execute_filters_by_target() {
         let store = fixture();
         let results = LogFilter::new()
-            .of_category("Rendering")
+            .of_target("Rendering")
             .with_store(Arc::clone(&store))
             .execute();
         // Entries 0, 2, 4 are Rendering.
         assert_eq!(results.len(), 3);
-        assert!(results.iter().all(|e| e.category == "Rendering"));
+        assert!(results.iter().all(|e| e.target == "Rendering"));
     }
 
     #[test]
@@ -544,7 +544,7 @@ mod store_filter {
         let store = fixture();
         // Rendering + Warn or worse → only entry 0 ("GPU crash").
         let results = LogFilter::new()
-            .of_category("Rendering")
+            .of_target("Rendering")
             .min_level(LogLevel::Warn)
             .with_store(Arc::clone(&store))
             .execute();
@@ -556,7 +556,7 @@ mod store_filter {
     fn execute_no_match_returns_empty_vec() {
         let store = fixture();
         let results = LogFilter::new()
-            .of_category("NonExistentSystem")
+            .of_target("NonExistentSystem")
             .with_store(Arc::clone(&store))
             .execute();
         assert!(results.is_empty());
@@ -595,7 +595,7 @@ mod store_filter {
         // Rendering entries in order: GPU crash (0), Frame complete (2), Shader compiled (4).
         // last(2) of that subset → [Frame complete, Shader compiled].
         let results = LogFilter::new()
-            .of_category("Rendering")
+            .of_target("Rendering")
             .with_store(Arc::clone(&store))
             .last(2);
         assert_eq!(results.len(), 2);
@@ -613,10 +613,10 @@ mod store_filter {
     }
 
     #[test]
-    fn count_by_category() {
+    fn count_by_target() {
         let store = fixture();
         let n = LogFilter::new()
-            .of_category("Rendering")
+            .of_target("Rendering")
             .with_store(Arc::clone(&store))
             .count();
         assert_eq!(n, 3);
@@ -626,7 +626,7 @@ mod store_filter {
     fn count_no_match_is_zero() {
         let store = fixture();
         let n = LogFilter::new()
-            .of_category("DoesNotExist")
+            .of_target("DoesNotExist")
             .with_store(Arc::clone(&store))
             .count();
         assert_eq!(n, 0);

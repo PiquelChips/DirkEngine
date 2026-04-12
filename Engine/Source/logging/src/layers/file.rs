@@ -67,13 +67,13 @@ impl FileLayer {
 
 impl<S: Subscriber> Layer<S> for FileLayer {
     fn on_event(&self, event: &Event<'_>, _ctx: Context<'_, S>) {
-        let (message, category, timestamp) = extract_event_data(event);
+        let (message, target, timestamp) = extract_event_data(event);
         let level = event.metadata().level();
 
         let ts_str = format_timestamp(&timestamp);
         // `colored = false` — ANSI escape codes must not appear in log files.
         let level_str = format_level(level, /* colored = */ false);
-        let line = format_line(&ts_str, &level_str, &category, &message);
+        let line = format_line(&ts_str, &level_str, &target, &message);
 
         // Best-effort writes: silently ignore I/O errors so logging never
         // panics the application.

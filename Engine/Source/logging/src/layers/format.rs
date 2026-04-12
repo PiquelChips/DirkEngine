@@ -3,21 +3,18 @@ use std::fmt;
 use time::OffsetDateTime;
 use tracing::field::{Field, Visit};
 
-/// Visitor that extracts the `message` and optional `category` fields from a
+/// Visitor that extracts the `message` and optional `target` fields from a
 /// tracing [`Event`](tracing::Event).
 #[derive(Default)]
 pub(crate) struct EventVisitor {
     pub message: String,
-    pub category: Option<String>,
 }
 
 impl Visit for EventVisitor {
     /// Handles string fields set via `field = "value"` syntax.
     fn record_str(&mut self, field: &Field, value: &str) {
-        match field.name() {
-            "message" => self.message = value.to_owned(),
-            "category" => self.category = Some(value.to_owned()),
-            _ => {}
+        if field.name() == "message" {
+            self.message = value.to_owned();
         }
     }
 
@@ -81,29 +78,22 @@ pub(crate) fn format_level(level: &tracing::Level, colored: bool) -> String {
 /// Assemble the final log line from its parts.
 ///
 /// Format: `YYYY/MM/DD HH:MM:SS [LEVEL] [Category] message`
-pub(crate) fn format_line(
-    timestamp: &str,
-    level_str: &str,
-    category: &str,
-    message: &str,
-) -> String {
-    format!("{timestamp} [{level_str}] [{category}] {message}")
+pub(crate) fn format_line(timestamp: &str, level_str: &str, target: &str, message: &str) -> String {
+    format!("{timestamp} [{level_str}] [{target}] {message}")
 }
 
 /// Extract all relevant fields from a tracing event, returning
-/// `(message, category, timestamp)` ready for use by any layer.
+/// `(message, target, timestamp)` ready for use by any layer.
 pub(crate) fn extract_event_data(event: &tracing::Event<'_>) -> (String, String, OffsetDateTime) {
     let mut visitor = EventVisitor::default();
     event.record(&mut visitor);
 
-    // Category priority: explicit `category` field > tracing `target`
+    // Category priority: explicit `target` field > tracing `target`
     // (target defaults to the Rust module path but can be set via
     //  `tracing::info!(target: "Rendering", "msg")`)
-    let category = visitor
-        .category
-        .unwrap_or_else(|| event.metadata().target().to_owned());
+    let target = event.metadata().target().to_owned();
 
     let timestamp = OffsetDateTime::now_utc();
 
-    (visitor.message, category, timestamp)
+    (visitor.message, target, timestamp)
 }

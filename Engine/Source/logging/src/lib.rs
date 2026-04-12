@@ -1,6 +1,6 @@
 //! # logging
 //!
-//! Engine logging built on [`tracing`], with structured categories, ANSI
+//! Engine logging built on [`tracing`], with structured targets, ANSI
 //! console output, rotating file output, and (in editor builds) a queryable
 //! in-memory store.
 //!
@@ -17,7 +17,7 @@
 //!
 //! ## Emitting log events
 //!
-//! Use standard [`tracing`] macros. Assign a category via the `target:`
+//! Use standard [`tracing`] macros. Assign a target via the `target:`
 //! directive (falls back to the Rust module path):
 //!
 //! ```rust
@@ -26,14 +26,6 @@
 //! tracing::error!(target: "Physics", "Broad-phase overflow");
 //! tracing::warn!(target: "Audio",   "Buffer underrun on stream {}", id);
 //! tracing::info!(target: "Rendering", "Frame {} complete", frame);
-//! ```
-//!
-//! Alternatively use the explicit `category` field, which takes precedence
-//! over `target`:
-//!
-//! ```rust
-//! # let n = 5_usize;
-//! tracing::info!(category = "Audio", "Loaded {} sounds", n);
 //! ```
 //!
 //! ## Querying the log store (editor builds only)
@@ -45,11 +37,11 @@
 //! # let logger = logging::Logger::new().init().unwrap();
 //! use logging::{Filter, LogLevel};
 //!
-//! // The 50 most recent warnings or worse from the Rendering category:
+//! // The 50 most recent warnings or worse from the Rendering target:
 //! let entries = logger
 //!     .query(
 //!         Filter::new()
-//!             .of_category("Rendering")
+//!             .of_target("Rendering")
 //!             .min_level(LogLevel::Warn),
 //!     )
 //!     .last(50);
@@ -62,9 +54,9 @@
 //!
 //! ## Category convention
 //!
-//! Prefer short, stable category names that map to engine subsystems
+//! Prefer short, stable target names that map to engine subsystems
 //! (`"Rendering"`, `"Physics"`, `"Audio"`, …). Hierarchical names like
-//! `"Rendering/Shadows"` work well with [`Filter::category_contains`].
+//! `"Rendering/Shadows"` work well with [`Filter::target_contains`].
 
 mod filter;
 mod layers;
@@ -75,7 +67,10 @@ mod tests;
 pub use filter::{LogFilter as Filter, StoreFilter};
 use thiserror::Error;
 use tracing_subscriber::{
-    Registry, filter::LevelFilter, layer::SubscriberExt, util::SubscriberInitExt,
+    Registry,
+    filter::{LevelFilter, filter_fn},
+    layer::SubscriberExt,
+    util::SubscriberInitExt,
 };
 
 use std::fmt;
@@ -162,13 +157,12 @@ impl fmt::Display for LogLevel {
 pub struct LogEntry {
     /// Severity of the event.
     pub level: LogLevel,
-    /// Subsystem category (e.g. `"Rendering"`, `"Physics"`).
+    /// Subsystem target (e.g. `"Rendering"`, `"Physics"`).
     ///
     /// Populated from (in priority order):
-    /// 1. An explicit `category` field in the tracing macro call.
-    /// 2. The `target:` directive.
-    /// 3. The Rust module path (tracing's default target).
-    pub category: String,
+    /// 1. The `target:` directive.
+    /// 2. The Rust module path (tracing's default target).
+    pub target: String,
     /// UTC time at which the event was recorded.
     pub timestamp: OffsetDateTime,
     /// Fully formatted log message.
@@ -187,7 +181,7 @@ pub struct LogEntry {
 /// let logger = Logger::new()
 ///     .max_level(LogLevel::Debug)
 ///     .write_fs(true)
-///     .allowed_categories(["Rendering", "Physics"])
+///     .allowed_targets(["Rendering", "Physics"])
 ///     .init()?;
 /// # Ok(()) };
 /// ```
@@ -218,8 +212,8 @@ pub struct Logger {
     max_level: Option<LogLevel>,
     /// Whether to write logs to disk.
     write_fs: bool,
-    /// Allowlist of category names. Empty means all categories pass.
-    allowed_categories: Vec<String>,
+    /// Allowlist of target names. Empty means all targets pass.
+    allowed_targets: Vec<String>,
     #[cfg(editor)]
     store: Arc<LogStore>,
 }
@@ -228,7 +222,7 @@ impl Logger {
     /// Create a new logger builder with default settings:
     /// - `max_level`: `Info` (same as `verbose(false)`)
     /// - `write_fs`: `false`
-    /// - all categories allowed
+    /// - all targets allowed
     pub fn new() -> Self {
         Self::default()
     }
@@ -269,26 +263,23 @@ impl Logger {
         self
     }
 
-    /// Restrict logging to entries whose category exactly matches one of the
-    /// provided names. All other categories are silently dropped by every layer.
+    /// Restrict logging to entries whose target exactly matches one of the
+    /// provided names. All other targets are silently dropped by every layer.
     ///
     /// Calling this with an empty iterator (or not calling it at all) allows
-    /// all categories through.
+    /// all targets through.
     ///
     /// # Example
     /// ```rust
     /// # use logging::Logger;
     /// # fn test() -> Result<(), Box<dyn std::error::Error>> {
     /// Logger::new()
-    ///     .allowed_categories(["Rendering", "Physics", "Audio"])
+    ///     .allowed_targets(["Rendering", "Physics", "Audio"])
     ///     .init()?;
     /// # Ok(()) };
     /// ```
-    pub fn allowed_categories(
-        mut self,
-        categories: impl IntoIterator<Item = impl Into<String>>,
-    ) -> Self {
-        self.allowed_categories = categories.into_iter().map(Into::into).collect();
+    pub fn allowed_targets(mut self, targets: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        self.allowed_targets = targets.into_iter().map(Into::into).collect();
         self
     }
 
@@ -311,12 +302,12 @@ impl Logger {
     /// let logger = Logger::new()
     ///     .max_level(LogLevel::Warn)   // only Warn and Error
     ///     .write_fs(true)
-    ///     .allowed_categories(["Rendering", "Physics"])
+    ///     .allowed_targets(["Rendering", "Physics"])
     ///     .init()?;
     /// # Ok(()) };
     ///
     /// tracing::info!(target: "Rendering", "this passes");
-    /// tracing::info!(target: "Audio",     "this is dropped — wrong category");
+    /// tracing::info!(target: "Audio",     "this is dropped — wrong target");
     /// tracing::debug!(target: "Rendering","this is dropped — below Warn");
     /// ```
     pub fn init(self) -> Result<Self, InitError> {
@@ -366,7 +357,7 @@ impl Logger {
     /// # let logger = logging::Logger::new().init().unwrap();
     /// use logging::{Filter, LogLevel};
     ///
-    /// // All errors across every category:
+    /// // All errors across every target:
     /// let all_errors = logger
     ///     .query(Filter::new().of_level(LogLevel::Error))
     ///     .execute();
@@ -375,7 +366,7 @@ impl Logger {
     /// let recent = logger
     ///     .query(
     ///         Filter::new()
-    ///             .of_category("Rendering")
+    ///             .of_target("Rendering")
     ///             .min_level(LogLevel::Warn)
     ///             .within_last_seconds(60),
     ///     )

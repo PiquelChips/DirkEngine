@@ -22,14 +22,14 @@ type Filter = Box<dyn Fn(&LogEntry) -> bool + Send + Sync>;
 ///
 /// let entry = LogEntry {
 ///     level:     LogLevel::Error,
-///     category:  "Rendering".to_string(),
+///     target:  "Rendering".to_string(),
 ///     timestamp: OffsetDateTime::now_utc(),
 ///     message:   "GPU fence timeout".to_string(),
 /// };
 ///
 /// // A filter that passes only Rendering errors:
 /// let passes = Filter::new()
-///     .of_category("Rendering")
+///     .of_target("Rendering")
 ///     .min_level(LogLevel::Warn)   // Error < Warn, so Error passes
 ///     .filter(&entry);
 ///
@@ -49,7 +49,7 @@ type Filter = Box<dyn Fn(&LogEntry) -> bool + Send + Sync>;
 /// let recent_render_errors = logger
 ///     .query(
 ///         Filter::new()
-///             .of_category("Rendering")
+///             .of_target("Rendering")
 ///             .min_level(LogLevel::Error)
 ///             .within_last_seconds(60),
 ///     )
@@ -66,32 +66,30 @@ impl LogFilter {
         Self::default()
     }
 
-    // ── Predicate builders ────────────────────────────────────────────────
-
-    /// Only include entries whose category **exactly** matches `category`.
+    /// Only include entries whose target **exactly** matches `target`.
     ///
     /// # Example
     /// ```rust
     /// # use logging::{Filter, LogLevel, LogEntry};
     /// # use time::OffsetDateTime;
     /// # fn make(cat: &str) -> LogEntry {
-    /// #     LogEntry { level: LogLevel::Info, category: cat.to_string(),
+    /// #     LogEntry { level: LogLevel::Info, target: cat.to_string(),
     /// #                timestamp: OffsetDateTime::now_utc(), message: String::new() }
     /// # }
-    /// let f = Filter::new().of_category("Audio");
+    /// let f = Filter::new().of_target("Audio");
     /// assert!( f.filter(&make("Audio")));
     /// assert!(!f.filter(&make("AudioManager"))); // substring — does not match
     /// assert!(!f.filter(&make("Rendering")));
     /// ```
-    pub fn of_category(mut self, category: impl Into<String>) -> Self {
-        let cat = category.into();
-        self.filters.push(Box::new(move |e| e.category == cat));
+    pub fn of_target(mut self, target: impl Into<String>) -> Self {
+        let cat = target.into();
+        self.filters.push(Box::new(move |e| e.target == cat));
         self
     }
 
-    /// Only include entries whose category **contains** `substring`.
+    /// Only include entries whose target **contains** `substring`.
     ///
-    /// Useful when categories follow a hierarchical naming scheme
+    /// Useful when targets follow a hierarchical naming scheme
     /// (e.g. `"Rendering/Shadows"`, `"Rendering/PostFX"`).
     ///
     /// # Example
@@ -99,18 +97,18 @@ impl LogFilter {
     /// # use logging::{Filter, LogLevel, LogEntry};
     /// # use time::OffsetDateTime;
     /// # fn make(cat: &str) -> LogEntry {
-    /// #     LogEntry { level: LogLevel::Info, category: cat.to_string(),
+    /// #     LogEntry { level: LogLevel::Info, target: cat.to_string(),
     /// #                timestamp: OffsetDateTime::now_utc(), message: String::new() }
     /// # }
-    /// let f = Filter::new().category_contains("Render");
+    /// let f = Filter::new().target_contains("Render");
     /// assert!(f.filter(&make("Rendering")));
     /// assert!(f.filter(&make("Rendering/Shadows")));
     /// assert!(!f.filter(&make("Physics")));
     /// ```
-    pub fn category_contains(mut self, substring: impl Into<String>) -> Self {
+    pub fn target_contains(mut self, substring: impl Into<String>) -> Self {
         let sub = substring.into();
         self.filters
-            .push(Box::new(move |e| e.category.contains(sub.as_str())));
+            .push(Box::new(move |e| e.target.contains(sub.as_str())));
         self
     }
 
@@ -124,7 +122,7 @@ impl LogFilter {
     /// # use logging::{Filter, LogLevel, LogEntry};
     /// # use time::OffsetDateTime;
     /// # fn make(lvl: LogLevel) -> LogEntry {
-    /// #     LogEntry { level: lvl, category: String::new(),
+    /// #     LogEntry { level: lvl, target: String::new(),
     /// #                timestamp: OffsetDateTime::now_utc(), message: String::new() }
     /// # }
     /// let f = Filter::new().of_level(LogLevel::Warn);
@@ -147,7 +145,7 @@ impl LogFilter {
     /// # use logging::{Filter, LogLevel, LogEntry};
     /// # use time::OffsetDateTime;
     /// # fn make(lvl: LogLevel) -> LogEntry {
-    /// #     LogEntry { level: lvl, category: String::new(),
+    /// #     LogEntry { level: lvl, target: String::new(),
     /// #                timestamp: OffsetDateTime::now_utc(), message: String::new() }
     /// # }
     /// let f = Filter::new().min_level(LogLevel::Warn);
@@ -175,7 +173,7 @@ impl LogFilter {
     /// // An entry stamped before the cutoff is excluded.
     /// let old = LogEntry {
     ///     level:     LogLevel::Info,
-    ///     category:  String::new(),
+    ///     target:  String::new(),
     ///     timestamp: cutoff - time::Duration::seconds(1),
     ///     message:   String::new(),
     /// };
@@ -216,7 +214,7 @@ impl LogFilter {
     /// # use time::OffsetDateTime;
     /// // Keep only entries from the last minute:
     /// let f = Filter::new()
-    ///     .of_category("Physics")
+    ///     .of_target("Physics")
     ///     .within_last_seconds(60);
     /// ```
     pub fn within_last_seconds(self, seconds: i64) -> Self {
@@ -231,7 +229,7 @@ impl LogFilter {
     /// # use logging::{Filter, LogLevel, LogEntry};
     /// # use time::OffsetDateTime;
     /// # fn make(msg: &str) -> LogEntry {
-    /// #     LogEntry { level: LogLevel::Error, category: String::new(),
+    /// #     LogEntry { level: LogLevel::Error, target: String::new(),
     /// #                timestamp: OffsetDateTime::now_utc(), message: msg.to_string() }
     /// # }
     /// let f = Filter::new().matching("overflow");
@@ -246,8 +244,6 @@ impl LogFilter {
             .push(Box::new(move |e| e.message.contains(pat.as_str())));
         self
     }
-
-    // ── Terminals ─────────────────────────────────────────────────────────
 
     /// Test `entry` against all accumulated predicates.
     ///
@@ -323,7 +319,7 @@ impl StoreFilter {
     /// # let logger = logging::Logger::new().init().unwrap();
     /// # use logging::{LogEntry, LogLevel, Filter};
     /// let recent: Vec<LogEntry> = logger
-    ///     .query(Filter::new().of_category("Rendering"))
+    ///     .query(Filter::new().of_target("Rendering"))
     ///     .last(50);
     /// ```
     pub fn last(self, n: usize) -> Vec<LogEntry> {
