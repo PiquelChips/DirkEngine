@@ -14,7 +14,7 @@ use ash::{
     khr::{surface, swapchain},
     vk,
 };
-use platform::{PlatformEvent, WindowEvent};
+use platform::{PlatformEvent, WindowEvent, WindowId};
 use tracing::{debug, error, info, trace, warn};
 
 mod errors;
@@ -30,7 +30,7 @@ mod scene;
 use scene::Scene;
 
 mod window;
-use window::{Window, WindowId};
+use window::Window;
 
 mod pipeline;
 use pipeline::GraphicsPipeline;
@@ -599,7 +599,7 @@ impl Renderer {
             properties,
             transfer_pool,
             graphics_pool,
-            main_window: window.id().into_raw(),
+            main_window: window.id(),
             windows: HashMap::new(),
             models: HashMap::new(),
             scenes: HashMap::new(),
@@ -700,7 +700,7 @@ impl Renderer {
         for event in platform_events {
             match event {
                 PlatformEvent::WindowCreated { id } => {
-                    let Some(plat_window) = windows.get(&id.into_raw()) else {
+                    let Some(plat_window) = windows.get(&id) else {
                         continue;
                     };
 
@@ -720,18 +720,17 @@ impl Renderer {
                         height: window_size.height,
                     };
 
-                    let window =
-                        window::Window::build(plat_window.id().into_raw(), self, surface, size)?;
+                    let window = window::Window::build(plat_window.id(), self, surface, size)?;
                     self.windows.insert(window.id(), window);
                 }
                 PlatformEvent::WindowDestroyed { id } => {
                     // in case the window was not destroyed by WindowCloseRequested
-                    if let Some(window) = self.windows.remove(&id.into_raw()) {
+                    if let Some(window) = self.windows.remove(&id) {
                         window.destroy(&self.device, &self.surface_loader, &self.swapchain_loader);
                     }
                 }
                 PlatformEvent::WindowCloseRequested { id } => {
-                    if let Some(window) = self.windows.remove(&id.into_raw()) {
+                    if let Some(window) = self.windows.remove(&id) {
                         window.destroy(&self.device, &self.surface_loader, &self.swapchain_loader);
                     }
                 }
@@ -742,7 +741,7 @@ impl Renderer {
         for event in window_events {
             match event {
                 WindowEvent::Resized { id, width, height } => {
-                    let Some(window) = self.windows.get(&id.into_raw()) else {
+                    let Some(window) = self.windows.get(&id) else {
                         continue;
                     };
                     let surface = window.surface();
@@ -750,13 +749,13 @@ impl Renderer {
                         self.create_swap_chain(surface, vk::Extent2D { width, height })?;
                     // Wait for the GPU to be idle before touching the swapchain.
                     unsafe { self.device.device_wait_idle()? };
-                    let Some(window) = self.windows.get_mut(&id.into_raw()) else {
+                    let Some(window) = self.windows.get_mut(&id) else {
                         continue;
                     };
                     window.update_swapcahin(swapchain, extent, images);
                 }
                 WindowEvent::Occluded { id, occluded } => {
-                    let Some(window) = self.windows.get_mut(&id.into_raw()) else {
+                    let Some(window) = self.windows.get_mut(&id) else {
                         continue;
                     };
                     window.set_occluded(occluded);

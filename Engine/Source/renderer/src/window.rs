@@ -3,10 +3,9 @@ use ash::{
     khr::{surface, swapchain},
     vk,
 };
+use platform::WindowId;
 
 use crate::{Error, Renderer, Result};
-
-pub type WindowId = usize;
 
 #[derive(Clone)]
 pub struct SwapchainImage {
