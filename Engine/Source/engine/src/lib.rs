@@ -186,7 +186,7 @@ impl Engine {
             },
         );
         world.insert(
-            shrek,
+            duck,
             components::Renderable {
                 model: "Duck".to_string(),
             },
