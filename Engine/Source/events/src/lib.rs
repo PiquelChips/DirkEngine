@@ -6,6 +6,8 @@ use std::{
     sync::mpsc::{self, Receiver, Sender},
 };
 
+use tracing::trace;
+
 mod tests;
 
 /// The trait that should be implemented by every event type.
@@ -49,6 +51,7 @@ impl EventManager {
     /// Drains all producers and forwards their pending events to matching subscribers.
     /// Call this once per frame / tick in your engine loop.
     pub fn dispatch_all(&mut self) {
+        trace!("dispatching events");
         for producer in &self.producers {
             producer.forward_pending(&mut self.subscribers);
         }
@@ -107,6 +110,7 @@ pub struct Dispatcher<T: Event> {
 impl<T: Event> Dispatcher<T> {
     /// Queues an event to be forwarded to subscribers.
     pub fn dispatch(&self, event: T) {
+        trace!("dispatching event {}", event.debug());
         // Ignore send errors: it just means the EventManager was dropped.
         let _ = self.sender.send(event);
     }
@@ -122,11 +126,15 @@ pub struct Consumer<T: Event> {
 impl<T: Event> Consumer<T> {
     /// Returns the next pending event, or `None` if the queue is empty.
     pub fn try_consume(&self) -> Option<T> {
-        self.receiver.try_recv().ok()
+        let res = self.receiver.try_recv().ok();
+        if let Some(event) = res.clone() {
+            trace!("consuming {}", event.debug())
+        }
+        res
     }
 
     /// Returns an iterator that drains all currently pending events.
     pub fn consume_all(&self) -> impl Iterator<Item = T> {
-        std::iter::from_fn(|| self.receiver.try_recv().ok())
+        std::iter::from_fn(|| self.try_consume())
     }
 }
