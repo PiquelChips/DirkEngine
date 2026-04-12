@@ -159,10 +159,10 @@ impl Engine {
             return Ok(false);
         }
 
+        // TODO: world::tick (run tick on every tickable object)
+
         self.platform.tick(delta_time);
         self.renderer.tick(delta_time).context("renderer")?;
-
-        // TODO: world::tick (run tick on every tickable object)
 
         self.render().context("render")?;
         Ok(!self.is_requesting_exit())
