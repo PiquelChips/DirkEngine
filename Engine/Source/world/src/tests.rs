@@ -7,14 +7,20 @@
 
 #![cfg(test)]
 
+use crate::World;
+fn new_world(id: u32) -> World {
+    let mut event_manager = events::EventManager::new();
+    World::new(id, &mut event_manager)
+}
+
 mod entity {
-    use crate::World;
+    use super::new_world;
 
     // --- spawn --------------------------------------------------------------
 
     #[test]
     fn spawn_returns_unique_ids() {
-        let mut w = World::new(0);
+        let mut w = new_world(0);
         let a = w.spawn();
         let b = w.spawn();
         let c = w.spawn();
@@ -25,14 +31,14 @@ mod entity {
 
     #[test]
     fn spawned_entity_appears_in_alive() {
-        let mut w = World::new(0);
+        let mut w = new_world(0);
         let e = w.spawn();
         assert!(w.alive().contains(&e));
     }
 
     #[test]
     fn entity_count_tracks_spawns() {
-        let mut w = World::new(0);
+        let mut w = new_world(0);
         assert_eq!(w.entity_count(), 0);
         w.spawn();
         w.spawn();
@@ -43,7 +49,7 @@ mod entity {
 
     #[test]
     fn despawned_entity_not_in_alive() {
-        let mut w = World::new(0);
+        let mut w = new_world(0);
         let e = w.spawn();
         w.despawn(e);
         assert!(!w.alive().contains(&e));
@@ -51,7 +57,7 @@ mod entity {
 
     #[test]
     fn despawn_unknown_entity_is_noop() {
-        let mut w = World::new(0);
+        let mut w = new_world(0);
         // Entity 99 was never spawned — should not panic.
         w.despawn(99);
         assert_eq!(w.entity_count(), 0);
@@ -59,7 +65,7 @@ mod entity {
 
     #[test]
     fn despawn_reduces_entity_count() {
-        let mut w = World::new(0);
+        let mut w = new_world(0);
         let a = w.spawn();
         let _b = w.spawn();
         assert_eq!(w.entity_count(), 2);
@@ -69,7 +75,7 @@ mod entity {
 
     #[test]
     fn ids_not_reused_after_despawn() {
-        let mut w = World::new(0);
+        let mut w = new_world(0);
         let first = w.spawn();
         w.despawn(first);
         let second = w.spawn();
@@ -80,7 +86,7 @@ mod entity {
 
     #[test]
     fn world_id_is_preserved() {
-        let w = World::new(42);
+        let w = new_world(42);
         assert_eq!(w.id(), 42);
     }
 }
@@ -248,6 +254,7 @@ mod components {
 // ---------------------------------------------------------------------------
 
 mod queries {
+    use super::new_world;
     use crate::{
         World,
         components::{Camera, Renderable, Transform},
@@ -255,7 +262,7 @@ mod queries {
     use glam::Vec3;
 
     fn make_world() -> World {
-        World::new(0)
+        new_world(0)
     }
 
     fn default_transform() -> Transform {
