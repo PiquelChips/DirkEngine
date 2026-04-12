@@ -834,7 +834,7 @@ impl Renderer {
         self.transition_image_layout(
             &cmd,
             swapchain_img.image,
-            vk::ImageLayout::UNDEFINED,
+            vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
             vk::ImageLayout::PRESENT_SRC_KHR,
             1,
             0,
@@ -1134,10 +1134,12 @@ impl Renderer {
         self.generate_mipmaps(&cmd, image, *tex.width(), *tex.height(), mip_levels)?;
         cmd.end_and_submit(&self.device)?;
 
-        unsafe {
-            self.device.destroy_buffer(staging_buf, None);
-            self.device.free_memory(staging_mem, None);
-        }
+        // TODO: destroy buffer when it is no longer needed (maybe with VMA)
+        // unsafe {
+        // currently it is destroyed too early, it is still in use
+        // self.device.destroy_buffer(staging_buf, None);
+        // self.device.free_memory(staging_mem, None);
+        // }
 
         let view =
             self.create_image_view(image, format, vk::ImageAspectFlags::COLOR, mip_levels)?;
@@ -1363,10 +1365,12 @@ impl Renderer {
         )?;
 
         self.copy_buffer(staging_buf, device_buf, size)?;
-        unsafe {
-            self.device.destroy_buffer(staging_buf, None);
-            self.device.free_memory(staging_mem, None);
-        }
+        // TODO: destroy buffer when it is no longer needed (maybe with VMA)
+        // unsafe {
+        // currently it is destroyed too early, it is still in use
+        // self.device.destroy_buffer(staging_buf, None);
+        // self.device.free_memory(staging_mem, None);
+        // }
 
         Ok((device_buf, device_mem))
     }

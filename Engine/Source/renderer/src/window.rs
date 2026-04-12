@@ -94,7 +94,7 @@ impl Window {
         swapchain_loader: &swapchain::Device,
     ) -> Result<(SwapchainImage, u32)> {
         self.semaphore_count = (self.semaphore_count + 1) % self.semaphores.len();
-        let (_, image_available_semaphore) = self.semaphores[self.semaphore_count];
+        let (_, image_available_semaphore) = self.current_semaphores();
 
         let (image_index, suboptimal) = unsafe {
             swapchain_loader.acquire_next_image(
@@ -133,6 +133,7 @@ impl Window {
         self.images.iter().for_each(|i| i.destroy(device));
         unsafe {
             self.semaphores.iter().for_each(|&(s1, s2)| {
+                device.device_wait_idle().unwrap();
                 device.destroy_semaphore(s1, None);
                 device.destroy_semaphore(s2, None);
             });

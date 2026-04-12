@@ -75,6 +75,10 @@ impl Platform {
             PumpStatus::Continue => {}
         }
 
+        if self.handler.windows.is_empty() {
+            self.exit_dispatcher.dispatch(event::AppExit(0));
+        }
+
         self.window_consumer.consume_all().for_each(|event| {
             if let Some(window) = self.handler.windows.get_mut(event.id()) {
                 window.handle_event(event.clone());
