@@ -113,12 +113,14 @@ impl Window {
     }
     pub fn update_swapcahin(
         &mut self,
+        device: &Device,
         swapchain: vk::SwapchainKHR,
         extent: vk::Extent2D,
         images: Vec<SwapchainImage>,
     ) {
         self.swapchain = swapchain;
         self.extent = extent;
+        self.images.iter().for_each(|i| i.destroy(device));
         self.images = images;
     }
     pub fn set_occluded(&mut self, occluded: bool) {

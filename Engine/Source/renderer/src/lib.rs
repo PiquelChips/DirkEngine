@@ -777,7 +777,7 @@ impl Renderer {
                     let Some(window) = self.windows.get_mut(&id) else {
                         continue;
                     };
-                    window.update_swapcahin(swapchain, extent, images);
+                    window.update_swapcahin(&self.device, swapchain, extent, images);
                 }
                 WindowEvent::Occluded { id, occluded } => {
                     let Some(window) = self.windows.get_mut(&id) else {
@@ -1138,10 +1138,10 @@ impl Renderer {
         cmd.end_and_submit(&self.device)?;
 
         // TODO: destroy buffer when it is no longer needed (maybe with VMA)
-        // unsafe {
         // currently it is destroyed too early, it is still in use
-        // self.device.destroy_buffer(staging_buf, None);
-        // self.device.free_memory(staging_mem, None);
+        // unsafe {
+        //     self.device.destroy_buffer(staging_buf, None);
+        //     self.device.free_memory(staging_mem, None);
         // }
 
         let view =
@@ -1369,10 +1369,10 @@ impl Renderer {
 
         self.copy_buffer(staging_buf, device_buf, size)?;
         // TODO: destroy buffer when it is no longer needed (maybe with VMA)
-        // unsafe {
         // currently it is destroyed too early, it is still in use
-        // self.device.destroy_buffer(staging_buf, None);
-        // self.device.free_memory(staging_mem, None);
+        // unsafe {
+        //     self.device.destroy_buffer(staging_buf, None);
+        //     self.device.free_memory(staging_mem, None);
         // }
 
         Ok((device_buf, device_mem))
