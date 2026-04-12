@@ -619,6 +619,10 @@ impl Renderer {
         Ok(renderer)
     }
 
+    pub fn tick(&mut self, _delta_time: f32) -> Result<()> {
+        Ok(())
+    }
+
     pub fn render(&mut self) -> Result<()> {
         let window = self.windows.get_mut(&self.main_window).unwrap();
         let (swapchain_img, idx) = window.next_image(&self.swapchain_loader)?;

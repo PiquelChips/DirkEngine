@@ -160,6 +160,7 @@ impl Engine {
         }
 
         self.platform.tick(delta_time);
+        self.renderer.tick(delta_time).context("renderer")?;
 
         // TODO: world::tick (run tick on every tickable object)
 
