@@ -51,7 +51,6 @@ impl EventManager {
     /// Drains all producers and forwards their pending events to matching subscribers.
     /// Call this once per frame / tick in your engine loop.
     pub fn dispatch_all(&mut self) {
-        trace!("dispatching events");
         for producer in &self.producers {
             producer.forward_pending(&mut self.subscribers);
         }
