@@ -443,6 +443,9 @@ impl Renderer {
             (device_info.handle, properties)
         };
 
+        // destroy the surface as it is no longer needed.
+        unsafe { surface_loader.destroy_surface(surface, None) };
+
         // DEVICE
         let device = {
             let unique_families: HashSet<u32> = [
@@ -1472,8 +1475,8 @@ impl Drop for Renderer {
         unsafe {
             self.device
                 .destroy_descriptor_pool(self.material_descriptor_pool, None);
-            self.device.destroy_device(None);
 
+            self.device.destroy_device(None);
             #[cfg(validation)]
             self.debug_utils_loader
                 .destroy_debug_utils_messenger(self.debug_messenger, None);
