@@ -650,29 +650,34 @@ impl Renderer {
                     let Some(world) = worlds.get(&world) else {
                         continue;
                     };
-                    let Some(renderable) = world.get::<components::Renderable>(entity) else {
-                        continue;
-                    };
                     let Some(transform) = world.get::<components::Transform>(entity) else {
                         continue;
                     };
-                    self.get_or_upload_model(&renderable.model)?;
+                    if let Some(renderable) = world.get::<components::Renderable>(entity) {
+                        self.get_or_upload_model(&renderable.model)?;
 
-                    let Some(scene) = self.scenes.get(&world.id()) else {
-                        continue;
-                    };
-                    let proxy = SceneProxy::build(
-                        self,
-                        scene,
-                        self.get_model(&renderable.model)
-                            .expect("model should have been loaded"),
-                        transform.matrix(),
-                    )?;
+                        let Some(scene) = self.scenes.get(&world.id()) else {
+                            continue;
+                        };
+                        let proxy = SceneProxy::build(
+                            self,
+                            scene,
+                            self.get_model(&renderable.model)
+                                .expect("model should have been loaded"),
+                            transform.matrix(),
+                        )?;
 
-                    let Some(scene) = self.scenes.get_mut(&world.id()) else {
-                        continue;
-                    };
-                    scene.add_proxy(entity, proxy)?;
+                        let Some(scene) = self.scenes.get_mut(&world.id()) else {
+                            continue;
+                        };
+                        scene.add_proxy(entity, proxy)?;
+                    }
+                    if let Some(camera) = world.get::<components::Camera>(entity) {
+                        let Some(scene) = self.scenes.get_mut(&world.id()) else {
+                            continue;
+                        };
+                        scene.set_camera(transform.view(), camera.projection());
+                    }
                 }
                 WorldEvent::EntityUpdate { world, entity } => {
                     let Some(world) = worlds.get(&world) else {
