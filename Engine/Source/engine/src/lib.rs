@@ -47,6 +47,7 @@ impl Engine {
                 app_version: version,
             },
             platform.main_window(),
+            &mut event_manager,
         )
         .context("renderer init")?;
 

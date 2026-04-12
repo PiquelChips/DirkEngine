@@ -202,10 +202,18 @@ pub struct Renderer {
     debug_messenger: vk::DebugUtilsMessengerEXT,
 
     graphics_pipeline: GraphicsPipeline,
+
+    // Events
+    window_consumer: events::Consumer<platform::WindowEvent>,
+    world_consumer: events::Consumer<world::events::WorldEvent>,
 }
 
 impl Renderer {
-    pub fn init(create_info: RendererCreateInfo, window: &platform::Window) -> Result<Self> {
+    pub fn init(
+        create_info: RendererCreateInfo,
+        window: &platform::Window,
+        event_manager: &mut events::EventManager,
+    ) -> Result<Self> {
         info!("Intializing Vulkan...");
 
         let entry = unsafe { Entry::load()? };
@@ -595,6 +603,9 @@ impl Renderer {
             debug_messenger,
 
             graphics_pipeline,
+
+            window_consumer: event_manager.subscribe(),
+            world_consumer: event_manager.subscribe(),
         };
 
         let window_size = window.size();
