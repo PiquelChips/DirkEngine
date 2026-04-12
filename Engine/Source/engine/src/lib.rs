@@ -88,7 +88,11 @@ impl Engine {
 
         self.platform.tick(delta_time);
         self.renderer
-            .tick(delta_time, &mut self.worlds)
+            .tick(
+                delta_time,
+                &mut self.worlds,
+                &mut self.platform.windows_mut(),
+            )
             .context("renderer")?;
 
         self.render().context("render")?;

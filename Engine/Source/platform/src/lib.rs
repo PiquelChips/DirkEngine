@@ -5,12 +5,14 @@
 //!
 //! The DirkEngine's platform API is build on the winit crate.
 
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 
 use tracing::info;
-use winit::event_loop::{
-    EventLoop,
-    pump_events::{EventLoopExtPumpEvents, PumpStatus},
+use winit::{
+    event_loop::{
+        EventLoop,
+        pump_events::{EventLoopExtPumpEvents, PumpStatus},
+    },
 };
 
 mod errors;
@@ -20,6 +22,7 @@ mod window;
 pub use errors::Error;
 pub use event::*;
 pub use window::Window;
+pub use winit::window::WindowId;
 
 use errors::Result;
 use handler::PlatformHandler;
@@ -83,6 +86,13 @@ impl Platform {
 
     pub fn main_window(&self) -> &Window {
         self.handler.main_window()
+    }
+
+    pub fn windows(&self) -> &HashMap<WindowId, Window> {
+        &self.handler.windows
+    }
+    pub fn windows_mut(&mut self) -> &HashMap<WindowId, Window> {
+        &self.handler.windows
     }
 }
 

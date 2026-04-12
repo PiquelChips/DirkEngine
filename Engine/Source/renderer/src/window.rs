@@ -33,6 +33,10 @@ pub struct Window {
     images: Vec<SwapchainImage>,
     extent: vk::Extent2D,
 
+    // TODO: actually stop rendering the window when it is
+    // occluded.
+    occluded: bool,
+
     /// The semaphores associated with each swapchain image
     semaphores: Vec<(vk::Semaphore, vk::Semaphore)>,
     /// The current index of the semaphores
@@ -65,6 +69,7 @@ impl Window {
             images,
             semaphores,
             semaphore_count: 0,
+            occluded: false,
         })
     }
     /// Returns the window's ID
@@ -76,6 +81,9 @@ impl Window {
     }
     pub fn swapchain(&self) -> vk::SwapchainKHR {
         self.swapchain
+    }
+    pub fn surface(&self) -> vk::SurfaceKHR {
+        self.surface
     }
     /// (render_finished_semaphore, image_available_semaphore)
     pub fn current_semaphores(&self) -> (vk::Semaphore, vk::Semaphore) {
@@ -103,12 +111,18 @@ impl Window {
 
         Ok((self.images[image_index as usize].clone(), image_index))
     }
-    pub fn resize(&mut self, renderer: &Renderer, in_size: vk::Extent2D) -> Result<()> {
-        let (swapchain, extent, images) = renderer.create_swap_chain(self.surface, in_size)?;
+    pub fn update_swapcahin(
+        &mut self,
+        swapchain: vk::SwapchainKHR,
+        extent: vk::Extent2D,
+        images: Vec<SwapchainImage>,
+    ) {
         self.swapchain = swapchain;
         self.extent = extent;
         self.images = images;
-        Ok(())
+    }
+    pub fn set_occluded(&mut self, occluded: bool) {
+        self.occluded = occluded
     }
     pub fn destroy(
         &self,

@@ -738,6 +738,34 @@ impl Renderer {
             }
         }
 
+        let window_events: Vec<_> = self.window_consumer.consume_all().collect();
+        for event in window_events {
+            match event {
+                WindowEvent::Resized { id, width, height } => {
+                    let Some(window) = self.windows.get(&id.into_raw()) else {
+                        continue;
+                    };
+                    let surface = window.surface();
+                    let (swapchain, extent, images) =
+                        self.create_swap_chain(surface, vk::Extent2D { width, height })?;
+                    // Wait for the GPU to be idle before touching the swapchain.
+                    unsafe { self.device.device_wait_idle()? };
+                    let Some(window) = self.windows.get_mut(&id.into_raw()) else {
+                        continue;
+                    };
+                    window.update_swapcahin(swapchain, extent, images);
+                }
+                WindowEvent::Occluded { id, occluded } => {
+                    let Some(window) = self.windows.get_mut(&id.into_raw()) else {
+                        continue;
+                    };
+                    window.set_occluded(occluded);
+                }
+                // don't care about these
+                WindowEvent::FocusChanged { .. } | WindowEvent::ThemeChanged { .. } => {}
+            }
+        }
+
         Ok(())
     }
 
@@ -822,15 +850,6 @@ impl Renderer {
     }
 
     // WINDOW MANAGEMENT
-
-    pub fn resize_window(&mut self, id: WindowId, width: u32, height: u32) -> Result<()> {
-        if let Some(window) = self.windows.get_mut(&id) {
-            // Wait for the GPU to be idle before touching the swapchain.
-            unsafe { self.device.device_wait_idle()? };
-            window.resize(self, vk::Extent2D { width, height })?;
-        }
-        Ok(())
-    }
 
     fn create_swap_chain(
         &self,
