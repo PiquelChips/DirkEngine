@@ -196,7 +196,15 @@ impl Scene {
             .iter()
             .for_each(|(_, proxy)| proxy.destroy(device));
         self.ubo.iter().for_each(|ubo| ubo.destroy(device));
-        unsafe { device.destroy_descriptor_pool(self.descriptor_pool, None) };
+        unsafe {
+            device.destroy_descriptor_pool(self.descriptor_pool, None);
+            device.destroy_image_view(self.color, None);
+            device.destroy_image(self.color_image, None);
+            device.free_memory(self.color_memory, None);
+            device.destroy_image_view(self.depth, None);
+            device.destroy_image(self.depth_image, None);
+            device.free_memory(self.depth_memory, None);
+        };
     }
     pub fn render(
         &self,

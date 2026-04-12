@@ -28,7 +28,7 @@ impl Engine {
     pub fn init() -> anyhow::Result<Self> {
         let logger = logging::Logger::new()
             .write_fs(true)
-            .verbose(true)
+            .max_level(logging::LogLevel::Debug)
             .init()
             .context("initialising logger")?;
 
@@ -77,7 +77,7 @@ impl Engine {
 
         // TODO: renders too fast and semaphores have problem.
         // remove when rendering takes longer
-        std::thread::sleep(std::time::Duration::from_millis(10));
+        std::thread::sleep(std::time::Duration::from_millis(100));
 
         self.process_events();
         if self.is_requesting_exit() {
