@@ -160,7 +160,11 @@ impl Scene {
         self.ubo.iter().for_each(|ubo| ubo.destroy(device));
         unsafe { device.destroy_descriptor_pool(self.descriptor_pool, None) };
     }
-    fn make_scene_proxies(&self, renderer: &mut Renderer, world: &World) -> Result<Vec<SceneProxy>> {
+    fn make_scene_proxies(
+        &self,
+        renderer: &mut Renderer,
+        world: &World,
+    ) -> Result<Vec<SceneProxy>> {
         world
             .query_double::<components::Renderable, components::Transform>()
             .iter()

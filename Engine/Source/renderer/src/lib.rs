@@ -625,7 +625,7 @@ impl Renderer {
         _delta_time: f32,
         worlds: &HashMap<world::WorldId, world::World>,
     ) -> Result<()> {
-        let events = self.world_consumer.consume_all();
+        let world_events = self.world_consumer.consume_all();
 
         let get_world = |id| {
             worlds
@@ -634,7 +634,7 @@ impl Renderer {
         };
         let mut build_worlds = HashSet::new();
 
-        for event in events {
+        for event in world_events {
             match event {
                 world::events::WorldEvent::Created(id) => {
                     build_worlds.insert(id);
