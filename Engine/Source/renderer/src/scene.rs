@@ -37,7 +37,13 @@ pub struct Scene {
     descriptor_pool: vk::DescriptorPool,
     ubo: [UboData; MAX_FRAMES_IN_FLIGHT],
     descriptor_sets: [vk::DescriptorSet; MAX_FRAMES_IN_FLIGHT],
-    render_pass: RenderPass,
+
+    color: vk::ImageView,
+    color_image: vk::Image,
+    color_memory: vk::DeviceMemory,
+    depth: vk::ImageView,
+    depth_image: vk::Image,
+    depth_memory: vk::DeviceMemory,
 }
 
 struct SceneUbo {
@@ -138,8 +144,36 @@ impl Scene {
                 .update_descriptor_sets(&descriptor_writes, &[])
         };
 
-        let window = renderer.windows.get(&renderer.main_window).unwrap();
-        let render_pass = RenderPass::build(renderer, window.extent())?;
+        // IMAGES
+        let (color_image, color_memory) = renderer.create_image(
+            size,
+            renderer.properties.surface_format.format,
+            vk::ImageTiling::OPTIMAL,
+            vk::ImageUsageFlags::TRANSIENT_ATTACHMENT | vk::ImageUsageFlags::COLOR_ATTACHMENT,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL,
+            (1, renderer.properties.msaa_samples),
+        )?;
+        let color = renderer.create_image_view(
+            color_image,
+            renderer.properties.surface_format.format,
+            vk::ImageAspectFlags::COLOR,
+            1,
+        )?;
+
+        let (depth_image, depth_memory) = renderer.create_image(
+            size,
+            renderer.properties.depth_format,
+            vk::ImageTiling::OPTIMAL,
+            vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL,
+            (1, renderer.properties.msaa_samples),
+        )?;
+        let depth = renderer.create_image_view(
+            depth_image,
+            renderer.properties.depth_format,
+            vk::ImageAspectFlags::DEPTH,
+            1,
+        )?;
 
         Ok(Self {
             id: world,
@@ -147,15 +181,20 @@ impl Scene {
             descriptor_pool,
             ubo,
             descriptor_sets: scene_desc_sets,
-            render_pass,
             camera: None,
+
+            color,
+            color_image,
+            color_memory,
+            depth,
+            depth_image,
+            depth_memory,
         })
     }
     pub fn destroy(&self, device: &Device) {
         self.proxies
             .iter()
             .for_each(|(_, proxy)| proxy.destroy(device));
-        self.render_pass.destroy(device);
         self.ubo.iter().for_each(|ubo| ubo.destroy(device));
         unsafe { device.destroy_descriptor_pool(self.descriptor_pool, None) };
     }
@@ -168,7 +207,7 @@ impl Scene {
     ) -> Result<()> {
         let device = &renderer.device;
 
-        self.render_pass.begin(renderer, cmd, size, view);
+        RenderPass::begin(renderer, cmd, size, view, color, depth);
         renderer.graphics_pipeline.bind(renderer, cmd);
 
         let viewport = vk::Viewport::default()
@@ -220,7 +259,7 @@ impl Scene {
             }
         }
 
-        self.render_pass.end(renderer, cmd);
+        RenderPass::end(renderer, cmd);
         Ok(())
     }
     pub fn add_proxy(&mut self, entity: world::Entity, proxy: SceneProxy) -> Result<()> {

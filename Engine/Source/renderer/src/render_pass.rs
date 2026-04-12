@@ -1,83 +1,26 @@
-use ash::{Device, vk};
+use ash::vk;
 
 use crate::{Renderer, Result, command_pool::CommandBuffer};
 
 /// This struct holds the graphics pipeline & stuff.
 /// It can be called on to begin the pass (begin rendering,
 /// bind graphics pipeline, ...)
-pub struct RenderPass {
-    color: vk::ImageView,
-    color_image: vk::Image,
-    color_memory: vk::DeviceMemory,
-    depth: vk::ImageView,
-    depth_image: vk::Image,
-    depth_memory: vk::DeviceMemory,
-}
+pub struct RenderPass {}
 
 impl RenderPass {
-    pub fn build(renderer: &Renderer, size: vk::Extent2D) -> Result<Self> {
-        let (color_image, color_memory) = renderer.create_image(
-            size,
-            renderer.properties.surface_format.format,
-            vk::ImageTiling::OPTIMAL,
-            vk::ImageUsageFlags::TRANSIENT_ATTACHMENT | vk::ImageUsageFlags::COLOR_ATTACHMENT,
-            vk::MemoryPropertyFlags::DEVICE_LOCAL,
-            (1, renderer.properties.msaa_samples),
-        )?;
-        let color = renderer.create_image_view(
-            color_image,
-            renderer.properties.surface_format.format,
-            vk::ImageAspectFlags::COLOR,
-            1,
-        )?;
-
-        let (depth_image, depth_memory) = renderer.create_image(
-            size,
-            renderer.properties.depth_format,
-            vk::ImageTiling::OPTIMAL,
-            vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
-            vk::MemoryPropertyFlags::DEVICE_LOCAL,
-            (1, renderer.properties.msaa_samples),
-        )?;
-        let depth = renderer.create_image_view(
-            depth_image,
-            renderer.properties.depth_format,
-            vk::ImageAspectFlags::DEPTH,
-            1,
-        )?;
-
-        Ok(Self {
-            color,
-            color_image,
-            color_memory,
-            depth,
-            depth_image,
-            depth_memory,
-        })
-    }
-    pub fn destroy(&self, device: &Device) {
-        unsafe {
-            device.destroy_image_view(self.color, None);
-            device.destroy_image(self.color_image, None);
-            device.free_memory(self.color_memory, None);
-
-            device.destroy_image_view(self.depth, None);
-            device.destroy_image(self.depth_image, None);
-            device.free_memory(self.depth_memory, None);
-        }
-    }
     pub fn begin(
-        &self,
         renderer: &Renderer,
         cmd: &CommandBuffer,
         size: vk::Extent2D,
         out: vk::ImageView,
+        color: vk::ImageView,
+        depth: vk::ImageView,
     ) {
         let color_attachement = vk::RenderingAttachmentInfo::default()
             .load_op(vk::AttachmentLoadOp::CLEAR)
             .store_op(vk::AttachmentStoreOp::STORE)
             .image_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
-            .image_view(self.color)
+            .image_view(color)
             .resolve_image_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
             .resolve_mode(vk::ResolveModeFlags::AVERAGE)
             .resolve_image_view(out)
@@ -91,7 +34,7 @@ impl RenderPass {
             .load_op(vk::AttachmentLoadOp::CLEAR)
             .store_op(vk::AttachmentStoreOp::DONT_CARE)
             .image_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
-            .image_view(self.depth)
+            .image_view(depth)
             .clear_value(vk::ClearValue {
                 depth_stencil: vk::ClearDepthStencilValue {
                     depth: 1.,
@@ -114,7 +57,7 @@ impl RenderPass {
                 .cmd_begin_rendering(cmd.raw(), &rendering_info)
         };
     }
-    pub fn end(&self, renderer: &Renderer, cmd: &CommandBuffer) {
+    pub fn end(renderer: &Renderer, cmd: &CommandBuffer) {
         unsafe { renderer.device.cmd_end_rendering(cmd.raw()) }
     }
 }

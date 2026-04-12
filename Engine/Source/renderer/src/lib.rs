@@ -187,8 +187,6 @@ pub struct Renderer {
     graphics_pool: CommandPool<Graphics>,
 
     properties: RendererProperties,
-    /// The ID of the main window in [Renderer::windows] field.
-    main_window: WindowId,
     /// All of the [window::Window]s constructed from [platform::Window]s.
     windows: HashMap<WindowId, Window>,
     /// All the uploaded [resource_manager::Model]s.
@@ -210,12 +208,14 @@ pub struct Renderer {
     #[cfg(validation)]
     debug_messenger: vk::DebugUtilsMessengerEXT,
 
-    graphics_pipeline: GraphicsPipeline,
-
     // Events
     window_consumer: events::Consumer<platform::WindowEvent>,
     platform_consumer: events::Consumer<platform::PlatformEvent>,
     world_consumer: events::Consumer<world::events::WorldEvent>,
+
+    // TODO: these are temporary while we get rendering to work
+    // render graph should fix this
+    graphics_pipeline: GraphicsPipeline,
 }
 
 impl Renderer {
