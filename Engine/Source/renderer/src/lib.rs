@@ -783,9 +783,9 @@ impl Renderer {
     pub fn render(&mut self) -> Result<()> {
         // TODO: don't always get main window
         let windows = &mut self.windows.values_mut().collect::<Vec<&mut Window>>();
-        let window: &mut Window = windows
-            .first_mut()
-            .expect("there should be at least one window");
+        let Some(window) = windows.first_mut() else {
+            return Ok(());
+        };
 
         let (swapchain_img, idx) = window.next_image(&self.swapchain_loader)?;
         let (render_finished_semaphore, image_available_semaphore) = window.current_semaphores();
