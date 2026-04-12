@@ -231,7 +231,7 @@ impl Renderer {
             let mut debug_create_info: vk::DebugUtilsMessengerCreateInfoEXT;
             #[cfg(validation)]
             {
-                info!("using validation layers");
+                info!(target: "vulkan::validation", "using validation layers");
                 extensions.push(debug_utils::NAME.as_ptr());
 
                 let severity_flags = vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE
@@ -1331,11 +1331,19 @@ extern "system" fn debug_callback(
 
     // TODO: logging should be better (see tracing crate)
     match severity {
-        vk::DebugUtilsMessageSeverityFlagsEXT::ERROR => error!("[Vulkan] {}", message),
-        vk::DebugUtilsMessageSeverityFlagsEXT::WARNING => warn!("[Vulkan] {}", message),
-        vk::DebugUtilsMessageSeverityFlagsEXT::INFO => info!("[Vulkan] {}", message),
-        vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE => debug!("[Vulkan] {}", message),
-        _ => trace!("[Vulkan] {}", message),
+        vk::DebugUtilsMessageSeverityFlagsEXT::ERROR => {
+            error!(target: "vulkan::validation", "{}", message)
+        }
+        vk::DebugUtilsMessageSeverityFlagsEXT::WARNING => {
+            warn! (target: "vulkan::validation", "{}", message)
+        }
+        vk::DebugUtilsMessageSeverityFlagsEXT::INFO => {
+            info! (target: "vulkan::validation", "{}", message)
+        }
+        vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE => {
+            debug!(target: "vulkan::validation", "{}", message)
+        }
+        _ => trace!(target: "vulkan::validation", "{}", message),
     }
 
     vk::FALSE
