@@ -95,12 +95,8 @@ impl Engine {
             )
             .context("renderer")?;
 
-        self.render().context("render")?;
+        self.renderer.render().context("render")?;
         Ok(!self.is_requesting_exit())
-    }
-    pub fn render(&mut self) -> anyhow::Result<()> {
-        self.renderer.render()?;
-        Ok(())
     }
     pub fn shutdown(&self) -> anyhow::Result<()> {
         Ok(())
