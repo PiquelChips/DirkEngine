@@ -99,6 +99,7 @@ struct Subscriber {
 
 /// This struct is created by the envent manager.
 /// It allows dispatching of events to subscribers.
+#[derive(Debug)]
 pub struct Dispatcher<T: Event> {
     sender: Sender<T>,
 }
@@ -113,6 +114,7 @@ impl<T: Event> Dispatcher<T> {
 
 /// This struct is created by the event manager.
 /// It can consume events that are sent by the event manager.
+#[derive(Debug)]
 pub struct Consumer<T: Event> {
     receiver: Receiver<T>,
 }

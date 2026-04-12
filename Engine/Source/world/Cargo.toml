@@ -9,4 +9,6 @@ version.workspace = true
 [dependencies]
 glam.workspace = true
 
+macros.workspace = true
+events.workspace = true
 utils.workspace = true

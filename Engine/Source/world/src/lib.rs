@@ -40,6 +40,8 @@ use std::collections::HashMap;
 mod tests;
 
 pub mod components;
+pub mod events;
+use crate::events::*;
 use components::*;
 
 /// A unique, opaque identifier for a spawned entity.
@@ -129,6 +131,7 @@ pub struct World {
     next_id: Entity,
     alive: Vec<Entity>,
     components: Components,
+    dispatcher: ::events::Dispatcher<WorldEvent>,
 }
 
 impl World {
@@ -136,12 +139,15 @@ impl World {
     ///
     /// The `id` is an arbitrary tag used to distinguish worlds when more than
     /// one exists simultaneously (e.g. a game world and a UI world).
-    pub fn new(id: WorldId) -> Self {
+    pub fn new(id: WorldId, event_manager: &mut ::events::EventManager) -> Self {
+        let dispatcher = event_manager.register();
+        dispatcher.dispatch(WorldEvent::Created(id));
         Self {
             id,
             next_id: 0,
             alive: Vec::new(),
             components: Components::default(),
+            dispatcher,
         }
     }
 
@@ -162,6 +168,12 @@ impl World {
         let id = self.next_id;
         self.next_id += 1;
         self.alive.push(id);
+
+        self.dispatcher.dispatch(WorldEvent::EntitySpawn {
+            world: self.id,
+            entity: id,
+        });
+
         id
     }
 
@@ -171,6 +183,11 @@ impl World {
     pub fn despawn(&mut self, entity: Entity) {
         self.alive.retain(|&e| e != entity);
         self.components.remove_all(entity);
+
+        self.dispatcher.dispatch(WorldEvent::EntityDespawn {
+            world: self.id,
+            entity: entity,
+        });
     }
 
     /// Returns a slice of all currently alive entity IDs in spawn order.
@@ -197,6 +214,10 @@ impl World {
     /// ensure the entity was obtained from [`World::spawn`] on this world.
     pub fn insert<C: Component>(&mut self, entity: Entity, component: C) {
         C::storage_mut(&mut self.components).insert(entity, component);
+        self.dispatcher.dispatch(WorldEvent::EntityUpdate {
+            world: self.id,
+            entity,
+        });
     }
 
     /// Returns a shared reference to a component, or `None` if the entity
@@ -208,6 +229,10 @@ impl World {
     /// Returns a mutable reference to a component, or `None` if the entity
     /// does not have one.
     pub fn get_mut<C: Component>(&mut self, entity: Entity) -> Option<&mut C> {
+        self.dispatcher.dispatch(WorldEvent::EntityUpdate {
+            world: self.id,
+            entity,
+        });
         C::storage_mut(&mut self.components).get_mut(&entity)
     }
 
@@ -217,6 +242,10 @@ impl World {
     /// present this is a no-op.
     pub fn remove<C: Component>(&mut self, entity: Entity) {
         C::storage_mut(&mut self.components).remove(&entity);
+        self.dispatcher.dispatch(WorldEvent::EntityUpdate {
+            world: self.id,
+            entity,
+        });
     }
 
     // -----------------------------------------------------------------------
@@ -284,5 +313,11 @@ impl World {
             })
             .cloned()
             .collect()
+    }
+}
+
+impl Drop for World {
+    fn drop(&mut self) {
+        self.dispatcher.dispatch(WorldEvent::Destroyed(self.id));
     }
 }
