@@ -190,7 +190,7 @@ impl World {
 
         self.dispatcher.dispatch(WorldEvent::EntityDespawn {
             world: self.id,
-            entity: entity,
+            entity,
         });
     }
 
