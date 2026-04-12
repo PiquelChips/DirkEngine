@@ -64,22 +64,28 @@ fn ansi_wrap(code: u8, text: &str) -> String {
 
 /// Format the log level, optionally with ANSI color codes.
 ///
-/// `colored = true`  → `\x1b[32mINFO\x1b[0m`
-/// `colored = false` → `INFO`
+/// `colored = true`  → `[\x1b[32mINFO\x1b[0m]`
+/// `colored = false` → `[INFO]`
 pub(crate) fn format_level(level: &tracing::Level, colored: bool) -> String {
     let name = level.to_string(); // "ERROR" | "WARN" | "INFO" | "DEBUG" | "TRACE"
-    if colored {
+    let text = if colored {
         ansi_wrap(level_color_code(level), &name).to_string()
     } else {
         name
+    };
+    let mut fmt = format!("[{}]", text);
+    if *level == tracing::Level::WARN || *level == tracing::Level::INFO {
+        fmt = format!("{fmt} ");
     }
+
+    fmt
 }
 
 /// Assemble the final log line from its parts.
 ///
 /// Format: `YYYY/MM/DD HH:MM:SS [LEVEL] [Category] message`
 pub(crate) fn format_line(timestamp: &str, level_str: &str, target: &str, message: &str) -> String {
-    format!("{timestamp} [{level_str}] [{target}] {message}")
+    format!("{timestamp} {level_str} [{target}] {message}")
 }
 
 /// Extract all relevant fields from a tracing event, returning
