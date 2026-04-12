@@ -320,7 +320,14 @@ impl Logger {
             }
         });
 
-        // TODO: actually filter out categories
+        let cats_filter = if self.allowed_targets.is_empty() {
+            None
+        } else {
+            let targets = self.allowed_targets.to_vec();
+            Some(filter_fn(move |metadata| {
+                targets.contains(&metadata.target().to_string())
+            }))
+        };
 
         let registry =
             Registry::default()
@@ -334,6 +341,9 @@ impl Logger {
 
         #[cfg(editor)]
         let registry = registry.with(StorageLayer::new(Arc::clone(&self.store)));
+
+        // always add the filter last
+        let registry = registry.with(cats_filter);
 
         registry
             .try_init()
