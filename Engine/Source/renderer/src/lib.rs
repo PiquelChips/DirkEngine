@@ -36,6 +36,7 @@ use pipeline::GraphicsPipeline;
 
 mod command_pool;
 use command_pool::{CommandBuffer, CommandPool, Graphics, Transfer};
+use world::WorldId;
 
 mod layouts;
 mod render_pass;
@@ -619,7 +620,46 @@ impl Renderer {
         Ok(renderer)
     }
 
-    pub fn tick(&mut self, _delta_time: f32) -> Result<()> {
+    pub fn tick(
+        &mut self,
+        _delta_time: f32,
+        worlds: &HashMap<world::WorldId, world::World>,
+    ) -> Result<()> {
+        let events = self.world_consumer.consume_all();
+
+        let get_world = |id| {
+            worlds
+                .get(&id)
+                .expect("world created event should mean the world exists")
+        };
+        let mut build_worlds = HashSet::new();
+
+        for event in events {
+            match event {
+                world::events::WorldEvent::Created(id) => {
+                    build_worlds.insert(id);
+                }
+                world::events::WorldEvent::Destroyed(id) => {
+                    if let Some(scene) = self.scenes.remove(&id) {
+                        scene.destroy(&self.device);
+                    }
+                }
+                world::events::WorldEvent::EntitySpawn { world, .. } => {
+                    build_worlds.insert(world);
+                }
+                world::events::WorldEvent::EntityUpdate { world, .. } => {
+                    build_worlds.insert(world);
+                }
+                world::events::WorldEvent::EntityDespawn { world, .. } => {
+                    build_worlds.insert(world);
+                }
+            }
+        }
+
+        for world in build_worlds {
+            self.scenes
+                .insert(world, Scene::build(self, get_world(world))?);
+        }
         Ok(())
     }
 
@@ -701,13 +741,6 @@ impl Renderer {
     }
     fn get_current_frame(&self) -> &Frame {
         &self.frames[self.current_frame]
-    }
-
-    // SCENES
-
-    pub fn create_scene(&mut self, world: &world::World) -> Result<()> {
-        self.scenes.insert(world.id(), Scene::build(self, world)?);
-        Ok(())
     }
 
     // WINDOW MANAGEMENT

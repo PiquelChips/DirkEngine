@@ -101,7 +101,9 @@ impl Engine {
         // TODO: world::tick (run tick on every tickable object)
 
         self.platform.tick(delta_time);
-        self.renderer.tick(delta_time).context("renderer")?;
+        self.renderer
+            .tick(delta_time, &mut self.worlds)
+            .context("renderer")?;
 
         self.render().context("render")?;
         Ok(!self.is_requesting_exit())
@@ -143,16 +145,11 @@ impl Engine {
         self.next_world_id += 1;
 
         let world = World::new(id, &mut self.event_manager);
-        // TODO: have the world submitted here, once not having camera doesn't panic.
-        // self.renderer
-        //     .create_scene(&world)
-        //     .context("create renderer scene")?;
         self.worlds.insert(id, world);
         Ok(id)
     }
     #[allow(unused)]
     fn destroy_world(&mut self, id: WorldId) {
-        // TODO: delete renderer scene
         self.worlds.remove(&id);
     }
 

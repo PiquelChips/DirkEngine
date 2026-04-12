@@ -53,7 +53,6 @@ impl Scene {
     /// Constructs the renderer stuff like command pools, descriptor sets, ... from
     /// the [Renderer] and all world proxy stuff from [World].
     pub fn build(renderer: &Renderer, world: &World) -> Result<Self> {
-        // TODO: load all the models that are used by the scene proxies
         let (camera, camera_trans) = Self::get_camera(world);
 
         let proxy_count = world
@@ -160,17 +159,6 @@ impl Scene {
         self.render_pass.destroy(device);
         self.ubo.iter().for_each(|ubo| ubo.destroy(device));
         unsafe { device.destroy_descriptor_pool(self.descriptor_pool, None) };
-    }
-    // TODO: on tick, worlds should be sent to update scenes
-    #[allow(unused)]
-    /// This function will reconstruct the internal world data with the new input world.
-    /// This includes: [SceneProxy]s, view matrix & projection matrix.
-    pub fn rebuild(&mut self, renderer: &Renderer, world: &World) -> Result<()> {
-        let (camera, camera_trans) = Self::get_camera(world);
-        self.proxies = self.make_scene_proxies(renderer, world)?;
-        self.view = camera_trans.view();
-        self.proj = camera.projection();
-        Ok(())
     }
     fn make_scene_proxies(&self, renderer: &Renderer, world: &World) -> Result<Vec<SceneProxy>> {
         world
