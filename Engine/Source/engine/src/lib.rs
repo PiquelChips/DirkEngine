@@ -140,7 +140,7 @@ impl Engine {
         self.worlds.remove(&id);
     }
 
-    fn create_test_world(&mut self) {
+    fn create_test_world(&mut self) -> WorldId {
         let world_id = self.create_world();
         use world::components;
         let world = self.worlds.get_mut(&world_id).unwrap();
@@ -196,5 +196,6 @@ impl Engine {
                 model: "Duck".to_string(),
             },
         );
+        world_id
     }
 }
