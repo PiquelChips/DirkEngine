@@ -29,14 +29,14 @@ impl UboData {
     /// The mapped pointer must be valid and the allocation must cover at least
     /// `size_of::<T>()` bytes — both invariants are guaranteed by every
     /// `UboData` constructed in this module.
-    fn write<T: Copy>(&self, data: &T) {
+    unsafe fn write<T: Copy>(&self, data: &T) {
         unsafe {
             std::ptr::copy_nonoverlapping(
                 data as *const T as *const u8,
                 self.mapped as *mut u8,
                 size_of::<T>(),
             )
-        };
+        }
     }
 }
 
@@ -238,7 +238,7 @@ impl Scene {
                 view: camera.view,
                 proj: camera.proj,
             };
-            self.ubo[frame].write(&scene_ubo);
+            unsafe { self.ubo[frame].write(&scene_ubo) };
         };
 
         for proxy in self.proxies.values() {
@@ -438,7 +438,7 @@ impl SceneProxy {
 
         let proxy_ubo = ProxyUbo { model: mat };
         for ubo in &self.ubo {
-            ubo.write(&proxy_ubo);
+            unsafe { ubo.write(&proxy_ubo) };
         }
     }
     pub fn set_camera(&mut self, view: glam::Mat4, proj: glam::Mat4) {
@@ -450,7 +450,7 @@ impl SceneProxy {
         };
 
         let data = ProxyUbo { model };
-        self.ubo[frame].write(&data);
+        unsafe { self.ubo[frame].write(&data) };
     }
 }
 
