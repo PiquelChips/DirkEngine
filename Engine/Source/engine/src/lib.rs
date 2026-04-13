@@ -1,9 +1,13 @@
-use std::{collections::HashMap, f32::consts::PI, ffi::CString, str::FromStr, time::Instant};
+mod player;
+
+use std::{collections::HashMap, ffi::CString, str::FromStr, time::Instant};
 
 use anyhow::Context;
 use world::{World, WorldId};
 
 use logging::Logger;
+
+use crate::player::Player;
 
 /// This is the main struct that holds global engine state.
 pub struct Engine {
@@ -19,6 +23,9 @@ pub struct Engine {
     is_requesting_exit: bool,
     exit_error: Option<anyhow::Error>,
     last_tick: Instant,
+
+    /// The main player. Only populated on engine start.
+    player: Option<Player>,
 
     #[allow(unused)]
     logger: Logger,
@@ -66,12 +73,18 @@ impl Engine {
             is_requesting_exit: false,
             exit_error: None,
             last_tick: Instant::now(),
+
+            player: None,
         })
     }
-    /// Will start the main game/editor. This should be called once right
-    /// after init.
+    /// Will start the main game/editor. This should be called
+    /// once right after init.
     pub fn start(&mut self) -> anyhow::Result<()> {
-        self.create_test_world();
+        let world_id = self.create_test_world();
+        let world = self.worlds.get_mut(&world_id).unwrap();
+
+        self.player = Some(Player::spawn(world));
+
         Ok(())
     }
     /// Ticks the engine. This is the master function that calls
@@ -144,26 +157,6 @@ impl Engine {
         let world_id = self.create_world();
         use world::components::*;
         let world = self.worlds.get_mut(&world_id).unwrap();
-
-        let player = world.spawn();
-        world.insert(
-            player,
-            components::Transform {
-                location: glam::vec3(0., 1000., 1000.),
-                rotation: glam::vec3(-PI / 4., 0., 0.),
-                scale: glam::Vec3::splat(1.),
-            },
-        );
-        world.insert(
-            player,
-            components::Camera {
-                fov: (45_f32).to_radians(),
-                near_clip: 0.1,
-                far_clip: 100000.,
-                width: 100.,
-                height: 100.,
-            },
-        );
 
         let shrek = world.spawn();
         world.insert(

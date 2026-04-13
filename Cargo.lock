@@ -419,6 +419,7 @@ name = "engine"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "derive-getters",
  "events",
  "glam",
  "logging",
