@@ -1016,10 +1016,6 @@ impl Renderer {
         self.upload_model(resource_manager::ResourceManager::load_model(name)?)
     }
 
-    fn get_model(&self, name: &str) -> Option<&Model> {
-        self.models.get(name)
-    }
-
     fn upload_primitive(&self, prim: &resource_manager::Primitive) -> Result<Primitive> {
         let vertices: Vec<Vertex> = prim
             .positions()
