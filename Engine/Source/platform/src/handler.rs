@@ -111,7 +111,7 @@ impl ApplicationHandler for PlatformHandler {
             }
             WindowEvent::Occluded(occluded) => {
                 self.window_dispatcher.dispatch(PlatformWindowEvent::Occluded { id, occluded });
-                }
+            }
 
             // ── Input: keyboard ───────────────────────────────────────────────
             WindowEvent::ModifiersChanged(new_modifiers) => {
