@@ -427,6 +427,7 @@ dependencies = [
  "renderer",
  "resource_manager",
  "thiserror 2.0.18",
+ "tracing",
  "utils",
  "world",
 ]

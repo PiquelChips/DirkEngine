@@ -3,6 +3,7 @@ mod player;
 use std::{collections::HashMap, ffi::CString, str::FromStr, time::Instant};
 
 use anyhow::Context;
+use tracing::info;
 use world::{World, WorldId};
 
 use logging::Logger;
@@ -34,6 +35,7 @@ pub struct Engine {
 impl Engine {
     /// Constructs and initialises the gine
     pub fn init() -> anyhow::Result<Self> {
+        info!("initialising engine");
         let logger = logging::Logger::new()
             .write_fs(true)
             .max_level(logging::LogLevel::Debug)
@@ -59,6 +61,7 @@ impl Engine {
         )
         .context("renderer init")?;
 
+        info!("engine initialised");
         Ok(Self {
             event_manager,
             exit_consumer,
@@ -80,6 +83,7 @@ impl Engine {
     /// Will start the main game/editor. This should be called
     /// once right after init.
     pub fn start(&mut self) -> anyhow::Result<()> {
+        info!("starting engine");
         let world_id = self.create_test_world();
         let world = self.worlds.get_mut(&world_id).unwrap();
 
@@ -102,8 +106,6 @@ impl Engine {
             return Ok(false);
         }
 
-        // TODO: world::tick (run tick on every tickable object)
-
         self.platform.tick(delta_time);
         self.renderer
             .tick(delta_time, &self.worlds, self.platform.windows_mut())
@@ -113,6 +115,7 @@ impl Engine {
         Ok(!self.is_requesting_exit())
     }
     pub fn shutdown(&self) -> anyhow::Result<()> {
+        info!("engine shutting down");
         Ok(())
     }
     fn process_events(&mut self) {
