@@ -121,3 +121,19 @@ pub enum InputEvent {
     /// The scroll wheel or trackpad was scrolled.
     MouseWheelScrolled { id: WindowId, delta: ScrollDelta },
 }
+
+impl InputEvent {
+    pub fn id(&self) -> &WindowId {
+        match self {
+            Self::KeyPressed { id, .. } => id,
+            Self::KeyReleased { id, .. } => id,
+            Self::ModifiersChanged { id, .. } => id,
+            Self::PointerMoved { id, .. } => id,
+            Self::PointerEntered { id, .. } => id,
+            Self::PointerLeft { id, .. } => id,
+            Self::MouseButtonPressed { id, .. } => id,
+            Self::MouseButtonReleased { id, .. } => id,
+            Self::MouseWheelScrolled { id, .. } => id,
+        }
+    }
+}
