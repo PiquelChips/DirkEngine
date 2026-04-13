@@ -1,6 +1,11 @@
 use events::Event;
 use macros::Event;
-use winit::window::WindowId;
+use winit::{
+    dpi::PhysicalPosition,
+    event::{ButtonSource, MouseScrollDelta},
+    keyboard::{Key, ModifiersState, PhysicalKey},
+    window::WindowId,
+};
 
 #[derive(Debug, Clone, Event)]
 #[event("App Exit with code {0}")]
@@ -56,5 +61,67 @@ impl WindowEvent {
     }
 }
 
+/// A platform-independent scroll delta.
+#[derive(Debug, Clone)]
+pub enum ScrollDelta {
+    /// Scroll expressed in lines (e.g. a traditional mouse wheel).
+    Lines { x: f32, y: f32 },
+    /// Scroll expressed in physical pixels (e.g. a trackpad).
+    Pixels { x: f64, y: f64 },
+}
+
+impl From<MouseScrollDelta> for ScrollDelta {
+    fn from(delta: MouseScrollDelta) -> Self {
+        match delta {
+            MouseScrollDelta::LineDelta(x, y) => Self::Lines { x, y },
+            MouseScrollDelta::PixelDelta(px) => Self::Pixels { x: px.x, y: px.y },
+        }
+    }
+}
+
 #[derive(Debug, Clone, Event)]
-pub enum InputEvent {}
+pub enum InputEvent {
+    /// A key was pressed. `repeat` is true for OS-generated key repeat events.
+    KeyPressed {
+        id: WindowId,
+        key: Key,
+        physical_key: PhysicalKey,
+        modifiers: ModifiersState,
+        repeat: bool,
+    },
+    /// A key was released.
+    KeyReleased {
+        id: WindowId,
+        key: Key,
+        physical_key: PhysicalKey,
+        modifiers: ModifiersState,
+    },
+    /// Keyboard modifier keys (Shift, Ctrl, Alt, Super) changed.
+    ModifiersChanged {
+        id: WindowId,
+        modifiers: ModifiersState,
+    },
+    /// The pointer moved inside the window.
+    PointerMoved {
+        id: WindowId,
+        position: PhysicalPosition<f64>,
+    },
+    /// The pointer entered the window area.
+    PointerEntered { id: WindowId },
+    /// The pointer left the window area.
+    PointerLeft { id: WindowId },
+    /// A mouse/pointer button was pressed.
+    MouseButtonPressed {
+        id: WindowId,
+        button: ButtonSource,
+        position: PhysicalPosition<f64>,
+    },
+    /// A mouse/pointer button was released.
+    MouseButtonReleased {
+        id: WindowId,
+        button: ButtonSource,
+        position: PhysicalPosition<f64>,
+    },
+    /// The scroll wheel or trackpad was scrolled.
+    MouseWheelScrolled { id: WindowId, delta: ScrollDelta },
+}
