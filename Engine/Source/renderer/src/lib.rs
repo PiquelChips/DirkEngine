@@ -14,14 +14,14 @@ use ash::{
     khr::{surface, swapchain},
     vk,
 };
-use platform::{PlatformEvent, WindowEvent, WindowId};
+use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use tracing::{debug, error, info, trace, warn};
+
+use platform::{PlatformEvent, WindowEvent, WindowId};
+use world::{components, events::WorldEvent};
 
 mod errors;
 pub use errors::{Error, Result};
-
-mod physical_device;
-use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
 mod model;
 use model::*;
@@ -37,10 +37,9 @@ use pipeline::GraphicsPipeline;
 
 mod command_pool;
 use command_pool::{CommandBuffer, CommandPool, Graphics, Transfer};
-use world::{components, events::WorldEvent};
 
 mod layouts;
-
+mod physical_device;
 mod render_pass;
 
 #[repr(C)]
