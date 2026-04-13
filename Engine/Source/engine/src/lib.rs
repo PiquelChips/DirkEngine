@@ -67,7 +67,7 @@ impl Engine {
             last_tick: Instant::now(),
         };
 
-        engine.create_test_world()?;
+        engine.create_test_world();
 
         Ok(engine)
     }
@@ -122,21 +122,21 @@ impl Engine {
         delta
     }
 
-    fn create_world(&mut self) -> anyhow::Result<WorldId> {
+    fn create_world(&mut self) -> WorldId {
         let id = self.next_world_id;
         self.next_world_id += 1;
 
         let world = World::new(id, &mut self.event_manager);
         self.worlds.insert(id, world);
-        Ok(id)
+        id
     }
     #[allow(unused)]
     fn destroy_world(&mut self, id: WorldId) {
         self.worlds.remove(&id);
     }
 
-    fn create_test_world(&mut self) -> anyhow::Result<()> {
-        let world_id = self.create_world().context("creating test world")?;
+    fn create_test_world(&mut self) {
+        let world_id = self.create_world();
         use world::components;
         let world = self.worlds.get_mut(&world_id).unwrap();
 
@@ -191,7 +191,5 @@ impl Engine {
                 model: "Duck".to_string(),
             },
         );
-
-        Ok(())
     }
 }
