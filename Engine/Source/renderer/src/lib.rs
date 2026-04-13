@@ -728,14 +728,10 @@ impl Renderer {
                 }
                 PlatformEvent::WindowDestroyed { id } => {
                     // in case the window was not destroyed by WindowCloseRequested
-                    if let Some(window) = self.windows.remove(&id) {
-                        window.destroy(&self.device, &self.surface_loader, &self.swapchain_loader);
-                    }
+                    self.windows.remove(&id);
                 }
                 PlatformEvent::WindowCloseRequested { id } => {
-                    if let Some(window) = self.windows.remove(&id) {
-                        window.destroy(&self.device, &self.surface_loader, &self.swapchain_loader);
-                    }
+                    self.windows.remove(&id);
                 }
             }
         }
@@ -1440,9 +1436,7 @@ impl Drop for Renderer {
 
         self.scenes.clear();
         self.models.values().for_each(|m| m.destroy(&self.device));
-        self.windows
-            .values()
-            .for_each(|w| w.destroy(&self.device, &self.surface_loader, &self.swapchain_loader));
+        self.windows.clear();
         self.frames.iter().for_each(|f| f.destroy(&self.device));
         self.graphics_pipeline.destroy();
         self.layouts.destroy(&self.device);

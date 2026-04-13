@@ -26,14 +26,17 @@ impl SwapchainImage {
 /// Holds the swapchain, surface & other related state.
 /// Doesn't actually do any of the rendering of the game.
 pub struct Window {
+    device: Device,
+    swapchain_loader: swapchain::Device,
+    surface_loader: surface::Instance,
+
     id: WindowId,
     surface: vk::SurfaceKHR,
     swapchain: vk::SwapchainKHR,
     images: Vec<SwapchainImage>,
     extent: vk::Extent2D,
 
-    // TODO: actually stop rendering the window when it is
-    // occluded.
+    // TODO: stop rendering when the window is occluded
     occluded: bool,
 
     /// The semaphores associated with each swapchain image
@@ -62,6 +65,10 @@ impl Window {
             .collect::<Result<Vec<_>>>()?;
 
         Ok(Self {
+            device: renderer.device.clone(),
+            swapchain_loader: renderer.swapchain_loader.clone(),
+            surface_loader: renderer.surface_loader.clone(),
+
             id,
             surface,
             swapchain,
@@ -126,21 +133,23 @@ impl Window {
     pub fn set_occluded(&mut self, occluded: bool) {
         self.occluded = occluded
     }
-    pub fn destroy(
-        &self,
-        device: &Device,
-        surface: &surface::Instance,
-        swapchain: &swapchain::Device,
-    ) {
-        self.images.iter().for_each(|i| i.destroy(device));
+    pub fn destroy(&self) {
+        self.images.iter().for_each(|i| i.destroy(&self.device));
         unsafe {
             self.semaphores.iter().for_each(|&(s1, s2)| {
-                device.device_wait_idle().unwrap();
-                device.destroy_semaphore(s1, None);
-                device.destroy_semaphore(s2, None);
+                self.device.device_wait_idle().unwrap();
+                self.device.destroy_semaphore(s1, None);
+                self.device.destroy_semaphore(s2, None);
             });
-            swapchain.destroy_swapchain(self.swapchain, None);
-            surface.destroy_surface(self.surface, None);
+            self.swapchain_loader
+                .destroy_swapchain(self.swapchain, None);
+            self.surface_loader.destroy_surface(self.surface, None);
         }
+    }
+}
+
+impl Drop for Window {
+    fn drop(&mut self) {
+        self.destroy();
     }
 }
