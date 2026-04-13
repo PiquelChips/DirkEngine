@@ -26,6 +26,11 @@ impl SwapchainImage {
 /// Holds the swapchain, surface & other related state.
 /// Doesn't actually do any of the rendering of the game.
 pub struct Window {
+    // ash functions
+    device: Device,
+    swapchain_loader: swapchain::Device,
+    surface_loader: surface::Instance,
+
     id: WindowId,
     surface: vk::SurfaceKHR,
     swapchain: vk::SwapchainKHR,
@@ -62,6 +67,10 @@ impl Window {
             .collect::<Result<Vec<_>>>()?;
 
         Ok(Self {
+            device: renderer.device.clone(),
+            swapchain_loader: renderer.swapchain_loader.clone(),
+            surface_loader: renderer.surface_loader.clone(),
+
             id,
             surface,
             swapchain,
@@ -113,34 +122,32 @@ impl Window {
     }
     pub fn update_swapcahin(
         &mut self,
-        device: &Device,
         swapchain: vk::SwapchainKHR,
         extent: vk::Extent2D,
         images: Vec<SwapchainImage>,
     ) {
         self.swapchain = swapchain;
         self.extent = extent;
-        self.images.iter().for_each(|i| i.destroy(device));
+        self.images.iter().for_each(|i| i.destroy(&self.device));
         self.images = images;
     }
     pub fn set_occluded(&mut self, occluded: bool) {
         self.occluded = occluded
     }
-    pub fn destroy(
-        &self,
-        device: &Device,
-        surface: &surface::Instance,
-        swapchain: &swapchain::Device,
-    ) {
-        self.images.iter().for_each(|i| i.destroy(device));
+}
+
+impl Drop for Window {
+    fn drop(&mut self) {
+        self.images.iter().for_each(|i| i.destroy(&self.device));
         unsafe {
             self.semaphores.iter().for_each(|&(s1, s2)| {
-                device.device_wait_idle().unwrap();
-                device.destroy_semaphore(s1, None);
-                device.destroy_semaphore(s2, None);
+                self.device.device_wait_idle().unwrap();
+                self.device.destroy_semaphore(s1, None);
+                self.device.destroy_semaphore(s2, None);
             });
-            swapchain.destroy_swapchain(self.swapchain, None);
-            surface.destroy_surface(self.surface, None);
+            self.swapchain_loader
+                .destroy_swapchain(self.swapchain, None);
+            self.surface_loader.destroy_surface(self.surface, None);
         }
     }
 }
