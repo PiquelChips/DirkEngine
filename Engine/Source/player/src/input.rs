@@ -30,11 +30,9 @@ impl InputManager {
         event: &platform::InputEvent,
     ) -> Option<&'a Player> {
         // TODO: calculate the position based on the regions
-        for player in players {
-            if player.window() == event.id() {
-                return Some(player);
-            }
-        }
-        None
+        players
+            .iter()
+            .find(|&player| player.window() == event.id())
+            .map(|v| v as _)
     }
 }
