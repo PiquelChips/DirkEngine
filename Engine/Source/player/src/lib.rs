@@ -1,3 +1,6 @@
+//! This crate handles everything to do with players.
+//! This includes the input system.
+
 use std::f32::consts::PI;
 
 use platform::WindowId;
@@ -7,16 +10,16 @@ use world::{Entity, World, WorldId};
 pub struct Player {
     world: WorldId,
     entity: Entity,
-    window: Option<WindowId>,
+    window: WindowId,
 }
 
 impl Player {
-    pub fn spawn(world: &mut World) -> Self {
+    pub fn spawn(world: &mut World, window: WindowId) -> Self {
         use world::components;
 
-        let player = world.spawn();
+        let entity = world.spawn();
         world.insert(
-            player,
+            entity,
             components::Transform {
                 location: glam::vec3(0., 1000., 1000.),
                 rotation: glam::vec3(-PI / 4., 0., 0.),
@@ -24,7 +27,7 @@ impl Player {
             },
         );
         world.insert(
-            player,
+            entity,
             components::Camera {
                 fov: (45_f32).to_radians(),
                 near_clip: 0.1,
@@ -36,8 +39,8 @@ impl Player {
 
         Self {
             world: world.id(),
-            entity: player,
-            window: None,
+            entity,
+            window,
         }
     }
 }

@@ -84,7 +84,7 @@ impl Engine {
         let world_id = self.create_test_world();
         let world = self.worlds.get_mut(&world_id).unwrap();
 
-        self.player = Some(Player::spawn(world));
+        self.player = Some(Player::spawn(world, self.platform.main_window().id()));
 
         Ok(())
     }
@@ -116,11 +116,8 @@ impl Engine {
             return Ok(());
         };
 
-        self.renderer.render(
-            player.window().unwrap_or(self.platform.main_window().id()),
-            *player.world(),
-            *player.entity(),
-        )?;
+        self.renderer
+            .render(*player.window(), *player.world(), *player.entity())?;
         Ok(())
     }
 
