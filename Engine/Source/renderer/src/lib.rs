@@ -15,7 +15,9 @@ use ash::{
     vk,
 };
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, info};
+#[cfg(validation)]
+use tracing::{error, trace, warn};
 
 use platform::{PlatformEvent, WindowEvent, WindowId};
 use world::{components, events::WorldEvent};
@@ -188,105 +190,102 @@ impl Renderer {
 
         let entry = unsafe { Entry::load()? };
 
-        let (instance, debug_utils_loader, debug_messenger) = {
-            let app_info = vk::ApplicationInfo::default()
-                .application_name(create_info.app_name.as_c_str())
-                .application_version(make_version(create_info.app_version))
-                .engine_name(create_info.engine_name.as_c_str())
-                .engine_version(make_version(create_info.engine_version))
-                .api_version(vk::API_VERSION_1_3);
+        let app_info = vk::ApplicationInfo::default()
+            .application_name(create_info.app_name.as_c_str())
+            .application_version(make_version(create_info.app_version))
+            .engine_name(create_info.engine_name.as_c_str())
+            .engine_version(make_version(create_info.engine_version))
+            .api_version(vk::API_VERSION_1_3);
 
-            // Collect extensions
-            let mut extensions: Vec<*const i8> = vec![surface::NAME.as_ptr()];
+        // Collect extensions
+        let mut extensions: Vec<*const i8> = vec![surface::NAME.as_ptr()];
 
-            #[cfg(platform_linux)]
-            extensions.push(wayland_surface::NAME.as_ptr());
+        #[cfg(platform_linux)]
+        extensions.push(wayland_surface::NAME.as_ptr());
 
-            let mut instance_create_info =
-                vk::InstanceCreateInfo::default().application_info(&app_info);
+        let mut instance_create_info =
+            vk::InstanceCreateInfo::default().application_info(&app_info);
 
-            #[cfg(validation)]
-            let mut debug_create_info: vk::DebugUtilsMessengerCreateInfoEXT;
-            #[cfg(validation)]
-            {
-                info!(target: "vulkan::validation", "using validation layers");
-                extensions.push(debug_utils::NAME.as_ptr());
+        #[cfg(validation)]
+        let mut debug_create_info: vk::DebugUtilsMessengerCreateInfoEXT;
+        #[cfg(validation)]
+        {
+            info!(target: "vulkan::validation", "using validation layers");
+            extensions.push(debug_utils::NAME.as_ptr());
 
-                let severity_flags = vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE
-                    | vk::DebugUtilsMessageSeverityFlagsEXT::INFO
-                    | vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
-                    | vk::DebugUtilsMessageSeverityFlagsEXT::ERROR;
+            let severity_flags = vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE
+                | vk::DebugUtilsMessageSeverityFlagsEXT::INFO
+                | vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
+                | vk::DebugUtilsMessageSeverityFlagsEXT::ERROR;
 
-                let message_type_flags = vk::DebugUtilsMessageTypeFlagsEXT::GENERAL
-                    | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE
-                    | vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION;
+            let message_type_flags = vk::DebugUtilsMessageTypeFlagsEXT::GENERAL
+                | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE
+                | vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION;
 
-                debug_create_info = vk::DebugUtilsMessengerCreateInfoEXT::default()
-                    .message_severity(severity_flags)
-                    .message_type(message_type_flags)
-                    .pfn_user_callback(Some(debug_callback));
+            debug_create_info = vk::DebugUtilsMessengerCreateInfoEXT::default()
+                .message_severity(severity_flags)
+                .message_type(message_type_flags)
+                .pfn_user_callback(Some(debug_callback));
 
-                let validation_layers = VALIDATION_LAYERS;
+            let validation_layers = VALIDATION_LAYERS;
 
-                // check validation layer support
-                {
-                    let available = unsafe {
-                        entry
-                            .enumerate_instance_layer_properties()
-                            .unwrap_or_default()
-                    };
-                    for &required in validation_layers {
-                        let required = unsafe { CStr::from_ptr(required) };
-                        let found = available.iter().any(
-                            |ext| unsafe { CStr::from_ptr(ext.layer_name.as_ptr()) } == required,
-                        );
-
-                        if !found {
-                            return Err(Error::ValidationLayerNotFound(
-                                required.to_string_lossy().into_owned(),
-                            ));
-                        }
-                    }
-                }
-
-                instance_create_info = instance_create_info
-                    .enabled_layer_names(VALIDATION_LAYERS)
-                    .push_next(&mut debug_create_info);
-            }
-
-            // check required instance extensions
+            // check validation layer support
             {
                 let available = unsafe {
                     entry
-                        .enumerate_instance_extension_properties(None)
+                        .enumerate_instance_layer_properties()
                         .unwrap_or_default()
                 };
-                for &required in &extensions {
+                for &required in validation_layers {
                     let required = unsafe { CStr::from_ptr(required) };
-                    let found = available.iter().any(
-                        |ext| unsafe { CStr::from_ptr(ext.extension_name.as_ptr()) } == required,
-                    );
+                    let found = available
+                        .iter()
+                        .any(|ext| unsafe { CStr::from_ptr(ext.layer_name.as_ptr()) } == required);
 
                     if !found {
-                        return Err(Error::ExtensionNotFound(
+                        return Err(Error::ValidationLayerNotFound(
                             required.to_string_lossy().into_owned(),
                         ));
                     }
                 }
             }
 
-            instance_create_info = instance_create_info.enabled_extension_names(&extensions);
+            instance_create_info = instance_create_info
+                .enabled_layer_names(VALIDATION_LAYERS)
+                .push_next(&mut debug_create_info);
+        }
 
-            let instance = unsafe { entry.create_instance(&instance_create_info, None)? };
-
-            let (debug_utils_loader, debug_messenger) = {
-                let loader = debug_utils::Instance::new(&entry, &instance);
-                let messenger =
-                    unsafe { loader.create_debug_utils_messenger(&debug_create_info, None)? };
-                (loader, messenger)
+        // check required instance extensions
+        {
+            let available = unsafe {
+                entry
+                    .enumerate_instance_extension_properties(None)
+                    .unwrap_or_default()
             };
+            for &required in &extensions {
+                let required = unsafe { CStr::from_ptr(required) };
+                let found = available
+                    .iter()
+                    .any(|ext| unsafe { CStr::from_ptr(ext.extension_name.as_ptr()) } == required);
 
-            (instance, debug_utils_loader, debug_messenger)
+                if !found {
+                    return Err(Error::ExtensionNotFound(
+                        required.to_string_lossy().into_owned(),
+                    ));
+                }
+            }
+        }
+
+        instance_create_info = instance_create_info.enabled_extension_names(&extensions);
+
+        let instance = unsafe { entry.create_instance(&instance_create_info, None)? };
+
+        #[cfg(validation)]
+        let (debug_utils_loader, debug_messenger) = {
+            let loader = debug_utils::Instance::new(&entry, &instance);
+            let messenger =
+                unsafe { loader.create_debug_utils_messenger(&debug_create_info, None)? };
+            (loader, messenger)
         };
 
         let (surface_loader, surface) = {
@@ -582,7 +581,9 @@ impl Renderer {
             current_frame: 0,
             surface_loader,
             swapchain_loader,
+            #[cfg(validation)]
             debug_utils_loader,
+            #[cfg(validation)]
             debug_messenger,
 
             graphics_pipeline,
