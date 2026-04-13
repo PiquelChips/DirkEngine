@@ -98,7 +98,6 @@ const DEVICE_EXTENSIONS: &[&str] =
 #[cfg(validation)]
 const VALIDATION_LAYERS: &[*const i8] = &[c"VK_LAYER_KHRONOS_validation".as_ptr()];
 
-#[derive(Debug)]
 struct Frame {
     /// Command pool to allocate command buffers on every frame
     command_pool: CommandPool<Graphics>,
@@ -111,7 +110,7 @@ struct Frame {
 
 impl Frame {
     fn destroy(&self, device: &Device) {
-        self.command_pool.destroy(device);
+        self.command_pool.destroy();
         unsafe {
             device.destroy_fence(self.fence, None);
         }
@@ -523,7 +522,9 @@ impl Renderer {
                 })
             })
             .collect();
-        let frames: [Frame; MAX_FRAMES_IN_FLIGHT] = frames?.try_into().unwrap();
+        let frames: [Frame; MAX_FRAMES_IN_FLIGHT] = frames?
+            .try_into()
+            .unwrap_or_else(|_| panic!("failed to convert frames to array"));
 
         // LAYOUTS
         let layouts = DescriptorLayouts {
@@ -1446,8 +1447,8 @@ impl Drop for Renderer {
         self.graphics_pipeline.destroy(&self.device);
         self.layouts.destroy(&self.device);
 
-        self.graphics_pool.destroy(&self.device);
-        self.transfer_pool.destroy(&self.device);
+        self.graphics_pool.destroy();
+        self.transfer_pool.destroy();
         unsafe {
             self.device
                 .destroy_descriptor_pool(self.material_descriptor_pool, None);
