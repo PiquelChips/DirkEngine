@@ -9,7 +9,7 @@ use winit::{
 };
 
 use crate::{
-    Window,
+    InputEvent, Window,
     event::{PlatformEvent, WindowEvent as PlatformWindowEvent},
 };
 
@@ -22,6 +22,8 @@ pub struct PlatformHandler {
     platform_dispatcher: events::Dispatcher<PlatformEvent>,
     /// Dispatch [PlatformWindowEvent]
     window_dispatcher: events::Dispatcher<PlatformWindowEvent>,
+    /// Dispatch [InputEvent]
+    input_dispatch: events::Dispatcher<InputEvent>,
 }
 
 impl PlatformHandler {
@@ -32,6 +34,7 @@ impl PlatformHandler {
             main_window: None,
             platform_dispatcher: events.register(),
             window_dispatcher: events.register(),
+            input_dispatch: events.register(),
         }
     }
     fn create_window(&mut self, event_loop: &dyn ActiveEventLoop) -> anyhow::Result<WindowId> {

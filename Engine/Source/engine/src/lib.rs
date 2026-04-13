@@ -11,6 +11,7 @@ use logging::Logger;
 pub struct Engine {
     exit_consumer: events::Consumer<platform::AppExit>,
     event_manager: events::EventManager,
+    input_manager: player::input::InputManager,
 
     renderer: renderer::Renderer,
     platform: platform::Platform,
@@ -42,6 +43,8 @@ impl Engine {
         let mut event_manager = events::EventManager::new();
         let exit_consumer = event_manager.subscribe();
 
+        let input_manager = player::input::InputManager::init(&mut event_manager);
+
         let version = utils::Version::from_str(env!("CARGO_PKG_VERSION"))?;
         let name = "DirkEngine";
 
@@ -66,6 +69,7 @@ impl Engine {
 
             platform,
             renderer,
+            input_manager,
 
             next_world_id: 0,
             worlds: HashMap::new(),
@@ -102,6 +106,8 @@ impl Engine {
         if self.is_requesting_exit() {
             return Ok(false);
         }
+
+        // TODO: tick input manager
 
         self.platform.tick(delta_time);
         self.renderer

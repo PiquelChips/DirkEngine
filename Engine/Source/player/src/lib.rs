@@ -1,6 +1,8 @@
 //! This crate handles everything to do with players.
 //! This includes the input system.
 
+pub mod input;
+
 use std::f32::consts::PI;
 
 use platform::WindowId;

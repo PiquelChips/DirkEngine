@@ -55,3 +55,6 @@ impl WindowEvent {
         }
     }
 }
+
+#[derive(Debug, Clone, Event)]
+pub enum InputEvent {}
