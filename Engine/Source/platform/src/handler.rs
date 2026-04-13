@@ -44,8 +44,7 @@ impl PlatformHandler {
         }
     }
     fn create_window(&mut self, event_loop: &dyn ActiveEventLoop) -> anyhow::Result<WindowId> {
-        #[allow(unused_mut)]
-        let mut window_attributes = WindowAttributes::default()
+        let window_attributes = WindowAttributes::default()
             .with_title("DirkEngine")
             .with_transparent(true);
 
