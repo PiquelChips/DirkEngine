@@ -18,13 +18,11 @@ pub struct Engine {
 
     next_world_id: WorldId,
     worlds: HashMap<WorldId, World>,
+    players: Vec<Player>,
 
     is_requesting_exit: bool,
     exit_error: Option<anyhow::Error>,
     last_tick: Instant,
-
-    /// The main player. Only populated on engine start.
-    player: Option<Player>,
 
     #[allow(unused)]
     logger: Logger,
@@ -73,12 +71,11 @@ impl Engine {
 
             next_world_id: 0,
             worlds: HashMap::new(),
+            players: Vec::new(),
 
             is_requesting_exit: false,
             exit_error: None,
             last_tick: Instant::now(),
-
-            player: None,
         })
     }
     /// Will start the main game/editor. This should be called
@@ -88,7 +85,8 @@ impl Engine {
         let world_id = self.create_test_world();
         let world = self.worlds.get_mut(&world_id).unwrap();
 
-        self.player = Some(Player::spawn(world, self.platform.main_window().id()));
+        self.players
+            .push(Player::spawn(world, self.platform.main_window().id()));
 
         Ok(())
     }
@@ -107,7 +105,7 @@ impl Engine {
             return Ok(false);
         }
 
-        // TODO: tick input manager
+        self.input_manager.tick(delta_time, &self.players);
 
         self.platform.tick(delta_time);
         self.renderer
@@ -118,12 +116,10 @@ impl Engine {
         Ok(!self.is_requesting_exit())
     }
     pub fn render(&mut self) -> anyhow::Result<()> {
-        let Some(ref player) = self.player else {
-            return Ok(());
-        };
-
-        self.renderer
-            .render(*player.window(), *player.world(), *player.entity())?;
+        for player in &self.players {
+            self.renderer
+                .render(*player.window(), *player.world(), *player.entity())?;
+        }
         Ok(())
     }
 
