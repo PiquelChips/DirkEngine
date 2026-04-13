@@ -11,6 +11,7 @@ pub struct Player {
     world: WorldId,
     entity: Entity,
     window: WindowId,
+    region: glam::Vec2,
 }
 
 impl Player {
@@ -41,6 +42,8 @@ impl Player {
             world: world.id(),
             entity,
             window,
+            // TODO: handle regions
+            region: glam::Vec2::splat(1.),
         }
     }
 }
