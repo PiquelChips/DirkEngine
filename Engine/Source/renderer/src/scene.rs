@@ -246,7 +246,7 @@ impl Scene {
         }
 
         RenderPass::begin(renderer, cmd, size, view, self.color, self.depth);
-        renderer.graphics_pipeline.bind(renderer, cmd);
+        renderer.graphics_pipeline.bind(cmd);
 
         let viewport = vk::Viewport::default()
             .width(size.width as f32)

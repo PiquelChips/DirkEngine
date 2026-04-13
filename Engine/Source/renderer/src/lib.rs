@@ -1444,7 +1444,7 @@ impl Drop for Renderer {
             .values()
             .for_each(|w| w.destroy(&self.device, &self.surface_loader, &self.swapchain_loader));
         self.frames.iter().for_each(|f| f.destroy(&self.device));
-        self.graphics_pipeline.destroy(&self.device);
+        self.graphics_pipeline.destroy();
         self.layouts.destroy(&self.device);
 
         self.graphics_pool.destroy();
