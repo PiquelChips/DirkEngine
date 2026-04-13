@@ -227,12 +227,12 @@ impl Scene {
             let proxy = &self
                 .proxies
                 .get(&camera)
-                .ok_or(Error::CameraDoesNotExit(self.world, camera))?;
+                .ok_or(Error::CameraDoesNotExist(self.world, camera))?;
 
             let camera = proxy
                 .camera
                 .as_ref()
-                .ok_or(Error::CameraDoesNotExit(self.world, camera))?;
+                .ok_or(Error::CameraDoesNotExist(self.world, camera))?;
 
             let scene_ubo = SceneUbo {
                 view: camera.view,

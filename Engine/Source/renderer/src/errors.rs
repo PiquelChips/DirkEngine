@@ -37,7 +37,7 @@ pub enum Error {
     SuboptimalSurface,
 
     #[error("camera {1} does not exist in world {1}")]
-    CameraDoesNotExit(world::WorldId, world::Entity),
+    CameraDoesNotExist(world::WorldId, world::Entity),
 }
 
 impl From<HandleError> for Error {
