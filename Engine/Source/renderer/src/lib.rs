@@ -52,6 +52,8 @@ mod render_pass;
 /// Used to construct Ubo samples.
 /// TODO: find a way to set this limit dynamically or have a error when the limit is reached.
 const MAX_RENDERABLES: u32 = 100;
+/// TODO: also find a way to do this dynamically
+const MAX_MATERIAL_DESCRIPTOR_SET: u32 = 256;
 
 const MAX_FRAMES_IN_FLIGHT: usize = 2;
 const DEVICE_EXTENSIONS: &[&str] =
@@ -460,31 +462,29 @@ impl Renderer {
         let swapchain_loader = swapchain::Device::new(&instance, &device);
 
         // IN FLIGHT FRAMES
-        let frames: Result<Vec<Frame>> = (0..MAX_FRAMES_IN_FLIGHT)
-            .map(|_| {
-                let command_pool = CommandPool::build(
-                    &device,
-                    &queues,
-                    &properties.queue_family_indices,
-                    vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
-                )?;
-                let fence = unsafe {
-                    device.create_fence(
-                        &vk::FenceCreateInfo::default().flags(vk::FenceCreateFlags::SIGNALED),
-                        None,
-                    )?
-                };
-
-                Ok(Frame {
-                    device: device.clone(),
-                    command_pool,
-                    fence,
-                })
+        let build_frame = || -> Result<Frame> {
+            let command_pool = CommandPool::build(
+                &device,
+                &queues,
+                &properties.queue_family_indices,
+                vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
+            )?;
+            let fence = unsafe {
+                device.create_fence(
+                    &vk::FenceCreateInfo::default().flags(vk::FenceCreateFlags::SIGNALED),
+                    None,
+                )?
+            };
+            Ok(Frame {
+                device: device.clone(),
+                command_pool,
+                fence,
             })
-            .collect();
-        let frames: [Frame; MAX_FRAMES_IN_FLIGHT] = frames?
-            .try_into()
-            .unwrap_or_else(|_| panic!("failed to convert frames to array"));
+        };
+        let frames = [build_frame()?, build_frame()?];
+        // nightly currently allows:
+        // let frames: [Frame; MAX_FRAMES_IN_FLIGHT] = std::array::try_from_fn(|_| build_frame())?;
+        // could be nice in the future
 
         // LAYOUTS
         let layouts = DescriptorLayouts {
@@ -530,7 +530,6 @@ impl Renderer {
 
         // MATERIAL DESCRIPTOR SETS
         let material_descriptor_pool = {
-            const MAX_MATERIAL_DESCRIPTOR_SET: u32 = 256;
             let pool_size = vk::DescriptorPoolSize {
                 ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
                 descriptor_count: MAX_MATERIAL_DESCRIPTOR_SET,
@@ -614,6 +613,7 @@ impl Renderer {
                     let Some(scene) = self.scenes.get(&world) else {
                         continue;
                     };
+                    // this creates a completely empty proxy, no mesh or matrix
                     let proxy = SceneProxy::build(self, scene)?;
                     let Some(scene) = self.scenes.get_mut(&world) else {
                         continue;
@@ -1357,7 +1357,7 @@ impl Renderer {
 
     fn mip_levels(width: u32, height: u32) -> u32 {
         // How many times can we halve the larger dimension before hitting 1px?
-        (width.max(height) as f32).log2().floor() as u32 + 1
+        u32::BITS - width.max(height).leading_zeros()
     }
     fn find_memory_type(
         &self,
