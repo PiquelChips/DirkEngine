@@ -25,6 +25,7 @@ pub struct Engine {
 }
 
 impl Engine {
+    /// Constructs and initialises the gine
     pub fn init() -> anyhow::Result<Self> {
         let logger = logging::Logger::new()
             .write_fs(true)
@@ -51,7 +52,7 @@ impl Engine {
         )
         .context("renderer init")?;
 
-        let mut engine = Self {
+        Ok(Self {
             event_manager,
             exit_consumer,
             logger,
@@ -65,12 +66,16 @@ impl Engine {
             is_requesting_exit: false,
             exit_error: None,
             last_tick: Instant::now(),
-        };
-
-        engine.create_test_world();
-
-        Ok(engine)
+        })
     }
+    /// Will start the main game/editor. This should be called once right
+    /// after init.
+    pub fn start(&mut self) -> anyhow::Result<()> {
+        self.create_test_world();
+        Ok(())
+    }
+    /// Ticks the engine. This is the master function that calls
+    /// every other system's tick function.
     pub fn tick(&mut self) -> anyhow::Result<bool> {
         let delta_time = self.capture_delta_time();
         self.event_manager.dispatch_all();
