@@ -20,6 +20,10 @@ use tracing::{debug, error, info, trace, warn};
 use platform::{PlatformEvent, WindowEvent, WindowId};
 use world::{components, events::WorldEvent};
 
+mod utils;
+use crate::utils::*;
+use ::utils::*;
+
 mod errors;
 pub use errors::{Error, Result};
 
@@ -41,50 +45,6 @@ use command_pool::{CommandBuffer, CommandPool, Graphics, Transfer};
 mod layouts;
 mod physical_device;
 mod render_pass;
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-struct Vertex {
-    position: [f32; 3],
-    normal: [f32; 3],
-    texcoord: [f32; 2],
-}
-
-impl Vertex {
-    const fn binding_description() -> vk::VertexInputBindingDescription {
-        vk::VertexInputBindingDescription {
-            binding: 0,
-            stride: size_of::<Self>() as u32,
-            input_rate: vk::VertexInputRate::VERTEX,
-        }
-    }
-    const fn attribute_description() -> [vk::VertexInputAttributeDescription; 3] {
-        [
-            vk::VertexInputAttributeDescription {
-                location: 0,
-                binding: 0,
-                format: vk::Format::R32G32B32_SFLOAT,
-                offset: std::mem::offset_of!(Self, position) as u32,
-            },
-            vk::VertexInputAttributeDescription {
-                location: 1,
-                binding: 0,
-                format: vk::Format::R32G32B32_SFLOAT,
-                offset: std::mem::offset_of!(Self, normal) as u32,
-            },
-            vk::VertexInputAttributeDescription {
-                location: 2,
-                binding: 0,
-                format: vk::Format::R32G32_SFLOAT,
-                offset: std::mem::offset_of!(Self, texcoord) as u32,
-            },
-        ]
-    }
-}
-
-fn make_version(version: utils::Version) -> u32 {
-    vk::make_api_version(0, version.major(), version.minor(), version.patch())
-}
 
 /// The maximum numer of renderables in a scene.
 /// Used to construct Ubo samples.
@@ -144,9 +104,9 @@ impl DescriptorLayouts {
 
 pub struct RendererCreateInfo {
     pub engine_name: CString,
-    pub engine_version: utils::Version,
+    pub engine_version: Version,
     pub app_name: CString,
-    pub app_version: utils::Version,
+    pub app_version: Version,
 }
 
 struct Queues {
