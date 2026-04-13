@@ -1031,6 +1031,7 @@ impl Renderer {
             self.upload_slice(prim.indices(), vk::BufferUsageFlags::INDEX_BUFFER)?;
 
         Ok(Primitive {
+            device: self.device.clone(),
             vertex_buffer,
             vertex_buffer_memory,
             index_buffer,
@@ -1123,6 +1124,7 @@ impl Renderer {
         let sampler = self.create_sampler(mip_levels)?;
 
         Ok(Texture {
+            device: self.device.clone(),
             image,
             memory,
             view,
@@ -1434,7 +1436,7 @@ impl Drop for Renderer {
         info!("cleaning up renderer");
 
         self.scenes.clear();
-        self.models.values().for_each(|m| m.destroy(&self.device));
+        self.models.clear();
         self.windows.clear();
         self.frames.iter().for_each(|f| f.destroy(&self.device));
         self.graphics_pipeline.destroy(&self.device);
