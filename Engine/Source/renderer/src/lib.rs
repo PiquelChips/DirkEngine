@@ -830,9 +830,11 @@ impl Renderer {
             0,
         )?;
 
-        for scene in self.scenes.values() {
-            scene.render(self, &cmd, size, swapchain_img.view)?;
-        }
+        let scenes = self.scenes.values().collect::<Vec<&Scene>>();
+        let Some(scene) = scenes.first() else {
+            return Ok(());
+        };
+        scene.render(self, &cmd, size, swapchain_img.view)?;
 
         self.transition_image_layout(
             &cmd,
