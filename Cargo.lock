@@ -424,6 +424,7 @@ dependencies = [
  "glam",
  "logging",
  "platform",
+ "player",
  "renderer",
  "resource_manager",
  "thiserror 2.0.18",
@@ -1130,6 +1131,17 @@ dependencies = [
  "thiserror 2.0.18",
  "tracing",
  "winit",
+]
+
+[[package]]
+name = "player"
+version = "0.1.0"
+dependencies = [
+ "derive-getters",
+ "events",
+ "glam",
+ "platform",
+ "world",
 ]
 
 [[package]]

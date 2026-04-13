@@ -1,14 +1,11 @@
-mod player;
-
 use std::{collections::HashMap, ffi::CString, str::FromStr, time::Instant};
 
 use anyhow::Context;
+use player::Player;
 use tracing::info;
 use world::{World, WorldId};
 
 use logging::Logger;
-
-use crate::player::Player;
 
 /// This is the main struct that holds global engine state.
 pub struct Engine {
