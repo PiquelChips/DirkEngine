@@ -684,7 +684,7 @@ impl Renderer {
                         );
                     };
                     if let Some(camera) = world.get::<components::Camera>(entity) {
-                        proxy.set_camera(camera.projection(), transform.view());
+                        proxy.set_camera(transform.view(), camera.projection());
                     }
                 }
                 WorldEvent::EntityDespawn { world, entity } => {
