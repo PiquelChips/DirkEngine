@@ -98,8 +98,8 @@ const DEVICE_EXTENSIONS: &[&str] =
 #[cfg(validation)]
 const VALIDATION_LAYERS: &[*const i8] = &[c"VK_LAYER_KHRONOS_validation".as_ptr()];
 
-#[derive(Debug)]
 struct Frame {
+    device: Device,
     /// Command pool to allocate command buffers on every frame
     command_pool: CommandPool<Graphics>,
     /// Main synchronization fence
@@ -110,11 +110,17 @@ struct Frame {
 }
 
 impl Frame {
-    fn destroy(&self, device: &Device) {
-        self.command_pool.destroy(device);
+    fn destroy(&self) {
+        self.command_pool.destroy();
         unsafe {
-            device.destroy_fence(self.fence, None);
+            self.device.destroy_fence(self.fence, None);
         }
+    }
+}
+
+impl Drop for Frame {
+    fn drop(&mut self) {
+        self.destroy();
     }
 }
 
@@ -125,6 +131,7 @@ impl Frame {
 /// propper comment explain what the layout is and where
 /// it is used.
 struct DescriptorLayouts {
+    device: Device,
     // TODO: much better comments for descriptor set layouts
     /// Per scene layout. Holds view & proj matrices for rendering.
     scene: vk::DescriptorSetLayout,
@@ -134,12 +141,19 @@ struct DescriptorLayouts {
     material: vk::DescriptorSetLayout,
 }
 
+impl Drop for DescriptorLayouts {
+    fn drop(&mut self) {
+        self.destroy();
+    }
+}
+
 impl DescriptorLayouts {
-    fn destroy(&self, device: &Device) {
+    fn destroy(&self) {
         unsafe {
-            device.destroy_descriptor_set_layout(self.scene, None);
-            device.destroy_descriptor_set_layout(self.object, None);
-            device.destroy_descriptor_set_layout(self.material, None);
+            self.device.destroy_descriptor_set_layout(self.scene, None);
+            self.device.destroy_descriptor_set_layout(self.object, None);
+            self.device
+                .destroy_descriptor_set_layout(self.material, None);
         }
     }
 }
@@ -518,15 +532,19 @@ impl Renderer {
                 };
 
                 Ok(Frame {
+                    device: device.clone(),
                     command_pool,
                     fence,
                 })
             })
             .collect();
-        let frames: [Frame; MAX_FRAMES_IN_FLIGHT] = frames?.try_into().unwrap();
+        let frames: [Frame; MAX_FRAMES_IN_FLIGHT] = frames?
+            .try_into()
+            .unwrap_or_else(|_| panic!("cannot convert frames to array"));
 
         // LAYOUTS
         let layouts = DescriptorLayouts {
+            device: device.clone(),
             scene: {
                 let binding = vk::DescriptorSetLayoutBinding::default()
                     .binding(0)
@@ -1438,12 +1456,12 @@ impl Drop for Renderer {
         self.scenes.clear();
         self.models.clear();
         self.windows.clear();
-        self.frames.iter().for_each(|f| f.destroy(&self.device));
-        self.graphics_pipeline.destroy(&self.device);
-        self.layouts.destroy(&self.device);
+        self.frames.iter().for_each(|f| f.destroy());
+        self.graphics_pipeline.destroy();
+        self.layouts.destroy();
 
-        self.graphics_pool.destroy(&self.device);
-        self.transfer_pool.destroy(&self.device);
+        self.graphics_pool.destroy();
+        self.transfer_pool.destroy();
         unsafe {
             self.device
                 .destroy_descriptor_pool(self.material_descriptor_pool, None);

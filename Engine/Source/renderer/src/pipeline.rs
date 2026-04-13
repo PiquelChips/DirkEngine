@@ -6,6 +6,7 @@ use crate::{
 
 /// This struct holds the graphics pipeline & stuff.
 pub struct GraphicsPipeline {
+    device: Device,
     pipeline_layout: vk::PipelineLayout,
     graphics_pipeline: vk::Pipeline,
 }
@@ -115,6 +116,7 @@ impl GraphicsPipeline {
         }
 
         Ok(Self {
+            device: device.clone(),
             graphics_pipeline,
             pipeline_layout,
         })
@@ -131,10 +133,17 @@ impl GraphicsPipeline {
     pub fn layout(&self) -> vk::PipelineLayout {
         self.pipeline_layout
     }
-    pub fn destroy(&self, device: &Device) {
+    pub fn destroy(&self) {
         unsafe {
-            device.destroy_pipeline_layout(self.pipeline_layout, None);
-            device.destroy_pipeline(self.graphics_pipeline, None);
+            self.device
+                .destroy_pipeline_layout(self.pipeline_layout, None);
+            self.device.destroy_pipeline(self.graphics_pipeline, None);
         }
+    }
+}
+
+impl Drop for GraphicsPipeline {
+    fn drop(&mut self) {
+        self.destroy();
     }
 }

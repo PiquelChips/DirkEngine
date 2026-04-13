@@ -8,21 +8,14 @@ use crate::{
     model, render_pass::RenderPass,
 };
 
-#[derive(Debug)]
 struct UboData {
+    device: Device,
     buffer: vk::Buffer,
     memory: vk::DeviceMemory,
     mapped: *mut c_void,
 }
 
 impl UboData {
-    fn destroy(&self, device: &Device) {
-        unsafe {
-            device.destroy_buffer(self.buffer, None);
-            device.free_memory(self.memory, None);
-        }
-    }
-
     /// Copies `data` into the persistently-mapped host-visible memory.
     ///
     /// # Safety
@@ -37,6 +30,15 @@ impl UboData {
                 size_of::<T>(),
             )
         };
+    }
+}
+
+impl Drop for UboData {
+    fn drop(&mut self) {
+        unsafe {
+            self.device.destroy_buffer(self.buffer, None);
+            self.device.free_memory(self.memory, None);
+        }
     }
 }
 
@@ -132,13 +134,16 @@ impl Scene {
                 };
 
                 Ok(UboData {
+                    device: renderer.device.clone(),
                     buffer,
                     memory,
                     mapped,
                 })
             })
             .collect::<Result<Vec<_>>>()?;
-        let ubo: [UboData; MAX_FRAMES_IN_FLIGHT] = ubo.try_into().unwrap();
+        let ubo: [UboData; MAX_FRAMES_IN_FLIGHT] = ubo
+            .try_into()
+            .unwrap_or_else(|_| panic!("cannot convert ubos to array"));
 
         let buffer_infos: [vk::DescriptorBufferInfo; MAX_FRAMES_IN_FLIGHT] =
             std::array::from_fn(|i| {
@@ -318,7 +323,6 @@ impl Scene {
 impl Drop for Scene {
     fn drop(&mut self) {
         self.proxies.clear();
-        self.ubo.iter().for_each(|ubo| ubo.destroy(&self.device));
         unsafe {
             self.device
                 .destroy_descriptor_pool(self.descriptor_pool, None);
@@ -336,7 +340,6 @@ impl Drop for Scene {
 /// Owned by [Scene], constructed from [world::components::Renderable] and
 /// [world::components::Transform].
 pub struct SceneProxy {
-    device: Device,
     /// The model matrix used for rendering. Constructed from the
     /// [world::components::Transform] of the entity.
     model_matrix: Option<glam::Mat4>,
@@ -376,13 +379,16 @@ impl SceneProxy {
                 };
 
                 Ok(UboData {
+                    device: renderer.device.clone(),
                     buffer,
                     memory,
                     mapped,
                 })
             })
             .collect::<Result<Vec<_>>>()?;
-        let ubo: [UboData; MAX_FRAMES_IN_FLIGHT] = ubo.try_into().unwrap();
+        let ubo: [UboData; MAX_FRAMES_IN_FLIGHT] = ubo
+            .try_into()
+            .unwrap_or_else(|_| panic!("cannot convert ubos to array"));
 
         // Allocate scene-level sets (one per frame)
         let layouts = [renderer.layouts.object; MAX_FRAMES_IN_FLIGHT];
@@ -422,7 +428,6 @@ impl SceneProxy {
         };
 
         Ok(Self {
-            device: renderer.device.clone(),
             model: None,
             model_matrix: None,
             camera: None,
@@ -451,11 +456,5 @@ impl SceneProxy {
 
         let data = ProxyUbo { model };
         self.ubo[frame].write(&data);
-    }
-}
-
-impl Drop for SceneProxy {
-    fn drop(&mut self) {
-        self.ubo.iter().for_each(|ubo| ubo.destroy(&self.device));
     }
 }

@@ -13,8 +13,8 @@ pub struct Transfer;
 pub struct Compute;
 
 /// Wrapper for [vk::CommandPool].
-#[derive(Debug)]
 pub struct CommandPool<Type: Pool> {
+    device: Device,
     /// The command pool
     pool: vk::CommandPool,
     /// The queue commands will be submitted to
@@ -74,14 +74,15 @@ impl<Type: Pool> CommandPool<Type> {
         let pool = unsafe { device.create_command_pool(&info, None)? };
 
         Ok(Self {
+            device: device.clone(),
             pool,
             queue,
             pool_type: PhantomData,
         })
     }
-    pub fn destroy(&self, device: &Device) {
+    pub fn destroy(&self) {
         unsafe {
-            device.destroy_command_pool(self.pool, None);
+            self.device.destroy_command_pool(self.pool, None);
         }
     }
     pub fn allocate_buffer(&self, device: &Device) -> Result<CommandBuffer> {
@@ -113,6 +114,12 @@ impl<Type: Pool> CommandPool<Type> {
             buff,
             queue: self.queue,
         })
+    }
+}
+
+impl<Type: Pool> Drop for CommandPool<Type> {
+    fn drop(&mut self) {
+        self.destroy();
     }
 }
 
