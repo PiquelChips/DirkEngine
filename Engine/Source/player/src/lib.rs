@@ -48,4 +48,8 @@ impl Player {
             region: glam::Vec2::splat(1.),
         }
     }
+    fn handle_input_event(&self, _event: platform::InputEvent) {
+        // TODO: actually do something with input
+        // TODO: hard code basic movement when right key down
+    }
 }
