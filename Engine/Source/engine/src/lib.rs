@@ -142,7 +142,7 @@ impl Engine {
 
     fn create_test_world(&mut self) -> WorldId {
         let world_id = self.create_world();
-        use world::components;
+        use world::components::*;
         let world = self.worlds.get_mut(&world_id).unwrap();
 
         let player = world.spawn();
@@ -168,7 +168,7 @@ impl Engine {
         let shrek = world.spawn();
         world.insert(
             shrek,
-            components::Transform {
+            Transform {
                 location: glam::Vec3::ZERO,
                 rotation: glam::Vec3::ZERO,
                 scale: glam::Vec3::splat(1.),
@@ -176,7 +176,7 @@ impl Engine {
         );
         world.insert(
             shrek,
-            components::Renderable {
+            Renderable {
                 model: "Shrek".to_string(),
             },
         );
@@ -184,7 +184,7 @@ impl Engine {
         let duck = world.spawn();
         world.insert(
             duck,
-            components::Transform {
+            Transform {
                 location: glam::vec3(100., 0., 0.),
                 rotation: glam::Vec3::ZERO,
                 scale: glam::Vec3::splat(1.),
@@ -192,7 +192,7 @@ impl Engine {
         );
         world.insert(
             duck,
-            components::Renderable {
+            Renderable {
                 model: "Duck".to_string(),
             },
         );
