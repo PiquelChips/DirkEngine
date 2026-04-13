@@ -1,4 +1,5 @@
 use glam::{Mat4, Vec3};
+use tracing::warn;
 
 /// Marks an entity as having a renderable mesh.
 ///
@@ -93,11 +94,14 @@ impl Transform {
     /// Builds a **left-handed** view matrix for a camera placed at this
     /// transform, looking in the [`forward`](Self::forward) direction.
     pub fn view(&self) -> Mat4 {
-        Mat4::look_at_lh(
-            self.location,
-            self.location + self.forward(),
-            utils::UP_DIRECTION,
-        )
+        let forward = self.forward();
+        if forward.cross(utils::UP_DIRECTION).length() < 1e-4 {
+            warn!(
+                "camera forward {:?} is parallel to UP — view matrix will be NaN",
+                forward
+            );
+        }
+        Mat4::look_at_lh(self.location, self.location + forward, utils::UP_DIRECTION)
     }
 }
 
