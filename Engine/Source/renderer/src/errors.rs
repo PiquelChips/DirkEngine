@@ -38,6 +38,10 @@ pub enum Error {
 
     #[error("camera {1} does not exist in world {1}")]
     CameraDoesNotExist(world::WorldId, world::Entity),
+    #[error("world {0} is not registered on renderer")]
+    WorldDoesNotExist(world::WorldId),
+    #[error("window {0:?} is not registered on renderer")]
+    WindowDoesNotExist(platform::WindowId),
 }
 
 impl From<HandleError> for Error {

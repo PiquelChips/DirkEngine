@@ -771,11 +771,17 @@ impl Renderer {
         Ok(())
     }
 
-    pub fn render(&mut self) -> Result<()> {
-        // TODO: don't always get main window
-        let windows = &mut self.windows.values_mut().collect::<Vec<&mut Window>>();
-        let Some(window) = windows.first_mut() else {
-            return Ok(());
+    pub fn render(
+        &mut self,
+        window: WindowId,
+        world: world::WorldId,
+        camera: world::Entity,
+    ) -> Result<()> {
+        let Some(window) = self.windows.get_mut(&window) else {
+            return Err(Error::WindowDoesNotExist(window));
+        };
+        let Some(scene) = self.scenes.get(&world) else {
+            return Err(Error::WorldDoesNotExist(world));
         };
 
         let (swapchain_img, idx) = window.next_image(&self.swapchain_loader)?;
@@ -808,11 +814,7 @@ impl Renderer {
             0,
         )?;
 
-        let scenes = self.scenes.values().collect::<Vec<&Scene>>();
-        let Some(scene) = scenes.first() else {
-            return Ok(());
-        };
-        scene.render(self, &cmd, size, swapchain_img.view)?;
+        scene.render(self, &cmd, size, swapchain_img.view, camera)?;
 
         self.transition_image_layout(
             &cmd,
