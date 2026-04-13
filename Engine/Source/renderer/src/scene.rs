@@ -1,10 +1,11 @@
 use std::{collections::HashMap, ffi::c_void};
 
 use ash::{Device, vk};
+use world::WorldId;
 
 use crate::{
-    MAX_FRAMES_IN_FLIGHT, MAX_RENDERABLES, Renderer, Result, command_pool::CommandBuffer, model,
-    render_pass::RenderPass,
+    Error, MAX_FRAMES_IN_FLIGHT, MAX_RENDERABLES, Renderer, Result, command_pool::CommandBuffer,
+    model, render_pass::RenderPass,
 };
 
 #[derive(Debug)]
@@ -45,9 +46,10 @@ impl UboData {
 /// Handles rendering all the [world::components::Renderable] objects
 /// of the world.
 pub struct Scene {
+    world: WorldId,
+    device: Device,
     /// The entities to render.
     proxies: HashMap<world::Entity, SceneProxy>,
-    camera: Option<CameraProxy>,
 
     descriptor_pool: vk::DescriptorPool,
     ubo: [UboData; MAX_FRAMES_IN_FLIGHT],
@@ -80,7 +82,7 @@ impl Scene {
     /// Builds a [Scene].
     /// Constructs the renderer stuff like command pools, descriptor sets, ... from
     /// the [Renderer].
-    pub fn build(renderer: &Renderer, size: vk::Extent2D) -> Result<Self> {
+    pub fn build(renderer: &Renderer, size: vk::Extent2D, world: WorldId) -> Result<Self> {
         let pool_sizes = [
             vk::DescriptorPoolSize {
                 ty: vk::DescriptorType::UNIFORM_BUFFER,
@@ -193,11 +195,12 @@ impl Scene {
         )?;
 
         Ok(Self {
+            world,
+            device: renderer.device.clone(),
             proxies: HashMap::new(),
             descriptor_pool,
             ubo,
             descriptor_sets: scene_desc_sets,
-            camera: None,
 
             color,
             color_image,
@@ -207,38 +210,36 @@ impl Scene {
             depth_memory,
         })
     }
-    pub fn destroy(&self, device: &Device) {
-        self.proxies
-            .iter()
-            .for_each(|(_, proxy)| proxy.destroy(device));
-        self.ubo.iter().for_each(|ubo| ubo.destroy(device));
-        unsafe {
-            device.destroy_descriptor_pool(self.descriptor_pool, None);
-            device.destroy_image_view(self.color, None);
-            device.destroy_image(self.color_image, None);
-            device.free_memory(self.color_memory, None);
-            device.destroy_image_view(self.depth, None);
-            device.destroy_image(self.depth_image, None);
-            device.free_memory(self.depth_memory, None);
-        };
-    }
     pub fn render(
         &self,
         renderer: &Renderer,
         cmd: &CommandBuffer,
         size: vk::Extent2D,
         view: vk::ImageView,
+        camera: world::Entity,
     ) -> Result<()> {
         let device = &renderer.device;
 
         let frame = renderer.current_frame;
-        if let Some(camera) = &self.camera {
+
+        // CAMERA
+        {
+            let proxy = &self
+                .proxies
+                .get(&camera)
+                .ok_or(Error::CameraDoesNotExit(self.world, camera))?;
+
+            let camera = proxy
+                .camera
+                .as_ref()
+                .ok_or(Error::CameraDoesNotExit(self.world, camera))?;
+
             let scene_ubo = SceneUbo {
                 view: camera.view,
                 proj: camera.proj,
             };
             self.ubo[frame].write(&scene_ubo);
-        }
+        };
 
         for proxy in self.proxies.values() {
             proxy.write_ubo(frame);
@@ -266,10 +267,14 @@ impl Scene {
         ];
 
         for proxy in self.proxies.values() {
-            for prim in &proxy.model.primitives {
+            let Some(ref model) = proxy.model else {
+                continue;
+            };
+
+            for prim in &model.primitives {
                 let mat_set = prim
                     .material
-                    .and_then(|idx| proxy.model.material_sets.get(idx).copied())
+                    .and_then(|idx| model.material_sets.get(idx).copied())
                     .unwrap_or(vk::DescriptorSet::null());
 
                 descriptor_sets[1] = proxy.sets[renderer.current_frame];
@@ -299,38 +304,31 @@ impl Scene {
         RenderPass::end(renderer, cmd);
         Ok(())
     }
-    pub fn set_camera(&mut self, view: glam::Mat4, proj: glam::Mat4) {
-        self.camera = Some(CameraProxy { view, proj });
-    }
-
-    pub fn update_camera(&mut self, view: glam::Mat4, proj: glam::Mat4) {
-        if let Some(camera) = &mut self.camera {
-            camera.view = view;
-            camera.proj = proj;
-        } else {
-            self.set_camera(view, proj);
-        }
-    }
     pub fn add_proxy(&mut self, entity: world::Entity, proxy: SceneProxy) -> Result<()> {
         self.proxies.insert(entity, proxy);
         Ok(())
     }
-    pub fn update_proxy(
-        &mut self,
-        entity: world::Entity,
-        model: &model::Model,
-        model_matrix: glam::Mat4,
-    ) -> Result<()> {
-        if let Some(proxy) = self.proxies.get_mut(&entity) {
-            proxy.set_model(model);
-            proxy.set_model_matrix(model_matrix);
-        }
-        Ok(())
+    pub fn get_proxy(&mut self, entity: world::Entity) -> Option<&mut SceneProxy> {
+        self.proxies.get_mut(&entity)
     }
-    pub fn remove_proxy(&mut self, device: &Device, entity: world::Entity) {
-        if let Some(proxy) = self.proxies.remove(&entity) {
-            proxy.destroy(device);
-        }
+    pub fn remove_proxy(&mut self, entity: world::Entity) {
+        self.proxies.remove(&entity);
+    }
+}
+impl Drop for Scene {
+    fn drop(&mut self) {
+        self.proxies.clear();
+        self.ubo.iter().for_each(|ubo| ubo.destroy(&self.device));
+        unsafe {
+            self.device
+                .destroy_descriptor_pool(self.descriptor_pool, None);
+            self.device.destroy_image_view(self.color, None);
+            self.device.destroy_image(self.color_image, None);
+            self.device.free_memory(self.color_memory, None);
+            self.device.destroy_image_view(self.depth, None);
+            self.device.destroy_image(self.depth_image, None);
+            self.device.free_memory(self.depth_memory, None);
+        };
     }
 }
 
@@ -338,12 +336,17 @@ impl Scene {
 /// Owned by [Scene], constructed from [world::components::Renderable] and
 /// [world::components::Transform].
 pub struct SceneProxy {
-    /// The name of the model. Used to request a [crate::model::Model] from the
-    /// renderer at render time.
-    model: model::Model,
+    device: Device,
     /// The model matrix used for rendering. Constructed from the
     /// [world::components::Transform] of the entity.
-    model_matrix: glam::Mat4,
+    model_matrix: Option<glam::Mat4>,
+    /// The name of the model. Used to request a [crate::model::Model] from the
+    /// renderer at render time.
+    model: Option<model::Model>,
+    /// An optional camera that could be attached to the mesh.
+    camera: Option<CameraProxy>,
+
+    // Per frame render stuff
     ubo: [UboData; MAX_FRAMES_IN_FLIGHT],
     sets: [vk::DescriptorSet; MAX_FRAMES_IN_FLIGHT],
 }
@@ -356,14 +359,7 @@ struct ProxyUbo {
 }
 
 impl SceneProxy {
-    pub fn build(
-        renderer: &Renderer,
-        scene: &Scene,
-        model: &model::Model,
-        model_matrix: glam::Mat4,
-    ) -> Result<Self> {
-        let model = model.clone();
-
+    pub fn build(renderer: &Renderer, scene: &Scene) -> Result<Self> {
         let size = size_of::<ProxyUbo>() as u64;
         let ubo: Vec<UboData> = (0..MAX_FRAMES_IN_FLIGHT)
             .map(|_| {
@@ -425,33 +421,41 @@ impl SceneProxy {
                 .update_descriptor_sets(&descriptor_writes, &[])
         };
 
-        let proxy_ubo = ProxyUbo {
-            model: model_matrix,
-        };
-        for ubo in &ubo {
-            ubo.write(&proxy_ubo);
-        }
-
         Ok(Self {
-            model,
-            model_matrix,
+            device: renderer.device.clone(),
+            model: None,
+            model_matrix: None,
+            camera: None,
             ubo,
             sets,
         })
     }
-    fn destroy(&self, device: &Device) {
-        self.ubo.iter().for_each(|ubo| ubo.destroy(device));
+    pub fn set_model(&mut self, model: &model::Model) {
+        self.model = Some(model.clone());
     }
-    fn set_model(&mut self, model: &model::Model) {
-        self.model = model.clone();
+    pub fn set_model_matrix(&mut self, mat: glam::Mat4) {
+        self.model_matrix = Some(mat);
+
+        let proxy_ubo = ProxyUbo { model: mat };
+        for ubo in &self.ubo {
+            ubo.write(&proxy_ubo);
+        }
     }
-    fn set_model_matrix(&mut self, mat: glam::Mat4) {
-        self.model_matrix = mat
+    pub fn set_camera(&mut self, view: glam::Mat4, proj: glam::Mat4) {
+        self.camera = Some(CameraProxy { view, proj })
     }
     fn write_ubo(&self, frame: usize) {
-        let data = ProxyUbo {
-            model: self.model_matrix,
+        let Some(model) = self.model_matrix else {
+            return;
         };
+
+        let data = ProxyUbo { model };
         self.ubo[frame].write(&data);
+    }
+}
+
+impl Drop for SceneProxy {
+    fn drop(&mut self) {
+        self.ubo.iter().for_each(|ubo| ubo.destroy(&self.device));
     }
 }
