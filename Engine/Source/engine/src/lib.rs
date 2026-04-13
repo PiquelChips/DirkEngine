@@ -111,9 +111,22 @@ impl Engine {
             .tick(delta_time, &self.worlds, self.platform.windows_mut())
             .context("renderer")?;
 
-        self.renderer.render().context("render")?;
+        self.render().context("rendering")?;
         Ok(!self.is_requesting_exit())
     }
+    pub fn render(&mut self) -> anyhow::Result<()> {
+        let Some(ref player) = self.player else {
+            return Ok(());
+        };
+
+        self.renderer.render(
+            player.window().unwrap_or(self.platform.main_window().id()),
+            *player.world(),
+            *player.entity(),
+        )?;
+        Ok(())
+    }
+
     pub fn shutdown(&self) -> anyhow::Result<()> {
         info!("engine shutting down");
         Ok(())
