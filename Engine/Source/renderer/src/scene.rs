@@ -245,7 +245,7 @@ impl Scene {
             proxy.write_ubo(frame);
         }
 
-        RenderPass::begin(renderer, cmd, size, view, self.color, self.depth);
+        RenderPass::begin(&renderer.device, cmd, size, view, self.color, self.depth);
         renderer.graphics_pipeline.bind(cmd);
 
         let viewport = vk::Viewport::default()
@@ -301,7 +301,7 @@ impl Scene {
             }
         }
 
-        RenderPass::end(renderer, cmd);
+        RenderPass::end(&renderer.device, cmd);
         Ok(())
     }
     pub fn add_proxy(&mut self, entity: world::Entity, proxy: SceneProxy) -> Result<()> {
