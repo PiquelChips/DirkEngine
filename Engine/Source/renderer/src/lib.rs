@@ -58,6 +58,7 @@ const DEVICE_EXTENSIONS: &[&str] =
 const VALIDATION_LAYERS: &[*const i8] = &[c"VK_LAYER_KHRONOS_validation".as_ptr()];
 
 struct Frame {
+    device: Device,
     /// Command pool to allocate command buffers on every frame
     command_pool: CommandPool<Graphics>,
     /// Main synchronization fence
@@ -68,10 +69,10 @@ struct Frame {
 }
 
 impl Frame {
-    fn destroy(&self, device: &Device) {
+    fn destroy(&self) {
         self.command_pool.destroy();
         unsafe {
-            device.destroy_fence(self.fence, None);
+            self.device.destroy_fence(self.fence, None);
         }
     }
 }
@@ -476,6 +477,7 @@ impl Renderer {
                 };
 
                 Ok(Frame {
+                    device: device.clone(),
                     command_pool,
                     fence,
                 })
@@ -1396,7 +1398,7 @@ impl Drop for Renderer {
         self.scenes.clear();
         self.models.values().for_each(|m| m.destroy(&self.device));
         self.windows.clear();
-        self.frames.iter().for_each(|f| f.destroy(&self.device));
+        self.frames.iter().for_each(|f| f.destroy());
         self.graphics_pipeline.destroy();
         self.layouts.destroy(&self.device);
 
