@@ -799,7 +799,7 @@ impl Renderer {
                 .reset_fences(std::slice::from_ref(&frame.fence))?;
         }
 
-        let cmd = frame.command_pool.allocate_buffer(&self.device)?;
+        let cmd = frame.command_pool.allocate_buffer()?;
 
         unsafe {
             self.device
@@ -1079,7 +1079,7 @@ impl Renderer {
             (mip_levels, vk::SampleCountFlags::TYPE_1),
         )?;
 
-        let cmd = self.graphics_pool.begin_single_time(&self.device)?;
+        let cmd = self.graphics_pool.begin_single_time()?;
 
         self.transition_image_layout(
             &cmd,
@@ -1114,7 +1114,7 @@ impl Renderer {
         }
 
         self.generate_mipmaps(&cmd, image, *tex.width(), *tex.height(), mip_levels)?;
-        cmd.end_and_submit(&self.device)?;
+        cmd.end_and_submit()?;
 
         // TODO: destroy buffer when it is no longer needed (maybe with VMA)
         // currently it is destroyed too early, it is still in use
@@ -1357,7 +1357,7 @@ impl Renderer {
         Ok((device_buf, device_mem))
     }
     fn copy_buffer(&self, src: vk::Buffer, dst: vk::Buffer, size: vk::DeviceSize) -> Result<()> {
-        let cmd = self.transfer_pool.begin_single_time(&self.device)?;
+        let cmd = self.transfer_pool.begin_single_time()?;
 
         let region = vk::BufferCopy {
             src_offset: 0,
@@ -1366,7 +1366,7 @@ impl Renderer {
         };
         unsafe { self.device.cmd_copy_buffer(cmd.raw(), src, dst, &[region]) };
 
-        cmd.end_and_submit(&self.device)?;
+        cmd.end_and_submit()?;
         Ok(())
     }
     fn create_buffer(

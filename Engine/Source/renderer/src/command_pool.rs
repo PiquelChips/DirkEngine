@@ -83,35 +83,28 @@ impl<Type: Pool> CommandPool<Type> {
             self.device.destroy_command_pool(self.pool, None);
         }
     }
-    pub fn allocate_buffer(&self, device: &Device) -> Result<CommandBuffer> {
+    pub fn allocate_buffer(&self) -> Result<CommandBuffer> {
         let allocate_info = vk::CommandBufferAllocateInfo::default()
             .command_pool(self.pool)
             .level(vk::CommandBufferLevel::PRIMARY)
             .command_buffer_count(1);
-        let buff = unsafe { device.allocate_command_buffers(&allocate_info)?[0] };
+        let buff = unsafe { self.device.allocate_command_buffers(&allocate_info)?[0] };
 
         Ok(CommandBuffer {
+            device: self.device.clone(),
             buff,
             queue: self.queue,
         })
     }
 
-    pub fn begin_single_time(&self, device: &Device) -> Result<CommandBuffer> {
-        let alloc_info = vk::CommandBufferAllocateInfo::default()
-            .command_pool(self.pool)
-            .level(vk::CommandBufferLevel::PRIMARY)
-            .command_buffer_count(1);
-
-        let buff = unsafe { device.allocate_command_buffers(&alloc_info)?[0] };
+    pub fn begin_single_time(&self) -> Result<CommandBuffer> {
+        let buff = self.allocate_buffer()?;
 
         let begin_info = vk::CommandBufferBeginInfo::default()
             .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
 
-        unsafe { device.begin_command_buffer(buff, &begin_info)? };
-        Ok(CommandBuffer {
-            buff,
-            queue: self.queue,
-        })
+        unsafe { self.device.begin_command_buffer(buff.raw(), &begin_info)? };
+        Ok(buff)
     }
 }
 
@@ -123,6 +116,7 @@ impl<Type: Pool> Drop for CommandPool<Type> {
 
 /// Wrapper for [vk::CommandBuffer].
 pub struct CommandBuffer {
+    device: Device,
     /// The buffer
     buff: vk::CommandBuffer,
     /// The queue to submit to
@@ -133,22 +127,19 @@ impl CommandBuffer {
     pub fn raw(&self) -> vk::CommandBuffer {
         self.buff
     }
-    pub fn submit(
-        &self,
-        device: &Device,
-        submit_info: vk::SubmitInfo,
-        fence: vk::Fence,
-    ) -> Result<()> {
-        unsafe { device.queue_submit(self.queue, std::slice::from_ref(&submit_info), fence)? };
-        Ok(())
-    }
-    pub fn end_and_submit(&self, device: &Device) -> Result<()> {
-        let info = vk::SubmitInfo::default().command_buffers(std::slice::from_ref(&self.buff));
+    pub fn submit(&self, submit_info: vk::SubmitInfo, fence: vk::Fence) -> Result<()> {
         unsafe {
-            device.end_command_buffer(self.buff)?;
-            device.queue_submit(self.queue, std::slice::from_ref(&info), vk::Fence::null())?;
+            self.device
+                .queue_submit(self.queue, std::slice::from_ref(&submit_info), fence)?
         };
         Ok(())
+    }
+    pub fn end_and_submit(&self) -> Result<()> {
+        let info = vk::SubmitInfo::default().command_buffers(std::slice::from_ref(&self.buff));
+        unsafe {
+            self.device.end_command_buffer(self.buff)?;
+        };
+        self.submit(info, vk::Fence::null())
     }
 }
 
