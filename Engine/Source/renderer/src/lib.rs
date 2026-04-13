@@ -1441,9 +1441,7 @@ impl Drop for Renderer {
         }
         info!("cleaning up renderer");
 
-        self.scenes
-            .iter()
-            .for_each(|(_, s)| s.destroy(&self.device));
+        self.scenes.clear();
         self.models.values().for_each(|m| m.destroy(&self.device));
         self.windows
             .values()
