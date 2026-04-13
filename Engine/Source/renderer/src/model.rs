@@ -12,10 +12,20 @@ pub struct Model {
     pub material_sets: Vec<vk::DescriptorSet>,
 }
 
+impl Model {
+    pub fn destroy(&self, device: &Device) {
+        for prim in &self.primitives {
+            prim.destroy(device);
+        }
+        for tex in &self.textures {
+            tex.destroy(device);
+        }
+    }
+}
+
 /// All GPU-side handles for a single texture.
 #[derive(Clone)]
 pub struct Texture {
-    pub device: Device,
     pub image: vk::Image,
     pub memory: vk::DeviceMemory,
     pub view: vk::ImageView,
@@ -23,13 +33,13 @@ pub struct Texture {
     pub mip_levels: u32,
 }
 
-impl Drop for Texture {
-    fn drop(&mut self) {
+impl Texture {
+    fn destroy(&self, device: &Device) {
         unsafe {
-            self.device.destroy_sampler(self.sampler, None);
-            self.device.destroy_image_view(self.view, None);
-            self.device.destroy_image(self.image, None);
-            self.device.free_memory(self.memory, None);
+            device.destroy_sampler(self.sampler, None);
+            device.destroy_image_view(self.view, None);
+            device.destroy_image(self.image, None);
+            device.free_memory(self.memory, None);
         }
     }
 }
@@ -37,7 +47,6 @@ impl Drop for Texture {
 /// GPU-side handles for a single glTF primitive.
 #[derive(Clone)]
 pub struct Primitive {
-    pub device: Device,
     pub vertex_buffer: vk::Buffer,
     pub vertex_buffer_memory: vk::DeviceMemory,
     pub index_buffer: vk::Buffer,
@@ -46,13 +55,13 @@ pub struct Primitive {
     pub material: Option<usize>,
 }
 
-impl Drop for Primitive {
-    fn drop(&mut self) {
+impl Primitive {
+    fn destroy(&self, device: &Device) {
         unsafe {
-            self.device.destroy_buffer(self.vertex_buffer, None);
-            self.device.free_memory(self.vertex_buffer_memory, None);
-            self.device.destroy_buffer(self.index_buffer, None);
-            self.device.free_memory(self.index_buffer_memory, None);
+            device.destroy_buffer(self.vertex_buffer, None);
+            device.free_memory(self.vertex_buffer_memory, None);
+            device.destroy_buffer(self.index_buffer, None);
+            device.free_memory(self.index_buffer_memory, None);
         }
     }
 }

@@ -98,8 +98,8 @@ const DEVICE_EXTENSIONS: &[&str] =
 #[cfg(validation)]
 const VALIDATION_LAYERS: &[*const i8] = &[c"VK_LAYER_KHRONOS_validation".as_ptr()];
 
+#[derive(Debug)]
 struct Frame {
-    device: Device,
     /// Command pool to allocate command buffers on every frame
     command_pool: CommandPool<Graphics>,
     /// Main synchronization fence
@@ -110,17 +110,11 @@ struct Frame {
 }
 
 impl Frame {
-    fn destroy(&self) {
-        self.command_pool.destroy();
+    fn destroy(&self, device: &Device) {
+        self.command_pool.destroy(device);
         unsafe {
-            self.device.destroy_fence(self.fence, None);
+            device.destroy_fence(self.fence, None);
         }
-    }
-}
-
-impl Drop for Frame {
-    fn drop(&mut self) {
-        self.destroy();
     }
 }
 
@@ -131,7 +125,6 @@ impl Drop for Frame {
 /// propper comment explain what the layout is and where
 /// it is used.
 struct DescriptorLayouts {
-    device: Device,
     // TODO: much better comments for descriptor set layouts
     /// Per scene layout. Holds view & proj matrices for rendering.
     scene: vk::DescriptorSetLayout,
@@ -141,19 +134,12 @@ struct DescriptorLayouts {
     material: vk::DescriptorSetLayout,
 }
 
-impl Drop for DescriptorLayouts {
-    fn drop(&mut self) {
-        self.destroy();
-    }
-}
-
 impl DescriptorLayouts {
-    fn destroy(&self) {
+    fn destroy(&self, device: &Device) {
         unsafe {
-            self.device.destroy_descriptor_set_layout(self.scene, None);
-            self.device.destroy_descriptor_set_layout(self.object, None);
-            self.device
-                .destroy_descriptor_set_layout(self.material, None);
+            device.destroy_descriptor_set_layout(self.scene, None);
+            device.destroy_descriptor_set_layout(self.object, None);
+            device.destroy_descriptor_set_layout(self.material, None);
         }
     }
 }
@@ -532,19 +518,15 @@ impl Renderer {
                 };
 
                 Ok(Frame {
-                    device: device.clone(),
                     command_pool,
                     fence,
                 })
             })
             .collect();
-        let frames: [Frame; MAX_FRAMES_IN_FLIGHT] = frames?
-            .try_into()
-            .unwrap_or_else(|_| panic!("cannot convert frames to array"));
+        let frames: [Frame; MAX_FRAMES_IN_FLIGHT] = frames?.try_into().unwrap();
 
         // LAYOUTS
         let layouts = DescriptorLayouts {
-            device: device.clone(),
             scene: {
                 let binding = vk::DescriptorSetLayoutBinding::default()
                     .binding(0)
@@ -745,10 +727,14 @@ impl Renderer {
                 }
                 PlatformEvent::WindowDestroyed { id } => {
                     // in case the window was not destroyed by WindowCloseRequested
-                    self.windows.remove(&id);
+                    if let Some(window) = self.windows.remove(&id) {
+                        window.destroy(&self.device, &self.surface_loader, &self.swapchain_loader);
+                    }
                 }
                 PlatformEvent::WindowCloseRequested { id } => {
-                    self.windows.remove(&id);
+                    if let Some(window) = self.windows.remove(&id) {
+                        window.destroy(&self.device, &self.surface_loader, &self.swapchain_loader);
+                    }
                 }
             }
         }
@@ -769,7 +755,7 @@ impl Renderer {
                     let Some(window) = self.windows.get_mut(&id) else {
                         continue;
                     };
-                    window.update_swapcahin(swapchain, extent, images);
+                    window.update_swapcahin(&self.device, swapchain, extent, images);
                 }
                 WindowEvent::Occluded { id, occluded } => {
                     let Some(window) = self.windows.get_mut(&id) else {
@@ -1049,7 +1035,6 @@ impl Renderer {
             self.upload_slice(prim.indices(), vk::BufferUsageFlags::INDEX_BUFFER)?;
 
         Ok(Primitive {
-            device: self.device.clone(),
             vertex_buffer,
             vertex_buffer_memory,
             index_buffer,
@@ -1142,7 +1127,6 @@ impl Renderer {
         let sampler = self.create_sampler(mip_levels)?;
 
         Ok(Texture {
-            device: self.device.clone(),
             image,
             memory,
             view,
@@ -1454,14 +1438,16 @@ impl Drop for Renderer {
         info!("cleaning up renderer");
 
         self.scenes.clear();
-        self.models.clear();
-        self.windows.clear();
-        self.frames.iter().for_each(|f| f.destroy());
-        self.graphics_pipeline.destroy();
-        self.layouts.destroy();
+        self.models.values().for_each(|m| m.destroy(&self.device));
+        self.windows
+            .values()
+            .for_each(|w| w.destroy(&self.device, &self.surface_loader, &self.swapchain_loader));
+        self.frames.iter().for_each(|f| f.destroy(&self.device));
+        self.graphics_pipeline.destroy(&self.device);
+        self.layouts.destroy(&self.device);
 
-        self.graphics_pool.destroy();
-        self.transfer_pool.destroy();
+        self.graphics_pool.destroy(&self.device);
+        self.transfer_pool.destroy(&self.device);
         unsafe {
             self.device
                 .destroy_descriptor_pool(self.material_descriptor_pool, None);
