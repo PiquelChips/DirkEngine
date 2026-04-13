@@ -884,8 +884,6 @@ impl Renderer {
         let swapchain = unsafe { self.swapchain_loader.create_swapchain(&create_info, None)? };
         let images = unsafe { self.swapchain_loader.get_swapchain_images(swapchain)? };
 
-        unsafe { self.swapchain_loader.destroy_swapchain(old_swapchain, None) };
-
         let swap_images = images
             .into_iter()
             .map(|image| {
@@ -898,6 +896,8 @@ impl Renderer {
                 Ok(window::SwapchainImage { image, view })
             })
             .collect::<Result<Vec<_>>>()?;
+
+        unsafe { self.swapchain_loader.destroy_swapchain(old_swapchain, None) };
 
         Ok((swapchain, extent, swap_images))
     }
