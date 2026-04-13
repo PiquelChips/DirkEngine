@@ -159,7 +159,7 @@ impl ApplicationHandler for PlatformHandler {
             WindowEvent::PointerMoved { position, .. } => {
                 trace!("Pointer moved to {position:?}");
                 self.input_dispatch
-                    .dispatch(InputEvent::PointerMoved { id, position });
+                    .dispatch(InputEvent::PointerMoved { id, position: glam::dvec2(position.x, position.y) });
             }
             WindowEvent::PointerEntered { .. } => {
                 trace!("Pointer entered Window={id:?}");
@@ -181,14 +181,14 @@ impl ApplicationHandler for PlatformHandler {
                         self.input_dispatch.dispatch(InputEvent::MouseButtonPressed {
                             id,
                             button,
-                            position,
+                            position: glam::dvec2(position.x, position.y),
                         });
                     }
                     ElementState::Released => {
                         self.input_dispatch.dispatch(InputEvent::MouseButtonReleased {
                             id,
                             button,
-                            position,
+                            position: glam::dvec2(position.x, position.y),
                         });
                     }
                 }

@@ -8,6 +8,7 @@ pub struct InputManager {
 
 impl InputManager {
     pub fn init(event_manager: &mut events::EventManager) -> Self {
+        let pos= glam::Vec2;
         Self {
             consumer: event_manager.subscribe(),
         }

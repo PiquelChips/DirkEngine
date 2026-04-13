@@ -1127,6 +1127,7 @@ dependencies = [
  "anyhow",
  "build",
  "events",
+ "glam",
  "macros",
  "thiserror 2.0.18",
  "tracing",

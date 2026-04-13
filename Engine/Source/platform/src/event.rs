@@ -1,7 +1,6 @@
 use events::Event;
 use macros::Event;
 use winit::{
-    dpi::PhysicalPosition,
     event::{ButtonSource, MouseScrollDelta},
     keyboard::{Key, ModifiersState, PhysicalKey},
     window::WindowId,
@@ -102,10 +101,7 @@ pub enum InputEvent {
         modifiers: ModifiersState,
     },
     /// The pointer moved inside the window.
-    PointerMoved {
-        id: WindowId,
-        position: PhysicalPosition<f64>,
-    },
+    PointerMoved { id: WindowId, position: glam::DVec2 },
     /// The pointer entered the window area.
     PointerEntered { id: WindowId },
     /// The pointer left the window area.
@@ -114,13 +110,13 @@ pub enum InputEvent {
     MouseButtonPressed {
         id: WindowId,
         button: ButtonSource,
-        position: PhysicalPosition<f64>,
+        position: glam::DVec2,
     },
     /// A mouse/pointer button was released.
     MouseButtonReleased {
         id: WindowId,
         button: ButtonSource,
-        position: PhysicalPosition<f64>,
+        position: glam::DVec2,
     },
     /// The scroll wheel or trackpad was scrolled.
     MouseWheelScrolled { id: WindowId, delta: ScrollDelta },
