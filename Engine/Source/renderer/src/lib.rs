@@ -14,6 +14,7 @@ use ash::{
     khr::{surface, swapchain},
     vk,
 };
+use gpu_allocator::vulkan::{Allocator, AllocatorCreateDesc};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use tracing::{debug, info};
 #[cfg(validation)]
@@ -135,6 +136,7 @@ pub struct RendererProperties {
 /// all rendering operations
 pub struct Renderer {
     entry: Entry,
+    allocator: Allocator,
 
     // Renderer Resources
     instance: Instance,
@@ -447,6 +449,15 @@ impl Renderer {
             unsafe { instance.create_device(physical_device, &device_create_info, None)? }
         };
 
+        let allocator = Allocator::new(&AllocatorCreateDesc {
+            instance: instance.clone(),
+            device: device.clone(),
+            physical_device,
+            debug_settings: Default::default(),
+            buffer_device_address: true,
+            allocation_sizes: Default::default(),
+        })?;
+
         // QUEUES
         let queues = {
             let indices = &properties.queue_family_indices;
@@ -564,6 +575,7 @@ impl Renderer {
 
         Ok(Self {
             entry,
+            allocator,
             instance,
             device,
             queues,
