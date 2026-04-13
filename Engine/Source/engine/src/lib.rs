@@ -145,7 +145,7 @@ impl Engine {
             player,
             components::Transform {
                 location: glam::vec3(0., 1000., 1000.),
-                rotation: glam::vec3(0., PI / 2., PI / 2.),
+                rotation: glam::vec3(-PI / 4., 0., 0.),
                 scale: glam::Vec3::splat(1.),
             },
         );
