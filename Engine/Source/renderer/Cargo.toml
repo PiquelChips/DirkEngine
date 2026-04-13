@@ -1,5 +1,5 @@
 [package]
-name = "engine"
+name = "renderer"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -7,17 +7,21 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
-anyhow.workspace = true
-thiserror.workspace = true
-derive-getters.workspace = true
 tracing.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
 
-logging.workspace = true
 utils.workspace = true
-events.workspace = true
 platform.workspace = true
-renderer.workspace = true
-world.workspace = true
 resource_manager.workspace = true
+world.workspace = true
+shaders.workspace = true
+events.workspace = true
 
+ash.workspace = true
+ash-window.workspace = true
+raw-window-handle.workspace = true
 glam.workspace = true
+
+[build-dependencies]
+build.workspace = true

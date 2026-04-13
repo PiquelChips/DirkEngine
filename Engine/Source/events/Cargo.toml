@@ -8,3 +8,5 @@ version.workspace = true
 
 [dependencies]
 macros.workspace = true
+
+tracing.workspace = true

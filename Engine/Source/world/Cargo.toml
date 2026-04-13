@@ -8,5 +8,8 @@ version.workspace = true
 
 [dependencies]
 glam.workspace = true
+tracing.workspace = true
 
+macros.workspace = true
+events.workspace = true
 utils.workspace = true

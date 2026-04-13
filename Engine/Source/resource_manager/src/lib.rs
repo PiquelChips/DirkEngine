@@ -21,6 +21,8 @@ const MODELS_PATH: &str = env!("MODELS_PATH");
 /// Internal representation of a model loaded from a gltf model.
 #[derive(derive_getters::Getters)]
 pub struct Model {
+    /// The name of the model. Derived from the file name.
+    name: String,
     meshes: Vec<Mesh>,
     textures: Vec<Texture>,
     materials: Vec<Material>,
@@ -59,7 +61,7 @@ pub struct Texture {
 }
 
 /// A material. Stores indices into the model's textures array.
-#[derive(derive_getters::Getters)]
+#[derive(derive_getters::Getters, Clone)]
 pub struct Material {
     /// An optional index into the model's textures array.
     base_color_texture: Option<usize>,
@@ -105,6 +107,7 @@ impl ResourceManager {
             .collect();
 
         Ok(Model {
+            name: name.to_string(),
             meshes,
             textures,
             materials,

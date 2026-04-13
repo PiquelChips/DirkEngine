@@ -10,6 +10,8 @@ members = [
     "Engine/Source/platform",
     "Engine/Source/run",
     "Engine/Source/resource_manager",
+    "Engine/Source/utils",
+    "Engine/Source/renderer",
     "Engine/Source/world",
     "Engine/Shaders"
 ]
@@ -41,12 +43,16 @@ engine = { path = "Engine/Source/engine" }
 events = { path = "Engine/Source/events" }
 macros = { path = "Engine/Source/macros" }
 platform = { path = "Engine/Source/platform" }
+renderer = { path = "Engine/Source/renderer" }
 resource_manager = { path = "Engine/Source/resource_manager" }
 world = { path = "Engine/Source/world" }
 shaders = { path = "Engine/Shaders" }
 
 # Main Engine Dependencies
 winit = "0.31.0-beta.2"
+ash = { version = "0.38", features = ["loaded"] }
+ash-window = "0.13"
+raw-window-handle = "0.6"
 glam = "0.32"
 gltf = "1"
 shaderc = "0.10"
