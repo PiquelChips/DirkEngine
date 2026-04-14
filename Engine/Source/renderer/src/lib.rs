@@ -436,6 +436,8 @@ impl Renderer {
 
             let physical_device_features =
                 vk::PhysicalDeviceFeatures::default().sampler_anisotropy(true);
+            let mut vulkan12_features =
+                vk::PhysicalDeviceVulkan12Features::default().buffer_device_address(true);
             let mut vulkan13_features =
                 vk::PhysicalDeviceVulkan13Features::default().dynamic_rendering(true);
 
@@ -447,6 +449,7 @@ impl Renderer {
                 .queue_create_infos(&queue_create_infos)
                 .enabled_features(&physical_device_features)
                 .enabled_extension_names(&extensions)
+                .push_next(&mut vulkan12_features)
                 .push_next(&mut vulkan13_features);
 
             unsafe { instance.create_device(physical_device, &device_create_info, None)? }
