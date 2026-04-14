@@ -52,6 +52,7 @@ mod image;
 use image::Image;
 
 mod physical_device;
+mod pipeline;
 mod render_pass;
 
 /// The maximum numer of renderables in a scene.

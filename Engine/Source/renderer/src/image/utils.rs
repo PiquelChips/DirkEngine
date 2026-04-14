@@ -3,6 +3,10 @@ use ash::vk;
 use crate::{Result, command_pool::CommandBuffer, image::Image};
 
 impl Image {
+    pub fn mip_levels(width: u32, height: u32) -> u32 {
+        // How many times can we halve the larger dimension before hitting 1px?
+        u32::BITS - width.max(height).leading_zeros()
+    }
     pub fn generate_mipmaps(
         &self,
         cmd: &CommandBuffer,

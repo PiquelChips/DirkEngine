@@ -214,10 +214,6 @@ impl Image {
 
         Ok(unsafe { renderer.device.create_image_view(&create_info, None)? })
     }
-    fn mip_levels(width: u32, height: u32) -> u32 {
-        // How many times can we halve the larger dimension before hitting 1px?
-        u32::BITS - width.max(height).leading_zeros()
-    }
 }
 
 impl Drop for Image {
