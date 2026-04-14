@@ -33,27 +33,23 @@ use ::utils::*;
 mod errors;
 pub use errors::{Error, Result};
 
-mod model;
-use model::*;
-
 mod scene;
 use scene::{Scene, SceneProxy};
 
 mod window;
 use window::Window;
 
-mod command_pool;
-use command_pool::{CommandPool, Graphics, Transfer};
+use resources::*;
 
-mod buffer;
 use buffer::{IndexBuffer, VertexBuffer};
-
-mod image;
+use command_pool::{CommandPool, Graphics, Transfer};
 use image::Image;
+use model::*;
 
 mod physical_device;
 mod pipeline;
 mod render_pass;
+mod resources;
 
 /// The maximum numer of renderables in a scene.
 /// Used to construct Ubo samples.
