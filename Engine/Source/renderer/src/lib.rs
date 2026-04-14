@@ -48,6 +48,9 @@ use pipeline::GraphicsPipeline;
 mod command_pool;
 use command_pool::{CommandBuffer, CommandPool, Graphics, Transfer};
 
+mod buffer;
+use buffer::{CustomBuffer, IndexBuffer, VertexBuffer};
+
 mod layouts;
 mod physical_device;
 mod render_pass;
@@ -1002,17 +1005,12 @@ impl Renderer {
             })
             .collect();
 
-        let (vertex_buffer, vertex_buffer_alloc) =
-            self.upload_slice(&vertices, vk::BufferUsageFlags::VERTEX_BUFFER)?;
-
-        let (index_buffer, index_buffer_alloc) =
-            self.upload_slice(prim.indices(), vk::BufferUsageFlags::INDEX_BUFFER)?;
+        let vertex_buffer = VertexBuffer::upload_slice(self, &vertices)?;
+        let index_buffer = IndexBuffer::upload_slice(self, prim.indices())?;
 
         Ok(Primitive {
             vertex_buffer,
-            vertex_buffer_alloc: Some(vertex_buffer_alloc),
             index_buffer,
-            index_buffer_alloc: Some(index_buffer_alloc),
             index_count: prim.indices().len() as u32,
             material: *prim.material(),
         })
@@ -1022,14 +1020,15 @@ impl Renderer {
         let size = (tex.pixels().len()) as vk::DeviceSize;
         let format = vk::Format::R8G8B8A8_SRGB;
 
-        let (staging_buf, staging_alloc) = self.create_buffer(
+        let staging_buf = CustomBuffer::create_custom(
+            self,
             size,
             vk::BufferUsageFlags::TRANSFER_SRC,
             MemoryLocation::CpuToGpu,
         )?;
 
         unsafe {
-            let ptr = staging_alloc.mapped_ptr().unwrap().as_ptr() as *mut u8;
+            let ptr = staging_buf.mapped().unwrap().as_ptr() as *mut u8;
             ptr.copy_from_nonoverlapping(tex.pixels().as_ptr(), tex.pixels().len());
         }
 
@@ -1075,7 +1074,7 @@ impl Renderer {
         unsafe {
             self.device.cmd_copy_buffer_to_image(
                 cmd.raw(),
-                staging_buf,
+                staging_buf.buffer(),
                 image,
                 vk::ImageLayout::TRANSFER_DST_OPTIMAL,
                 &[region],
@@ -1287,85 +1286,6 @@ impl Renderer {
             .unnormalized_coordinates(false);
 
         Ok(unsafe { self.device.create_sampler(&sampler_info, None)? })
-    }
-
-    // BUFFER UTILITIES
-
-    fn upload_slice<T: Copy>(
-        &mut self,
-        data: &[T],
-        usage: vk::BufferUsageFlags,
-    ) -> Result<(vk::Buffer, Allocation)> {
-        let size = std::mem::size_of_val(data) as vk::DeviceSize;
-
-        let (staging_buf, staging_alloc) = self.create_buffer(
-            size,
-            vk::BufferUsageFlags::TRANSFER_SRC,
-            MemoryLocation::CpuToGpu,
-        )?;
-
-        unsafe {
-            let ptr = staging_alloc.mapped_ptr().unwrap().as_ptr() as *mut T;
-            ptr.copy_from_nonoverlapping(data.as_ptr(), data.len());
-        }
-
-        let (device_buf, device_alloc) = self.create_buffer(
-            size,
-            vk::BufferUsageFlags::TRANSFER_DST | usage,
-            MemoryLocation::GpuOnly,
-        )?;
-
-        self.copy_buffer(staging_buf, device_buf, size)?;
-        // TODO: destroy buffer when it is no longer needed (maybe with VMA)
-        // currently it is destroyed too early, it is still in use
-        // unsafe {
-        //     self.device.destroy_buffer(staging_buf, None);
-        //     self.device.free_memory(staging_mem, None);
-        // }
-
-        Ok((device_buf, device_alloc))
-    }
-    fn copy_buffer(&self, src: vk::Buffer, dst: vk::Buffer, size: vk::DeviceSize) -> Result<()> {
-        let cmd = self.transfer_pool.begin_single_time()?;
-
-        let region = vk::BufferCopy {
-            src_offset: 0,
-            dst_offset: 0,
-            size,
-        };
-        unsafe { self.device.cmd_copy_buffer(cmd.raw(), src, dst, &[region]) };
-
-        cmd.end_and_submit()?;
-        Ok(())
-    }
-    fn create_buffer(
-        &mut self,
-        size: vk::DeviceSize,
-        usage: vk::BufferUsageFlags,
-        location: MemoryLocation,
-    ) -> Result<(vk::Buffer, Allocation)> {
-        let buffer_info = vk::BufferCreateInfo::default()
-            .size(size)
-            .usage(usage)
-            .sharing_mode(vk::SharingMode::EXCLUSIVE);
-
-        let buffer = unsafe { self.device.create_buffer(&buffer_info, None)? };
-        let requirements = unsafe { self.device.get_buffer_memory_requirements(buffer) };
-
-        let allocation = self.allocator.allocate(&AllocationCreateDesc {
-            name: "buffer",
-            requirements,
-            location,
-            linear: true, // buffers are always linear
-            allocation_scheme: gpu_allocator::vulkan::AllocationScheme::GpuAllocatorManaged,
-        })?;
-
-        unsafe {
-            self.device
-                .bind_buffer_memory(buffer, allocation.memory(), allocation.offset())?
-        };
-
-        Ok((buffer, allocation))
     }
 
     // EXTRA UTILS

@@ -8,43 +8,9 @@ use gpu_allocator::{
 use world::WorldId;
 
 use crate::{
-    Error, MAX_FRAMES_IN_FLIGHT, MAX_RENDERABLES, Renderer, Result, command_pool::CommandBuffer,
-    render_pass::RenderPass,
+    Error, MAX_FRAMES_IN_FLIGHT, MAX_RENDERABLES, Renderer, Result, buffer::UniformBuffer,
+    command_pool::CommandBuffer, render_pass::RenderPass,
 };
-
-#[derive(Debug)]
-struct UboData {
-    buffer: vk::Buffer,
-    alloc: Option<Allocation>,
-}
-
-impl UboData {
-    fn destroy(&mut self, device: &Device, allocator: &mut Allocator) {
-        if let Some(alloc) = self.alloc.take() {
-            allocator.free(alloc).unwrap();
-        }
-        unsafe {
-            device.destroy_buffer(self.buffer, None);
-        }
-    }
-
-    /// Copies `data` into the persistently-mapped host-visible memory.
-    ///
-    /// # Safety
-    /// The mapped pointer must be valid and the allocation must cover at least
-    /// `size_of::<T>()` bytes — both invariants are guaranteed by every
-    /// `UboData` constructed in this module.
-    unsafe fn write<T: Copy>(&self, data: &T) {
-        let Some(alloc) = &self.alloc else {
-            return;
-        };
-        let ptr = alloc
-            .mapped_ptr()
-            .expect("UBO allocation must be host-visible")
-            .as_ptr() as *mut u8;
-        unsafe { std::ptr::copy_nonoverlapping(data as *const T as *const u8, ptr, size_of::<T>()) }
-    }
-}
 
 /// This scene is created from a [world::World].
 /// It should then be updated whenever the world is updated.
@@ -58,7 +24,7 @@ pub struct Scene {
     proxies: HashMap<world::Entity, SceneProxy>,
 
     descriptor_pool: vk::DescriptorPool,
-    ubo: [UboData; MAX_FRAMES_IN_FLIGHT],
+    ubo: [UniformBuffer; MAX_FRAMES_IN_FLIGHT],
     descriptor_sets: [vk::DescriptorSet; MAX_FRAMES_IN_FLIGHT],
 
     color: vk::ImageView,
@@ -122,27 +88,14 @@ impl Scene {
                 .unwrap()
         };
 
-        let ubo: Vec<UboData> = (0..MAX_FRAMES_IN_FLIGHT)
-            .map(|_| {
-                let size = size_of::<SceneUbo>() as u64;
-                let (buffer, alloc) = renderer.create_buffer(
-                    size,
-                    vk::BufferUsageFlags::UNIFORM_BUFFER,
-                    MemoryLocation::CpuToGpu,
-                )?;
-
-                Ok(UboData {
-                    buffer,
-                    alloc: Some(alloc),
-                })
-            })
-            .collect::<Result<Vec<_>>>()?;
-        let ubo: [UboData; MAX_FRAMES_IN_FLIGHT] = ubo.try_into().unwrap();
+        let ubo_size = size_of::<SceneUbo>() as u64;
+        let mut build_ubo = || UniformBuffer::create(renderer, ubo_size, MemoryLocation::CpuToGpu);
+        let ubo = [build_ubo()?, build_ubo()?];
 
         let buffer_infos: [vk::DescriptorBufferInfo; MAX_FRAMES_IN_FLIGHT] =
             std::array::from_fn(|i| {
                 vk::DescriptorBufferInfo::default()
-                    .buffer(ubo[i].buffer)
+                    .buffer(ubo[i].buffer())
                     .range(size_of::<SceneUbo>() as u64)
                     .offset(0)
             });
@@ -291,10 +244,15 @@ impl Scene {
                         &descriptor_sets,
                         &[],
                     );
-                    device.cmd_bind_vertex_buffers(cmd.raw(), 0, &[prim.vertex_buffer], &[0]);
+                    device.cmd_bind_vertex_buffers(
+                        cmd.raw(),
+                        0,
+                        &[prim.vertex_buffer.buffer()],
+                        &[0],
+                    );
                     device.cmd_bind_index_buffer(
                         cmd.raw(),
-                        prim.index_buffer,
+                        prim.index_buffer.buffer(),
                         0,
                         vk::IndexType::UINT32,
                     );
@@ -318,10 +276,6 @@ impl Scene {
     }
 
     pub fn destroy(&mut self, allocator: &mut Allocator) {
-        self.proxies.values_mut().for_each(|p| p.destroy(allocator));
-        self.ubo
-            .iter_mut()
-            .for_each(|ubo| ubo.destroy(&self.device, allocator));
         unsafe {
             self.device
                 .destroy_descriptor_pool(self.descriptor_pool, None);
@@ -344,7 +298,6 @@ impl Scene {
 /// Owned by [Scene], constructed from [world::components::Renderable] and
 /// [world::components::Transform].
 pub struct SceneProxy {
-    device: Device,
     /// The model matrix used for rendering. Constructed from the
     /// [world::components::Transform] of the entity.
     model_matrix: Option<glam::Mat4>,
@@ -355,7 +308,7 @@ pub struct SceneProxy {
     camera: Option<CameraProxy>,
 
     // Per frame render stuff
-    ubo: [UboData; MAX_FRAMES_IN_FLIGHT],
+    ubo: [UniformBuffer; MAX_FRAMES_IN_FLIGHT],
     sets: [vk::DescriptorSet; MAX_FRAMES_IN_FLIGHT],
 }
 
@@ -369,21 +322,8 @@ struct ProxyUbo {
 impl SceneProxy {
     pub fn build(renderer: &mut Renderer, world: WorldId) -> Result<Self> {
         let size = size_of::<ProxyUbo>() as u64;
-        let ubo: Vec<UboData> = (0..MAX_FRAMES_IN_FLIGHT)
-            .map(|_| {
-                let (buffer, alloc) = renderer.create_buffer(
-                    size,
-                    vk::BufferUsageFlags::UNIFORM_BUFFER,
-                    MemoryLocation::CpuToGpu,
-                )?;
-
-                Ok(UboData {
-                    buffer,
-                    alloc: Some(alloc),
-                })
-            })
-            .collect::<Result<Vec<_>>>()?;
-        let ubo: [UboData; MAX_FRAMES_IN_FLIGHT] = ubo.try_into().unwrap();
+        let mut build_ubo = || UniformBuffer::create(renderer, size, MemoryLocation::CpuToGpu);
+        let ubo = [build_ubo()?, build_ubo()?];
 
         let Some(scene) = renderer.scenes.get(&world) else {
             return Err(Error::WorldDoesNotExist(world));
@@ -406,7 +346,7 @@ impl SceneProxy {
         let buffer_infos: [vk::DescriptorBufferInfo; MAX_FRAMES_IN_FLIGHT] =
             std::array::from_fn(|i| {
                 vk::DescriptorBufferInfo::default()
-                    .buffer(ubo[i].buffer)
+                    .buffer(ubo[i].buffer())
                     .range(size)
                     .offset(0)
             });
@@ -427,7 +367,6 @@ impl SceneProxy {
         };
 
         Ok(Self {
-            device: renderer.device.clone(),
             model: None,
             model_matrix: None,
             camera: None,
@@ -456,11 +395,5 @@ impl SceneProxy {
 
         let data = ProxyUbo { model };
         unsafe { self.ubo[frame].write(&data) };
-    }
-
-    fn destroy(&mut self, allocator: &mut Allocator) {
-        self.ubo
-            .iter_mut()
-            .for_each(|ubo| ubo.destroy(&self.device, allocator));
     }
 }

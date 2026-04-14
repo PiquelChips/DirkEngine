@@ -1,6 +1,8 @@
 use ash::{Device, vk};
 use gpu_allocator::vulkan::{Allocation, Allocator};
 
+use crate::buffer::{IndexBuffer, VertexBuffer};
+
 /// Complete GPU model.
 pub struct Model {
     pub name: String,
@@ -14,9 +16,6 @@ pub struct Model {
 
 impl Model {
     pub fn destroy(&mut self, device: &Device, allocator: &mut Allocator) {
-        for prim in &mut self.primitives {
-            prim.destroy(device, allocator);
-        }
         for tex in &mut self.textures {
             tex.destroy(device, allocator);
         }
@@ -48,25 +47,8 @@ impl Texture {
 
 /// GPU-side handles for a single glTF primitive.
 pub struct Primitive {
-    pub vertex_buffer: vk::Buffer,
-    pub vertex_buffer_alloc: Option<Allocation>,
-    pub index_buffer: vk::Buffer,
-    pub index_buffer_alloc: Option<Allocation>,
+    pub vertex_buffer: VertexBuffer,
+    pub index_buffer: IndexBuffer,
     pub index_count: u32,
     pub material: Option<usize>,
-}
-
-impl Primitive {
-    fn destroy(&mut self, device: &Device, allocator: &mut Allocator) {
-        if let Some(alloc) = self.vertex_buffer_alloc.take() {
-            allocator.free(alloc).unwrap();
-        }
-        if let Some(alloc) = self.index_buffer_alloc.take() {
-            allocator.free(alloc).unwrap();
-        }
-        unsafe {
-            device.destroy_buffer(self.vertex_buffer, None);
-            device.destroy_buffer(self.index_buffer, None);
-        }
-    }
 }
