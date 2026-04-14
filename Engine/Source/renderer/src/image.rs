@@ -9,15 +9,18 @@ use gpu_allocator::{
     vulkan::{Allocation, AllocationCreateDesc},
 };
 
-use crate::{Renderer, Result, buffer::CustomBuffer, model::Texture};
+use crate::{Renderer, Result, buffer::CustomBuffer, command_pool::CommandBuffer, model::Texture};
 
 /// An abstraction around vulkan windows.
 pub struct Image {
     device: Device,
     image: vk::Image,
     view: vk::ImageView,
+    /// Wether to destroy the image on [Drop]. This is only
+    /// disabled for [SwapchainImage].
+    destroy_image: bool,
     #[allow(unused)]
-    allocation: Allocation,
+    allocation: Option<Allocation>,
     // TODO: store internal format for use in transition image layout
     // TODO: store current queue?
 }
@@ -79,7 +82,8 @@ impl Image {
                 info.aspect_flags,
                 info.mip_levels,
             )?,
-            allocation,
+            destroy_image: true,
+            allocation: Some(allocation),
         })
     }
     pub fn image(&self) -> vk::Image {
@@ -219,46 +223,47 @@ impl Image {
 impl Drop for Image {
     fn drop(&mut self) {
         unsafe {
-            self.device.destroy_image(self.image, None);
+            if self.destroy_image {
+                self.device.destroy_image(self.image, None);
+            }
             self.device.destroy_image_view(self.view, None);
         };
         // TODO: free the allocation
     }
 }
 
-#[derive(Clone)]
-/// TODO: have SwapchainImage wrap image. Maybe have a field to disable image
-/// destruction?
 pub struct SwapchainImage {
-    device: Device,
-    image: vk::Image,
-    view: vk::ImageView,
+    image: Image,
 }
+
 impl SwapchainImage {
     pub fn new(renderer: &Renderer, image: vk::Image, format: vk::Format) -> Result<Self> {
         Ok(Self {
-            device: renderer.device.clone(),
-            image,
-            view: Image::create_image_view(
-                renderer,
+            image: Image {
+                device: renderer.device.clone(),
                 image,
-                format,
-                vk::ImageAspectFlags::COLOR,
-                1,
-            )?,
+                view: Image::create_image_view(
+                    renderer,
+                    image,
+                    format,
+                    vk::ImageAspectFlags::COLOR,
+                    1,
+                )?,
+                destroy_image: false,
+                allocation: None,
+            },
         })
     }
     pub fn view(&self) -> vk::ImageView {
-        self.view
+        self.image.view()
     }
-}
-
-impl Drop for SwapchainImage {
-    fn drop(&mut self) {
-        // don't destroy image as it is owned
-        // by swap chain
-        unsafe {
-            self.device.destroy_image_view(self.view, None);
-        }
+    pub fn transition_image_layout(
+        &self,
+        cmd: &CommandBuffer,
+        old_layout: vk::ImageLayout,
+        new_layout: vk::ImageLayout,
+    ) -> Result<()> {
+        self.image
+            .transition_image_layout(cmd, old_layout, new_layout, 1, 0)
     }
 }

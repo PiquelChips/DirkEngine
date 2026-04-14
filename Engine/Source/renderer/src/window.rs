@@ -84,7 +84,7 @@ impl Window {
     pub fn next_image(
         &mut self,
         swapchain_loader: &swapchain::Device,
-    ) -> Result<(SwapchainImage, u32)> {
+    ) -> Result<(&SwapchainImage, u32)> {
         self.semaphore_count = (self.semaphore_count + 1) % self.semaphores.len();
         let (_, image_available_semaphore) = self.current_semaphores();
 
@@ -101,7 +101,7 @@ impl Window {
             return Err(Error::SuboptimalSurface);
         }
 
-        Ok((self.images[image_index as usize].clone(), image_index))
+        Ok((&self.images[image_index as usize], image_index))
     }
     pub fn update_swapcahin(
         &mut self,

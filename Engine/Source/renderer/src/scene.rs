@@ -5,11 +5,7 @@ use gpu_allocator::MemoryLocation;
 use world::WorldId;
 
 use crate::{
-    Error, MAX_FRAMES_IN_FLIGHT, MAX_RENDERABLES, Renderer, Result,
-    buffer::UniformBuffer,
-    command_pool::CommandBuffer,
-    image::{Image, ImageCreateInfo},
-    render_pass::RenderPass,
+    Error, MAX_FRAMES_IN_FLIGHT, MAX_RENDERABLES, Renderer, Result, buffer::UniformBuffer, command_pool::CommandBuffer, image::{Image, ImageCreateInfo}, model, pipeline::GraphicsPipeline, render_pass::RenderPass
 };
 
 /// This scene is created from a [world::World].
@@ -27,8 +23,11 @@ pub struct Scene {
     ubo: [UniformBuffer; MAX_FRAMES_IN_FLIGHT],
     descriptor_sets: [vk::DescriptorSet; MAX_FRAMES_IN_FLIGHT],
 
+    // TODO: these need to be removed
     color: Image,
     depth: Image,
+    // render graph should fix this
+    graphics_pipeline: GraphicsPipeline,
 }
 
 #[derive(Clone, Copy)]
@@ -111,7 +110,7 @@ impl Scene {
                 .update_descriptor_sets(&descriptor_writes, &[])
         };
 
-        // IMAGES
+        // TEMP
         let color_info = ImageCreateInfo {
             size,
             format: renderer.properties.surface_format.format,
@@ -136,6 +135,8 @@ impl Scene {
             aspect_flags: vk::ImageAspectFlags::DEPTH,
         };
         let depth = Image::create_image(renderer, depth_info)?;
+        let graphics_pipeline =
+            GraphicsPipeline::build(&renderer.device, &renderer.layouts, &renderer.properties)?;
 
         Ok(Self {
             world,
@@ -147,20 +148,18 @@ impl Scene {
 
             color,
             depth,
+            graphics_pipeline,
         })
     }
     pub fn render(
         &self,
-        renderer: &Renderer,
+        frame: usize,
+        models: &HashMap<String, model::Model>,
         cmd: &CommandBuffer,
         size: vk::Extent2D,
         view: vk::ImageView,
         camera: world::Entity,
     ) -> Result<()> {
-        let device = &renderer.device;
-
-        let frame = renderer.current_frame;
-
         // CAMERA
         {
             let proxy = &self
@@ -184,23 +183,23 @@ impl Scene {
             proxy.write_ubo(frame);
         }
 
-        RenderPass::begin(&renderer.device, cmd, size, view, &self.color, &self.depth);
-        renderer.graphics_pipeline.bind(cmd);
+        RenderPass::begin(&self.device, cmd, size, view, &self.color, &self.depth);
+        self.graphics_pipeline.bind(cmd);
 
         let viewport = vk::Viewport::default()
             .width(size.width as f32)
             .height(size.height as f32)
             .min_depth(0.)
             .max_depth(1.);
-        unsafe { renderer.device.cmd_set_viewport(cmd.raw(), 0, &[viewport]) };
+        unsafe { self.device.cmd_set_viewport(cmd.raw(), 0, &[viewport]) };
 
         let scissor = vk::Rect2D::default()
             .offset(vk::Offset2D::default())
             .extent(size);
-        unsafe { renderer.device.cmd_set_scissor(cmd.raw(), 0, &[scissor]) };
+        unsafe { self.device.cmd_set_scissor(cmd.raw(), 0, &[scissor]) };
 
         let mut descriptor_sets = [
-            self.descriptor_sets[renderer.current_frame],
+            self.descriptor_sets[frame],
             vk::DescriptorSet::null(),
             vk::DescriptorSet::null(),
         ];
@@ -209,7 +208,7 @@ impl Scene {
             let Some(ref model) = proxy.model else {
                 continue;
             };
-            let Some(model) = renderer.models.get(model) else {
+            let Some(model) = models.get(model) else {
                 continue;
             };
 
@@ -219,36 +218,37 @@ impl Scene {
                     .and_then(|idx| model.material_sets.get(idx).copied())
                     .unwrap_or(vk::DescriptorSet::null());
 
-                descriptor_sets[1] = proxy.sets[renderer.current_frame];
+                descriptor_sets[1] = proxy.sets[frame];
                 descriptor_sets[2] = mat_set;
 
                 unsafe {
-                    device.cmd_bind_descriptor_sets(
+                    self.device.cmd_bind_descriptor_sets(
                         cmd.raw(),
                         vk::PipelineBindPoint::GRAPHICS,
-                        renderer.graphics_pipeline.layout(),
+                        self.graphics_pipeline.layout(),
                         0,
                         &descriptor_sets,
                         &[],
                     );
-                    device.cmd_bind_vertex_buffers(
+                    self.device.cmd_bind_vertex_buffers(
                         cmd.raw(),
                         0,
                         &[prim.vertex_buffer.buffer()],
                         &[0],
                     );
-                    device.cmd_bind_index_buffer(
+                    self.device.cmd_bind_index_buffer(
                         cmd.raw(),
                         prim.index_buffer.buffer(),
                         0,
                         vk::IndexType::UINT32,
                     );
-                    device.cmd_draw_indexed(cmd.raw(), prim.index_count, 1, 0, 0, 0);
+                    self.device
+                        .cmd_draw_indexed(cmd.raw(), prim.index_count, 1, 0, 0, 0);
                 }
             }
         }
 
-        RenderPass::end(&renderer.device, cmd);
+        RenderPass::end(&self.device, cmd);
         Ok(())
     }
     pub fn add_proxy(&mut self, entity: world::Entity, proxy: SceneProxy) -> Result<()> {

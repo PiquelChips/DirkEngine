@@ -42,9 +42,6 @@ use scene::{Scene, SceneProxy};
 mod window;
 use window::Window;
 
-mod pipeline;
-use pipeline::GraphicsPipeline;
-
 mod command_pool;
 use command_pool::{CommandPool, Graphics, Transfer};
 
@@ -185,10 +182,9 @@ pub struct Renderer {
     platform_consumer: events::Consumer<platform::PlatformEvent>,
     world_consumer: events::Consumer<world::events::WorldEvent>,
 
-    // TODO: these are temporary while we get rendering to work
-    // render graph should fix this
-    graphics_pipeline: GraphicsPipeline,
     /// The size of the output
+    /// TODO: should be removed once we get the frame graph to
+    /// handle transient resources
     extent: vk::Extent2D,
 }
 
@@ -551,8 +547,6 @@ impl Renderer {
             },
         };
 
-        let graphics_pipeline = GraphicsPipeline::build(&device, &layouts, &properties)?;
-
         // MATERIAL DESCRIPTOR SETS
         let material_descriptor_pool = {
             let pool_size = vk::DescriptorPoolSize {
@@ -611,7 +605,6 @@ impl Renderer {
             #[cfg(validation)]
             debug_messenger,
 
-            graphics_pipeline,
             extent,
 
             window_consumer: event_manager.subscribe(),
@@ -763,12 +756,12 @@ impl Renderer {
             return Err(Error::WorldDoesNotExist(world));
         };
 
-        let (swapchain_img, idx) = window.next_image(&self.swapchain_loader)?;
         let (render_finished_semaphore, image_available_semaphore) = window.current_semaphores();
         let size = window.extent();
         let swapchain = window.swapchain();
+        let (swapchain_img, idx) = window.next_image(&self.swapchain_loader)?;
 
-        let frame = self.get_current_frame();
+        let frame = &self.frames[self.current_frame];
 
         unsafe {
             self.device
@@ -788,18 +781,21 @@ impl Renderer {
             &cmd,
             vk::ImageLayout::UNDEFINED,
             vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-            1,
-            0,
         )?;
 
-        scene.render(self, &cmd, size, swapchain_img.view(), camera)?;
+        scene.render(
+            self.current_frame,
+            &self.models,
+            &cmd,
+            size,
+            swapchain_img.view(),
+            camera,
+        )?;
 
         swapchain_img.transition_image_layout(
             &cmd,
             vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
             vk::ImageLayout::PRESENT_SRC_KHR,
-            1,
-            0,
         )?;
 
         unsafe { self.device.end_command_buffer(cmd.raw())? }
@@ -832,9 +828,6 @@ impl Renderer {
 
         self.current_frame = (self.current_frame + 1) % MAX_FRAMES_IN_FLIGHT;
         Ok(())
-    }
-    fn get_current_frame(&self) -> &Frame {
-        &self.frames[self.current_frame]
     }
 
     // WINDOW MANAGEMENT
@@ -1059,7 +1052,6 @@ impl Drop for Renderer {
         self.models.clear();
         self.windows.clear();
         self.frames.iter().for_each(|f| f.destroy());
-        self.graphics_pipeline.destroy();
         self.layouts.destroy(&self.device);
 
         self.graphics_pool.destroy();
