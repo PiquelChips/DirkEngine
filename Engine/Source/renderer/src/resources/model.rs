@@ -1,8 +1,9 @@
-use ash::{Device, vk};
+use ash::vk;
 
 use crate::{
     buffer::{IndexBuffer, VertexBuffer},
     image::Image,
+    resources::device::{Garbage, RenderDevice},
 };
 
 /// Complete GPU model.
@@ -18,7 +19,7 @@ pub struct Model {
 
 /// All GPU-side handles for a single texture.
 pub struct Texture {
-    pub device: Device,
+    pub device: RenderDevice,
     pub image: Image,
     pub sampler: vk::Sampler,
     pub mip_levels: u32,
@@ -26,9 +27,7 @@ pub struct Texture {
 
 impl Drop for Texture {
     fn drop(&mut self) {
-        unsafe {
-            self.device.destroy_sampler(self.sampler, None);
-        }
+        self.device.destroy(Garbage::Sampler(self.sampler));
     }
 }
 

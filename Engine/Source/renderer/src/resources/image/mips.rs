@@ -62,7 +62,7 @@ impl Image {
                 ]);
 
             unsafe {
-                self.device.cmd_blit_image(
+                self.device.device.cmd_blit_image(
                     cmd.raw(),
                     self.image(),
                     vk::ImageLayout::TRANSFER_SRC_OPTIMAL,

@@ -10,6 +10,7 @@ version.workspace = true
 tracing.workspace = true
 thiserror.workspace = true
 anyhow.workspace = true
+parking_lot.workspace = true
 
 utils.workspace = true
 platform.workspace = true

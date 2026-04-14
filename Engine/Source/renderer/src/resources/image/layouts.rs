@@ -31,7 +31,7 @@ impl Image {
             });
 
         unsafe {
-            self.device.cmd_pipeline_barrier(
+            self.device.device.cmd_pipeline_barrier(
                 cmd.raw(),
                 src_stage,
                 dst_stage,

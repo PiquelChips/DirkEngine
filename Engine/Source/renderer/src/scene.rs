@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use ash::{Device, vk};
+use ash::vk;
 use gpu_allocator::MemoryLocation;
 use world::WorldId;
 
@@ -12,6 +12,7 @@ use crate::{
     model,
     pipeline::GraphicsPipeline,
     render_pass::RenderPass,
+    resources::device::{Garbage, RenderDevice},
 };
 
 /// This scene is created from a [world::World].
@@ -21,7 +22,7 @@ use crate::{
 /// of the world.
 pub struct Scene {
     world: WorldId,
-    device: Device,
+    device: RenderDevice,
     /// The entities to render.
     proxies: HashMap<world::Entity, SceneProxy>,
 
@@ -55,7 +56,7 @@ impl Scene {
     /// Builds a [Scene].
     /// Constructs the renderer stuff like command pools, descriptor sets, ... from
     /// the [Renderer].
-    pub fn build(renderer: &mut Renderer, size: vk::Extent2D, world: WorldId) -> Result<Self> {
+    pub fn build(device: RenderDevice, size: vk::Extent2D, world: WorldId) -> Result<Self> {
         let pool_sizes = [
             vk::DescriptorPoolSize {
                 ty: vk::DescriptorType::UNIFORM_BUFFER,
@@ -73,16 +74,16 @@ impl Scene {
             .pool_sizes(&pool_sizes)
             .max_sets((1 + MAX_RENDERABLES * 2) * MAX_FRAMES_IN_FLIGHT as u32);
 
-        let descriptor_pool = unsafe { renderer.device.create_descriptor_pool(&pool_info, None)? };
+        let descriptor_pool = unsafe { device.device.create_descriptor_pool(&pool_info, None)? };
 
         // Allocate scene-level sets (one per frame)
-        let layouts = [renderer.layouts.scene; MAX_FRAMES_IN_FLIGHT];
+        let layouts = [device.layouts.scene; MAX_FRAMES_IN_FLIGHT];
         let alloc_info = vk::DescriptorSetAllocateInfo::default()
             .descriptor_pool(descriptor_pool)
             .set_layouts(&layouts);
 
         let scene_desc_sets: [vk::DescriptorSet; MAX_FRAMES_IN_FLIGHT] = unsafe {
-            renderer
+            device
                 .device
                 .allocate_descriptor_sets(&alloc_info)?
                 .try_into()
@@ -90,7 +91,8 @@ impl Scene {
         };
 
         let ubo_size = size_of::<SceneUbo>() as u64;
-        let mut build_ubo = || UniformBuffer::create(renderer, ubo_size, MemoryLocation::CpuToGpu);
+        let build_ubo =
+            || UniformBuffer::create(device.clone(), ubo_size, MemoryLocation::CpuToGpu);
         let ubo = [build_ubo()?, build_ubo()?];
 
         let buffer_infos: [vk::DescriptorBufferInfo; MAX_FRAMES_IN_FLIGHT] =
@@ -111,7 +113,7 @@ impl Scene {
             });
 
         unsafe {
-            renderer
+            device
                 .device
                 .update_descriptor_sets(&descriptor_writes, &[])
         };
@@ -119,34 +121,34 @@ impl Scene {
         // TEMP
         let color_info = ImageCreateInfo {
             size,
-            format: renderer.properties.surface_format.format,
+            format: device.properties.surface_format.format,
             tiling: vk::ImageTiling::OPTIMAL,
             usage: vk::ImageUsageFlags::TRANSIENT_ATTACHMENT
                 | vk::ImageUsageFlags::COLOR_ATTACHMENT,
             location: MemoryLocation::GpuOnly,
             mip_levels: 1,
-            num_samples: renderer.properties.msaa_samples,
+            num_samples: device.properties.msaa_samples,
             aspect_flags: vk::ImageAspectFlags::COLOR,
         };
-        let color = Image::create_image(renderer, color_info)?;
+        let color = Image::create_image(device.clone(), color_info)?;
 
         let depth_info = ImageCreateInfo {
             size,
-            format: renderer.properties.depth_format,
+            format: device.properties.depth_format,
             tiling: vk::ImageTiling::OPTIMAL,
             usage: vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
             location: MemoryLocation::GpuOnly,
             mip_levels: 1,
-            num_samples: renderer.properties.msaa_samples,
+            num_samples: device.properties.msaa_samples,
             aspect_flags: vk::ImageAspectFlags::DEPTH,
         };
-        let depth = Image::create_image(renderer, depth_info)?;
+        let depth = Image::create_image(device.clone(), depth_info)?;
         let graphics_pipeline =
-            GraphicsPipeline::build(&renderer.device, &renderer.layouts, &renderer.properties)?;
+            GraphicsPipeline::build(&device.device, &device.layouts, &device.properties)?;
 
         Ok(Self {
             world,
-            device: renderer.device.clone(),
+            device: device.clone(),
             proxies: HashMap::new(),
             descriptor_pool,
             ubo,
@@ -159,13 +161,13 @@ impl Scene {
     }
     pub fn render(
         &self,
-        frame: usize,
         models: &HashMap<String, model::Model>,
         cmd: &CommandBuffer,
         size: vk::Extent2D,
         view: vk::ImageView,
         camera: world::Entity,
     ) -> Result<()> {
+        let frame = self.device.current_frame() as usize;
         // CAMERA
         {
             let proxy = &self
@@ -189,7 +191,14 @@ impl Scene {
             proxy.write_ubo(frame);
         }
 
-        RenderPass::begin(&self.device, cmd, size, view, &self.color, &self.depth);
+        RenderPass::begin(
+            &self.device.device,
+            cmd,
+            size,
+            view,
+            &self.color,
+            &self.depth,
+        );
         self.graphics_pipeline.bind(cmd);
 
         let viewport = vk::Viewport::default()
@@ -197,12 +206,16 @@ impl Scene {
             .height(size.height as f32)
             .min_depth(0.)
             .max_depth(1.);
-        unsafe { self.device.cmd_set_viewport(cmd.raw(), 0, &[viewport]) };
+        unsafe {
+            self.device
+                .device
+                .cmd_set_viewport(cmd.raw(), 0, &[viewport])
+        };
 
         let scissor = vk::Rect2D::default()
             .offset(vk::Offset2D::default())
             .extent(size);
-        unsafe { self.device.cmd_set_scissor(cmd.raw(), 0, &[scissor]) };
+        unsafe { self.device.device.cmd_set_scissor(cmd.raw(), 0, &[scissor]) };
 
         let mut descriptor_sets = [
             self.descriptor_sets[frame],
@@ -228,7 +241,7 @@ impl Scene {
                 descriptor_sets[2] = mat_set;
 
                 unsafe {
-                    self.device.cmd_bind_descriptor_sets(
+                    self.device.device.cmd_bind_descriptor_sets(
                         cmd.raw(),
                         vk::PipelineBindPoint::GRAPHICS,
                         self.graphics_pipeline.layout(),
@@ -236,25 +249,26 @@ impl Scene {
                         &descriptor_sets,
                         &[],
                     );
-                    self.device.cmd_bind_vertex_buffers(
+                    self.device.device.cmd_bind_vertex_buffers(
                         cmd.raw(),
                         0,
                         &[prim.vertex_buffer.buffer()],
                         &[0],
                     );
-                    self.device.cmd_bind_index_buffer(
+                    self.device.device.cmd_bind_index_buffer(
                         cmd.raw(),
                         prim.index_buffer.buffer(),
                         0,
                         vk::IndexType::UINT32,
                     );
                     self.device
+                        .device
                         .cmd_draw_indexed(cmd.raw(), prim.index_count, 1, 0, 0, 0);
                 }
             }
         }
 
-        RenderPass::end(&self.device, cmd);
+        RenderPass::end(&self.device.device, cmd);
         Ok(())
     }
     pub fn add_proxy(&mut self, entity: world::Entity, proxy: SceneProxy) -> Result<()> {
@@ -271,10 +285,8 @@ impl Scene {
 
 impl Drop for Scene {
     fn drop(&mut self) {
-        unsafe {
-            self.device
-                .destroy_descriptor_pool(self.descriptor_pool, None);
-        };
+        self.device
+            .destroy(Garbage::DescriptorPool(self.descriptor_pool))
     }
 }
 
@@ -306,7 +318,13 @@ struct ProxyUbo {
 impl SceneProxy {
     pub fn build(renderer: &mut Renderer, world: WorldId) -> Result<Self> {
         let size = size_of::<ProxyUbo>() as u64;
-        let mut build_ubo = || UniformBuffer::create(renderer, size, MemoryLocation::CpuToGpu);
+        let build_ubo = || {
+            UniformBuffer::create(
+                renderer.render_device.clone(),
+                size,
+                MemoryLocation::CpuToGpu,
+            )
+        };
         let ubo = [build_ubo()?, build_ubo()?];
 
         let Some(scene) = renderer.scenes.get(&world) else {
@@ -314,13 +332,14 @@ impl SceneProxy {
         };
 
         // Allocate scene-level sets (one per frame)
-        let layouts = [renderer.layouts.object; MAX_FRAMES_IN_FLIGHT];
+        let layouts = [renderer.render_device.layouts.object; MAX_FRAMES_IN_FLIGHT];
         let alloc_info = vk::DescriptorSetAllocateInfo::default()
             .descriptor_pool(scene.descriptor_pool)
             .set_layouts(&layouts);
 
         let sets: [vk::DescriptorSet; MAX_FRAMES_IN_FLIGHT] = unsafe {
             renderer
+                .render_device
                 .device
                 .allocate_descriptor_sets(&alloc_info)?
                 .try_into()
@@ -346,6 +365,7 @@ impl SceneProxy {
 
         unsafe {
             renderer
+                .render_device
                 .device
                 .update_descriptor_sets(&descriptor_writes, &[])
         };

@@ -3,6 +3,10 @@ use std::os::raw::c_void;
 use std::{
     collections::{HashMap, HashSet},
     ffi::{CStr, CString},
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
 };
 
 #[cfg(validation)]
@@ -10,7 +14,7 @@ use ash::ext::debug_utils;
 #[cfg(platform_linux)]
 use ash::khr::wayland_surface;
 use ash::{
-    Device, Entry, Instance,
+    Device, Entry,
     khr::{surface, swapchain},
     vk,
 };
@@ -27,7 +31,7 @@ use platform::{PlatformEvent, WindowEvent, WindowId};
 use world::{components, events::WorldEvent};
 
 mod utils;
-use crate::{image::SwapchainImage, utils::*};
+use crate::{image::SwapchainImage, resources::device::RenderDevice, utils::*};
 use ::utils::*;
 
 mod errors;
@@ -42,7 +46,7 @@ use window::Window;
 use resources::*;
 
 use buffer::{IndexBuffer, VertexBuffer};
-use command_pool::{CommandPool, Graphics, Transfer};
+use command_pool::{CommandPool, Graphics};
 use image::Image;
 use model::*;
 
@@ -138,37 +142,20 @@ pub struct RendererProperties {
 /// all rendering operations
 pub struct Renderer {
     entry: Entry,
-    allocator: Allocator,
+    render_device: RenderDevice,
 
-    // Renderer Resources
-    instance: Instance,
-    device: Device,
-    queues: Queues,
-    physical_device: vk::PhysicalDevice,
-    /// For single use buffers.
-    /// Used for texture uploads and layout transitions.
-    transfer_pool: CommandPool<Transfer>,
-    /// For single use buffers.
-    /// Used for mip generation.
-    graphics_pool: CommandPool<Graphics>,
-
-    properties: RendererProperties,
+    // Heavy renderer state:
     /// All of the [window::Window]s constructed from [platform::Window]s.
     windows: HashMap<WindowId, Window>,
     /// All the uploaded [resource_manager::Model]s.
     models: HashMap<String, Model>,
     /// All of the internal [world::World] representations.
     scenes: HashMap<world::WorldId, Scene>,
-    /// All the descriptor layouts used in the renderer.
-    layouts: DescriptorLayouts,
     material_descriptor_pool: vk::DescriptorPool,
 
     frames: [Frame; MAX_FRAMES_IN_FLIGHT],
-    current_frame: usize,
+    current_frame: Arc<AtomicU64>,
 
-    // Extensions
-    surface_loader: surface::Instance,
-    swapchain_loader: swapchain::Device,
     #[cfg(validation)]
     debug_utils_loader: debug_utils::Instance,
     #[cfg(validation)]
@@ -578,25 +565,31 @@ impl Renderer {
             }
         };
 
-        Ok(Self {
-            entry,
-            allocator,
-            instance,
-            device,
-            queues,
+        let current_frame = Arc::new(AtomicU64::new(0));
+        let render_device = RenderDevice::new(
+            instance.clone(),
+            device.clone(),
+            surface_loader.clone(),
+            swapchain_loader.clone(),
             physical_device,
-            properties,
+            queues,
             transfer_pool,
             graphics_pool,
+            layouts,
+            properties,
+            allocator,
+            current_frame.clone(),
+        );
+
+        Ok(Self {
+            entry,
+            render_device,
             windows: HashMap::new(),
             models: HashMap::new(),
             scenes: HashMap::new(),
-            layouts,
             material_descriptor_pool,
             frames,
-            current_frame: 0,
-            surface_loader,
-            swapchain_loader,
+            current_frame,
             #[cfg(validation)]
             debug_utils_loader,
             #[cfg(validation)]
@@ -620,7 +613,7 @@ impl Renderer {
         for event in world_events {
             match event {
                 WorldEvent::Created(id) => {
-                    let scene = Scene::build(self, self.extent, id)?;
+                    let scene = Scene::build(self.render_device.clone(), self.extent, id)?;
                     self.scenes.insert(id, scene);
                 }
                 WorldEvent::Destroyed(id) => {
@@ -680,7 +673,7 @@ impl Renderer {
                     let surface = unsafe {
                         ash_window::create_surface(
                             &self.entry,
-                            &self.instance,
+                            &self.render_device.instance,
                             plat_window.display_handle()?.as_raw(),
                             plat_window.window_handle()?.as_raw(),
                             None,
@@ -756,21 +749,26 @@ impl Renderer {
         let (render_finished_semaphore, image_available_semaphore) = window.current_semaphores();
         let size = window.extent();
         let swapchain = window.swapchain();
-        let (swapchain_img, idx) = window.next_image(&self.swapchain_loader)?;
+        let (swapchain_img, idx) = window.next_image(&self.render_device.swapchain_loader)?;
 
-        let frame = &self.frames[self.current_frame];
+        let frame = &self.frames[self.current_frame.load(Ordering::Relaxed) as usize];
 
         unsafe {
-            self.device
-                .wait_for_fences(std::slice::from_ref(&frame.fence), true, u64::MAX)?;
-            self.device
+            self.render_device.device.wait_for_fences(
+                std::slice::from_ref(&frame.fence),
+                true,
+                u64::MAX,
+            )?;
+            self.render_device
+                .device
                 .reset_fences(std::slice::from_ref(&frame.fence))?;
         }
 
         let cmd = frame.command_pool.allocate_buffer()?;
 
         unsafe {
-            self.device
+            self.render_device
+                .device
                 .begin_command_buffer(cmd.raw(), &vk::CommandBufferBeginInfo::default())?
         }
 
@@ -780,14 +778,7 @@ impl Renderer {
             vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
         )?;
 
-        scene.render(
-            self.current_frame,
-            &self.models,
-            &cmd,
-            size,
-            swapchain_img.view(),
-            camera,
-        )?;
+        scene.render(&self.models, &cmd, size, swapchain_img.view(), camera)?;
 
         swapchain_img.transition_image_layout(
             &cmd,
@@ -795,7 +786,7 @@ impl Renderer {
             vk::ImageLayout::PRESENT_SRC_KHR,
         )?;
 
-        unsafe { self.device.end_command_buffer(cmd.raw())? }
+        unsafe { self.render_device.device.end_command_buffer(cmd.raw())? }
 
         let submit_info = vk::SubmitInfo::default()
             .wait_dst_stage_mask(std::slice::from_ref(
@@ -806,8 +797,8 @@ impl Renderer {
             .signal_semaphores(std::slice::from_ref(&render_finished_semaphore));
 
         unsafe {
-            self.device.queue_submit(
-                self.queues.graphics,
+            self.render_device.device.queue_submit(
+                self.render_device.queues.graphics,
                 std::slice::from_ref(&submit_info),
                 frame.fence,
             )?
@@ -819,11 +810,17 @@ impl Renderer {
             .image_indices(std::slice::from_ref(&idx));
 
         unsafe {
-            self.swapchain_loader
-                .queue_present(self.queues.present, &present_info)?
+            self.render_device
+                .swapchain_loader
+                .queue_present(self.render_device.queues.present, &present_info)?
         };
 
-        self.current_frame = (self.current_frame + 1) % MAX_FRAMES_IN_FLIGHT;
+        self.current_frame.store(
+            ((self.current_frame() + 1) % MAX_FRAMES_IN_FLIGHT)
+                .try_into()
+                .unwrap(),
+            Ordering::Relaxed,
+        );
         Ok(())
     }
 
@@ -836,8 +833,12 @@ impl Renderer {
         old_swapchain: vk::SwapchainKHR,
     ) -> Result<(vk::SwapchainKHR, vk::Extent2D, Vec<SwapchainImage>)> {
         let capabilities = unsafe {
-            self.surface_loader
-                .get_physical_device_surface_capabilities(self.physical_device, surface)?
+            self.render_device
+                .surface_loader
+                .get_physical_device_surface_capabilities(
+                    self.render_device.physical_device,
+                    surface,
+                )?
         };
 
         let extent = if capabilities.current_extent.width != u32::MAX {
@@ -860,7 +861,7 @@ impl Renderer {
             image_count = capabilities.max_image_count;
         }
 
-        let indices = &self.properties.queue_family_indices;
+        let indices = &self.render_device.properties.queue_family_indices;
         // Deduplicate — concurrent mode requires unique family indices
         let mut unique_indices: Vec<u32> =
             vec![indices.graphics, indices.present, indices.transfer];
@@ -876,8 +877,8 @@ impl Renderer {
         let create_info = vk::SwapchainCreateInfoKHR::default()
             .surface(surface)
             .min_image_count(image_count)
-            .image_format(self.properties.surface_format.format)
-            .image_color_space(self.properties.surface_format.color_space)
+            .image_format(self.render_device.properties.surface_format.format)
+            .image_color_space(self.render_device.properties.surface_format.color_space)
             .image_extent(extent)
             .image_array_layers(1)
             .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)
@@ -885,19 +886,37 @@ impl Renderer {
             .queue_family_indices(indices_slice)
             .pre_transform(capabilities.current_transform)
             .composite_alpha(vk::CompositeAlphaFlagsKHR::OPAQUE)
-            .present_mode(self.properties.present_mode)
+            .present_mode(self.render_device.properties.present_mode)
             .clipped(true)
             .old_swapchain(old_swapchain);
 
-        let swapchain = unsafe { self.swapchain_loader.create_swapchain(&create_info, None)? };
-        let images = unsafe { self.swapchain_loader.get_swapchain_images(swapchain)? };
+        let swapchain = unsafe {
+            self.render_device
+                .swapchain_loader
+                .create_swapchain(&create_info, None)?
+        };
+        let images = unsafe {
+            self.render_device
+                .swapchain_loader
+                .get_swapchain_images(swapchain)?
+        };
 
         let swap_images = images
             .into_iter()
-            .map(|image| SwapchainImage::new(self, image, self.properties.surface_format.format))
+            .map(|image| {
+                SwapchainImage::new(
+                    &self.render_device,
+                    image,
+                    self.render_device.properties.surface_format.format,
+                )
+            })
             .collect::<Result<Vec<_>>>()?;
 
-        unsafe { self.swapchain_loader.destroy_swapchain(old_swapchain, None) };
+        unsafe {
+            self.render_device
+                .swapchain_loader
+                .destroy_swapchain(old_swapchain, None)
+        };
 
         Ok((swapchain, extent, swap_images))
     }
@@ -915,19 +934,24 @@ impl Renderer {
         let textures: Vec<_> = model
             .textures()
             .iter()
-            .map(|t| Image::upload_texture(self, t))
+            .map(|t| Image::upload_texture(self.render_device.clone(), t))
             .collect::<Result<_>>()?;
 
         let material_count = model.materials().len();
         // Allocate one set per material
-        let layouts: Vec<vk::DescriptorSetLayout> = vec![self.layouts.material; material_count];
+        let layouts: Vec<vk::DescriptorSetLayout> =
+            vec![self.render_device.layouts.material; material_count];
 
         let material_sets: Vec<vk::DescriptorSet> = if material_count > 0 {
             let alloc_info = vk::DescriptorSetAllocateInfo::default()
                 .descriptor_pool(self.material_descriptor_pool)
                 .set_layouts(&layouts);
 
-            unsafe { self.device.allocate_descriptor_sets(&alloc_info)? }
+            unsafe {
+                self.render_device
+                    .device
+                    .allocate_descriptor_sets(&alloc_info)?
+            }
         } else {
             Vec::new()
         };
@@ -951,7 +975,11 @@ impl Renderer {
                 .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
                 .image_info(std::slice::from_ref(&image_info));
 
-            unsafe { self.device.update_descriptor_sets(&[write], &[]) };
+            unsafe {
+                self.render_device
+                    .device
+                    .update_descriptor_sets(&[write], &[])
+            };
         }
 
         self.models.insert(
@@ -987,8 +1015,8 @@ impl Renderer {
             })
             .collect();
 
-        let vertex_buffer = VertexBuffer::upload_slice(self, &vertices)?;
-        let index_buffer = IndexBuffer::upload_slice(self, prim.indices())?;
+        let vertex_buffer = VertexBuffer::upload_slice(self.render_device.clone(), &vertices)?;
+        let index_buffer = IndexBuffer::upload_slice(self.render_device.clone(), prim.indices())?;
 
         Ok(Primitive {
             vertex_buffer,
@@ -1000,10 +1028,11 @@ impl Renderer {
 
     // IMAGE UTILITIES
 
-    fn create_sampler(&self, mip_levels: u32) -> Result<vk::Sampler> {
+    fn create_sampler(device: &RenderDevice, mip_levels: u32) -> Result<vk::Sampler> {
         let props = unsafe {
-            self.instance
-                .get_physical_device_properties(self.physical_device)
+            device
+                .instance
+                .get_physical_device_properties(device.physical_device)
         };
         let max_aniso = props.limits.max_sampler_anisotropy;
 
@@ -1015,7 +1044,7 @@ impl Renderer {
             .address_mode_v(vk::SamplerAddressMode::REPEAT)
             .address_mode_w(vk::SamplerAddressMode::REPEAT)
             .mip_lod_bias(0.0)
-            .anisotropy_enable(true)
+            .anisotropy_enable(true) // TODO: use the detected prpoerty
             .max_anisotropy(max_aniso) // use hardware maximum
             .compare_enable(false)
             .min_lod(0.0)
@@ -1023,7 +1052,7 @@ impl Renderer {
             .border_color(vk::BorderColor::INT_OPAQUE_BLACK)
             .unnormalized_coordinates(false);
 
-        Ok(unsafe { self.device.create_sampler(&sampler_info, None)? })
+        Ok(unsafe { device.device.create_sampler(&sampler_info, None)? })
     }
 
     // EXTRA UTILS
@@ -1036,12 +1065,16 @@ impl Renderer {
         let info = vk::ShaderModuleCreateInfo::default().code(code.as_slice());
         Ok(unsafe { device.create_shader_module(&info, None)? })
     }
+    fn current_frame(&self) -> usize {
+        self.current_frame
+            .load(std::sync::atomic::Ordering::Relaxed) as usize
+    }
 }
 
 impl Drop for Renderer {
     fn drop(&mut self) {
         unsafe {
-            self.device.device_wait_idle().ok();
+            self.render_device.device.device_wait_idle().ok();
         }
         info!("cleaning up renderer");
 
@@ -1049,20 +1082,24 @@ impl Drop for Renderer {
         self.models.clear();
         self.windows.clear();
         self.frames.iter().for_each(|f| f.destroy());
-        self.layouts.destroy(&self.device);
+        self.render_device.shutdown();
 
-        self.graphics_pool.destroy();
-        self.transfer_pool.destroy();
+        self.render_device
+            .layouts
+            .destroy(&self.render_device.device);
+        self.render_device.graphics_pool.destroy();
+        self.render_device.transfer_pool.destroy();
         unsafe {
-            self.device
+            self.render_device
+                .device
                 .destroy_descriptor_pool(self.material_descriptor_pool, None);
 
-            self.device.destroy_device(None);
+            self.render_device.device.destroy_device(None);
             #[cfg(validation)]
             self.debug_utils_loader
                 .destroy_debug_utils_messenger(self.debug_messenger, None);
 
-            self.instance.destroy_instance(None);
+            self.render_device.instance.destroy_instance(None);
         }
     }
 }
