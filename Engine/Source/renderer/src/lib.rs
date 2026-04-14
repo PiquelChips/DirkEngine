@@ -15,7 +15,7 @@ use ash::{
     vk,
 };
 use gpu_allocator::{
-    MemoryLocation,
+    AllocatorDebugSettings, MemoryLocation,
     vulkan::{Allocation, AllocationCreateDesc, Allocator, AllocatorCreateDesc},
 };
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
@@ -455,11 +455,14 @@ impl Renderer {
             unsafe { instance.create_device(physical_device, &device_create_info, None)? }
         };
 
+        let mut allocator_debug_settings = AllocatorDebugSettings::default();
+        // TODO: actually fix the memory leak in buffer creation
+        allocator_debug_settings.log_leaks_on_shutdown = false;
         let allocator = Allocator::new(&AllocatorCreateDesc {
             instance: instance.clone(),
             device: device.clone(),
             physical_device,
-            debug_settings: Default::default(),
+            debug_settings: allocator_debug_settings,
             buffer_device_address: true,
             allocation_sizes: Default::default(),
         })?;
