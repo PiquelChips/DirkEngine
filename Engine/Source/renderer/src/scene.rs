@@ -5,7 +5,13 @@ use gpu_allocator::MemoryLocation;
 use world::WorldId;
 
 use crate::{
-    Error, MAX_FRAMES_IN_FLIGHT, MAX_RENDERABLES, Renderer, Result, buffer::UniformBuffer, command_pool::CommandBuffer, image::{Image, ImageCreateInfo}, model, pipeline::GraphicsPipeline, render_pass::RenderPass
+    Error, MAX_FRAMES_IN_FLIGHT, MAX_RENDERABLES, Renderer, Result,
+    buffer::UniformBuffer,
+    command_pool::CommandBuffer,
+    image::{Image, ImageCreateInfo},
+    model,
+    pipeline::GraphicsPipeline,
+    render_pass::RenderPass,
 };
 
 /// This scene is created from a [world::World].

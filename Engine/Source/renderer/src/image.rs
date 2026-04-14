@@ -21,7 +21,6 @@ pub struct Image {
     destroy_image: bool,
     #[allow(unused)]
     allocation: Option<Allocation>,
-    // TODO: store internal format for use in transition image layout
     // TODO: store current queue?
 }
 
