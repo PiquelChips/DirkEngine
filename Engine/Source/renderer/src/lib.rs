@@ -46,7 +46,7 @@ mod pipeline;
 use pipeline::GraphicsPipeline;
 
 mod command_pool;
-use command_pool::{CommandBuffer, CommandPool, Graphics, Transfer};
+use command_pool::{CommandPool, Graphics, Transfer};
 
 mod buffer;
 use buffer::{IndexBuffer, VertexBuffer};

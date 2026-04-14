@@ -16,6 +16,7 @@ pub struct Image {
     device: Device,
     image: vk::Image,
     view: vk::ImageView,
+    #[allow(unused)]
     allocation: Allocation,
     // TODO: store internal format for use in transition image layout
     // TODO: store current queue?
