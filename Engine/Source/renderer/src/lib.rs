@@ -14,6 +14,10 @@ use ash::{
     khr::{surface, swapchain},
     vk,
 };
+use gpu_allocator::{
+    AllocatorDebugSettings, MemoryLocation,
+    vulkan::{Allocation, AllocationCreateDesc, Allocator, AllocatorCreateDesc},
+};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use tracing::{debug, info};
 #[cfg(validation)]
@@ -135,6 +139,7 @@ pub struct RendererProperties {
 /// all rendering operations
 pub struct Renderer {
     entry: Entry,
+    allocator: Allocator,
 
     // Renderer Resources
     instance: Instance,
@@ -431,6 +436,8 @@ impl Renderer {
 
             let physical_device_features =
                 vk::PhysicalDeviceFeatures::default().sampler_anisotropy(true);
+            let mut vulkan12_features =
+                vk::PhysicalDeviceVulkan12Features::default().buffer_device_address(true);
             let mut vulkan13_features =
                 vk::PhysicalDeviceVulkan13Features::default().dynamic_rendering(true);
 
@@ -442,10 +449,23 @@ impl Renderer {
                 .queue_create_infos(&queue_create_infos)
                 .enabled_features(&physical_device_features)
                 .enabled_extension_names(&extensions)
+                .push_next(&mut vulkan12_features)
                 .push_next(&mut vulkan13_features);
 
             unsafe { instance.create_device(physical_device, &device_create_info, None)? }
         };
+
+        let mut allocator_debug_settings = AllocatorDebugSettings::default();
+        // TODO: actually fix the memory leak in buffer creation
+        allocator_debug_settings.log_leaks_on_shutdown = false;
+        let allocator = Allocator::new(&AllocatorCreateDesc {
+            instance: instance.clone(),
+            device: device.clone(),
+            physical_device,
+            debug_settings: allocator_debug_settings,
+            buffer_device_address: true,
+            allocation_sizes: Default::default(),
+        })?;
 
         // QUEUES
         let queues = {
@@ -564,6 +584,7 @@ impl Renderer {
 
         Ok(Self {
             entry,
+            allocator,
             instance,
             device,
             queues,
@@ -604,17 +625,15 @@ impl Renderer {
         for event in world_events {
             match event {
                 WorldEvent::Created(id) => {
-                    self.scenes.insert(id, Scene::build(self, self.extent, id)?);
+                    let scene = Scene::build(self, self.extent, id)?;
+                    self.scenes.insert(id, scene);
                 }
                 WorldEvent::Destroyed(id) => {
                     self.scenes.remove(&id);
                 }
                 WorldEvent::EntitySpawn { world, entity } => {
-                    let Some(scene) = self.scenes.get(&world) else {
-                        continue;
-                    };
+                    let proxy = SceneProxy::build(self, world)?;
                     // this creates a completely empty proxy, no mesh or matrix
-                    let proxy = SceneProxy::build(self, scene)?;
                     let Some(scene) = self.scenes.get_mut(&world) else {
                         continue;
                     };
@@ -640,11 +659,7 @@ impl Renderer {
                     proxy.set_model_matrix(transform.matrix());
 
                     if let Some(renderable) = world.get::<components::Renderable>(entity) {
-                        proxy.set_model(
-                            self.models
-                                .get(&renderable.model)
-                                .expect("model should have been loaded"),
-                        );
+                        proxy.set_model(&renderable.model);
                     };
                     if let Some(camera) = world.get::<components::Camera>(entity) {
                         proxy.set_camera(transform.view(), camera.projection());
@@ -975,7 +990,7 @@ impl Renderer {
         self.upload_model(resource_manager::ResourceManager::load_model(name)?)
     }
 
-    fn upload_primitive(&self, prim: &resource_manager::Primitive) -> Result<Primitive> {
+    fn upload_primitive(&mut self, prim: &resource_manager::Primitive) -> Result<Primitive> {
         let vertices: Vec<Vertex> = prim
             .positions()
             .iter()
@@ -987,42 +1002,38 @@ impl Renderer {
             })
             .collect();
 
-        let (vertex_buffer, vertex_buffer_memory) =
+        let (vertex_buffer, vertex_buffer_alloc) =
             self.upload_slice(&vertices, vk::BufferUsageFlags::VERTEX_BUFFER)?;
 
-        let (index_buffer, index_buffer_memory) =
+        let (index_buffer, index_buffer_alloc) =
             self.upload_slice(prim.indices(), vk::BufferUsageFlags::INDEX_BUFFER)?;
 
         Ok(Primitive {
             vertex_buffer,
-            vertex_buffer_memory,
+            vertex_buffer_alloc: Some(vertex_buffer_alloc),
             index_buffer,
-            index_buffer_memory,
+            index_buffer_alloc: Some(index_buffer_alloc),
             index_count: prim.indices().len() as u32,
             material: *prim.material(),
         })
     }
-    fn upload_texture(&self, tex: &resource_manager::Texture) -> Result<Texture> {
+    fn upload_texture(&mut self, tex: &resource_manager::Texture) -> Result<Texture> {
         let mip_levels = Self::mip_levels(*tex.width(), *tex.height());
         let size = (tex.pixels().len()) as vk::DeviceSize;
         let format = vk::Format::R8G8B8A8_SRGB;
 
-        let (staging_buf, staging_mem) = self.create_buffer(
+        let (staging_buf, staging_alloc) = self.create_buffer(
             size,
             vk::BufferUsageFlags::TRANSFER_SRC,
-            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+            MemoryLocation::CpuToGpu,
         )?;
 
         unsafe {
-            let ptr = self
-                .device
-                .map_memory(staging_mem, 0, size, vk::MemoryMapFlags::empty())?
-                as *mut u8;
+            let ptr = staging_alloc.mapped_ptr().unwrap().as_ptr() as *mut u8;
             ptr.copy_from_nonoverlapping(tex.pixels().as_ptr(), tex.pixels().len());
-            self.device.unmap_memory(staging_mem);
         }
 
-        let (image, memory) = self.create_image(
+        let (image, alloc) = self.create_image(
             vk::Extent2D {
                 width: *tex.width(),
                 height: *tex.height(),
@@ -1033,7 +1044,7 @@ impl Renderer {
             vk::ImageUsageFlags::TRANSFER_DST
                 | vk::ImageUsageFlags::TRANSFER_SRC
                 | vk::ImageUsageFlags::SAMPLED,
-            vk::MemoryPropertyFlags::DEVICE_LOCAL,
+            MemoryLocation::GpuOnly,
             (mip_levels, vk::SampleCountFlags::TYPE_1),
         )?;
 
@@ -1087,7 +1098,7 @@ impl Renderer {
 
         Ok(Texture {
             image,
-            memory,
+            alloc: Some(alloc),
             view,
             sampler,
             mip_levels,
@@ -1118,14 +1129,14 @@ impl Renderer {
         Ok(unsafe { self.device.create_image_view(&create_info, None)? })
     }
     fn create_image(
-        &self,
+        &mut self,
         size: vk::Extent2D,
         format: vk::Format,
         tiling: vk::ImageTiling,
         usage: vk::ImageUsageFlags,
-        properties: vk::MemoryPropertyFlags,
+        location: MemoryLocation,
         (mip_levels, num_samples): (u32, vk::SampleCountFlags),
-    ) -> Result<(vk::Image, vk::DeviceMemory)> {
+    ) -> Result<(vk::Image, Allocation)> {
         let image_info = vk::ImageCreateInfo::default()
             .image_type(vk::ImageType::TYPE_2D)
             .format(format)
@@ -1143,18 +1154,22 @@ impl Renderer {
             .initial_layout(vk::ImageLayout::UNDEFINED);
 
         let image = unsafe { self.device.create_image(&image_info, None)? };
+        let requirements = unsafe { self.device.get_image_memory_requirements(image) };
 
-        let mem_req = unsafe { self.device.get_image_memory_requirements(image) };
+        let allocation = self.allocator.allocate(&AllocationCreateDesc {
+            name: "image",
+            requirements,
+            location,
+            linear: tiling == vk::ImageTiling::LINEAR,
+            allocation_scheme: gpu_allocator::vulkan::AllocationScheme::GpuAllocatorManaged,
+        })?;
 
-        let alloc_info = vk::MemoryAllocateInfo::default()
-            .allocation_size(mem_req.size)
-            .memory_type_index(self.find_memory_type(mem_req.memory_type_bits, properties)?);
+        unsafe {
+            self.device
+                .bind_image_memory(image, allocation.memory(), allocation.offset())?
+        };
 
-        let memory = unsafe { self.device.allocate_memory(&alloc_info, None)? };
-
-        unsafe { self.device.bind_image_memory(image, memory, 0)? };
-
-        Ok((image, memory))
+        Ok((image, allocation))
     }
     fn generate_mipmaps(
         &self,
@@ -1277,31 +1292,27 @@ impl Renderer {
     // BUFFER UTILITIES
 
     fn upload_slice<T: Copy>(
-        &self,
+        &mut self,
         data: &[T],
         usage: vk::BufferUsageFlags,
-    ) -> Result<(vk::Buffer, vk::DeviceMemory)> {
+    ) -> Result<(vk::Buffer, Allocation)> {
         let size = std::mem::size_of_val(data) as vk::DeviceSize;
 
-        let (staging_buf, staging_mem) = self.create_buffer(
+        let (staging_buf, staging_alloc) = self.create_buffer(
             size,
             vk::BufferUsageFlags::TRANSFER_SRC,
-            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+            MemoryLocation::CpuToGpu,
         )?;
 
         unsafe {
-            let ptr = self
-                .device
-                .map_memory(staging_mem, 0, size, vk::MemoryMapFlags::empty())?
-                as *mut T;
+            let ptr = staging_alloc.mapped_ptr().unwrap().as_ptr() as *mut T;
             ptr.copy_from_nonoverlapping(data.as_ptr(), data.len());
-            self.device.unmap_memory(staging_mem);
         }
 
-        let (device_buf, device_mem) = self.create_buffer(
+        let (device_buf, device_alloc) = self.create_buffer(
             size,
             vk::BufferUsageFlags::TRANSFER_DST | usage,
-            vk::MemoryPropertyFlags::DEVICE_LOCAL,
+            MemoryLocation::GpuOnly,
         )?;
 
         self.copy_buffer(staging_buf, device_buf, size)?;
@@ -1312,7 +1323,7 @@ impl Renderer {
         //     self.device.free_memory(staging_mem, None);
         // }
 
-        Ok((device_buf, device_mem))
+        Ok((device_buf, device_alloc))
     }
     fn copy_buffer(&self, src: vk::Buffer, dst: vk::Buffer, size: vk::DeviceSize) -> Result<()> {
         let cmd = self.transfer_pool.begin_single_time()?;
@@ -1328,11 +1339,11 @@ impl Renderer {
         Ok(())
     }
     fn create_buffer(
-        &self,
+        &mut self,
         size: vk::DeviceSize,
         usage: vk::BufferUsageFlags,
-        properties: vk::MemoryPropertyFlags,
-    ) -> Result<(vk::Buffer, vk::DeviceMemory)> {
+        location: MemoryLocation,
+    ) -> Result<(vk::Buffer, Allocation)> {
         let buffer_info = vk::BufferCreateInfo::default()
             .size(size)
             .usage(usage)
@@ -1340,17 +1351,21 @@ impl Renderer {
 
         let buffer = unsafe { self.device.create_buffer(&buffer_info, None)? };
         let requirements = unsafe { self.device.get_buffer_memory_requirements(buffer) };
-        let memory_type = self.find_memory_type(requirements.memory_type_bits, properties)?;
 
-        let alloc_info = vk::MemoryAllocateInfo::default()
-            .allocation_size(requirements.size)
-            .memory_type_index(memory_type);
+        let allocation = self.allocator.allocate(&AllocationCreateDesc {
+            name: "buffer",
+            requirements,
+            location,
+            linear: true, // buffers are always linear
+            allocation_scheme: gpu_allocator::vulkan::AllocationScheme::GpuAllocatorManaged,
+        })?;
 
-        let memory = unsafe { self.device.allocate_memory(&alloc_info, None)? };
+        unsafe {
+            self.device
+                .bind_buffer_memory(buffer, allocation.memory(), allocation.offset())?
+        };
 
-        unsafe { self.device.bind_buffer_memory(buffer, memory, 0)? };
-
-        Ok((buffer, memory))
+        Ok((buffer, allocation))
     }
 
     // EXTRA UTILS
@@ -1358,26 +1373,6 @@ impl Renderer {
     fn mip_levels(width: u32, height: u32) -> u32 {
         // How many times can we halve the larger dimension before hitting 1px?
         u32::BITS - width.max(height).leading_zeros()
-    }
-    fn find_memory_type(
-        &self,
-        type_filter: u32,
-        properties: vk::MemoryPropertyFlags,
-    ) -> Result<u32> {
-        let mem_props = unsafe {
-            self.instance
-                .get_physical_device_memory_properties(self.physical_device)
-        };
-
-        (0..mem_props.memory_type_count)
-            .find(|&i| {
-                let type_match = type_filter & (1 << i) != 0;
-                let prop_match = mem_props.memory_types[i as usize]
-                    .property_flags
-                    .contains(properties);
-                type_match && prop_match
-            })
-            .ok_or(Error::NoSuitableMemoryType)
     }
     fn create_shader_module(
         device: &Device,
@@ -1396,8 +1391,12 @@ impl Drop for Renderer {
         }
         info!("cleaning up renderer");
 
-        self.scenes.clear();
-        self.models.values().for_each(|m| m.destroy(&self.device));
+        self.scenes
+            .values_mut()
+            .for_each(|s| s.destroy(&mut self.allocator));
+        self.models
+            .values_mut()
+            .for_each(|m| m.destroy(&self.device, &mut self.allocator));
         self.windows.clear();
         self.frames.iter().for_each(|f| f.destroy());
         self.graphics_pipeline.destroy();

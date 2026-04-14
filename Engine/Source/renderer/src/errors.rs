@@ -8,6 +8,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub enum Error {
     #[error("Vulkan error: {0}")]
     VulkanError(#[from] ash::vk::Result),
+    #[error("Allocation error: {0}")]
+    Allocation(#[from] gpu_allocator::AllocationError),
 
     #[error("Error loading Vulkan functions: {0}")]
     Loading(#[from] ash::LoadingError),
