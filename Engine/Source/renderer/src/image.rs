@@ -1,7 +1,7 @@
 //! This module houses the vulkan image abstraction
 
 pub mod layouts;
-pub mod utils;
+pub mod mips;
 
 use ash::{Device, vk};
 use gpu_allocator::{
