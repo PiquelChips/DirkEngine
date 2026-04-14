@@ -1,7 +1,7 @@
 use ash::{Device, vk};
+use gpu_allocator::vulkan::{Allocation, Allocator};
 
 /// Complete GPU model.
-#[derive(Clone)]
 pub struct Model {
     pub name: String,
     pub primitives: Vec<Primitive>,
@@ -13,55 +13,60 @@ pub struct Model {
 }
 
 impl Model {
-    pub fn destroy(&self, device: &Device) {
-        for prim in &self.primitives {
-            prim.destroy(device);
+    pub fn destroy(&mut self, device: &Device, allocator: &mut Allocator) {
+        for prim in &mut self.primitives {
+            prim.destroy(device, allocator);
         }
-        for tex in &self.textures {
-            tex.destroy(device);
+        for tex in &mut self.textures {
+            tex.destroy(device, allocator);
         }
     }
 }
 
 /// All GPU-side handles for a single texture.
-#[derive(Clone)]
 pub struct Texture {
     pub image: vk::Image,
-    pub memory: vk::DeviceMemory,
+    pub alloc: Option<Allocation>,
     pub view: vk::ImageView,
     pub sampler: vk::Sampler,
     pub mip_levels: u32,
 }
 
 impl Texture {
-    fn destroy(&self, device: &Device) {
+    fn destroy(&mut self, device: &Device, allocator: &mut Allocator) {
+        if let Some(alloc) = self.alloc.take() {
+            allocator.free(alloc).unwrap();
+        }
+
         unsafe {
             device.destroy_sampler(self.sampler, None);
             device.destroy_image_view(self.view, None);
             device.destroy_image(self.image, None);
-            device.free_memory(self.memory, None);
         }
     }
 }
 
 /// GPU-side handles for a single glTF primitive.
-#[derive(Clone)]
 pub struct Primitive {
     pub vertex_buffer: vk::Buffer,
-    pub vertex_buffer_memory: vk::DeviceMemory,
+    pub vertex_buffer_alloc: Option<Allocation>,
     pub index_buffer: vk::Buffer,
-    pub index_buffer_memory: vk::DeviceMemory,
+    pub index_buffer_alloc: Option<Allocation>,
     pub index_count: u32,
     pub material: Option<usize>,
 }
 
 impl Primitive {
-    fn destroy(&self, device: &Device) {
+    fn destroy(&mut self, device: &Device, allocator: &mut Allocator) {
+        if let Some(alloc) = self.vertex_buffer_alloc.take() {
+            allocator.free(alloc).unwrap();
+        }
+        if let Some(alloc) = self.index_buffer_alloc.take() {
+            allocator.free(alloc).unwrap();
+        }
         unsafe {
             device.destroy_buffer(self.vertex_buffer, None);
-            device.free_memory(self.vertex_buffer_memory, None);
             device.destroy_buffer(self.index_buffer, None);
-            device.free_memory(self.index_buffer_memory, None);
         }
     }
 }
