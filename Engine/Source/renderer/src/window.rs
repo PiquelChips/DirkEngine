@@ -5,22 +5,7 @@ use ash::{
 };
 use platform::WindowId;
 
-use crate::{Error, Renderer, Result};
-
-#[derive(Clone)]
-pub struct SwapchainImage {
-    pub image: vk::Image,
-    pub view: vk::ImageView,
-}
-impl SwapchainImage {
-    pub fn destroy(&self, device: &Device) {
-        // don't destroy image as it is owned
-        // by swap chain
-        unsafe {
-            device.destroy_image_view(self.view, None);
-        }
-    }
-}
+use crate::{Error, Renderer, Result, image::SwapchainImage};
 
 /// The renderer's representation of a platform window.
 /// Holds the swapchain, surface & other related state.
@@ -120,21 +105,21 @@ impl Window {
     }
     pub fn update_swapcahin(
         &mut self,
-        device: &Device,
         swapchain: vk::SwapchainKHR,
         extent: vk::Extent2D,
         images: Vec<SwapchainImage>,
     ) {
         self.swapchain = swapchain;
         self.extent = extent;
-        self.images.iter().for_each(|i| i.destroy(device));
         self.images = images;
     }
     pub fn set_occluded(&mut self, occluded: bool) {
         self.occluded = occluded
     }
-    pub fn destroy(&self) {
-        self.images.iter().for_each(|i| i.destroy(&self.device));
+}
+
+impl Drop for Window {
+    fn drop(&mut self) {
         unsafe {
             self.semaphores.iter().for_each(|&(s1, s2)| {
                 self.device.device_wait_idle().unwrap();
@@ -145,11 +130,5 @@ impl Window {
                 .destroy_swapchain(self.swapchain, None);
             self.surface_loader.destroy_surface(self.surface, None);
         }
-    }
-}
-
-impl Drop for Window {
-    fn drop(&mut self) {
-        self.destroy();
     }
 }

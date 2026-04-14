@@ -1,7 +1,9 @@
 use ash::{Device, vk};
-use gpu_allocator::vulkan::{Allocation, Allocator};
 
-use crate::buffer::{IndexBuffer, VertexBuffer};
+use crate::{
+    buffer::{IndexBuffer, VertexBuffer},
+    image::Image,
+};
 
 /// Complete GPU model.
 pub struct Model {
@@ -14,33 +16,18 @@ pub struct Model {
     pub material_sets: Vec<vk::DescriptorSet>,
 }
 
-impl Model {
-    pub fn destroy(&mut self, device: &Device, allocator: &mut Allocator) {
-        for tex in &mut self.textures {
-            tex.destroy(device, allocator);
-        }
-    }
-}
-
 /// All GPU-side handles for a single texture.
 pub struct Texture {
-    pub image: vk::Image,
-    pub alloc: Option<Allocation>,
-    pub view: vk::ImageView,
+    pub device: Device,
+    pub image: Image,
     pub sampler: vk::Sampler,
     pub mip_levels: u32,
 }
 
-impl Texture {
-    fn destroy(&mut self, device: &Device, allocator: &mut Allocator) {
-        if let Some(alloc) = self.alloc.take() {
-            allocator.free(alloc).unwrap();
-        }
-
+impl Drop for Texture {
+    fn drop(&mut self) {
         unsafe {
-            device.destroy_sampler(self.sampler, None);
-            device.destroy_image_view(self.view, None);
-            device.destroy_image(self.image, None);
+            self.device.destroy_sampler(self.sampler, None);
         }
     }
 }

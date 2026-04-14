@@ -1,15 +1,15 @@
 use std::collections::HashMap;
 
 use ash::{Device, vk};
-use gpu_allocator::{
-    MemoryLocation,
-    vulkan::{Allocation, Allocator},
-};
+use gpu_allocator::MemoryLocation;
 use world::WorldId;
 
 use crate::{
-    Error, MAX_FRAMES_IN_FLIGHT, MAX_RENDERABLES, Renderer, Result, buffer::UniformBuffer,
-    command_pool::CommandBuffer, render_pass::RenderPass,
+    Error, MAX_FRAMES_IN_FLIGHT, MAX_RENDERABLES, Renderer, Result,
+    buffer::UniformBuffer,
+    command_pool::CommandBuffer,
+    image::{Image, ImageCreateInfo},
+    render_pass::RenderPass,
 };
 
 /// This scene is created from a [world::World].
@@ -27,12 +27,8 @@ pub struct Scene {
     ubo: [UniformBuffer; MAX_FRAMES_IN_FLIGHT],
     descriptor_sets: [vk::DescriptorSet; MAX_FRAMES_IN_FLIGHT],
 
-    color: vk::ImageView,
-    color_image: vk::Image,
-    color_alloc: Option<Allocation>,
-    depth: vk::ImageView,
-    depth_image: vk::Image,
-    depth_alloc: Option<Allocation>,
+    color: Image,
+    depth: Image,
 }
 
 #[derive(Clone, Copy)]
@@ -116,35 +112,30 @@ impl Scene {
         };
 
         // IMAGES
-        let (color_image, color_alloc) = renderer.create_image(
+        let color_info = ImageCreateInfo {
             size,
-            renderer.properties.surface_format.format,
-            vk::ImageTiling::OPTIMAL,
-            vk::ImageUsageFlags::TRANSIENT_ATTACHMENT | vk::ImageUsageFlags::COLOR_ATTACHMENT,
-            MemoryLocation::GpuOnly,
-            (1, renderer.properties.msaa_samples),
-        )?;
-        let color = renderer.create_image_view(
-            color_image,
-            renderer.properties.surface_format.format,
-            vk::ImageAspectFlags::COLOR,
-            1,
-        )?;
+            format: renderer.properties.surface_format.format,
+            tiling: vk::ImageTiling::OPTIMAL,
+            usage: vk::ImageUsageFlags::TRANSIENT_ATTACHMENT
+                | vk::ImageUsageFlags::COLOR_ATTACHMENT,
+            location: MemoryLocation::GpuOnly,
+            mip_levels: 1,
+            num_samples: renderer.properties.msaa_samples,
+            aspect_flags: vk::ImageAspectFlags::COLOR,
+        };
+        let color = Image::create_image(renderer, color_info)?;
 
-        let (depth_image, depth_alloc) = renderer.create_image(
+        let depth_info = ImageCreateInfo {
             size,
-            renderer.properties.depth_format,
-            vk::ImageTiling::OPTIMAL,
-            vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
-            MemoryLocation::GpuOnly,
-            (1, renderer.properties.msaa_samples),
-        )?;
-        let depth = renderer.create_image_view(
-            depth_image,
-            renderer.properties.depth_format,
-            vk::ImageAspectFlags::DEPTH,
-            1,
-        )?;
+            format: renderer.properties.depth_format,
+            tiling: vk::ImageTiling::OPTIMAL,
+            usage: vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
+            location: MemoryLocation::GpuOnly,
+            mip_levels: 1,
+            num_samples: renderer.properties.msaa_samples,
+            aspect_flags: vk::ImageAspectFlags::DEPTH,
+        };
+        let depth = Image::create_image(renderer, depth_info)?;
 
         Ok(Self {
             world,
@@ -155,11 +146,7 @@ impl Scene {
             descriptor_sets: scene_desc_sets,
 
             color,
-            color_image,
-            color_alloc: Some(color_alloc),
             depth,
-            depth_image,
-            depth_alloc: Some(depth_alloc),
         })
     }
     pub fn render(
@@ -197,7 +184,7 @@ impl Scene {
             proxy.write_ubo(frame);
         }
 
-        RenderPass::begin(&renderer.device, cmd, size, view, self.color, self.depth);
+        RenderPass::begin(&renderer.device, cmd, size, view, &self.color, &self.depth);
         renderer.graphics_pipeline.bind(cmd);
 
         let viewport = vk::Viewport::default()
@@ -274,23 +261,14 @@ impl Scene {
     pub fn remove_proxy(&mut self, entity: world::Entity) {
         self.proxies.remove(&entity);
     }
+}
 
-    pub fn destroy(&mut self, allocator: &mut Allocator) {
+impl Drop for Scene {
+    fn drop(&mut self) {
         unsafe {
             self.device
                 .destroy_descriptor_pool(self.descriptor_pool, None);
-            self.device.destroy_image_view(self.color, None);
-            self.device.destroy_image(self.color_image, None);
-            self.device.destroy_image_view(self.depth, None);
-            self.device.destroy_image(self.depth_image, None);
         };
-
-        if let Some(alloc) = self.color_alloc.take() {
-            allocator.free(alloc).unwrap();
-        }
-        if let Some(alloc) = self.depth_alloc.take() {
-            allocator.free(alloc).unwrap();
-        }
     }
 }
 

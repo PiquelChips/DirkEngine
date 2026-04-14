@@ -15,8 +15,8 @@ use ash::{
     vk,
 };
 use gpu_allocator::{
-    AllocatorDebugSettings, MemoryLocation,
-    vulkan::{Allocation, AllocationCreateDesc, Allocator, AllocatorCreateDesc},
+    AllocatorDebugSettings,
+    vulkan::{Allocator, AllocatorCreateDesc},
 };
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use tracing::{debug, info};
@@ -27,7 +27,7 @@ use platform::{PlatformEvent, WindowEvent, WindowId};
 use world::{components, events::WorldEvent};
 
 mod utils;
-use crate::utils::*;
+use crate::{image::SwapchainImage, utils::*};
 use ::utils::*;
 
 mod errors;
@@ -49,7 +49,10 @@ mod command_pool;
 use command_pool::{CommandBuffer, CommandPool, Graphics, Transfer};
 
 mod buffer;
-use buffer::{CustomBuffer, IndexBuffer, VertexBuffer};
+use buffer::{IndexBuffer, VertexBuffer};
+
+mod image;
+use image::Image;
 
 mod layouts;
 mod physical_device;
@@ -732,7 +735,7 @@ impl Renderer {
                     let Some(window) = self.windows.get_mut(&id) else {
                         continue;
                     };
-                    window.update_swapcahin(&self.device, swapchain, extent, images);
+                    window.update_swapcahin(swapchain, extent, images);
                 }
                 WindowEvent::Occluded { id, occluded } => {
                     let Some(window) = self.windows.get_mut(&id) else {
@@ -784,18 +787,18 @@ impl Renderer {
 
         self.transition_image_layout(
             &cmd,
-            swapchain_img.image,
+            swapchain_img.image(),
             vk::ImageLayout::UNDEFINED,
             vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
             1,
             0,
         )?;
 
-        scene.render(self, &cmd, size, swapchain_img.view, camera)?;
+        scene.render(self, &cmd, size, swapchain_img.view(), camera)?;
 
         self.transition_image_layout(
             &cmd,
-            swapchain_img.image,
+            swapchain_img.image(),
             vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
             vk::ImageLayout::PRESENT_SRC_KHR,
             1,
@@ -844,7 +847,7 @@ impl Renderer {
         surface: vk::SurfaceKHR,
         window_size: vk::Extent2D,
         old_swapchain: vk::SwapchainKHR,
-    ) -> Result<(vk::SwapchainKHR, vk::Extent2D, Vec<window::SwapchainImage>)> {
+    ) -> Result<(vk::SwapchainKHR, vk::Extent2D, Vec<SwapchainImage>)> {
         let capabilities = unsafe {
             self.surface_loader
                 .get_physical_device_surface_capabilities(self.physical_device, surface)?
@@ -904,15 +907,7 @@ impl Renderer {
 
         let swap_images = images
             .into_iter()
-            .map(|image| {
-                let view = self.create_image_view(
-                    image,
-                    self.properties.surface_format.format,
-                    vk::ImageAspectFlags::COLOR,
-                    1,
-                )?;
-                Ok(window::SwapchainImage { image, view })
-            })
+            .map(|image| SwapchainImage::new(self, image, self.properties.surface_format.format))
             .collect::<Result<Vec<_>>>()?;
 
         unsafe { self.swapchain_loader.destroy_swapchain(old_swapchain, None) };
@@ -933,7 +928,7 @@ impl Renderer {
         let textures: Vec<_> = model
             .textures()
             .iter()
-            .map(|t| self.upload_texture(t))
+            .map(|t| Image::upload_texture(self, t))
             .collect::<Result<_>>()?;
 
         let material_count = model.materials().len();
@@ -960,7 +955,7 @@ impl Renderer {
 
             let image_info = vk::DescriptorImageInfo::default()
                 .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .image_view(tex.view)
+                .image_view(tex.image.view())
                 .sampler(tex.sampler);
 
             let write = vk::WriteDescriptorSet::default()
@@ -1015,161 +1010,9 @@ impl Renderer {
             material: *prim.material(),
         })
     }
-    fn upload_texture(&mut self, tex: &resource_manager::Texture) -> Result<Texture> {
-        let mip_levels = Self::mip_levels(*tex.width(), *tex.height());
-        let size = (tex.pixels().len()) as vk::DeviceSize;
-        let format = vk::Format::R8G8B8A8_SRGB;
-
-        let staging_buf = CustomBuffer::create_custom(
-            self,
-            size,
-            vk::BufferUsageFlags::TRANSFER_SRC,
-            MemoryLocation::CpuToGpu,
-        )?;
-
-        unsafe {
-            let ptr = staging_buf.mapped().unwrap().as_ptr() as *mut u8;
-            ptr.copy_from_nonoverlapping(tex.pixels().as_ptr(), tex.pixels().len());
-        }
-
-        let (image, alloc) = self.create_image(
-            vk::Extent2D {
-                width: *tex.width(),
-                height: *tex.height(),
-            },
-            format,
-            vk::ImageTiling::OPTIMAL,
-            // TRANSFER_SRC needed for mip creation
-            vk::ImageUsageFlags::TRANSFER_DST
-                | vk::ImageUsageFlags::TRANSFER_SRC
-                | vk::ImageUsageFlags::SAMPLED,
-            MemoryLocation::GpuOnly,
-            (mip_levels, vk::SampleCountFlags::TYPE_1),
-        )?;
-
-        let cmd = self.graphics_pool.begin_single_time()?;
-
-        self.transition_image_layout(
-            &cmd,
-            image,
-            vk::ImageLayout::UNDEFINED,
-            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-            mip_levels, // all mip levels start undefined
-            0,
-        )?;
-
-        let region = vk::BufferImageCopy::default()
-            .image_subresource(vk::ImageSubresourceLayers {
-                aspect_mask: vk::ImageAspectFlags::COLOR,
-                mip_level: 0,
-                base_array_layer: 0,
-                layer_count: 1,
-            })
-            .image_extent(vk::Extent3D {
-                width: *tex.width(),
-                height: *tex.height(),
-                depth: 1,
-            });
-
-        unsafe {
-            self.device.cmd_copy_buffer_to_image(
-                cmd.raw(),
-                staging_buf.buffer(),
-                image,
-                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                &[region],
-            );
-        }
-
-        self.generate_mipmaps(&cmd, image, *tex.width(), *tex.height(), mip_levels)?;
-        cmd.end_and_submit()?;
-
-        // TODO: destroy buffer when it is no longer needed (maybe with VMA)
-        // currently it is destroyed too early, it is still in use
-        // unsafe {
-        //     self.device.destroy_buffer(staging_buf, None);
-        //     self.device.free_memory(staging_mem, None);
-        // }
-
-        let view =
-            self.create_image_view(image, format, vk::ImageAspectFlags::COLOR, mip_levels)?;
-        let sampler = self.create_sampler(mip_levels)?;
-
-        Ok(Texture {
-            image,
-            alloc: Some(alloc),
-            view,
-            sampler,
-            mip_levels,
-        })
-    }
 
     // IMAGE UTILITIES
 
-    fn create_image_view(
-        &self,
-        image: vk::Image,
-        format: vk::Format,
-        aspect_flags: vk::ImageAspectFlags,
-        mip_levels: u32,
-    ) -> Result<vk::ImageView> {
-        let create_info = vk::ImageViewCreateInfo::default()
-            .image(image)
-            .view_type(vk::ImageViewType::TYPE_2D)
-            .format(format)
-            .subresource_range(vk::ImageSubresourceRange {
-                aspect_mask: aspect_flags,
-                base_mip_level: 0,
-                level_count: mip_levels,
-                base_array_layer: 0,
-                layer_count: 1,
-            });
-
-        Ok(unsafe { self.device.create_image_view(&create_info, None)? })
-    }
-    fn create_image(
-        &mut self,
-        size: vk::Extent2D,
-        format: vk::Format,
-        tiling: vk::ImageTiling,
-        usage: vk::ImageUsageFlags,
-        location: MemoryLocation,
-        (mip_levels, num_samples): (u32, vk::SampleCountFlags),
-    ) -> Result<(vk::Image, Allocation)> {
-        let image_info = vk::ImageCreateInfo::default()
-            .image_type(vk::ImageType::TYPE_2D)
-            .format(format)
-            .extent(vk::Extent3D {
-                width: size.width,
-                height: size.height,
-                depth: 1,
-            })
-            .mip_levels(mip_levels)
-            .array_layers(1)
-            .samples(num_samples)
-            .tiling(tiling)
-            .usage(usage)
-            .sharing_mode(vk::SharingMode::EXCLUSIVE)
-            .initial_layout(vk::ImageLayout::UNDEFINED);
-
-        let image = unsafe { self.device.create_image(&image_info, None)? };
-        let requirements = unsafe { self.device.get_image_memory_requirements(image) };
-
-        let allocation = self.allocator.allocate(&AllocationCreateDesc {
-            name: "image",
-            requirements,
-            location,
-            linear: tiling == vk::ImageTiling::LINEAR,
-            allocation_scheme: gpu_allocator::vulkan::AllocationScheme::GpuAllocatorManaged,
-        })?;
-
-        unsafe {
-            self.device
-                .bind_image_memory(image, allocation.memory(), allocation.offset())?
-        };
-
-        Ok((image, allocation))
-    }
     fn generate_mipmaps(
         &self,
         cmd: &CommandBuffer,
@@ -1311,12 +1154,8 @@ impl Drop for Renderer {
         }
         info!("cleaning up renderer");
 
-        self.scenes
-            .values_mut()
-            .for_each(|s| s.destroy(&mut self.allocator));
-        self.models
-            .values_mut()
-            .for_each(|m| m.destroy(&self.device, &mut self.allocator));
+        self.scenes.clear();
+        self.models.clear();
         self.windows.clear();
         self.frames.iter().for_each(|f| f.destroy());
         self.graphics_pipeline.destroy();
