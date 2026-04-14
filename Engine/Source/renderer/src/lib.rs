@@ -54,7 +54,6 @@ use buffer::{IndexBuffer, VertexBuffer};
 mod image;
 use image::Image;
 
-mod layouts;
 mod physical_device;
 mod render_pass;
 
@@ -785,9 +784,8 @@ impl Renderer {
                 .begin_command_buffer(cmd.raw(), &vk::CommandBufferBeginInfo::default())?
         }
 
-        self.transition_image_layout(
+        swapchain_img.transition_image_layout(
             &cmd,
-            swapchain_img.image(),
             vk::ImageLayout::UNDEFINED,
             vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
             1,
@@ -796,9 +794,8 @@ impl Renderer {
 
         scene.render(self, &cmd, size, swapchain_img.view(), camera)?;
 
-        self.transition_image_layout(
+        swapchain_img.transition_image_layout(
             &cmd,
-            swapchain_img.image(),
             vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
             vk::ImageLayout::PRESENT_SRC_KHR,
             1,
@@ -1016,7 +1013,7 @@ impl Renderer {
     fn generate_mipmaps(
         &self,
         cmd: &CommandBuffer,
-        image: vk::Image,
+        image: &Image,
         width: u32,
         height: u32,
         mip_levels: u32,
@@ -1027,9 +1024,8 @@ impl Renderer {
         for level in 1..mip_levels {
             let base_mip = level - 1;
             // Transition previous level: TRANSFER_DST → TRANSFER_SRC
-            self.transition_image_layout(
+            image.transition_image_layout(
                 cmd,
-                image,
                 vk::ImageLayout::TRANSFER_DST_OPTIMAL,
                 vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
                 1,
@@ -1072,9 +1068,9 @@ impl Renderer {
             unsafe {
                 self.device.cmd_blit_image(
                     cmd.raw(),
-                    image,
+                    image.image(),
                     vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-                    image,
+                    image.image(),
                     vk::ImageLayout::TRANSFER_DST_OPTIMAL,
                     &[blit],
                     vk::Filter::LINEAR,
@@ -1082,9 +1078,8 @@ impl Renderer {
             }
 
             // Previous level is fully consumed — transition to shader-readable
-            self.transition_image_layout(
+            image.transition_image_layout(
                 cmd,
-                image,
                 vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
                 vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
                 1,
@@ -1096,9 +1091,8 @@ impl Renderer {
         }
 
         // Transition the final mip level (never used as a blit source)
-        self.transition_image_layout(
+        image.transition_image_layout(
             cmd,
-            image,
             vk::ImageLayout::TRANSFER_DST_OPTIMAL,
             vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
             1,

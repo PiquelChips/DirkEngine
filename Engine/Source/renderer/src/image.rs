@@ -1,5 +1,7 @@
 //! This module houses the vulkan image abstraction
 
+pub mod layouts;
+
 use ash::{Device, vk};
 use gpu_allocator::{
     MemoryLocation,
@@ -14,6 +16,8 @@ pub struct Image {
     image: vk::Image,
     view: vk::ImageView,
     allocation: Allocation,
+    // TODO: store internal format for use in transition image layout
+    // TODO: store current queue?
 }
 
 // TODO: default
@@ -123,9 +127,8 @@ impl Image {
 
         let cmd = renderer.graphics_pool.begin_single_time()?;
 
-        renderer.transition_image_layout(
+        image.transition_image_layout(
             &cmd,
-            image.image(),
             vk::ImageLayout::UNDEFINED,
             vk::ImageLayout::TRANSFER_DST_OPTIMAL,
             mip_levels, // all mip levels start undefined
@@ -155,7 +158,8 @@ impl Image {
             );
         }
 
-        renderer.generate_mipmaps(&cmd, image.image(), *tex.width(), *tex.height(), mip_levels)?;
+        // TODO: start in transfer queue, swap to graphics and then go back
+        renderer.generate_mipmaps(&cmd, &image, *tex.width(), *tex.height(), mip_levels)?;
         cmd.end_and_submit()?;
 
         // TODO: destroy buffer when it is no longer needed (maybe with VMA)
@@ -217,6 +221,8 @@ impl Drop for Image {
 }
 
 #[derive(Clone)]
+/// TODO: have SwapchainImage wrap image. Maybe have a field to disable image
+/// destruction?
 pub struct SwapchainImage {
     device: Device,
     image: vk::Image,
