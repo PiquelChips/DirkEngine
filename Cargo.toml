@@ -61,3 +61,4 @@ gpu-allocator = { version = "0.28", default-features = false, features = ["std",
 # Macro dependencies
 syn = "2.0"
 quote = "1.0"
+paste = "1"

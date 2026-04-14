@@ -1,12 +1,11 @@
 use ash::vk;
 
-use crate::{Error, Renderer, Result, command_pool::CommandBuffer};
+use crate::{Error, Result, command_pool::CommandBuffer, image::Image};
 
-impl Renderer {
+impl Image {
     pub fn transition_image_layout(
         &self,
         cmd: &CommandBuffer,
-        image: vk::Image,
         old_layout: vk::ImageLayout,
         new_layout: vk::ImageLayout,
         mip_levels: u32,
@@ -22,7 +21,7 @@ impl Renderer {
             .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
             .src_access_mask(src_access)
             .dst_access_mask(dst_access)
-            .image(image)
+            .image(self.image)
             .subresource_range(vk::ImageSubresourceRange {
                 aspect_mask: vk::ImageAspectFlags::COLOR,
                 base_mip_level: base_mip,
@@ -44,6 +43,7 @@ impl Renderer {
         };
         Ok(())
     }
+
     fn src_layout_info(
         layout: vk::ImageLayout,
     ) -> Result<(vk::AccessFlags, vk::PipelineStageFlags)> {
