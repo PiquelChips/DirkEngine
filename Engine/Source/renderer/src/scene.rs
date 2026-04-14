@@ -269,7 +269,7 @@ impl Scene {
             let Some(ref model) = proxy.model else {
                 continue;
             };
-            let Some(ref model) = renderer.models.get(model) else {
+            let Some(model) = renderer.models.get(model) else {
                 continue;
             };
 
