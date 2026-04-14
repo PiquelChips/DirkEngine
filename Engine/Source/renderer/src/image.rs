@@ -1,6 +1,7 @@
 //! This module houses the vulkan image abstraction
 
 pub mod layouts;
+pub mod utils;
 
 use ash::{Device, vk};
 use gpu_allocator::{
@@ -91,7 +92,7 @@ impl Image {
         renderer: &mut Renderer,
         tex: &resource_manager::Texture,
     ) -> Result<Texture> {
-        let mip_levels = Renderer::mip_levels(*tex.width(), *tex.height());
+        let mip_levels = Self::mip_levels(*tex.width(), *tex.height());
         let size = (tex.pixels().len()) as vk::DeviceSize;
         let format = vk::Format::R8G8B8A8_SRGB;
 
@@ -159,7 +160,7 @@ impl Image {
         }
 
         // TODO: start in transfer queue, swap to graphics and then go back
-        renderer.generate_mipmaps(&cmd, &image, *tex.width(), *tex.height(), mip_levels)?;
+        image.generate_mipmaps(&cmd, *tex.width(), *tex.height(), mip_levels)?;
         cmd.end_and_submit()?;
 
         // TODO: destroy buffer when it is no longer needed (maybe with VMA)
@@ -208,6 +209,10 @@ impl Image {
 
         Ok(unsafe { renderer.device.create_image_view(&create_info, None)? })
     }
+    fn mip_levels(width: u32, height: u32) -> u32 {
+        // How many times can we halve the larger dimension before hitting 1px?
+        u32::BITS - width.max(height).leading_zeros()
+    }
 }
 
 impl Drop for Image {
@@ -241,9 +246,6 @@ impl SwapchainImage {
                 1,
             )?,
         })
-    }
-    pub fn image(&self) -> vk::Image {
-        self.image
     }
     pub fn view(&self) -> vk::ImageView {
         self.view
