@@ -14,6 +14,7 @@ use ash::{
     khr::{surface, swapchain},
     vk,
 };
+use events::EventManager;
 use gpu_allocator::{
     AllocatorDebugSettings,
     vulkan::{Allocator, AllocatorCreateDesc},
@@ -175,6 +176,9 @@ pub struct Renderer {
     debug_messenger: vk::DebugUtilsMessengerEXT,
 
     // Events
+    /// TODO: will be used to create listeners for scenes
+    #[allow(unused)]
+    event_manager: EventManager,
     window_consumer: events::Consumer<platform::WindowEvent>,
     platform_consumer: events::Consumer<platform::PlatformEvent>,
     world_consumer: events::Consumer<world::events::WorldEvent>,
@@ -189,7 +193,7 @@ impl Renderer {
     pub fn init(
         create_info: RendererCreateInfo,
         window: &platform::Window,
-        event_manager: &mut events::EventManager,
+        event_manager: events::EventManager,
     ) -> Result<Self> {
         info!("Intializing Vulkan...");
 
@@ -607,6 +611,7 @@ impl Renderer {
             window_consumer: event_manager.subscribe(),
             platform_consumer: event_manager.subscribe(),
             world_consumer: event_manager.subscribe(),
+            event_manager,
         })
     }
 
