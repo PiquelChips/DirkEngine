@@ -41,11 +41,7 @@ mod window;
 use window::Window;
 
 mod resources;
-use resources::{
-    command_pool::{CommandPool, Graphics},
-    device::RenderDevice,
-    image::SwapchainImage,
-};
+use resources::{command_pool::CommandPool, device::RenderDevice, image::SwapchainImage};
 
 mod assets;
 use assets::AssetManager;
@@ -68,74 +64,11 @@ const DEVICE_EXTENSIONS: &[&str] =
 #[cfg(validation)]
 const VALIDATION_LAYERS: &[*const i8] = &[c"VK_LAYER_KHRONOS_validation".as_ptr()];
 
-struct Frame {
-    device: Device,
-    /// Command pool to allocate command buffers on every frame
-    command_pool: CommandPool<Graphics>,
-    /// Main synchronization fence
-    fence: vk::Fence,
-    // TODO: have one primary command buffer that is allocated once and
-    // secondary command for each scene. Should be allocated every time
-    // there is a change in scene count. If not reallocated, reset.
-}
-
-impl Frame {
-    fn destroy(&self) {
-        self.command_pool.destroy();
-        unsafe {
-            self.device.destroy_fence(self.fence, None);
-        }
-    }
-}
-
-/// This struct is owned by [Renderer] and stores
-/// all the different descriptor set layouts used by
-/// the renderer.
-/// Every field should be a descriptor set layout with a
-/// propper comment explain what the layout is and where
-/// it is used.
-struct DescriptorLayouts {
-    // TODO: much better comments for descriptor set layouts
-    /// Per scene layout. Holds view & proj matrices for rendering.
-    scene: vk::DescriptorSetLayout,
-    /// Per object layout. For model matrix.
-    object: vk::DescriptorSetLayout,
-    /// Per material layout. For texture descriptor.
-    material: vk::DescriptorSetLayout,
-}
-
-impl DescriptorLayouts {
-    fn destroy(&self, device: &Device) {
-        unsafe {
-            device.destroy_descriptor_set_layout(self.scene, None);
-            device.destroy_descriptor_set_layout(self.object, None);
-            device.destroy_descriptor_set_layout(self.material, None);
-        }
-    }
-}
-
 pub struct RendererCreateInfo {
     pub engine_name: CString,
     pub engine_version: Version,
     pub app_name: CString,
     pub app_version: Version,
-}
-
-struct Queues {
-    graphics: vk::Queue,
-    compute: vk::Queue,
-    transfer: vk::Queue,
-    present: vk::Queue,
-}
-
-pub struct RendererProperties {
-    msaa_samples: vk::SampleCountFlags,
-    #[allow(unused)]
-    anisotropy: bool,
-    surface_format: vk::SurfaceFormatKHR,
-    queue_family_indices: physical_device::QueueFamilyIndices,
-    depth_format: vk::Format,
-    present_mode: vk::PresentModeKHR,
 }
 
 /// The Renderer struct that holds all render state and is called upon to handle
@@ -501,6 +434,7 @@ impl Renderer {
             render_device,
             windows: HashMap::new(),
             scenes: HashMap::new(),
+            players: HashMap::new(),
             asset_manager,
             frames,
             current_frame,
