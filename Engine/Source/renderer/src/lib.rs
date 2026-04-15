@@ -14,6 +14,10 @@ use ash::{
     khr::{surface, swapchain},
     vk,
 };
+use gpu_allocator::{
+    AllocatorDebugSettings,
+    vulkan::{Allocator, AllocatorCreateDesc},
+};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use tracing::{debug, info};
 #[cfg(validation)]
@@ -23,14 +27,11 @@ use platform::{PlatformEvent, WindowEvent, WindowId};
 use world::{components, events::WorldEvent};
 
 mod utils;
-use crate::utils::*;
+use crate::{image::SwapchainImage, utils::*};
 use ::utils::*;
 
 mod errors;
 pub use errors::{Error, Result};
-
-mod model;
-use model::*;
 
 mod scene;
 use scene::{Scene, SceneProxy};
@@ -38,15 +39,17 @@ use scene::{Scene, SceneProxy};
 mod window;
 use window::Window;
 
-mod pipeline;
-use pipeline::GraphicsPipeline;
+use resources::*;
 
-mod command_pool;
-use command_pool::{CommandBuffer, CommandPool, Graphics, Transfer};
+use buffer::{IndexBuffer, VertexBuffer};
+use command_pool::{CommandPool, Graphics, Transfer};
+use image::Image;
+use model::*;
 
-mod layouts;
 mod physical_device;
+mod pipeline;
 mod render_pass;
+mod resources;
 
 /// The maximum numer of renderables in a scene.
 /// Used to construct Ubo samples.
@@ -135,6 +138,7 @@ pub struct RendererProperties {
 /// all rendering operations
 pub struct Renderer {
     entry: Entry,
+    allocator: Allocator,
 
     // Renderer Resources
     instance: Instance,
@@ -175,10 +179,9 @@ pub struct Renderer {
     platform_consumer: events::Consumer<platform::PlatformEvent>,
     world_consumer: events::Consumer<world::events::WorldEvent>,
 
-    // TODO: these are temporary while we get rendering to work
-    // render graph should fix this
-    graphics_pipeline: GraphicsPipeline,
     /// The size of the output
+    /// TODO: should be removed once we get the frame graph to
+    /// handle transient resources
     extent: vk::Extent2D,
 }
 
@@ -431,6 +434,8 @@ impl Renderer {
 
             let physical_device_features =
                 vk::PhysicalDeviceFeatures::default().sampler_anisotropy(true);
+            let mut vulkan12_features =
+                vk::PhysicalDeviceVulkan12Features::default().buffer_device_address(true);
             let mut vulkan13_features =
                 vk::PhysicalDeviceVulkan13Features::default().dynamic_rendering(true);
 
@@ -442,10 +447,23 @@ impl Renderer {
                 .queue_create_infos(&queue_create_infos)
                 .enabled_features(&physical_device_features)
                 .enabled_extension_names(&extensions)
+                .push_next(&mut vulkan12_features)
                 .push_next(&mut vulkan13_features);
 
             unsafe { instance.create_device(physical_device, &device_create_info, None)? }
         };
+
+        let mut allocator_debug_settings = AllocatorDebugSettings::default();
+        // TODO: actually fix the memory leak in buffer creation
+        allocator_debug_settings.log_leaks_on_shutdown = false;
+        let allocator = Allocator::new(&AllocatorCreateDesc {
+            instance: instance.clone(),
+            device: device.clone(),
+            physical_device,
+            debug_settings: allocator_debug_settings,
+            buffer_device_address: true,
+            allocation_sizes: Default::default(),
+        })?;
 
         // QUEUES
         let queues = {
@@ -526,8 +544,6 @@ impl Renderer {
             },
         };
 
-        let graphics_pipeline = GraphicsPipeline::build(&device, &layouts, &properties)?;
-
         // MATERIAL DESCRIPTOR SETS
         let material_descriptor_pool = {
             let pool_size = vk::DescriptorPoolSize {
@@ -564,6 +580,7 @@ impl Renderer {
 
         Ok(Self {
             entry,
+            allocator,
             instance,
             device,
             queues,
@@ -585,7 +602,6 @@ impl Renderer {
             #[cfg(validation)]
             debug_messenger,
 
-            graphics_pipeline,
             extent,
 
             window_consumer: event_manager.subscribe(),
@@ -604,17 +620,15 @@ impl Renderer {
         for event in world_events {
             match event {
                 WorldEvent::Created(id) => {
-                    self.scenes.insert(id, Scene::build(self, self.extent, id)?);
+                    let scene = Scene::build(self, self.extent, id)?;
+                    self.scenes.insert(id, scene);
                 }
                 WorldEvent::Destroyed(id) => {
                     self.scenes.remove(&id);
                 }
                 WorldEvent::EntitySpawn { world, entity } => {
-                    let Some(scene) = self.scenes.get(&world) else {
-                        continue;
-                    };
+                    let proxy = SceneProxy::build(self, world)?;
                     // this creates a completely empty proxy, no mesh or matrix
-                    let proxy = SceneProxy::build(self, scene)?;
                     let Some(scene) = self.scenes.get_mut(&world) else {
                         continue;
                     };
@@ -640,11 +654,7 @@ impl Renderer {
                     proxy.set_model_matrix(transform.matrix());
 
                     if let Some(renderable) = world.get::<components::Renderable>(entity) {
-                        proxy.set_model(
-                            self.models
-                                .get(&renderable.model)
-                                .expect("model should have been loaded"),
-                        );
+                        proxy.set_model(&renderable.model);
                     };
                     if let Some(camera) = world.get::<components::Camera>(entity) {
                         proxy.set_camera(transform.view(), camera.projection());
@@ -714,7 +724,7 @@ impl Renderer {
                     let Some(window) = self.windows.get_mut(&id) else {
                         continue;
                     };
-                    window.update_swapcahin(&self.device, swapchain, extent, images);
+                    window.update_swapcahin(swapchain, extent, images);
                 }
                 WindowEvent::Occluded { id, occluded } => {
                     let Some(window) = self.windows.get_mut(&id) else {
@@ -743,12 +753,12 @@ impl Renderer {
             return Err(Error::WorldDoesNotExist(world));
         };
 
-        let (swapchain_img, idx) = window.next_image(&self.swapchain_loader)?;
         let (render_finished_semaphore, image_available_semaphore) = window.current_semaphores();
         let size = window.extent();
         let swapchain = window.swapchain();
+        let (swapchain_img, idx) = window.next_image(&self.swapchain_loader)?;
 
-        let frame = self.get_current_frame();
+        let frame = &self.frames[self.current_frame];
 
         unsafe {
             self.device
@@ -764,24 +774,25 @@ impl Renderer {
                 .begin_command_buffer(cmd.raw(), &vk::CommandBufferBeginInfo::default())?
         }
 
-        self.transition_image_layout(
+        swapchain_img.transition_image_layout(
             &cmd,
-            swapchain_img.image,
             vk::ImageLayout::UNDEFINED,
             vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-            1,
-            0,
         )?;
 
-        scene.render(self, &cmd, size, swapchain_img.view, camera)?;
-
-        self.transition_image_layout(
+        scene.render(
+            self.current_frame,
+            &self.models,
             &cmd,
-            swapchain_img.image,
+            size,
+            swapchain_img.view(),
+            camera,
+        )?;
+
+        swapchain_img.transition_image_layout(
+            &cmd,
             vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
             vk::ImageLayout::PRESENT_SRC_KHR,
-            1,
-            0,
         )?;
 
         unsafe { self.device.end_command_buffer(cmd.raw())? }
@@ -815,9 +826,6 @@ impl Renderer {
         self.current_frame = (self.current_frame + 1) % MAX_FRAMES_IN_FLIGHT;
         Ok(())
     }
-    fn get_current_frame(&self) -> &Frame {
-        &self.frames[self.current_frame]
-    }
 
     // WINDOW MANAGEMENT
 
@@ -826,7 +834,7 @@ impl Renderer {
         surface: vk::SurfaceKHR,
         window_size: vk::Extent2D,
         old_swapchain: vk::SwapchainKHR,
-    ) -> Result<(vk::SwapchainKHR, vk::Extent2D, Vec<window::SwapchainImage>)> {
+    ) -> Result<(vk::SwapchainKHR, vk::Extent2D, Vec<SwapchainImage>)> {
         let capabilities = unsafe {
             self.surface_loader
                 .get_physical_device_surface_capabilities(self.physical_device, surface)?
@@ -886,15 +894,7 @@ impl Renderer {
 
         let swap_images = images
             .into_iter()
-            .map(|image| {
-                let view = self.create_image_view(
-                    image,
-                    self.properties.surface_format.format,
-                    vk::ImageAspectFlags::COLOR,
-                    1,
-                )?;
-                Ok(window::SwapchainImage { image, view })
-            })
+            .map(|image| SwapchainImage::new(self, image, self.properties.surface_format.format))
             .collect::<Result<Vec<_>>>()?;
 
         unsafe { self.swapchain_loader.destroy_swapchain(old_swapchain, None) };
@@ -915,7 +915,7 @@ impl Renderer {
         let textures: Vec<_> = model
             .textures()
             .iter()
-            .map(|t| self.upload_texture(t))
+            .map(|t| Image::upload_texture(self, t))
             .collect::<Result<_>>()?;
 
         let material_count = model.materials().len();
@@ -942,7 +942,7 @@ impl Renderer {
 
             let image_info = vk::DescriptorImageInfo::default()
                 .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .image_view(tex.view)
+                .image_view(tex.image.view())
                 .sampler(tex.sampler);
 
             let write = vk::WriteDescriptorSet::default()
@@ -975,7 +975,7 @@ impl Renderer {
         self.upload_model(resource_manager::ResourceManager::load_model(name)?)
     }
 
-    fn upload_primitive(&self, prim: &resource_manager::Primitive) -> Result<Primitive> {
+    fn upload_primitive(&mut self, prim: &resource_manager::Primitive) -> Result<Primitive> {
         let vertices: Vec<Vertex> = prim
             .positions()
             .iter()
@@ -987,267 +987,19 @@ impl Renderer {
             })
             .collect();
 
-        let (vertex_buffer, vertex_buffer_memory) =
-            self.upload_slice(&vertices, vk::BufferUsageFlags::VERTEX_BUFFER)?;
-
-        let (index_buffer, index_buffer_memory) =
-            self.upload_slice(prim.indices(), vk::BufferUsageFlags::INDEX_BUFFER)?;
+        let vertex_buffer = VertexBuffer::upload_slice(self, &vertices)?;
+        let index_buffer = IndexBuffer::upload_slice(self, prim.indices())?;
 
         Ok(Primitive {
             vertex_buffer,
-            vertex_buffer_memory,
             index_buffer,
-            index_buffer_memory,
             index_count: prim.indices().len() as u32,
             material: *prim.material(),
-        })
-    }
-    fn upload_texture(&self, tex: &resource_manager::Texture) -> Result<Texture> {
-        let mip_levels = Self::mip_levels(*tex.width(), *tex.height());
-        let size = (tex.pixels().len()) as vk::DeviceSize;
-        let format = vk::Format::R8G8B8A8_SRGB;
-
-        let (staging_buf, staging_mem) = self.create_buffer(
-            size,
-            vk::BufferUsageFlags::TRANSFER_SRC,
-            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
-        )?;
-
-        unsafe {
-            let ptr = self
-                .device
-                .map_memory(staging_mem, 0, size, vk::MemoryMapFlags::empty())?
-                as *mut u8;
-            ptr.copy_from_nonoverlapping(tex.pixels().as_ptr(), tex.pixels().len());
-            self.device.unmap_memory(staging_mem);
-        }
-
-        let (image, memory) = self.create_image(
-            vk::Extent2D {
-                width: *tex.width(),
-                height: *tex.height(),
-            },
-            format,
-            vk::ImageTiling::OPTIMAL,
-            // TRANSFER_SRC needed for mip creation
-            vk::ImageUsageFlags::TRANSFER_DST
-                | vk::ImageUsageFlags::TRANSFER_SRC
-                | vk::ImageUsageFlags::SAMPLED,
-            vk::MemoryPropertyFlags::DEVICE_LOCAL,
-            (mip_levels, vk::SampleCountFlags::TYPE_1),
-        )?;
-
-        let cmd = self.graphics_pool.begin_single_time()?;
-
-        self.transition_image_layout(
-            &cmd,
-            image,
-            vk::ImageLayout::UNDEFINED,
-            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-            mip_levels, // all mip levels start undefined
-            0,
-        )?;
-
-        let region = vk::BufferImageCopy::default()
-            .image_subresource(vk::ImageSubresourceLayers {
-                aspect_mask: vk::ImageAspectFlags::COLOR,
-                mip_level: 0,
-                base_array_layer: 0,
-                layer_count: 1,
-            })
-            .image_extent(vk::Extent3D {
-                width: *tex.width(),
-                height: *tex.height(),
-                depth: 1,
-            });
-
-        unsafe {
-            self.device.cmd_copy_buffer_to_image(
-                cmd.raw(),
-                staging_buf,
-                image,
-                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                &[region],
-            );
-        }
-
-        self.generate_mipmaps(&cmd, image, *tex.width(), *tex.height(), mip_levels)?;
-        cmd.end_and_submit()?;
-
-        // TODO: destroy buffer when it is no longer needed (maybe with VMA)
-        // currently it is destroyed too early, it is still in use
-        // unsafe {
-        //     self.device.destroy_buffer(staging_buf, None);
-        //     self.device.free_memory(staging_mem, None);
-        // }
-
-        let view =
-            self.create_image_view(image, format, vk::ImageAspectFlags::COLOR, mip_levels)?;
-        let sampler = self.create_sampler(mip_levels)?;
-
-        Ok(Texture {
-            image,
-            memory,
-            view,
-            sampler,
-            mip_levels,
         })
     }
 
     // IMAGE UTILITIES
 
-    fn create_image_view(
-        &self,
-        image: vk::Image,
-        format: vk::Format,
-        aspect_flags: vk::ImageAspectFlags,
-        mip_levels: u32,
-    ) -> Result<vk::ImageView> {
-        let create_info = vk::ImageViewCreateInfo::default()
-            .image(image)
-            .view_type(vk::ImageViewType::TYPE_2D)
-            .format(format)
-            .subresource_range(vk::ImageSubresourceRange {
-                aspect_mask: aspect_flags,
-                base_mip_level: 0,
-                level_count: mip_levels,
-                base_array_layer: 0,
-                layer_count: 1,
-            });
-
-        Ok(unsafe { self.device.create_image_view(&create_info, None)? })
-    }
-    fn create_image(
-        &self,
-        size: vk::Extent2D,
-        format: vk::Format,
-        tiling: vk::ImageTiling,
-        usage: vk::ImageUsageFlags,
-        properties: vk::MemoryPropertyFlags,
-        (mip_levels, num_samples): (u32, vk::SampleCountFlags),
-    ) -> Result<(vk::Image, vk::DeviceMemory)> {
-        let image_info = vk::ImageCreateInfo::default()
-            .image_type(vk::ImageType::TYPE_2D)
-            .format(format)
-            .extent(vk::Extent3D {
-                width: size.width,
-                height: size.height,
-                depth: 1,
-            })
-            .mip_levels(mip_levels)
-            .array_layers(1)
-            .samples(num_samples)
-            .tiling(tiling)
-            .usage(usage)
-            .sharing_mode(vk::SharingMode::EXCLUSIVE)
-            .initial_layout(vk::ImageLayout::UNDEFINED);
-
-        let image = unsafe { self.device.create_image(&image_info, None)? };
-
-        let mem_req = unsafe { self.device.get_image_memory_requirements(image) };
-
-        let alloc_info = vk::MemoryAllocateInfo::default()
-            .allocation_size(mem_req.size)
-            .memory_type_index(self.find_memory_type(mem_req.memory_type_bits, properties)?);
-
-        let memory = unsafe { self.device.allocate_memory(&alloc_info, None)? };
-
-        unsafe { self.device.bind_image_memory(image, memory, 0)? };
-
-        Ok((image, memory))
-    }
-    fn generate_mipmaps(
-        &self,
-        cmd: &CommandBuffer,
-        image: vk::Image,
-        width: u32,
-        height: u32,
-        mip_levels: u32,
-    ) -> Result<()> {
-        let mut mip_width = width;
-        let mut mip_height = height;
-
-        for level in 1..mip_levels {
-            let base_mip = level - 1;
-            // Transition previous level: TRANSFER_DST → TRANSFER_SRC
-            self.transition_image_layout(
-                cmd,
-                image,
-                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-                1,
-                base_mip,
-            )?;
-
-            let next_w = (mip_width / 2).max(1);
-            let next_h = (mip_height / 2).max(1);
-
-            let blit = vk::ImageBlit::default()
-                .src_subresource(vk::ImageSubresourceLayers {
-                    aspect_mask: vk::ImageAspectFlags::COLOR,
-                    mip_level: level - 1,
-                    base_array_layer: 0,
-                    layer_count: 1,
-                })
-                .src_offsets([
-                    vk::Offset3D { x: 0, y: 0, z: 0 },
-                    vk::Offset3D {
-                        x: mip_width as i32,
-                        y: mip_height as i32,
-                        z: 1,
-                    },
-                ])
-                .dst_subresource(vk::ImageSubresourceLayers {
-                    aspect_mask: vk::ImageAspectFlags::COLOR,
-                    mip_level: level,
-                    base_array_layer: 0,
-                    layer_count: 1,
-                })
-                .dst_offsets([
-                    vk::Offset3D { x: 0, y: 0, z: 0 },
-                    vk::Offset3D {
-                        x: next_w as i32,
-                        y: next_h as i32,
-                        z: 1,
-                    },
-                ]);
-
-            unsafe {
-                self.device.cmd_blit_image(
-                    cmd.raw(),
-                    image,
-                    vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-                    image,
-                    vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                    &[blit],
-                    vk::Filter::LINEAR,
-                );
-            }
-
-            // Previous level is fully consumed — transition to shader-readable
-            self.transition_image_layout(
-                cmd,
-                image,
-                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-                1,
-                base_mip,
-            )?;
-
-            mip_width = next_w;
-            mip_height = next_h;
-        }
-
-        // Transition the final mip level (never used as a blit source)
-        self.transition_image_layout(
-            cmd,
-            image,
-            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-            vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-            1,
-            mip_levels - 1,
-        )
-    }
     fn create_sampler(&self, mip_levels: u32) -> Result<vk::Sampler> {
         let props = unsafe {
             self.instance
@@ -1274,111 +1026,8 @@ impl Renderer {
         Ok(unsafe { self.device.create_sampler(&sampler_info, None)? })
     }
 
-    // BUFFER UTILITIES
-
-    fn upload_slice<T: Copy>(
-        &self,
-        data: &[T],
-        usage: vk::BufferUsageFlags,
-    ) -> Result<(vk::Buffer, vk::DeviceMemory)> {
-        let size = std::mem::size_of_val(data) as vk::DeviceSize;
-
-        let (staging_buf, staging_mem) = self.create_buffer(
-            size,
-            vk::BufferUsageFlags::TRANSFER_SRC,
-            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
-        )?;
-
-        unsafe {
-            let ptr = self
-                .device
-                .map_memory(staging_mem, 0, size, vk::MemoryMapFlags::empty())?
-                as *mut T;
-            ptr.copy_from_nonoverlapping(data.as_ptr(), data.len());
-            self.device.unmap_memory(staging_mem);
-        }
-
-        let (device_buf, device_mem) = self.create_buffer(
-            size,
-            vk::BufferUsageFlags::TRANSFER_DST | usage,
-            vk::MemoryPropertyFlags::DEVICE_LOCAL,
-        )?;
-
-        self.copy_buffer(staging_buf, device_buf, size)?;
-        // TODO: destroy buffer when it is no longer needed (maybe with VMA)
-        // currently it is destroyed too early, it is still in use
-        // unsafe {
-        //     self.device.destroy_buffer(staging_buf, None);
-        //     self.device.free_memory(staging_mem, None);
-        // }
-
-        Ok((device_buf, device_mem))
-    }
-    fn copy_buffer(&self, src: vk::Buffer, dst: vk::Buffer, size: vk::DeviceSize) -> Result<()> {
-        let cmd = self.transfer_pool.begin_single_time()?;
-
-        let region = vk::BufferCopy {
-            src_offset: 0,
-            dst_offset: 0,
-            size,
-        };
-        unsafe { self.device.cmd_copy_buffer(cmd.raw(), src, dst, &[region]) };
-
-        cmd.end_and_submit()?;
-        Ok(())
-    }
-    fn create_buffer(
-        &self,
-        size: vk::DeviceSize,
-        usage: vk::BufferUsageFlags,
-        properties: vk::MemoryPropertyFlags,
-    ) -> Result<(vk::Buffer, vk::DeviceMemory)> {
-        let buffer_info = vk::BufferCreateInfo::default()
-            .size(size)
-            .usage(usage)
-            .sharing_mode(vk::SharingMode::EXCLUSIVE);
-
-        let buffer = unsafe { self.device.create_buffer(&buffer_info, None)? };
-        let requirements = unsafe { self.device.get_buffer_memory_requirements(buffer) };
-        let memory_type = self.find_memory_type(requirements.memory_type_bits, properties)?;
-
-        let alloc_info = vk::MemoryAllocateInfo::default()
-            .allocation_size(requirements.size)
-            .memory_type_index(memory_type);
-
-        let memory = unsafe { self.device.allocate_memory(&alloc_info, None)? };
-
-        unsafe { self.device.bind_buffer_memory(buffer, memory, 0)? };
-
-        Ok((buffer, memory))
-    }
-
     // EXTRA UTILS
 
-    fn mip_levels(width: u32, height: u32) -> u32 {
-        // How many times can we halve the larger dimension before hitting 1px?
-        u32::BITS - width.max(height).leading_zeros()
-    }
-    fn find_memory_type(
-        &self,
-        type_filter: u32,
-        properties: vk::MemoryPropertyFlags,
-    ) -> Result<u32> {
-        let mem_props = unsafe {
-            self.instance
-                .get_physical_device_memory_properties(self.physical_device)
-        };
-
-        (0..mem_props.memory_type_count)
-            .find(|&i| {
-                let type_match = type_filter & (1 << i) != 0;
-                let prop_match = mem_props.memory_types[i as usize]
-                    .property_flags
-                    .contains(properties);
-                type_match && prop_match
-            })
-            .ok_or(Error::NoSuitableMemoryType)
-    }
     fn create_shader_module(
         device: &Device,
         shader: &'static shaders::Shader,
@@ -1397,10 +1046,9 @@ impl Drop for Renderer {
         info!("cleaning up renderer");
 
         self.scenes.clear();
-        self.models.values().for_each(|m| m.destroy(&self.device));
+        self.models.clear();
         self.windows.clear();
         self.frames.iter().for_each(|f| f.destroy());
-        self.graphics_pipeline.destroy();
         self.layouts.destroy(&self.device);
 
         self.graphics_pool.destroy();

@@ -1,44 +1,18 @@
-use std::{collections::HashMap, ffi::c_void};
+use std::collections::HashMap;
 
 use ash::{Device, vk};
+use gpu_allocator::MemoryLocation;
 use world::WorldId;
 
 use crate::{
-    Error, MAX_FRAMES_IN_FLIGHT, MAX_RENDERABLES, Renderer, Result, command_pool::CommandBuffer,
-    model, render_pass::RenderPass,
+    Error, MAX_FRAMES_IN_FLIGHT, MAX_RENDERABLES, Renderer, Result,
+    buffer::UniformBuffer,
+    command_pool::CommandBuffer,
+    image::{Image, ImageCreateInfo},
+    model,
+    pipeline::GraphicsPipeline,
+    render_pass::RenderPass,
 };
-
-#[derive(Debug)]
-struct UboData {
-    buffer: vk::Buffer,
-    memory: vk::DeviceMemory,
-    mapped: *mut c_void,
-}
-
-impl UboData {
-    fn destroy(&self, device: &Device) {
-        unsafe {
-            device.destroy_buffer(self.buffer, None);
-            device.free_memory(self.memory, None);
-        }
-    }
-
-    /// Copies `data` into the persistently-mapped host-visible memory.
-    ///
-    /// # Safety
-    /// The mapped pointer must be valid and the allocation must cover at least
-    /// `size_of::<T>()` bytes — both invariants are guaranteed by every
-    /// `UboData` constructed in this module.
-    unsafe fn write<T: Copy>(&self, data: &T) {
-        unsafe {
-            std::ptr::copy_nonoverlapping(
-                data as *const T as *const u8,
-                self.mapped as *mut u8,
-                size_of::<T>(),
-            )
-        }
-    }
-}
 
 /// This scene is created from a [world::World].
 /// It should then be updated whenever the world is updated.
@@ -52,15 +26,14 @@ pub struct Scene {
     proxies: HashMap<world::Entity, SceneProxy>,
 
     descriptor_pool: vk::DescriptorPool,
-    ubo: [UboData; MAX_FRAMES_IN_FLIGHT],
+    ubo: [UniformBuffer; MAX_FRAMES_IN_FLIGHT],
     descriptor_sets: [vk::DescriptorSet; MAX_FRAMES_IN_FLIGHT],
 
-    color: vk::ImageView,
-    color_image: vk::Image,
-    color_memory: vk::DeviceMemory,
-    depth: vk::ImageView,
-    depth_image: vk::Image,
-    depth_memory: vk::DeviceMemory,
+    // TODO: these need to be removed
+    color: Image,
+    depth: Image,
+    // render graph should fix this
+    graphics_pipeline: GraphicsPipeline,
 }
 
 #[derive(Clone, Copy)]
@@ -82,7 +55,7 @@ impl Scene {
     /// Builds a [Scene].
     /// Constructs the renderer stuff like command pools, descriptor sets, ... from
     /// the [Renderer].
-    pub fn build(renderer: &Renderer, size: vk::Extent2D, world: WorldId) -> Result<Self> {
+    pub fn build(renderer: &mut Renderer, size: vk::Extent2D, world: WorldId) -> Result<Self> {
         let pool_sizes = [
             vk::DescriptorPoolSize {
                 ty: vk::DescriptorType::UNIFORM_BUFFER,
@@ -116,34 +89,14 @@ impl Scene {
                 .unwrap()
         };
 
-        let ubo: Vec<UboData> = (0..MAX_FRAMES_IN_FLIGHT)
-            .map(|_| {
-                let size = size_of::<SceneUbo>() as u64;
-                let (buffer, memory) = renderer.create_buffer(
-                    size,
-                    vk::BufferUsageFlags::UNIFORM_BUFFER,
-                    vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
-                )?;
-
-                let mapped = unsafe {
-                    renderer
-                        .device
-                        .map_memory(memory, 0, size, vk::MemoryMapFlags::empty())?
-                };
-
-                Ok(UboData {
-                    buffer,
-                    memory,
-                    mapped,
-                })
-            })
-            .collect::<Result<Vec<_>>>()?;
-        let ubo: [UboData; MAX_FRAMES_IN_FLIGHT] = ubo.try_into().unwrap();
+        let ubo_size = size_of::<SceneUbo>() as u64;
+        let mut build_ubo = || UniformBuffer::create(renderer, ubo_size, MemoryLocation::CpuToGpu);
+        let ubo = [build_ubo()?, build_ubo()?];
 
         let buffer_infos: [vk::DescriptorBufferInfo; MAX_FRAMES_IN_FLIGHT] =
             std::array::from_fn(|i| {
                 vk::DescriptorBufferInfo::default()
-                    .buffer(ubo[i].buffer)
+                    .buffer(ubo[i].buffer())
                     .range(size_of::<SceneUbo>() as u64)
                     .offset(0)
             });
@@ -163,36 +116,33 @@ impl Scene {
                 .update_descriptor_sets(&descriptor_writes, &[])
         };
 
-        // IMAGES
-        let (color_image, color_memory) = renderer.create_image(
+        // TEMP
+        let color_info = ImageCreateInfo {
             size,
-            renderer.properties.surface_format.format,
-            vk::ImageTiling::OPTIMAL,
-            vk::ImageUsageFlags::TRANSIENT_ATTACHMENT | vk::ImageUsageFlags::COLOR_ATTACHMENT,
-            vk::MemoryPropertyFlags::DEVICE_LOCAL,
-            (1, renderer.properties.msaa_samples),
-        )?;
-        let color = renderer.create_image_view(
-            color_image,
-            renderer.properties.surface_format.format,
-            vk::ImageAspectFlags::COLOR,
-            1,
-        )?;
+            format: renderer.properties.surface_format.format,
+            tiling: vk::ImageTiling::OPTIMAL,
+            usage: vk::ImageUsageFlags::TRANSIENT_ATTACHMENT
+                | vk::ImageUsageFlags::COLOR_ATTACHMENT,
+            location: MemoryLocation::GpuOnly,
+            mip_levels: 1,
+            num_samples: renderer.properties.msaa_samples,
+            aspect_flags: vk::ImageAspectFlags::COLOR,
+        };
+        let color = Image::create_image(renderer, color_info)?;
 
-        let (depth_image, depth_memory) = renderer.create_image(
+        let depth_info = ImageCreateInfo {
             size,
-            renderer.properties.depth_format,
-            vk::ImageTiling::OPTIMAL,
-            vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
-            vk::MemoryPropertyFlags::DEVICE_LOCAL,
-            (1, renderer.properties.msaa_samples),
-        )?;
-        let depth = renderer.create_image_view(
-            depth_image,
-            renderer.properties.depth_format,
-            vk::ImageAspectFlags::DEPTH,
-            1,
-        )?;
+            format: renderer.properties.depth_format,
+            tiling: vk::ImageTiling::OPTIMAL,
+            usage: vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
+            location: MemoryLocation::GpuOnly,
+            mip_levels: 1,
+            num_samples: renderer.properties.msaa_samples,
+            aspect_flags: vk::ImageAspectFlags::DEPTH,
+        };
+        let depth = Image::create_image(renderer, depth_info)?;
+        let graphics_pipeline =
+            GraphicsPipeline::build(&renderer.device, &renderer.layouts, &renderer.properties)?;
 
         Ok(Self {
             world,
@@ -203,25 +153,19 @@ impl Scene {
             descriptor_sets: scene_desc_sets,
 
             color,
-            color_image,
-            color_memory,
             depth,
-            depth_image,
-            depth_memory,
+            graphics_pipeline,
         })
     }
     pub fn render(
         &self,
-        renderer: &Renderer,
+        frame: usize,
+        models: &HashMap<String, model::Model>,
         cmd: &CommandBuffer,
         size: vk::Extent2D,
         view: vk::ImageView,
         camera: world::Entity,
     ) -> Result<()> {
-        let device = &renderer.device;
-
-        let frame = renderer.current_frame;
-
         // CAMERA
         {
             let proxy = &self
@@ -245,29 +189,32 @@ impl Scene {
             proxy.write_ubo(frame);
         }
 
-        RenderPass::begin(&renderer.device, cmd, size, view, self.color, self.depth);
-        renderer.graphics_pipeline.bind(cmd);
+        RenderPass::begin(&self.device, cmd, size, view, &self.color, &self.depth);
+        self.graphics_pipeline.bind(cmd);
 
         let viewport = vk::Viewport::default()
             .width(size.width as f32)
             .height(size.height as f32)
             .min_depth(0.)
             .max_depth(1.);
-        unsafe { renderer.device.cmd_set_viewport(cmd.raw(), 0, &[viewport]) };
+        unsafe { self.device.cmd_set_viewport(cmd.raw(), 0, &[viewport]) };
 
         let scissor = vk::Rect2D::default()
             .offset(vk::Offset2D::default())
             .extent(size);
-        unsafe { renderer.device.cmd_set_scissor(cmd.raw(), 0, &[scissor]) };
+        unsafe { self.device.cmd_set_scissor(cmd.raw(), 0, &[scissor]) };
 
         let mut descriptor_sets = [
-            self.descriptor_sets[renderer.current_frame],
+            self.descriptor_sets[frame],
             vk::DescriptorSet::null(),
             vk::DescriptorSet::null(),
         ];
 
         for proxy in self.proxies.values() {
             let Some(ref model) = proxy.model else {
+                continue;
+            };
+            let Some(model) = models.get(model) else {
                 continue;
             };
 
@@ -277,31 +224,37 @@ impl Scene {
                     .and_then(|idx| model.material_sets.get(idx).copied())
                     .unwrap_or(vk::DescriptorSet::null());
 
-                descriptor_sets[1] = proxy.sets[renderer.current_frame];
+                descriptor_sets[1] = proxy.sets[frame];
                 descriptor_sets[2] = mat_set;
 
                 unsafe {
-                    device.cmd_bind_descriptor_sets(
+                    self.device.cmd_bind_descriptor_sets(
                         cmd.raw(),
                         vk::PipelineBindPoint::GRAPHICS,
-                        renderer.graphics_pipeline.layout(),
+                        self.graphics_pipeline.layout(),
                         0,
                         &descriptor_sets,
                         &[],
                     );
-                    device.cmd_bind_vertex_buffers(cmd.raw(), 0, &[prim.vertex_buffer], &[0]);
-                    device.cmd_bind_index_buffer(
+                    self.device.cmd_bind_vertex_buffers(
                         cmd.raw(),
-                        prim.index_buffer,
+                        0,
+                        &[prim.vertex_buffer.buffer()],
+                        &[0],
+                    );
+                    self.device.cmd_bind_index_buffer(
+                        cmd.raw(),
+                        prim.index_buffer.buffer(),
                         0,
                         vk::IndexType::UINT32,
                     );
-                    device.cmd_draw_indexed(cmd.raw(), prim.index_count, 1, 0, 0, 0);
+                    self.device
+                        .cmd_draw_indexed(cmd.raw(), prim.index_count, 1, 0, 0, 0);
                 }
             }
         }
 
-        RenderPass::end(&renderer.device, cmd);
+        RenderPass::end(&self.device, cmd);
         Ok(())
     }
     pub fn add_proxy(&mut self, entity: world::Entity, proxy: SceneProxy) -> Result<()> {
@@ -315,19 +268,12 @@ impl Scene {
         self.proxies.remove(&entity);
     }
 }
+
 impl Drop for Scene {
     fn drop(&mut self) {
-        self.proxies.clear();
-        self.ubo.iter().for_each(|ubo| ubo.destroy(&self.device));
         unsafe {
             self.device
                 .destroy_descriptor_pool(self.descriptor_pool, None);
-            self.device.destroy_image_view(self.color, None);
-            self.device.destroy_image(self.color_image, None);
-            self.device.free_memory(self.color_memory, None);
-            self.device.destroy_image_view(self.depth, None);
-            self.device.destroy_image(self.depth_image, None);
-            self.device.free_memory(self.depth_memory, None);
         };
     }
 }
@@ -336,18 +282,17 @@ impl Drop for Scene {
 /// Owned by [Scene], constructed from [world::components::Renderable] and
 /// [world::components::Transform].
 pub struct SceneProxy {
-    device: Device,
     /// The model matrix used for rendering. Constructed from the
     /// [world::components::Transform] of the entity.
     model_matrix: Option<glam::Mat4>,
     /// The name of the model. Used to request a [crate::model::Model] from the
     /// renderer at render time.
-    model: Option<model::Model>,
+    model: Option<String>,
     /// An optional camera that could be attached to the mesh.
     camera: Option<CameraProxy>,
 
     // Per frame render stuff
-    ubo: [UboData; MAX_FRAMES_IN_FLIGHT],
+    ubo: [UniformBuffer; MAX_FRAMES_IN_FLIGHT],
     sets: [vk::DescriptorSet; MAX_FRAMES_IN_FLIGHT],
 }
 
@@ -359,30 +304,14 @@ struct ProxyUbo {
 }
 
 impl SceneProxy {
-    pub fn build(renderer: &Renderer, scene: &Scene) -> Result<Self> {
+    pub fn build(renderer: &mut Renderer, world: WorldId) -> Result<Self> {
         let size = size_of::<ProxyUbo>() as u64;
-        let ubo: Vec<UboData> = (0..MAX_FRAMES_IN_FLIGHT)
-            .map(|_| {
-                let (buffer, memory) = renderer.create_buffer(
-                    size,
-                    vk::BufferUsageFlags::UNIFORM_BUFFER,
-                    vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
-                )?;
+        let mut build_ubo = || UniformBuffer::create(renderer, size, MemoryLocation::CpuToGpu);
+        let ubo = [build_ubo()?, build_ubo()?];
 
-                let mapped = unsafe {
-                    renderer
-                        .device
-                        .map_memory(memory, 0, size, vk::MemoryMapFlags::empty())?
-                };
-
-                Ok(UboData {
-                    buffer,
-                    memory,
-                    mapped,
-                })
-            })
-            .collect::<Result<Vec<_>>>()?;
-        let ubo: [UboData; MAX_FRAMES_IN_FLIGHT] = ubo.try_into().unwrap();
+        let Some(scene) = renderer.scenes.get(&world) else {
+            return Err(Error::WorldDoesNotExist(world));
+        };
 
         // Allocate scene-level sets (one per frame)
         let layouts = [renderer.layouts.object; MAX_FRAMES_IN_FLIGHT];
@@ -401,7 +330,7 @@ impl SceneProxy {
         let buffer_infos: [vk::DescriptorBufferInfo; MAX_FRAMES_IN_FLIGHT] =
             std::array::from_fn(|i| {
                 vk::DescriptorBufferInfo::default()
-                    .buffer(ubo[i].buffer)
+                    .buffer(ubo[i].buffer())
                     .range(size)
                     .offset(0)
             });
@@ -422,7 +351,6 @@ impl SceneProxy {
         };
 
         Ok(Self {
-            device: renderer.device.clone(),
             model: None,
             model_matrix: None,
             camera: None,
@@ -430,8 +358,8 @@ impl SceneProxy {
             sets,
         })
     }
-    pub fn set_model(&mut self, model: &model::Model) {
-        self.model = Some(model.clone());
+    pub fn set_model(&mut self, model: &str) {
+        self.model = Some(model.to_string());
     }
     pub fn set_model_matrix(&mut self, mat: glam::Mat4) {
         self.model_matrix = Some(mat);
@@ -451,11 +379,5 @@ impl SceneProxy {
 
         let data = ProxyUbo { model };
         unsafe { self.ubo[frame].write(&data) };
-    }
-}
-
-impl Drop for SceneProxy {
-    fn drop(&mut self) {
-        self.ubo.iter().for_each(|ubo| ubo.destroy(&self.device));
     }
 }

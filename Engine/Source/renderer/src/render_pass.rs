@@ -1,6 +1,6 @@
 use ash::{Device, vk};
 
-use crate::command_pool::CommandBuffer;
+use crate::{command_pool::CommandBuffer, image::Image};
 
 /// This struct holds the graphics pipeline & stuff.
 /// It can be called on to begin the pass (begin rendering,
@@ -13,14 +13,14 @@ impl RenderPass {
         cmd: &CommandBuffer,
         size: vk::Extent2D,
         out: vk::ImageView,
-        color: vk::ImageView,
-        depth: vk::ImageView,
+        color: &Image,
+        depth: &Image,
     ) {
         let color_attachement = vk::RenderingAttachmentInfo::default()
             .load_op(vk::AttachmentLoadOp::CLEAR)
             .store_op(vk::AttachmentStoreOp::STORE)
             .image_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
-            .image_view(color)
+            .image_view(color.view())
             .resolve_image_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
             .resolve_mode(vk::ResolveModeFlags::AVERAGE)
             .resolve_image_view(out)
@@ -34,7 +34,7 @@ impl RenderPass {
             .load_op(vk::AttachmentLoadOp::CLEAR)
             .store_op(vk::AttachmentStoreOp::DONT_CARE)
             .image_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
-            .image_view(depth)
+            .image_view(depth.view())
             .clear_value(vk::ClearValue {
                 depth_stencil: vk::ClearDepthStencilValue {
                     depth: 1.,
