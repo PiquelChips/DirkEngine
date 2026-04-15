@@ -8,5 +8,6 @@ version.workspace = true
 
 [dependencies]
 macros.workspace = true
+parking_lot.workspace = true
 
 tracing.workspace = true
