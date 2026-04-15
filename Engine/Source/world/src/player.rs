@@ -1,16 +1,13 @@
-//! This crate handles everything to do with players.
-//! This includes the input system.
+//! This module handles everything to do with players.
 
-pub mod events;
+use std::{collections::HashSet, f32::consts::PI};
 
-use std::collections::HashSet;
-use std::f32::consts::PI;
-
-use ::events::{Dispatcher, EventManager};
+use events::{Dispatcher, EventManager};
 use platform::{KeyCode, PhysicalKey, WindowId};
-use world::{Entity, World, WorldId};
 
-pub use crate::events::{PlayerEvent, PlayerId};
+use crate::{Entity, World, WorldId, components, events::PlayerEvent};
+
+pub type PlayerId = u32;
 
 /// Look sensitivity in radians per physical pixel.
 const MOUSE_SENSITIVITY: f32 = 0.002;
@@ -104,7 +101,7 @@ impl Player {
         window: WindowId,
         event_manager: &EventManager,
     ) -> Self {
-        use world::components;
+        use crate::components;
         let entity = world.spawn();
         world.insert(
             entity,
@@ -217,7 +214,7 @@ impl Player {
     /// Fires [`PlayerEvent::Updated`] if the transform actually changed this
     /// frame (either look rotation or movement). Idle ticks produce no event.
     pub fn tick(&mut self, delta_time: f32, world: &mut World) {
-        let Some(transform) = world.get_mut::<world::components::Transform>(self.entity) else {
+        let Some(transform) = world.get_mut::<components::Transform>(self.entity) else {
             return;
         };
 

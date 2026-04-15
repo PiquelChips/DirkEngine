@@ -4,7 +4,6 @@ members = [
     "Engine/Source/build",
     "Engine/Source/utils",
     "Engine/Source/engine",
-    "Engine/Source/player",
     "Engine/Source/events",
     "Engine/Source/macros",
     "Engine/Source/logging",
@@ -41,7 +40,6 @@ build = { path = "Engine/Source/build" }
 utils = { path = "Engine/Source/utils" }
 logging = { path = "Engine/Source/logging" }
 engine = { path = "Engine/Source/engine" }
-player = { path = "Engine/Source/player" }
 events = { path = "Engine/Source/events" }
 macros = { path = "Engine/Source/macros" }
 platform = { path = "Engine/Source/platform" }

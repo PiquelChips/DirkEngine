@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use platform::WindowId;
-use player::PlayerId;
 use tracing::trace;
+use world::player::PlayerId;
 
 use crate::Engine;
 

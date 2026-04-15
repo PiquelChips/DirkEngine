@@ -43,6 +43,7 @@ mod tests;
 
 pub mod components;
 pub mod events;
+pub mod player;
 use crate::events::*;
 use components::*;
 

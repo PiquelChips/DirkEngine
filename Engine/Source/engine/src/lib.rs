@@ -1,9 +1,11 @@
 use std::{collections::HashMap, ffi::CString, str::FromStr, time::Instant};
 
 use anyhow::Context;
-use player::{Player, PlayerId};
 use tracing::info;
-use world::{World, WorldId};
+use world::{
+    World, WorldId,
+    player::{Player, PlayerId},
+};
 
 use logging::Logger;
 
