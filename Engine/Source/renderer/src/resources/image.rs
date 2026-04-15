@@ -100,12 +100,19 @@ impl Image {
         self.view
     }
 
-    pub fn upload_texture(
-        device: RenderDevice,
-        tex: &resource_manager::Texture,
-    ) -> Result<Texture> {
-        let mip_levels = Self::mip_levels(*tex.width(), *tex.height());
-        let size = (tex.pixels().len()) as vk::DeviceSize;
+    pub fn upload_texture(device: RenderDevice, tex: &gltf::image::Data) -> Result<Texture> {
+        let pixels = match tex.format {
+            gltf::image::Format::R8G8B8 => tex
+                .pixels
+                .chunks_exact(3)
+                .flat_map(|rgb| [rgb[0], rgb[1], rgb[2], 255])
+                .collect(),
+            gltf::image::Format::R8G8B8A8 => tex.pixels.clone(),
+            fmt => panic!("Unsuported glTF image format: {fmt:?}"),
+        };
+
+        let mip_levels = Self::mip_levels(tex.width, tex.height);
+        let size = (pixels.len()) as vk::DeviceSize;
         let format = vk::Format::R8G8B8A8_SRGB;
 
         let staging_buf = CustomBuffer::create_custom(
@@ -117,13 +124,13 @@ impl Image {
 
         unsafe {
             let ptr = staging_buf.mapped().unwrap().as_ptr() as *mut u8;
-            ptr.copy_from_nonoverlapping(tex.pixels().as_ptr(), tex.pixels().len());
+            ptr.copy_from_nonoverlapping(pixels.as_ptr(), pixels.len());
         }
 
         let create_info = ImageCreateInfo {
             size: vk::Extent2D {
-                width: *tex.width(),
-                height: *tex.height(),
+                width: tex.width,
+                height: tex.height,
             },
             format,
             tiling: vk::ImageTiling::OPTIMAL,
@@ -156,8 +163,8 @@ impl Image {
                 layer_count: 1,
             })
             .image_extent(vk::Extent3D {
-                width: *tex.width(),
-                height: *tex.height(),
+                width: tex.width,
+                height: tex.height,
                 depth: 1,
             });
 
@@ -172,7 +179,7 @@ impl Image {
         }
 
         // TODO: start in transfer queue, swap to graphics and then go back
-        image.generate_mipmaps(&cmd, *tex.width(), *tex.height(), mip_levels)?;
+        image.generate_mipmaps(&cmd, tex.width, tex.height, mip_levels)?;
         cmd.end_and_submit()?;
 
         // TODO: destroy buffer when it is no longer needed (maybe with VMA)

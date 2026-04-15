@@ -1,3 +1,5 @@
+mod manager;
+
 use std::collections::HashMap;
 
 use ash::vk;
@@ -6,7 +8,7 @@ use crate::{
     Result,
     resources::{
         buffer::{IndexBuffer, VertexBuffer},
-        device::{Garbage, RenderDevice},
+        device::RenderDevice,
         image::Image,
     },
     utils::Vertex,
@@ -23,19 +25,7 @@ pub struct Model {
     pub material_sets: Vec<vk::DescriptorSet>,
 }
 
-/// All GPU-side handles for a single texture.
-pub struct Texture {
-    pub device: RenderDevice,
-    pub image: Image,
-    pub sampler: vk::Sampler,
-    pub mip_levels: u32,
-}
-
-impl Drop for Texture {
-    fn drop(&mut self) {
-        self.device.destroy(Garbage::Sampler(self.sampler));
-    }
-}
+pub use manager::Texture;
 
 /// GPU-side handles for a single glTF primitive.
 pub struct Primitive {

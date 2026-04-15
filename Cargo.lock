@@ -1284,6 +1284,7 @@ dependencies = [
  "build",
  "events",
  "glam",
+ "gltf",
  "gpu-allocator",
  "parking_lot",
  "pastey",

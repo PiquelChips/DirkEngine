@@ -17,6 +17,8 @@ pub enum Error {
     Platform(#[from] platform::Error),
     #[error("resource manager error: {0}")]
     ResourceManager(#[from] resource_manager::Error),
+    #[error("gltf error: {0}")]
+    GltfError(#[from] gltf::Error),
 
     #[error("no suitable graphics device found")]
     NoDeviceFound,
