@@ -152,3 +152,15 @@ fn get_idents_for_unnamed(format: &str, fields: &FieldsUnnamed) -> (String, Vec<
 
     (new_format, idents)
 }
+
+#[proc_macro_derive(Component)]
+pub fn derive_component(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let name = input.ident;
+
+    let expanded = quote! {
+        impl Component for #name {}
+    };
+
+    TokenStream::from(expanded)
+}
