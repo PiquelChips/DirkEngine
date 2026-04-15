@@ -284,6 +284,7 @@ impl Renderer {
             (loader, messenger)
         };
 
+        // this is a temporary surface, it is destroyed very soon
         let (surface_loader, surface) = {
             let surface = unsafe {
                 ash_window::create_surface(
@@ -444,38 +445,29 @@ impl Renderer {
             unsafe { instance.create_device(physical_device, &device_create_info, None)? }
         };
 
-        let mut allocator_debug_settings = AllocatorDebugSettings::default();
-        // TODO: actually fix the memory leak in buffer creation
-        allocator_debug_settings.log_leaks_on_shutdown = false;
-        let allocator = Allocator::new(&AllocatorCreateDesc {
-            instance: instance.clone(),
-            device: device.clone(),
-            physical_device,
-            debug_settings: allocator_debug_settings,
-            buffer_device_address: true,
-            allocation_sizes: Default::default(),
-        })?;
-
-        // QUEUES
-        let queues = {
-            let indices = &properties.queue_family_indices;
-            Queues {
-                graphics: unsafe { device.get_device_queue(indices.graphics, 0) },
-                present: unsafe { device.get_device_queue(indices.present, 0) },
-                compute: unsafe { device.get_device_queue(indices.compute, 0) },
-                transfer: unsafe { device.get_device_queue(indices.transfer, 0) },
-            }
-        };
-
         // SWAP CHAIN
         let swapchain_loader = swapchain::Device::new(&instance, &device);
+
+        let current_frame = Arc::new(AtomicU64::new(0));
+
+        // RENDER DEVICE
+        let render_device = RenderDevice::new(
+            instance.clone(),
+            device.clone(),
+            surface_loader.clone(),
+            swapchain_loader.clone(),
+            physical_device,
+            properties,
+            current_frame.clone(),
+            event_manager.clone(),
+        )?;
 
         // IN FLIGHT FRAMES
         let build_frame = || -> Result<Frame> {
             let command_pool = CommandPool::build(
                 &device,
-                &queues,
-                &properties.queue_family_indices,
+                &render_device.queues,
+                &render_device.properties.queue_family_indices,
                 vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
             )?;
             let fence = unsafe {
@@ -495,46 +487,6 @@ impl Renderer {
         // let frames: [Frame; MAX_FRAMES_IN_FLIGHT] = std::array::try_from_fn(|_| build_frame())?;
         // could be nice in the future
 
-        // LAYOUTS
-        let layouts = DescriptorLayouts {
-            scene: {
-                let binding = vk::DescriptorSetLayoutBinding::default()
-                    .binding(0)
-                    .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
-                    .descriptor_count(1)
-                    .stage_flags(vk::ShaderStageFlags::VERTEX);
-
-                let info = vk::DescriptorSetLayoutCreateInfo::default()
-                    .bindings(std::slice::from_ref(&binding));
-
-                unsafe { device.create_descriptor_set_layout(&info, None)? }
-            },
-            object: {
-                let binding = vk::DescriptorSetLayoutBinding::default()
-                    .binding(1)
-                    .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
-                    .descriptor_count(1)
-                    .stage_flags(vk::ShaderStageFlags::VERTEX);
-
-                let info = vk::DescriptorSetLayoutCreateInfo::default()
-                    .bindings(std::slice::from_ref(&binding));
-
-                unsafe { device.create_descriptor_set_layout(&info, None)? }
-            },
-            material: {
-                let binding = vk::DescriptorSetLayoutBinding::default()
-                    .binding(2)
-                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                    .descriptor_count(1)
-                    .stage_flags(vk::ShaderStageFlags::FRAGMENT);
-
-                let info = vk::DescriptorSetLayoutCreateInfo::default()
-                    .bindings(std::slice::from_ref(&binding));
-
-                unsafe { device.create_descriptor_set_layout(&info, None)? }
-            },
-        };
-
         // MATERIAL DESCRIPTOR SETS
         let material_descriptor_pool = {
             let pool_size = vk::DescriptorPoolSize {
@@ -548,19 +500,6 @@ impl Renderer {
             unsafe { device.create_descriptor_pool(&pool_info, None)? }
         };
 
-        let transfer_pool = CommandPool::build(
-            &device,
-            &queues,
-            &properties.queue_family_indices,
-            vk::CommandPoolCreateFlags::TRANSIENT,
-        )?;
-        let graphics_pool = CommandPool::build(
-            &device,
-            &queues,
-            &properties.queue_family_indices,
-            vk::CommandPoolCreateFlags::TRANSIENT,
-        )?;
-
         let extent = {
             let size = window.size();
             vk::Extent2D {
@@ -568,24 +507,6 @@ impl Renderer {
                 height: size.height,
             }
         };
-
-        let current_frame = Arc::new(AtomicU64::new(0));
-        let render_device = RenderDevice::new(
-            instance.clone(),
-            device.clone(),
-            surface_loader.clone(),
-            swapchain_loader.clone(),
-            physical_device,
-            queues,
-            transfer_pool,
-            graphics_pool,
-            layouts,
-            properties,
-            allocator,
-            current_frame.clone(),
-            event_manager.clone(),
-        );
-
         Ok(Self {
             entry,
             render_device,

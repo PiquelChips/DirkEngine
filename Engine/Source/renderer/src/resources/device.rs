@@ -10,11 +10,11 @@ use ash::{
     khr::{surface, swapchain},
     vk,
 };
-use gpu_allocator::vulkan::{Allocation, Allocator};
+use gpu_allocator::vulkan::{Allocation, Allocator, AllocatorCreateDesc};
 use parking_lot::Mutex;
 
 use crate::{
-    DescriptorLayouts, MAX_FRAMES_IN_FLIGHT, Queues, RendererProperties,
+    DescriptorLayouts, MAX_FRAMES_IN_FLIGHT, Queues, RendererProperties, Result,
     resources::command_pool::{CommandPool, Graphics, Transfer},
 };
 
@@ -47,8 +47,9 @@ pub struct RenderDeviceInner {
     pub layouts: DescriptorLayouts,
     pub properties: RendererProperties,
 
-    pub allocator: Mutex<Allocator>,
     pub event_manager: events::EventManager,
+
+    allocator: Mutex<Allocator>,
     deletion_queue: Mutex<DeletionQueue>,
     current_frame: Arc<AtomicU64>,
 }
@@ -60,16 +61,86 @@ impl RenderDevice {
         surface_loader: surface::Instance,
         swapchain_loader: swapchain::Device,
         physical_device: vk::PhysicalDevice,
-        queues: Queues,
-        transfer_pool: CommandPool<Transfer>,
-        graphics_pool: CommandPool<Graphics>,
-        layouts: DescriptorLayouts,
         properties: RendererProperties,
-        allocator: Allocator,
         current_frame: Arc<AtomicU64>,
         event_manager: events::EventManager,
-    ) -> Self {
-        Self(Arc::new(RenderDeviceInner {
+    ) -> Result<Self> {
+        // ALLOCATOR
+        let allocator = Allocator::new(&AllocatorCreateDesc {
+            instance: instance.clone(),
+            device: device.clone(),
+            physical_device,
+            debug_settings: Default::default(),
+            buffer_device_address: true,
+            allocation_sizes: Default::default(),
+        })?;
+
+        // LAYOUTS
+        let layouts = DescriptorLayouts {
+            scene: {
+                let binding = vk::DescriptorSetLayoutBinding::default()
+                    .binding(0)
+                    .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                    .descriptor_count(1)
+                    .stage_flags(vk::ShaderStageFlags::VERTEX);
+
+                let info = vk::DescriptorSetLayoutCreateInfo::default()
+                    .bindings(std::slice::from_ref(&binding));
+
+                unsafe { device.create_descriptor_set_layout(&info, None)? }
+            },
+            object: {
+                let binding = vk::DescriptorSetLayoutBinding::default()
+                    .binding(1)
+                    .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                    .descriptor_count(1)
+                    .stage_flags(vk::ShaderStageFlags::VERTEX);
+
+                let info = vk::DescriptorSetLayoutCreateInfo::default()
+                    .bindings(std::slice::from_ref(&binding));
+
+                unsafe { device.create_descriptor_set_layout(&info, None)? }
+            },
+            material: {
+                let binding = vk::DescriptorSetLayoutBinding::default()
+                    .binding(2)
+                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                    .descriptor_count(1)
+                    .stage_flags(vk::ShaderStageFlags::FRAGMENT);
+
+                let info = vk::DescriptorSetLayoutCreateInfo::default()
+                    .bindings(std::slice::from_ref(&binding));
+
+                unsafe { device.create_descriptor_set_layout(&info, None)? }
+            },
+        };
+
+        // QUEUES
+        let queues = {
+            let indices = &properties.queue_family_indices;
+            Queues {
+                graphics: unsafe { device.get_device_queue(indices.graphics, 0) },
+                present: unsafe { device.get_device_queue(indices.present, 0) },
+                compute: unsafe { device.get_device_queue(indices.compute, 0) },
+                transfer: unsafe { device.get_device_queue(indices.transfer, 0) },
+            }
+        };
+
+        // COMMAND POOLS
+        let transfer_pool = CommandPool::build(
+            &device,
+            &queues,
+            &properties.queue_family_indices,
+            vk::CommandPoolCreateFlags::TRANSIENT,
+        )?;
+        let graphics_pool = CommandPool::build(
+            &device,
+            &queues,
+            &properties.queue_family_indices,
+            vk::CommandPoolCreateFlags::TRANSIENT,
+        )?;
+
+        Ok(Self(Arc::new(RenderDeviceInner {
             device,
             surface_loader,
             swapchain_loader,
@@ -87,7 +158,7 @@ impl RenderDevice {
             )),
             current_frame,
             event_manager,
-        }))
+        })))
     }
 
     pub fn destroy(&mut self, garbage: Garbage) {
