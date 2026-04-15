@@ -49,8 +49,6 @@ use resources::{
     model::*,
 };
 
-use crate::resources::device::Garbage;
-
 mod physical_device;
 mod pipeline;
 mod render_pass;
@@ -105,10 +103,12 @@ struct DescriptorLayouts {
 }
 
 impl DescriptorLayouts {
-    fn destroy(&self, device: &mut RenderDevice) {
-        device.destroy(Garbage::DescriptorSetLayout(self.scene));
-        device.destroy(Garbage::DescriptorSetLayout(self.object));
-        device.destroy(Garbage::DescriptorSetLayout(self.material));
+    fn destroy(&self, device: &Device) {
+        unsafe {
+            device.destroy_descriptor_set_layout(self.scene, None);
+            device.destroy_descriptor_set_layout(self.object, None);
+            device.destroy_descriptor_set_layout(self.material, None);
+        }
     }
 }
 
@@ -653,6 +653,7 @@ impl Renderer {
                 .device
                 .reset_fences(std::slice::from_ref(&frame.fence))?;
         }
+        self.render_device.flush_deletions();
 
         let cmd = frame.command_pool.allocate_buffer()?;
 
@@ -813,7 +814,7 @@ impl Renderer {
 
     // UPLOADING TO THE RENDERER
 
-    pub fn upload_model(&mut self, model: resource_manager::Model) -> Result<&Model> {
+    fn upload_model(&mut self, model: resource_manager::Model) -> Result<&Model> {
         let primitives = model
             .meshes()
             .iter()
@@ -972,24 +973,12 @@ impl Drop for Renderer {
         self.models.clear();
         self.windows.clear();
         self.frames.iter().for_each(|f| f.destroy());
-        self.render_device.shutdown();
+        self.render_device.flush_all();
 
-        self.render_device
-            .layouts
-            .destroy(&self.render_device.device);
-        self.render_device.graphics_pool.destroy();
-        self.render_device.transfer_pool.destroy();
         unsafe {
             self.render_device
                 .device
                 .destroy_descriptor_pool(self.material_descriptor_pool, None);
-
-            self.render_device.device.destroy_device(None);
-            #[cfg(validation)]
-            self.debug_utils_loader
-                .destroy_debug_utils_messenger(self.debug_messenger, None);
-
-            self.render_device.instance.destroy_instance(None);
         }
     }
 }

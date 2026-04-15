@@ -20,7 +20,7 @@ use crate::{
 
 /// The device that stores all vulkan objects.
 #[derive(Clone)]
-pub(crate) struct RenderDevice(Arc<RenderDeviceInner>);
+pub struct RenderDevice(Arc<RenderDeviceInner>);
 
 impl Deref for RenderDevice {
     type Target = RenderDeviceInner;
@@ -29,7 +29,7 @@ impl Deref for RenderDevice {
     }
 }
 
-pub(crate) struct RenderDeviceInner {
+pub struct RenderDeviceInner {
     pub device: ash::Device,
     pub surface_loader: surface::Instance,
     pub swapchain_loader: swapchain::Device,
@@ -166,7 +166,7 @@ impl RenderDevice {
     pub fn allocate(&self, desc: &AllocationCreateDesc<'_>) -> Result<Allocation> {
         Ok(self.allocator.lock().allocate(desc)?)
     }
-    pub fn free(&mut self, allocation: Allocation) -> Result<()> {
+    pub fn free(&self, allocation: Allocation) -> Result<()> {
         Ok(self.allocator.lock().free(allocation)?)
     }
 
@@ -177,22 +177,34 @@ impl RenderDevice {
     /// Call once per frame from your render loop.
     pub fn flush_deletions(&self) {
         let mut queue = self.deletion_queue.lock();
-        let mut allocator = self.allocator.lock();
-        queue.flush(&self.device, &mut allocator, self.current_frame());
+        queue.flush(&self, self.current_frame());
     }
 
-    /// Call during shutdown, after device_wait_idle.
-    pub fn shutdown(&self) {
-        unsafe {
-            self.device.device_wait_idle().unwrap();
-        }
+    /// Call once before shutdown to flush the entire queue
+    pub fn flush_all(&self) {
         let mut queue = self.deletion_queue.lock();
-        let mut allocator = self.allocator.lock();
-        queue.flush_all(&self.device, &mut allocator);
+        queue.flush_all(&self);
     }
 
     pub fn current_frame(&self) -> u64 {
         self.current_frame.load(Ordering::Relaxed)
+    }
+}
+
+impl Drop for RenderDevice {
+    fn drop(&mut self) {
+        self.layouts.destroy(&self.device);
+        self.graphics_pool.destroy();
+        self.transfer_pool.destroy();
+        unsafe {
+            self.device.destroy_device(None);
+            // TODO: destroy debug stuff
+            // #[cfg(validation)]
+            // self.debug_utils_loader
+            //     .destroy_debug_utils_messenger(self.debug_messenger, None);
+
+            self.instance.destroy_instance(None);
+        }
     }
 }
 
@@ -207,7 +219,6 @@ pub enum Garbage {
     Pipeline(vk::Pipeline),
     PipelineLayout(vk::PipelineLayout),
     DescriptorPool(vk::DescriptorPool),
-    DescriptorSetLayout(vk::DescriptorSetLayout),
     Semaphore(vk::Semaphore),
 
     Swapchain(vk::SwapchainKHR),
@@ -243,11 +254,11 @@ impl DeletionQueue {
     }
 
     /// Call once per frame. Destroys anything safe to destroy.
-    pub fn flush(&mut self, device: &ash::Device, allocator: &mut Allocator, current_frame: u64) {
+    pub fn flush(&mut self, device: &RenderDevice, current_frame: u64) {
         self.pending.retain_mut(|item| {
             if current_frame >= item.death_frame {
                 if let Some(garbage) = item.garbage.take() {
-                    garbage.destroy(device, allocator);
+                    garbage.destroy(device);
                 }
                 false
             } else {
@@ -257,20 +268,21 @@ impl DeletionQueue {
     }
 
     /// Call on shutdown — destroys everything regardless of frame.
-    pub fn flush_all(&mut self, device: &ash::Device, allocator: &mut Allocator) {
+    pub fn flush_all(&mut self, device: &RenderDevice) {
         for mut item in self.pending.drain(..) {
             if let Some(garbage) = item.garbage.take() {
-                garbage.destroy(device, allocator);
+                garbage.destroy(device);
             }
         }
     }
 }
 
 impl Garbage {
-    fn destroy(self, device: &ash::Device, allocator: &mut Allocator) {
+    fn destroy(self, render_device: &RenderDevice) {
+        let device = &render_device.device;
         unsafe {
             match self {
-                Self::Allocation(allocation) => allocator
+                Self::Allocation(allocation) => render_device
                     .free(allocation)
                     .expect("Failed to free allocation"),
                 Self::Buffer(buffer) => device.destroy_buffer(buffer, None),
@@ -280,12 +292,13 @@ impl Garbage {
                 Self::Pipeline(p) => device.destroy_pipeline(p, None),
                 Self::PipelineLayout(l) => device.destroy_pipeline_layout(l, None),
                 Self::DescriptorPool(pool) => device.destroy_descriptor_pool(pool, None),
-                Self::DescriptorSetLayout(layout) => {
-                    device.destroy_descriptor_set_layout(layout, None)
-                }
                 Self::Semaphore(semaphore) => device.destroy_semaphore(semaphore, None),
-                // TODO: actually destroy
-                Self::Surface(..) | Self::Swapchain(..) => {}
+                Self::Surface(surface) => {
+                    render_device.surface_loader.destroy_surface(surface, None)
+                }
+                Self::Swapchain(swapchain) => render_device
+                    .swapchain_loader
+                    .destroy_swapchain(swapchain, None),
             }
         }
     }
