@@ -1,13 +1,14 @@
 //! This crate the engine's event system.
-
+use parking_lot::Mutex;
 use std::{
     any::{Any, TypeId},
     collections::HashMap,
-    sync::mpsc::{self, Receiver, Sender},
+    sync::{
+        Arc,
+        mpsc::{self, Receiver, Sender},
+    },
 };
-
 use tracing::trace;
-
 mod tests;
 
 /// The trait that should be implemented by every event type.
@@ -15,49 +16,70 @@ pub trait Event: Send + Clone + 'static {
     fn debug(&self) -> String;
 }
 
-/// The event manager struct.
+/// Private inner state, held behind the `Arc<Mutex<>>`.
 #[derive(Default)]
-pub struct EventManager {
+struct EventManagerInner {
     producers: Vec<Box<dyn AnyProducer>>,
     subscribers: HashMap<TypeId, Vec<Subscriber>>,
+}
+
+/// The event manager.
+///
+/// Cheaply cloneable — all clones share the same underlying state.
+/// Use [`EventManager::new`] to create one and pass it around freely.
+#[derive(Clone, Default)]
+pub struct EventManager {
+    inner: Arc<Mutex<EventManagerInner>>,
 }
 
 impl EventManager {
     pub fn new() -> Self {
         Self::default()
     }
-
-    pub fn register<T: Event>(&mut self) -> Dispatcher<T> {
+    /// Registers a new event type and returns a [`Dispatcher`] for it.
+    pub fn register<T: Event>(&self) -> Dispatcher<T> {
         let (sender, receiver) = mpsc::channel::<T>();
-
-        self.producers.push(Box::new(TypedProducer {
+        self.inner.lock().producers.push(Box::new(TypedProducer {
             type_id: TypeId::of::<T>(),
             receiver,
         }));
-        Dispatcher { sender }
+        Dispatcher {
+            sender,
+            manager: self.clone(),
+        }
     }
-    pub fn subscribe<T: Event>(&mut self) -> Consumer<T> {
+    /// Subscribes to an event type and returns a [`Consumer`] for it.
+    pub fn subscribe<T: Event>(&self) -> Consumer<T> {
         let (sender, receiver) = mpsc::channel::<T>();
-
         let type_id = TypeId::of::<T>();
-
-        let subscribers = self.subscribers.entry(type_id).or_default();
-
-        subscribers.push(Subscriber {
-            sender: Box::new(sender),
-        });
-        Consumer { receiver }
+        self.inner
+            .lock()
+            .subscribers
+            .entry(type_id)
+            .or_default()
+            .push(Subscriber {
+                sender: Box::new(sender),
+            });
+        Consumer {
+            receiver,
+            manager: self.clone(),
+        }
     }
     /// Drains all producers and forwards their pending events to matching subscribers.
     /// Call this once per frame / tick in your engine loop.
-    pub fn dispatch_all(&mut self) {
-        for producer in &self.producers {
-            producer.forward_pending(&mut self.subscribers);
+    pub fn dispatch_all(&self) {
+        let mut inner = self.inner.lock();
+        let EventManagerInner {
+            producers,
+            subscribers,
+        } = &mut *inner;
+        for producer in producers.iter() {
+            producer.forward_pending(subscribers);
         }
     }
 }
 
-/// The Type Erasure Trait
+/// The Type Erasure Trait.
 /// Allows the EventManager to forward pending events without knowing `T`.
 trait AnyProducer: Send {
     fn forward_pending(&self, subscribers: &mut HashMap<TypeId, Vec<Subscriber>>);
@@ -80,7 +102,6 @@ impl<T: Event> AnyProducer for TypedProducer<T> {
         let Some(subscribers) = subscribers.get_mut(&self.type_id) else {
             return;
         };
-
         while let Ok(event) = self.receiver.try_recv() {
             subscribers.retain(|sub| {
                 let Some(sender) = sub.sender.downcast_ref::<Sender<T>>() else {
@@ -101,25 +122,36 @@ struct Subscriber {
 
 /// This struct is created by the envent manager.
 /// It allows dispatching of events to subscribers.
-#[derive(Debug)]
 pub struct Dispatcher<T: Event> {
     sender: Sender<T>,
+    manager: EventManager,
 }
 
 impl<T: Event> Dispatcher<T> {
-    /// Queues an event to be forwarded to subscribers.
+    /// Queues an event to be forwarded to subscribers on the next [`EventManager::dispatch_all`].
     pub fn dispatch(&self, event: T) {
         trace!("dispatching event {}", event.debug());
-        // Ignore send errors: it just means the EventManager was dropped.
         let _ = self.sender.send(event);
     }
 }
 
-/// This struct is created by the event manager.
-/// It can consume events that are sent by the event manager.
-#[derive(Debug)]
+impl<T: Event> Clone for Dispatcher<T> {
+    fn clone(&self) -> Self {
+        self.manager.register()
+    }
+}
+
+impl<T: Event> std::fmt::Debug for Dispatcher<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Dispatcher").finish_non_exhaustive()
+    }
+}
+
+/// Cloning produces a fresh [`Consumer`] with its own independent subscription,
+/// sharing the same underlying [`EventManager`].
 pub struct Consumer<T: Event> {
     receiver: Receiver<T>,
+    manager: EventManager,
 }
 
 impl<T: Event> Consumer<T> {
@@ -135,5 +167,17 @@ impl<T: Event> Consumer<T> {
     /// Returns an iterator that drains all currently pending events.
     pub fn consume_all(&self) -> impl Iterator<Item = T> {
         std::iter::from_fn(|| self.try_consume())
+    }
+}
+
+impl<T: Event> Clone for Consumer<T> {
+    fn clone(&self) -> Self {
+        self.manager.subscribe()
+    }
+}
+
+impl<T: Event> std::fmt::Debug for Consumer<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Consumer").finish_non_exhaustive()
     }
 }

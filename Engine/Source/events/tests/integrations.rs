@@ -163,7 +163,7 @@ fn raw_enum_event_each_variant_falls_back_to_debug() {
 /// listen to each.
 #[test]
 fn realistic_multi_system_engine_loop() {
-    let mut mgr = EventManager::new();
+    let mgr = EventManager::new();
 
     let key_dispatcher: Dispatcher<KeyPressed> = mgr.register();
     let win_dispatcher: Dispatcher<WindowResized> = mgr.register();
@@ -202,7 +202,7 @@ fn realistic_multi_system_engine_loop() {
 fn fan_out_to_many_consumers() {
     const N: usize = 500;
 
-    let mut mgr = EventManager::new();
+    let mgr = EventManager::new();
     let dispatcher = mgr.register::<KeyPressed>();
 
     let consumers: Vec<Consumer<KeyPressed>> = (0..8).map(|_| mgr.subscribe()).collect();
@@ -225,7 +225,7 @@ fn fan_out_to_many_consumers() {
 /// main thread. Tests `Send` bounds on Dispatcher and Event.
 #[test]
 fn dispatcher_is_send_and_can_be_moved_to_thread() {
-    let mut mgr = EventManager::new();
+    let mgr = EventManager::new();
     let dispatcher = mgr.register::<KeyPressed>();
     let consumer = mgr.subscribe::<KeyPressed>();
 
@@ -246,7 +246,7 @@ fn dispatcher_is_send_and_can_be_moved_to_thread() {
 /// all subscribers.
 #[test]
 fn unit_event_reaches_all_consumers() {
-    let mut mgr = EventManager::new();
+    let mgr = EventManager::new();
     let dispatcher = mgr.register::<ShutdownRequested>();
     let c1 = mgr.subscribe::<ShutdownRequested>();
     let c2 = mgr.subscribe::<ShutdownRequested>();
@@ -265,7 +265,7 @@ fn unit_event_reaches_all_consumers() {
 /// Registering but never subscribing: must not panic on dispatch_all.
 #[test]
 fn register_without_subscribe_is_safe() {
-    let mut mgr = EventManager::new();
+    let mgr = EventManager::new();
     let dispatcher = mgr.register::<KeyPressed>();
     dispatcher.dispatch(KeyPressed(1));
     mgr.dispatch_all();
@@ -275,7 +275,7 @@ fn register_without_subscribe_is_safe() {
 /// Subscribing but never registering any dispatcher: consumer stays empty.
 #[test]
 fn subscribe_without_register_yields_empty_consumer() {
-    let mut mgr = EventManager::new();
+    let mgr = EventManager::new();
     let consumer = mgr.subscribe::<KeyPressed>();
     mgr.dispatch_all();
     assert!(collect_all(&consumer).is_empty());
@@ -284,7 +284,7 @@ fn subscribe_without_register_yields_empty_consumer() {
 /// Calling dispatch_all repeatedly without any events in between is a no-op.
 #[test]
 fn repeated_dispatch_all_with_no_events() {
-    let mut mgr = EventManager::new();
+    let mgr = EventManager::new();
     let _d = mgr.register::<KeyPressed>();
     let consumer = mgr.subscribe::<KeyPressed>();
 
@@ -298,7 +298,7 @@ fn repeated_dispatch_all_with_no_events() {
 /// consumers and subsequent dispatches must be unaffected.
 #[test]
 fn mid_simulation_consumer_drop_is_handled() {
-    let mut mgr = EventManager::new();
+    let mgr = EventManager::new();
     let dispatcher = mgr.register::<KeyPressed>();
     let alive = mgr.subscribe::<KeyPressed>();
 
@@ -321,7 +321,7 @@ fn mid_simulation_consumer_drop_is_handled() {
 /// consume_all returns an empty iterator when called before dispatch_all.
 #[test]
 fn consume_all_before_dispatch_all_is_empty() {
-    let mut mgr = EventManager::new();
+    let mgr = EventManager::new();
     let dispatcher = mgr.register::<KeyPressed>();
     let consumer = mgr.subscribe::<KeyPressed>();
 
@@ -333,7 +333,7 @@ fn consume_all_before_dispatch_all_is_empty() {
 /// Verifies that an enum event (NetworkEvent) goes through the full pipeline.
 #[test]
 fn enum_event_round_trips_through_manager() {
-    let mut mgr = EventManager::new();
+    let mgr = EventManager::new();
     let dispatcher = mgr.register::<NetworkEvent>();
     let consumer = mgr.subscribe::<NetworkEvent>();
 
