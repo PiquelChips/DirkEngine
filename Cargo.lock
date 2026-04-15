@@ -2374,6 +2374,7 @@ dependencies = [
  "events",
  "glam",
  "macros",
+ "platform",
  "tracing",
  "utils",
 ]
