@@ -144,7 +144,7 @@ impl World {
     ///
     /// The `id` is an arbitrary tag used to distinguish worlds when more than
     /// one exists simultaneously (e.g. a game world and a UI world).
-    pub fn new(id: WorldId, event_manager: &mut ::events::EventManager) -> Self {
+    pub fn new(id: WorldId, event_manager: &::events::EventManager) -> Self {
         let dispatcher = event_manager.register();
         dispatcher.dispatch(WorldEvent::Created(id));
         Self {
@@ -203,6 +203,11 @@ impl World {
     /// Returns the total number of alive entities.
     pub fn entity_count(&self) -> usize {
         self.alive.len()
+    }
+
+    /// Returns if the specified entity is alive
+    pub fn is_alive(&self,entity: Entity) -> bool{
+        self.alive.contains(&entity)
     }
 
     // -----------------------------------------------------------------------
