@@ -378,7 +378,7 @@ mod event_manager {
 
     #[test]
     fn single_event_reaches_single_subscriber() {
-        let mut mgr = EventManager::new();
+        let mgr = EventManager::new();
         let dispatcher: Dispatcher<CounterEvent> = mgr.register();
         let consumer: Consumer<CounterEvent> = mgr.subscribe();
 
@@ -392,7 +392,7 @@ mod event_manager {
 
     #[test]
     fn multiple_events_all_reach_subscriber() {
-        let mut mgr = EventManager::new();
+        let mgr = EventManager::new();
         let dispatcher = mgr.register::<CounterEvent>();
         let consumer = mgr.subscribe::<CounterEvent>();
 
@@ -409,7 +409,7 @@ mod event_manager {
 
     #[test]
     fn events_are_buffered_until_dispatch_all() {
-        let mut mgr = EventManager::new();
+        let mgr = EventManager::new();
         let dispatcher = mgr.register::<CounterEvent>();
         let consumer = mgr.subscribe::<CounterEvent>();
 
@@ -424,7 +424,7 @@ mod event_manager {
 
     #[test]
     fn dispatch_all_can_be_called_multiple_times() {
-        let mut mgr = EventManager::new();
+        let mgr = EventManager::new();
         let dispatcher = mgr.register::<CounterEvent>();
         let consumer = mgr.subscribe::<CounterEvent>();
 
@@ -446,7 +446,7 @@ mod event_manager {
 
     #[test]
     fn no_events_means_empty_consumer() {
-        let mut mgr = EventManager::new();
+        let mgr = EventManager::new();
         let _dispatcher = mgr.register::<CounterEvent>();
         let consumer = mgr.subscribe::<CounterEvent>();
 
@@ -458,7 +458,7 @@ mod event_manager {
 
     #[test]
     fn single_event_reaches_all_subscribers() {
-        let mut mgr = EventManager::new();
+        let mgr = EventManager::new();
         let dispatcher = mgr.register::<CounterEvent>();
         let c1 = mgr.subscribe::<CounterEvent>();
         let c2 = mgr.subscribe::<CounterEvent>();
@@ -476,7 +476,7 @@ mod event_manager {
 
     #[test]
     fn multiple_events_fan_out_to_all_subscribers() {
-        let mut mgr = EventManager::new();
+        let mgr = EventManager::new();
         let dispatcher = mgr.register::<CounterEvent>();
         let c1 = mgr.subscribe::<CounterEvent>();
         let c2 = mgr.subscribe::<CounterEvent>();
@@ -496,7 +496,7 @@ mod event_manager {
 
     #[test]
     fn subscribers_only_receive_their_event_type() {
-        let mut mgr = EventManager::new();
+        let mgr = EventManager::new();
         let counter_dispatcher = mgr.register::<CounterEvent>();
         let label_dispatcher = mgr.register::<LabelEvent>();
 
@@ -518,7 +518,7 @@ mod event_manager {
 
     #[test]
     fn no_cross_contamination_between_event_types() {
-        let mut mgr = EventManager::new();
+        let mgr = EventManager::new();
         let counter_dispatcher = mgr.register::<CounterEvent>();
         let _label_dispatcher = mgr.register::<LabelEvent>();
 
@@ -537,7 +537,7 @@ mod event_manager {
 
     #[test]
     fn dispatching_with_no_subscribers_does_not_panic() {
-        let mut mgr = EventManager::new();
+        let mgr = EventManager::new();
         let dispatcher = mgr.register::<CounterEvent>();
 
         dispatcher.dispatch(CounterEvent(0));
@@ -547,7 +547,7 @@ mod event_manager {
 
     #[test]
     fn dispatch_all_on_empty_manager_does_not_panic() {
-        let mut mgr = EventManager::new();
+        let mgr = EventManager::new();
         mgr.dispatch_all(); // Nothing registered at all.
     }
 
@@ -555,7 +555,7 @@ mod event_manager {
 
     #[test]
     fn dropped_consumer_is_pruned_silently() {
-        let mut mgr = EventManager::new();
+        let mgr = EventManager::new();
         let dispatcher = mgr.register::<CounterEvent>();
 
         let alive = mgr.subscribe::<CounterEvent>();
@@ -575,7 +575,7 @@ mod event_manager {
 
     #[test]
     fn all_consumers_dropped_does_not_panic() {
-        let mut mgr = EventManager::new();
+        let mgr = EventManager::new();
         let dispatcher = mgr.register::<CounterEvent>();
 
         {
@@ -591,7 +591,7 @@ mod event_manager {
 
     #[test]
     fn subscribing_without_dispatcher_gives_empty_consumer() {
-        let mut mgr = EventManager::new();
+        let mgr = EventManager::new();
         // Subscribe before any dispatcher is registered for this type.
         let consumer = mgr.subscribe::<CounterEvent>();
 
@@ -608,7 +608,7 @@ mod event_manager {
     fn high_volume_events_all_delivered() {
         const N: u32 = 10_000;
 
-        let mut mgr = EventManager::new();
+        let mgr = EventManager::new();
         let dispatcher = mgr.register::<CounterEvent>();
         let consumer = mgr.subscribe::<CounterEvent>();
 
@@ -628,7 +628,7 @@ mod event_manager {
 
     #[test]
     fn events_accumulate_correctly_across_many_ticks() {
-        let mut mgr = EventManager::new();
+        let mgr = EventManager::new();
         let dispatcher = mgr.register::<CounterEvent>();
         let consumer = mgr.subscribe::<CounterEvent>();
 
@@ -652,7 +652,7 @@ mod event_manager {
 
     #[test]
     fn try_consume_returns_none_when_empty() {
-        let mut mgr = EventManager::new();
+        let mgr = EventManager::new();
         let _dispatcher = mgr.register::<CounterEvent>();
         let consumer = mgr.subscribe::<CounterEvent>();
 
@@ -662,7 +662,7 @@ mod event_manager {
 
     #[test]
     fn try_consume_drains_one_at_a_time() {
-        let mut mgr = EventManager::new();
+        let mgr = EventManager::new();
         let dispatcher = mgr.register::<CounterEvent>();
         let consumer = mgr.subscribe::<CounterEvent>();
 
@@ -679,7 +679,7 @@ mod event_manager {
 
     #[test]
     fn two_dispatchers_for_same_type_both_reach_subscriber() {
-        let mut mgr = EventManager::new();
+        let mgr = EventManager::new();
         let d1 = mgr.register::<CounterEvent>();
         let d2 = mgr.register::<CounterEvent>();
         let consumer = mgr.subscribe::<CounterEvent>();
@@ -697,8 +697,8 @@ mod event_manager {
 
     #[test]
     fn new_and_default_are_equivalent() {
-        let mut mgr_new = EventManager::new();
-        let mut mgr_default = EventManager::default();
+        let mgr_new = EventManager::new();
+        let mgr_default = EventManager::default();
 
         let d1 = mgr_new.register::<CounterEvent>();
         let c1 = mgr_new.subscribe::<CounterEvent>();
