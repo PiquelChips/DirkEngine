@@ -20,7 +20,7 @@ use crate::{
 
 /// The device that stores all vulkan objects.
 #[derive(Clone)]
-pub struct RenderDevice(Arc<RenderDeviceInner>);
+pub(crate) struct RenderDevice(Arc<RenderDeviceInner>);
 
 impl Deref for RenderDevice {
     type Target = RenderDeviceInner;
@@ -29,7 +29,7 @@ impl Deref for RenderDevice {
     }
 }
 
-pub struct RenderDeviceInner {
+pub(crate) struct RenderDeviceInner {
     pub device: ash::Device,
     pub surface_loader: surface::Instance,
     pub swapchain_loader: swapchain::Device,
@@ -59,7 +59,6 @@ impl RenderDevice {
         instance: ash::Instance,
         device: ash::Device,
         surface_loader: surface::Instance,
-        swapchain_loader: swapchain::Device,
         physical_device: vk::PhysicalDevice,
         properties: RendererProperties,
         current_frame: Arc<AtomicU64>,
@@ -74,6 +73,9 @@ impl RenderDevice {
             buffer_device_address: true,
             allocation_sizes: Default::default(),
         })?;
+
+        // SWAP CHAIN
+        let swapchain_loader = swapchain::Device::new(&instance, &device);
 
         // LAYOUTS
         let layouts = DescriptorLayouts {
@@ -203,6 +205,7 @@ pub enum Garbage {
     ImageView(vk::ImageView),
     Sampler(vk::Sampler),
     Pipeline(vk::Pipeline),
+    PipelineLayout(vk::PipelineLayout),
     DescriptorPool(vk::DescriptorPool),
     DescriptorSetLayout(vk::DescriptorSetLayout),
     Semaphore(vk::Semaphore),
@@ -275,6 +278,7 @@ impl Garbage {
                 Self::ImageView(view) => device.destroy_image_view(view, None),
                 Self::Sampler(s) => device.destroy_sampler(s, None),
                 Self::Pipeline(p) => device.destroy_pipeline(p, None),
+                Self::PipelineLayout(l) => device.destroy_pipeline_layout(l, None),
                 Self::DescriptorPool(pool) => device.destroy_descriptor_pool(pool, None),
                 Self::DescriptorSetLayout(layout) => {
                     device.destroy_descriptor_set_layout(layout, None)

@@ -148,7 +148,7 @@ impl Scene {
         };
         let depth = Image::create_image(device.clone(), depth_info)?;
         let graphics_pipeline =
-            GraphicsPipeline::build(&device.device, &device.layouts, &device.properties)?;
+            GraphicsPipeline::build(&device, &device.layouts, &device.properties)?;
 
         Ok(Self {
             world,

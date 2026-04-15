@@ -442,9 +442,6 @@ impl Renderer {
             unsafe { instance.create_device(physical_device, &device_create_info, None)? }
         };
 
-        // SWAP CHAIN
-        let swapchain_loader = swapchain::Device::new(&instance, &device);
-
         let current_frame = Arc::new(AtomicU64::new(0));
 
         // RENDER DEVICE
@@ -452,7 +449,6 @@ impl Renderer {
             instance.clone(),
             device.clone(),
             surface_loader.clone(),
-            swapchain_loader.clone(),
             physical_device,
             properties,
             current_frame.clone(),
