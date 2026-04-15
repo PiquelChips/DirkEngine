@@ -9,10 +9,6 @@ use world::{
 
 use logging::Logger;
 
-use crate::input::WindowSizes;
-
-mod input;
-
 /// This is the main struct that holds global engine state.
 pub struct Engine {
     exit_consumer: events::Consumer<platform::AppExit>,
@@ -32,13 +28,6 @@ pub struct Engine {
 
     #[allow(unused)]
     logger: Logger,
-
-    // input handling
-    input_consumer: events::Consumer<platform::InputEvent>,
-    window_consumer: events::Consumer<platform::WindowEvent>,
-    /// Separate consumer for window resize events so we can keep pointer
-    /// coordinates normalised correctly at all times.
-    window_sizes: WindowSizes,
 }
 
 impl Engine {
@@ -72,8 +61,6 @@ impl Engine {
         info!("engine initialised");
         Ok(Self {
             exit_consumer: event_manager.subscribe(),
-            input_consumer: event_manager.subscribe(),
-            window_consumer: event_manager.subscribe(),
             event_manager,
             logger,
 
@@ -88,7 +75,6 @@ impl Engine {
             is_requesting_exit: false,
             exit_error: None,
             last_tick: Instant::now(),
-            window_sizes: Default::default(),
         })
     }
     /// Will start the main game/editor. This should be called
@@ -125,8 +111,6 @@ impl Engine {
         if self.is_requesting_exit() {
             return Ok(false);
         }
-
-        self.process_input_events();
 
         self.platform.tick(delta_time);
         self.renderer
