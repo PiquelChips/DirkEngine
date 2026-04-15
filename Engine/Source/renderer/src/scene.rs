@@ -6,6 +6,7 @@ use world::{World, WorldId, components, events::WorldEvent};
 
 use crate::{
     Error, MAX_FRAMES_IN_FLIGHT, MAX_RENDERABLES, Result,
+    assets::AssetManager,
     pipeline::GraphicsPipeline,
     render_pass::RenderPass,
     resources::{
@@ -205,7 +206,7 @@ impl Scene {
     }
     pub fn render(
         &self,
-        models: &HashMap<String, model::Model>,
+        assets: &AssetManager,
         cmd: &CommandBuffer,
         size: vk::Extent2D,
         view: vk::ImageView,
@@ -271,7 +272,7 @@ impl Scene {
             let Some(ref model) = proxy.model else {
                 continue;
             };
-            let Some(model) = models.get(model) else {
+            let Some(model) = assets.get(model) else {
                 continue;
             };
 

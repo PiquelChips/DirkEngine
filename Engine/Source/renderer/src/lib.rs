@@ -47,6 +47,8 @@ use resources::{
     image::SwapchainImage,
 };
 
+use crate::assets::AssetManager;
+
 mod assets;
 mod physical_device;
 mod pipeline;
@@ -143,6 +145,8 @@ pub struct Renderer {
     windows: HashMap<WindowId, Window>,
     /// All of the internal [world::World] representations.
     scenes: HashMap<world::WorldId, Scene>,
+    /// Manages all renderer assets like meshes & stuff.
+    asset_manager: AssetManager,
 
     frames: [Frame; MAX_FRAMES_IN_FLIGHT],
     current_frame: Arc<AtomicU64>,
@@ -451,6 +455,8 @@ impl Renderer {
             event_manager.clone(),
         )?;
 
+        let asset_manager = AssetManager::new(&render_device)?;
+
         // IN FLIGHT FRAMES
         let build_frame = || -> Result<Frame> {
             let command_pool = CommandPool::build(
@@ -488,6 +494,7 @@ impl Renderer {
             render_device,
             windows: HashMap::new(),
             scenes: HashMap::new(),
+            asset_manager,
             frames,
             current_frame,
             #[cfg(validation)]
@@ -650,7 +657,13 @@ impl Renderer {
             vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
         )?;
 
-        scene.render(&self.models, &cmd, size, swapchain_img.view(), camera)?;
+        scene.render(
+            &self.asset_manager,
+            &cmd,
+            size,
+            swapchain_img.view(),
+            camera,
+        )?;
 
         swapchain_img.transition_image_layout(
             &cmd,
