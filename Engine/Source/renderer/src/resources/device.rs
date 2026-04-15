@@ -48,6 +48,7 @@ pub struct RenderDeviceInner {
     pub properties: RendererProperties,
 
     pub allocator: Mutex<Allocator>,
+    pub event_manager: events::EventManager,
     deletion_queue: Mutex<DeletionQueue>,
     current_frame: Arc<AtomicU64>,
 }
@@ -66,6 +67,7 @@ impl RenderDevice {
         properties: RendererProperties,
         allocator: Allocator,
         current_frame: Arc<AtomicU64>,
+        event_manager: events::EventManager,
     ) -> Self {
         Self(Arc::new(RenderDeviceInner {
             device,
@@ -84,6 +86,7 @@ impl RenderDevice {
                 MAX_FRAMES_IN_FLIGHT,
             )),
             current_frame,
+            event_manager,
         }))
     }
 

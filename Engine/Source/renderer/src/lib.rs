@@ -29,7 +29,7 @@ use tracing::{debug, info};
 use tracing::{error, trace, warn};
 
 use platform::{PlatformEvent, WindowEvent, WindowId};
-use world::{components, events::WorldEvent};
+use world::events::WorldEvent;
 
 mod utils;
 use crate::{image::SwapchainImage, resources::device::RenderDevice, utils::*};
@@ -39,7 +39,7 @@ mod errors;
 pub use errors::{Error, Result};
 
 mod scene;
-use scene::{Scene, SceneProxy};
+use scene::Scene;
 
 mod window;
 use window::Window;
@@ -583,6 +583,7 @@ impl Renderer {
             properties,
             allocator,
             current_frame.clone(),
+            event_manager.clone(),
         );
 
         Ok(Self {
@@ -624,46 +625,9 @@ impl Renderer {
                 WorldEvent::Destroyed(id) => {
                     self.scenes.remove(&id);
                 }
-                WorldEvent::EntitySpawn { world, entity } => {
-                    let proxy = SceneProxy::build(self, world)?;
-                    // this creates a completely empty proxy, no mesh or matrix
-                    let Some(scene) = self.scenes.get_mut(&world) else {
-                        continue;
-                    };
-                    scene.add_proxy(entity, proxy)?;
-                }
-                WorldEvent::EntityUpdate { world, entity } => {
-                    let Some(world) = worlds.get(&world) else {
-                        continue;
-                    };
-                    if let Some(renderable) = world.get::<components::Renderable>(entity) {
-                        self.get_or_upload_model(&renderable.model)?;
-                    }
-                    let Some(scene) = self.scenes.get_mut(&world.id()) else {
-                        continue;
-                    };
-                    let Some(proxy) = scene.get_proxy(entity) else {
-                        continue;
-                    };
-
-                    let Some(transform) = world.get::<components::Transform>(entity) else {
-                        continue;
-                    };
-                    proxy.set_model_matrix(transform.matrix());
-
-                    if let Some(renderable) = world.get::<components::Renderable>(entity) {
-                        proxy.set_model(&renderable.model);
-                    };
-                    if let Some(camera) = world.get::<components::Camera>(entity) {
-                        proxy.set_camera(transform.view(), camera.projection());
-                    }
-                }
-                WorldEvent::EntityDespawn { world, entity } => {
-                    let Some(scene) = self.scenes.get_mut(&world) else {
-                        continue;
-                    };
-                    scene.remove_proxy(entity);
-                }
+                WorldEvent::EntitySpawn { .. }
+                | WorldEvent::EntityUpdate { .. }
+                | WorldEvent::EntityDespawn { .. } => {}
             }
         }
 
@@ -734,6 +698,13 @@ impl Renderer {
                 WindowEvent::FocusChanged { .. } | WindowEvent::ThemeChanged { .. } => {}
             }
         }
+
+        self.scenes.values_mut().try_for_each(|scene| {
+            let Some(world) = worlds.get(&scene.world()) else {
+                return Ok(());
+            };
+            scene.tick(world)
+        })?;
 
         Ok(())
     }

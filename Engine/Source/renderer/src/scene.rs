@@ -2,10 +2,10 @@ use std::collections::HashMap;
 
 use ash::vk;
 use gpu_allocator::MemoryLocation;
-use world::WorldId;
+use world::{World, WorldId, components, events::WorldEvent};
 
 use crate::{
-    Error, MAX_FRAMES_IN_FLIGHT, MAX_RENDERABLES, Renderer, Result,
+    Error, MAX_FRAMES_IN_FLIGHT, MAX_RENDERABLES, Result,
     buffer::UniformBuffer,
     command_pool::CommandBuffer,
     image::{Image, ImageCreateInfo},
@@ -29,6 +29,8 @@ pub struct Scene {
     descriptor_pool: vk::DescriptorPool,
     ubo: [UniformBuffer; MAX_FRAMES_IN_FLIGHT],
     descriptor_sets: [vk::DescriptorSet; MAX_FRAMES_IN_FLIGHT],
+
+    world_consumer: events::Consumer<world::events::WorldEvent>,
 
     // TODO: these need to be removed
     color: Image,
@@ -153,11 +155,52 @@ impl Scene {
             descriptor_pool,
             ubo,
             descriptor_sets: scene_desc_sets,
+            world_consumer: device.event_manager.subscribe(),
 
             color,
             depth,
             graphics_pipeline,
         })
+    }
+    pub fn tick(&mut self, world: &World) -> Result<()> {
+        for event in self
+            .world_consumer
+            .consume_all()
+            .filter(|e| e.world() == self.world)
+        {
+            match event {
+                WorldEvent::Created(..) | WorldEvent::Destroyed(..) => {}
+                WorldEvent::EntitySpawn { world: _, entity } => {
+                    self.proxies
+                        .insert(entity, SceneProxy::build(self.device.clone(), self)?);
+                }
+                WorldEvent::EntityUpdate { world: _, entity } => {
+                    // TODO: asset manager
+                    // if let Some(renderable) = world.get::<components::Renderable>(entity) {
+                    //     self.get_or_upload_model(&renderable.model)?;
+                    // }
+                    let Some(proxy) = self.proxies.get_mut(&entity) else {
+                        continue;
+                    };
+
+                    let Some(transform) = world.get::<components::Transform>(entity) else {
+                        continue;
+                    };
+                    proxy.set_model_matrix(transform.matrix());
+
+                    if let Some(renderable) = world.get::<components::Renderable>(entity) {
+                        proxy.set_model(&renderable.model);
+                    };
+                    if let Some(camera) = world.get::<components::Camera>(entity) {
+                        proxy.set_camera(transform.view(), camera.projection());
+                    }
+                }
+                WorldEvent::EntityDespawn { world: _, entity } => {
+                    self.proxies.remove(&entity);
+                }
+            }
+        }
+        Ok(())
     }
     pub fn render(
         &self,
@@ -271,15 +314,9 @@ impl Scene {
         RenderPass::end(&self.device.device, cmd);
         Ok(())
     }
-    pub fn add_proxy(&mut self, entity: world::Entity, proxy: SceneProxy) -> Result<()> {
-        self.proxies.insert(entity, proxy);
-        Ok(())
-    }
-    pub fn get_proxy(&mut self, entity: world::Entity) -> Option<&mut SceneProxy> {
-        self.proxies.get_mut(&entity)
-    }
-    pub fn remove_proxy(&mut self, entity: world::Entity) {
-        self.proxies.remove(&entity);
+
+    pub fn world(&self) -> WorldId {
+        self.world
     }
 }
 
@@ -316,30 +353,19 @@ struct ProxyUbo {
 }
 
 impl SceneProxy {
-    pub fn build(renderer: &mut Renderer, world: WorldId) -> Result<Self> {
+    fn build(device: RenderDevice, scene: &Scene) -> Result<Self> {
         let size = size_of::<ProxyUbo>() as u64;
-        let build_ubo = || {
-            UniformBuffer::create(
-                renderer.render_device.clone(),
-                size,
-                MemoryLocation::CpuToGpu,
-            )
-        };
+        let build_ubo = || UniformBuffer::create(device.clone(), size, MemoryLocation::CpuToGpu);
         let ubo = [build_ubo()?, build_ubo()?];
 
-        let Some(scene) = renderer.scenes.get(&world) else {
-            return Err(Error::WorldDoesNotExist(world));
-        };
-
         // Allocate scene-level sets (one per frame)
-        let layouts = [renderer.render_device.layouts.object; MAX_FRAMES_IN_FLIGHT];
+        let layouts = [device.layouts.object; MAX_FRAMES_IN_FLIGHT];
         let alloc_info = vk::DescriptorSetAllocateInfo::default()
             .descriptor_pool(scene.descriptor_pool)
             .set_layouts(&layouts);
 
         let sets: [vk::DescriptorSet; MAX_FRAMES_IN_FLIGHT] = unsafe {
-            renderer
-                .render_device
+            device
                 .device
                 .allocate_descriptor_sets(&alloc_info)?
                 .try_into()
@@ -364,8 +390,7 @@ impl SceneProxy {
             });
 
         unsafe {
-            renderer
-                .render_device
+            device
                 .device
                 .update_descriptor_sets(&descriptor_writes, &[])
         };
