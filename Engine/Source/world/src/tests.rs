@@ -9,7 +9,7 @@
 
 use crate::World;
 fn new_world(id: u32) -> World {
-    let mut event_manager = events::EventManager::new();
+    let mut event_manager = ::events::EventManager::new();
     World::new(id, &mut event_manager)
 }
 
@@ -660,5 +660,97 @@ mod player {
         cloned.size = glam::vec2(1.0, 1.0);
         // Original must be unaffected.
         assert_eq!(original.size, glam::vec2(0.5, 1.0));
+    }
+}
+
+mod events {
+    use crate::events::*;
+
+    // -----------------------------------------------------------------------
+    // Unit tests — WorldEvent::world()
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn world_event_created_returns_correct_world_id() {
+        let id = 1;
+        assert_eq!(WorldEvent::Created(id).world(), id);
+    }
+
+    #[test]
+    fn world_event_destroyed_returns_correct_world_id() {
+        let id = 2;
+        assert_eq!(WorldEvent::Destroyed(id).world(), id);
+    }
+
+    #[test]
+    fn world_event_entity_spawn_returns_correct_world_id() {
+        let id = 3;
+        let evt = WorldEvent::EntitySpawn {
+            world: id,
+            entity: 0,
+        };
+        assert_eq!(evt.world(), id);
+    }
+
+    #[test]
+    fn world_event_entity_update_returns_correct_world_id() {
+        let id = 4;
+        let evt = WorldEvent::EntityUpdate {
+            world: id,
+            entity: 0,
+        };
+        assert_eq!(evt.world(), id);
+    }
+
+    #[test]
+    fn world_event_entity_despawn_returns_correct_world_id() {
+        let id = 5;
+        let evt = WorldEvent::EntityDespawn {
+            world: id,
+            entity: 0,
+        };
+        assert_eq!(evt.world(), id);
+    }
+
+    #[test]
+    fn world_event_different_ids_do_not_alias() {
+        // Regression: ensure the match arms don't inadvertently return the
+        // same constant regardless of what was stored.
+        assert_ne!(
+            WorldEvent::Created(10).world(),
+            WorldEvent::Created(20).world()
+        );
+    }
+
+    #[test]
+    fn world_event_clone_is_equal_to_original() {
+        let evt = WorldEvent::EntitySpawn {
+            world: 6,
+            entity: 7,
+        };
+        let cloned = evt.clone();
+        assert_eq!(evt.world(), cloned.world());
+    }
+
+    // -----------------------------------------------------------------------
+    // Unit tests — PlayerUpdateType
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn player_update_type_variants_are_distinct() {
+        assert_ne!(PlayerUpdateType::Spawned, PlayerUpdateType::Updated);
+        assert_ne!(PlayerUpdateType::Updated, PlayerUpdateType::Despawned);
+        assert_ne!(PlayerUpdateType::Spawned, PlayerUpdateType::Despawned);
+    }
+
+    #[test]
+    fn player_update_type_clone_equals_original() {
+        for variant in [
+            PlayerUpdateType::Spawned,
+            PlayerUpdateType::Updated,
+            PlayerUpdateType::Despawned,
+        ] {
+            assert_eq!(variant.clone(), variant);
+        }
     }
 }
