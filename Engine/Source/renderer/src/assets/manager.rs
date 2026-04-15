@@ -58,8 +58,6 @@ pub struct Material {
     descriptor_set: vk::DescriptorSet,
 }
 
-/// This replaces your old "Model". It's a CPU-side hierarchy
-/// that points to GPU-side assets via Handles.
 pub struct ModelHierarchy {
     // TODO: store transform with each mesh handle
     pub mesh_instances: Vec<Handle<Mesh>>,
@@ -147,14 +145,8 @@ impl AssetManager {
             })
             .collect::<Result<Vec<_>>>()?;
 
-        // TODO: upload all materials at once
-        // let materials = gltf.materials().collect();
-        let mut material_handles = Vec::new();
-        for mat in gltf.materials() {
-            // TODO: handle group allocation
-            let handle = self.create_material(mat, &texture_handles)?;
-            material_handles.push(handle);
-        }
+        let material_handles =
+            self.create_materials(gltf.materials().collect(), &texture_handles)?;
 
         let mesh_instances = gltf
             .meshes()
@@ -172,40 +164,54 @@ impl AssetManager {
         Ok(model_handle)
     }
 
-    fn create_material(
+    fn create_materials(
         &mut self,
-        mat: gltf::Material,
+        materials: Vec<gltf::Material>,
         texture_refs: &[Handle<Texture>],
-    ) -> Result<Handle<Material>> {
-        let pbr = mat.pbr_metallic_roughness();
-        // TODO: actually PBR materials
-        let tex = pbr.base_color_texture().unwrap().texture().source().index();
+    ) -> Result<Vec<Handle<Material>>> {
+        let material_count = materials.len();
+        // Allocate one set per material
+        let layouts: Vec<vk::DescriptorSetLayout> =
+            vec![self.device.layouts.material; material_count];
 
-        let layouts: Vec<vk::DescriptorSetLayout> = vec![self.device.layouts.material; 1];
-        let alloc_info = vk::DescriptorSetAllocateInfo::default()
-            .descriptor_pool(self.material_pool)
-            .set_layouts(&layouts);
+        let material_sets: Vec<vk::DescriptorSet> = if material_count > 0 {
+            let alloc_info = vk::DescriptorSetAllocateInfo::default()
+                .descriptor_pool(self.material_pool)
+                .set_layouts(&layouts);
 
-        let mat_set = unsafe { self.device.device.allocate_descriptor_sets(&alloc_info)? }[0];
+            unsafe { self.device.device.allocate_descriptor_sets(&alloc_info)? }
+        } else {
+            Vec::new()
+        };
 
-        let tex_handle = texture_refs[tex];
-        let tex = self.textures.get(tex_handle);
-        let image_info = vk::DescriptorImageInfo::default()
-            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-            .image_view(tex.image.view())
-            .sampler(tex.sampler);
+        Ok(materials
+            .into_iter()
+            .enumerate()
+            .map(|(i, mat)| {
+                let pbr = mat.pbr_metallic_roughness();
+                // TODO: actually PBR materials
+                let tex = pbr.base_color_texture().unwrap().texture().source().index();
 
-        let write = vk::WriteDescriptorSet::default()
-            .dst_set(mat_set)
-            .dst_binding(2) // matches layouts.material
-            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-            .image_info(std::slice::from_ref(&image_info));
+                let tex_handle = texture_refs[tex];
+                let tex = self.textures.get(tex_handle);
+                let image_info = vk::DescriptorImageInfo::default()
+                    .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                    .image_view(tex.image.view())
+                    .sampler(tex.sampler);
 
-        unsafe { self.device.device.update_descriptor_sets(&[write], &[]) };
-        Ok(self.materials.insert(Material {
-            base_color: tex_handle,
-            descriptor_set: mat_set,
-        }))
+                let write = vk::WriteDescriptorSet::default()
+                    .dst_set(material_sets[i])
+                    .dst_binding(2) // matches layouts.material
+                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                    .image_info(std::slice::from_ref(&image_info));
+
+                unsafe { self.device.device.update_descriptor_sets(&[write], &[]) };
+                self.materials.insert(Material {
+                    base_color: tex_handle,
+                    descriptor_set: material_sets[i],
+                })
+            })
+            .collect())
     }
 
     fn upload_primitive(
