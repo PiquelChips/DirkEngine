@@ -35,14 +35,6 @@ impl WorldEvent {
     }
 }
 
-/// Events emitted by the player system.
-///
-/// These describe changes to the *player handle* itself (spawn, despawn,
-/// per-tick state change). Component-level mutations (Transform, Camera) are
-/// separately covered by [`world::events::WorldEvent`].
-///
-/// TODO: refactor player events: only care about change in world, entity,
-/// window, region, ...
 #[derive(Debug, Clone, Event)]
 pub struct PlayerUpdateEvent {
     id: PlayerId,
