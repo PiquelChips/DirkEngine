@@ -1,4 +1,6 @@
+use crate::Component;
 use glam::{Mat4, Vec3};
+use macros::Component;
 use tracing::warn;
 
 /// Marks an entity as having a renderable mesh.
@@ -12,7 +14,7 @@ use tracing::warn;
 /// let r = Renderable { model: "meshes/cube.glb".into() };
 /// assert_eq!(r.model, "meshes/cube.glb");
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Component)]
 pub struct Renderable {
     /// Asset-registry key for the mesh to render (e.g. `"meshes/cube.glb"`).
     pub model: String,
@@ -37,7 +39,7 @@ pub struct Renderable {
 /// let fwd = t.forward();
 /// assert!((fwd.length() - 1.0).abs() < 1e-5);
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Component)]
 pub struct Transform {
     /// World-space position.
     pub location: Vec3,
@@ -127,7 +129,7 @@ impl From<Transform> for Mat4 {
 /// // The matrix must be finite.
 /// assert!(proj.to_cols_array().iter().all(|v| v.is_finite()));
 /// ```
-#[derive(Debug)]
+#[derive(Debug, Component)]
 pub struct Camera {
     /// Vertical field of view **in radians**.
     pub fov: f32,
