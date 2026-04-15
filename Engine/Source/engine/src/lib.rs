@@ -82,18 +82,8 @@ impl Engine {
     pub fn start(&mut self) -> anyhow::Result<()> {
         info!("starting engine");
         let world_id = self.create_test_world();
-        let world = self.worlds.get_mut(&world_id).unwrap();
 
-        self.players.insert(
-            self.next_player_id,
-            Player::spawn(
-                self.next_player_id,
-                world,
-                self.platform.main_window().id(),
-                &self.event_manager,
-            ),
-        );
-        self.next_player_id += 1;
+        self.spawn_player(world_id);
 
         Ok(())
     }
@@ -168,6 +158,33 @@ impl Engine {
     #[allow(unused)]
     fn destroy_world(&mut self, id: WorldId) {
         self.worlds.remove(&id);
+    }
+
+    fn spawn_player(&mut self, world: WorldId) -> PlayerId {
+        let id = self.next_player_id;
+        self.next_player_id += 1;
+
+        let world = self.worlds.get_mut(&world).unwrap();
+
+        let player = Player::spawn(
+            id,
+            world,
+            self.platform.main_window().id(),
+            &self.event_manager,
+        );
+
+        self.players.insert(id, player);
+        id
+    }
+    #[allow(unused)]
+    fn kill_player(&mut self, id: PlayerId) {
+        let Some(player) = self.players.remove(&id) else {
+            return;
+        };
+        let Some(world) = self.worlds.get_mut(&player.world()) else {
+            return;
+        };
+        player.despawn(world);
     }
 
     fn create_test_world(&mut self) -> WorldId {
