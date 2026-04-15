@@ -155,7 +155,7 @@ impl WorldEvent {
 /// ```rust
 /// # use world::events::{PlayerUpdateEvent, PlayerUpdateType};
 /// # fn example(evt: PlayerUpdateEvent) {
-/// match evt.update_type() {
+/// match evt.update_type {
 ///     PlayerUpdateType::Spawned   => { /* initialise per-player state */ }
 ///     PlayerUpdateType::Updated   => { /* refresh cached region / camera */ }
 ///     PlayerUpdateType::Despawned => { /* free per-player resources */ }
