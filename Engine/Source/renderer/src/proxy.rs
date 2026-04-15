@@ -1,3 +1,5 @@
+//! This module holds proxies for various engine objects
+
 use platform::WindowId;
 use world::{
     Entity, WorldId,
