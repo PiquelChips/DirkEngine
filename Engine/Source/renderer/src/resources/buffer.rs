@@ -33,7 +33,7 @@ macro_rules! define_buff_type {
             }
         }
 
-        paste::paste! {
+        pastey::paste! {
             pub type [<$name Buffer>] = Buffer<$name>;
         }
     };
