@@ -1157,10 +1157,11 @@ dependencies = [
 name = "player"
 version = "0.1.0"
 dependencies = [
- "derive-getters",
  "events",
  "glam",
+ "macros",
  "platform",
+ "tracing",
  "world",
 ]
 

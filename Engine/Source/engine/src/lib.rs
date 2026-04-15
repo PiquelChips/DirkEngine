@@ -1,24 +1,28 @@
 use std::{collections::HashMap, ffi::CString, str::FromStr, time::Instant};
 
 use anyhow::Context;
-use player::Player;
+use player::{Player, PlayerId};
 use tracing::info;
 use world::{World, WorldId};
 
 use logging::Logger;
 
+use crate::input::WindowSizes;
+
+mod input;
+
 /// This is the main struct that holds global engine state.
 pub struct Engine {
     exit_consumer: events::Consumer<platform::AppExit>,
     event_manager: events::EventManager,
-    input_manager: player::input::InputManager,
 
     renderer: renderer::Renderer,
     platform: platform::Platform,
 
     next_world_id: WorldId,
     worlds: HashMap<WorldId, World>,
-    players: Vec<Player>,
+    next_player_id: PlayerId,
+    players: HashMap<PlayerId, Player>,
 
     is_requesting_exit: bool,
     exit_error: Option<anyhow::Error>,
@@ -26,6 +30,13 @@ pub struct Engine {
 
     #[allow(unused)]
     logger: Logger,
+
+    // input handling
+    input_consumer: events::Consumer<platform::InputEvent>,
+    window_consumer: events::Consumer<platform::WindowEvent>,
+    /// Separate consumer for window resize events so we can keep pointer
+    /// coordinates normalised correctly at all times.
+    window_sizes: WindowSizes,
 }
 
 impl Engine {
@@ -38,15 +49,12 @@ impl Engine {
             .init()
             .context("initialising logger")?;
 
-        let mut event_manager = events::EventManager::new();
-        let exit_consumer = event_manager.subscribe();
-
-        let input_manager = player::input::InputManager::init(&mut event_manager);
+        let event_manager = events::EventManager::new();
 
         let version = utils::Version::from_str(env!("CARGO_PKG_VERSION"))?;
         let name = "DirkEngine";
 
-        let platform = platform::Platform::init(&mut event_manager).context("platform init")?;
+        let platform = platform::Platform::init(&event_manager).context("platform init")?;
         let renderer = renderer::Renderer::init(
             renderer::RendererCreateInfo {
                 engine_name: CString::from_str(name)?,
@@ -61,21 +69,24 @@ impl Engine {
 
         info!("engine initialised");
         Ok(Self {
+            exit_consumer: event_manager.subscribe(),
+            input_consumer: event_manager.subscribe(),
+            window_consumer: event_manager.subscribe(),
             event_manager,
-            exit_consumer,
             logger,
 
             platform,
             renderer,
-            input_manager,
 
             next_world_id: 0,
             worlds: HashMap::new(),
-            players: Vec::new(),
+            next_player_id: 0,
+            players: HashMap::new(),
 
             is_requesting_exit: false,
             exit_error: None,
             last_tick: Instant::now(),
+            window_sizes: Default::default(),
         })
     }
     /// Will start the main game/editor. This should be called
@@ -85,8 +96,16 @@ impl Engine {
         let world_id = self.create_test_world();
         let world = self.worlds.get_mut(&world_id).unwrap();
 
-        self.players
-            .push(Player::spawn(world, self.platform.main_window().id()));
+        self.players.insert(
+            self.next_player_id,
+            Player::spawn(
+                self.next_player_id,
+                world,
+                self.platform.main_window().id(),
+                &self.event_manager,
+            ),
+        );
+        self.next_player_id += 1;
 
         Ok(())
     }
@@ -105,7 +124,7 @@ impl Engine {
             return Ok(false);
         }
 
-        self.input_manager.tick(delta_time, &self.players);
+        self.process_input_events();
 
         self.platform.tick(delta_time);
         self.renderer
@@ -116,9 +135,9 @@ impl Engine {
         Ok(!self.is_requesting_exit())
     }
     pub fn render(&mut self) -> anyhow::Result<()> {
-        for player in &self.players {
+        for player in self.players.values() {
             self.renderer
-                .render(*player.window(), *player.world(), *player.entity())?;
+                .render(player.window(), player.world(), player.entity())?;
         }
         Ok(())
     }

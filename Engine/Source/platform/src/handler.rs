@@ -32,7 +32,7 @@ pub struct PlatformHandler {
 }
 
 impl PlatformHandler {
-    pub fn new(events: &mut events::EventManager) -> Self {
+    pub fn new(events: &events::EventManager) -> Self {
         Self {
             can_create_surfaces: false,
             windows: HashMap::new(),

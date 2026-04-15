@@ -7,9 +7,10 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
-derive-getters.workspace = true
+tracing.workspace = true
 
 events.workspace = true
+macros.workspace = true
 platform.workspace = true
 world.workspace = true
 
