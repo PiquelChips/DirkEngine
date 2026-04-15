@@ -49,6 +49,8 @@ use resources::{
     model::*,
 };
 
+use crate::resources::device::Garbage;
+
 mod physical_device;
 mod pipeline;
 mod render_pass;
@@ -103,12 +105,10 @@ struct DescriptorLayouts {
 }
 
 impl DescriptorLayouts {
-    fn destroy(&self, device: &Device) {
-        unsafe {
-            device.destroy_descriptor_set_layout(self.scene, None);
-            device.destroy_descriptor_set_layout(self.object, None);
-            device.destroy_descriptor_set_layout(self.material, None);
-        }
+    fn destroy(&self, device: &mut RenderDevice) {
+        device.destroy(Garbage::DescriptorSetLayout(self.scene));
+        device.destroy(Garbage::DescriptorSetLayout(self.object));
+        device.destroy(Garbage::DescriptorSetLayout(self.material));
     }
 }
 
