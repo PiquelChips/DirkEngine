@@ -65,7 +65,7 @@ pub type WorldId = u32;
 /// use world::Component;
 /// use macros::Component;
 ///
-/// #[derivce(Component)]
+/// #[derive(Component)]
 /// struct Health(f32);
 /// ```
 pub trait Component: 'static + Sized {}
