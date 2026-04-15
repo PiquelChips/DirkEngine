@@ -206,7 +206,7 @@ impl World {
     }
 
     /// Returns if the specified entity is alive
-    pub fn is_alive(&self,entity: Entity) -> bool{
+    pub fn is_alive(&self, entity: Entity) -> bool {
         self.alive.contains(&entity)
     }
 

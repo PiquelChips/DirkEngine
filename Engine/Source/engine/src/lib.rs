@@ -151,7 +151,7 @@ impl Engine {
         let id = self.next_world_id;
         self.next_world_id += 1;
 
-        let world = World::new(id, &mut self.event_manager);
+        let world = World::new(id, &self.event_manager);
         self.worlds.insert(id, world);
         id
     }
