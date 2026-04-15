@@ -5,7 +5,10 @@ use std::f32::consts::PI;
 use events::{Dispatcher, EventManager};
 use platform::WindowId;
 
-use crate::{Entity, World, WorldId, events::PlayerEvent};
+use crate::{
+    Entity, World, WorldId,
+    events::{PlayerUpdateEvent, PlayerUpdateType},
+};
 
 pub type PlayerId = u32;
 
@@ -22,6 +25,7 @@ pub type PlayerId = u32;
 /// │           │  P2     │  offset=(0.5, 0.0), size=(0.5, 1.0)
 /// └─────────────────────┘
 /// ```
+#[derive(Debug, Clone)]
 pub struct PlayerRegion {
     /// Top-left corner in normalised window space.
     pub offset: glam::Vec2,
@@ -64,7 +68,7 @@ pub struct Player {
     entity: Entity,
     window: WindowId,
     region: PlayerRegion,
-    dispatcher: Dispatcher<PlayerEvent>,
+    dispatcher: Dispatcher<PlayerUpdateEvent>,
 }
 
 impl Player {
@@ -101,16 +105,20 @@ impl Player {
         );
 
         let dispatcher = event_manager.register();
-        dispatcher.dispatch(PlayerEvent::Spawned(id));
 
-        Self {
+        let player = Self {
             id,
             world: world.id(),
             entity,
             window,
             region: PlayerRegion::default(),
             dispatcher,
-        }
+        };
+        player.dispatcher.dispatch(PlayerUpdateEvent::from_player(
+            &player,
+            PlayerUpdateType::Spawned,
+        ));
+        player
     }
 
     /// Removes the player entity from the world and fires
@@ -119,7 +127,10 @@ impl Player {
     /// Consumes `self` so the handle cannot be used after despawning.
     pub fn despawn(self, world: &mut World) {
         world.despawn(self.entity);
-        self.dispatcher.dispatch(PlayerEvent::Despawned(self.id));
+        self.dispatcher.dispatch(PlayerUpdateEvent::from_player(
+            &self,
+            PlayerUpdateType::Despawned,
+        ));
     }
 
     pub fn id(&self) -> PlayerId {
@@ -139,5 +150,13 @@ impl Player {
     }
     pub fn set_region(&mut self, region: PlayerRegion) {
         self.region = region;
+        self.dispatch_update();
+    }
+
+    fn dispatch_update(&self) {
+        self.dispatcher.dispatch(PlayerUpdateEvent::from_player(
+            self,
+            PlayerUpdateType::Updated,
+        ));
     }
 }

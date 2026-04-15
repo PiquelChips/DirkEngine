@@ -1,7 +1,11 @@
 use events::Event;
 use macros::Event;
+use platform::WindowId;
 
-use crate::{Entity, WorldId, player::PlayerId};
+use crate::{
+    Entity, WorldId,
+    player::{Player, PlayerId, PlayerRegion},
+};
 
 #[derive(Debug, Clone, Event)]
 pub enum WorldEvent {
@@ -40,13 +44,31 @@ impl WorldEvent {
 /// TODO: refactor player events: only care about change in world, entity,
 /// window, region, ...
 #[derive(Debug, Clone, Event)]
-pub enum PlayerEvent {
-    #[event("Player {0} spawned")]
-    Spawned(PlayerId),
-    #[event("Player {0} despawned")]
-    Despawned(PlayerId),
-    /// Fired at the end of a tick in which the player's transform actually
-    /// changed (movement applied or camera rotated). Not fired on idle ticks.
-    #[event("Player {0} updated")]
-    Updated(PlayerId),
+pub struct PlayerUpdateEvent {
+    id: PlayerId,
+    world: WorldId,
+    entity: Entity,
+    window: WindowId,
+    region: PlayerRegion,
+    update_type: PlayerUpdateType,
+}
+
+#[derive(Clone, Debug)]
+pub enum PlayerUpdateType {
+    Spawned,
+    Updated,
+    Despawned,
+}
+
+impl PlayerUpdateEvent {
+    pub fn from_player(player: &Player, update_type: PlayerUpdateType) -> Self {
+        Self {
+            id: player.id(),
+            world: player.world(),
+            entity: player.entity(),
+            window: player.window(),
+            region: player.region().clone(),
+            update_type,
+        }
+    }
 }
