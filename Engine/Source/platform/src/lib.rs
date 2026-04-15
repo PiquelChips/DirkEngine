@@ -20,12 +20,7 @@ mod window;
 pub use errors::Error;
 pub use event::*;
 pub use window::Window;
-
-pub use winit::{
-    event::ButtonSource,
-    keyboard::{Key, KeyCode, ModifiersState, PhysicalKey},
-    window::WindowId,
-};
+pub use winit::window::WindowId;
 
 use errors::Result;
 use handler::PlatformHandler;
@@ -40,7 +35,7 @@ pub struct Platform {
 }
 
 impl Platform {
-    pub fn init(events: &events::EventManager) -> Result<Self> {
+    pub fn init(events: &mut events::EventManager) -> Result<Self> {
         let mut platform = Self {
             handler: PlatformHandler::new(events),
             event_loop: EventLoop::new().expect("failed to create winit event loop"),

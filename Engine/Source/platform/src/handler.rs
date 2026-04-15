@@ -3,14 +3,13 @@ use std::collections::HashMap;
 use tracing::{debug, trace};
 use winit::{
     application::ApplicationHandler,
-    event::{ElementState, WindowEvent},
+    event::WindowEvent,
     event_loop::ActiveEventLoop,
-    keyboard::ModifiersState,
     window::{WindowAttributes, WindowId},
 };
 
 use crate::{
-    InputEvent, Window,
+    Window,
     event::{PlatformEvent, WindowEvent as PlatformWindowEvent},
 };
 
@@ -19,32 +18,25 @@ pub struct PlatformHandler {
     pub windows: HashMap<WindowId, Window>,
     main_window: Option<WindowId>,
 
-    /// Current keyboard modifier state, updated on every ModifiersChanged event.
-    /// TODO: should only be tracked by input manager
-    modifiers: ModifiersState,
-
     /// Dispatch [PlatformEvent]
     platform_dispatcher: events::Dispatcher<PlatformEvent>,
     /// Dispatch [PlatformWindowEvent]
     window_dispatcher: events::Dispatcher<PlatformWindowEvent>,
-    /// Dispatch [InputEvent]
-    input_dispatch: events::Dispatcher<InputEvent>,
 }
 
 impl PlatformHandler {
-    pub fn new(events: &events::EventManager) -> Self {
+    pub fn new(events: &mut events::EventManager) -> Self {
         Self {
             can_create_surfaces: false,
             windows: HashMap::new(),
             main_window: None,
-            modifiers: ModifiersState::default(),
             platform_dispatcher: events.register(),
             window_dispatcher: events.register(),
-            input_dispatch: events.register(),
         }
     }
     fn create_window(&mut self, event_loop: &dyn ActiveEventLoop) -> anyhow::Result<WindowId> {
-        let window_attributes = WindowAttributes::default()
+        #[allow(unused_mut)]
+        let mut window_attributes = WindowAttributes::default()
             .with_title("DirkEngine")
             .with_transparent(true);
 
@@ -94,7 +86,7 @@ impl ApplicationHandler for PlatformHandler {
             }
             WindowEvent::Destroyed => {
                 debug!("Window {id:?} destroyed");
-                self.platform_dispatcher.dispatch(PlatformEvent::WindowDestroyed { id });
+                self.platform_dispatcher .dispatch(PlatformEvent::WindowDestroyed { id });
             }
             WindowEvent::SurfaceResized(size) => {
                 self.window_dispatcher.dispatch(PlatformWindowEvent::Resized {
@@ -111,104 +103,87 @@ impl ApplicationHandler for PlatformHandler {
             }
             WindowEvent::Occluded(occluded) => {
                 self.window_dispatcher.dispatch(PlatformWindowEvent::Occluded { id, occluded });
+                }
+            WindowEvent::ModifiersChanged(_modifiers) => {
+            /*
+                window.set_modifiers(modifiers.state());
+                trace!("Modifiers changed to {:?}", window.get_modifiers());
+            */
             }
-
-            // ── Input: keyboard ───────────────────────────────────────────────
-            WindowEvent::ModifiersChanged(new_modifiers) => {
-                self.modifiers = new_modifiers.state();
-                trace!("Modifiers changed to {:?}", self.modifiers);
-                self.input_dispatch.dispatch(InputEvent::ModifiersChanged {
-                    id,
-                    modifiers: self.modifiers,
-                });
-            }
+            WindowEvent::MouseWheel { delta: _, .. } => {}
+            /* TODO: input events
+            match delta {
+                MouseScrollDelta::LineDelta(x, y) => {
+                    trace!("Mouse wheel Line Delta: ({x},{y})");
+                }
+                MouseScrollDelta::PixelDelta(px) => {
+                    trace!("Mouse wheel Pixel Delta: ({},{})", px.x, px.y);
+                }
+            },
+            */
             WindowEvent::KeyboardInput {
-                event,
+                event: _,
                 is_synthetic: false,
                 ..
             } => {
-                let modifiers = self.modifiers;
-                match event.state {
-                    ElementState::Pressed => {
-                        trace!(
-                            "Key pressed: {:?} (repeat={})",
-                            event.logical_key,
-                            event.repeat
-                        );
-                        self.input_dispatch.dispatch(InputEvent::KeyPressed {
-                            id,
-                            key: event.logical_key,
-                            physical_key: event.physical_key,
-                            modifiers,
-                            repeat: event.repeat,
-                        });
-                    }
-                    ElementState::Released => {
-                        trace!("Key released: {:?}", event.logical_key);
-                        self.input_dispatch.dispatch(InputEvent::KeyReleased {
-                            id,
-                            key: event.logical_key,
-                            physical_key: event.physical_key,
-                            modifiers,
-                        });
+                /* TODO: input events
+                let mods = window.modifiers;
+
+                // Dispatch actions only on press.
+                if event.state.is_pressed() {
+                    let action = if let Key::Character(ch) = event.key_without_modifiers.as_ref() {
+                        Self::process_key_binding(&ch.to_uppercase(), &mods)
+                    } else {
+                        None
+                    };
+
+                    if let Some(action) = action {
+                        self.handle_action_with_window(event_loop, window_id, action);
                     }
                 }
+                */
             }
-
-            // ── Input: pointer ────────────────────────────────────────────────
-            WindowEvent::PointerMoved { position, .. } => {
-                trace!("Pointer moved to {position:?}");
-                self.input_dispatch
-                    .dispatch(InputEvent::PointerMoved { id, position: glam::dvec2(position.x, position.y) });
-            }
-            WindowEvent::PointerEntered { .. } => {
-                trace!("Pointer entered Window={id:?}");
-                self.input_dispatch.dispatch(InputEvent::PointerEntered { id });
+            WindowEvent::PointerButton { button, state, .. } => {
+                trace!("Pointer button {button:?} {state:?}");
+                /* TODO: input events
+                let mods = window.modifiers;
+                if let Some(action) = state
+                    .is_pressed()
+                    .then(|| button.mouse_button())
+                    .flatten()
+                    .and_then(|button| Self::process_mouse_binding(button, &mods))
+                {
+                    self.handle_action_with_window(event_loop, window_id, action);
+                }
+                */
             }
             WindowEvent::PointerLeft { .. } => {
                 trace!("Pointer left Window={id:?}");
-                self.input_dispatch.dispatch(InputEvent::PointerLeft { id });
+                // TODO: input events: window.cursor_left();
             }
-            WindowEvent::PointerButton {
-                button,
-                state,
-                position,
-                ..
-            } => {
-                trace!("Pointer button {button:?} {state:?} at {position:?}");
-                match state {
-                    ElementState::Pressed => {
-                        self.input_dispatch.dispatch(InputEvent::MouseButtonPressed {
-                            id,
-                            button,
-                            position: glam::dvec2(position.x, position.y),
-                        });
-                    }
-                    ElementState::Released => {
-                        self.input_dispatch.dispatch(InputEvent::MouseButtonReleased {
-                            id,
-                            button,
-                            position: glam::dvec2(position.x, position.y),
-                        });
+            WindowEvent::PointerMoved { position, .. } => {
+                trace!("Moved pointer to {position:?}");
+                // TODO: input events: window.cursor_moved(position);
+            }
+            WindowEvent::ActivationTokenDone { token: _token, .. } => {
+                /* TODO: activation token (X11/Wayland)
+                #[cfg(any(x11_platform, wayland_platform))]
+                {
+                    startup_notify::set_activation_token_env(_token);
+                    if let Err(err) = self.create_window(event_loop, None) {
+                        error!("Error creating new window: {err}");
                     }
                 }
+                */
             }
-            WindowEvent::MouseWheel { delta, .. } => {
-                trace!("Mouse wheel {delta:?}");
-                self.input_dispatch.dispatch(InputEvent::MouseWheelScrolled {
-                    id,
-                    delta: delta.into(),
-                });
-            }
-
-            // ── Ignored ───────────────────────────────────────────────────────
             WindowEvent::PinchGesture { .. }
             | WindowEvent::RotationGesture { .. }
             | WindowEvent::PanGesture { .. }
             | WindowEvent::DoubleTapGesture { .. }
             | WindowEvent::TouchpadPressure { .. }
             | WindowEvent::DragLeft { .. }
-            | WindowEvent::KeyboardInput { .. } // synthetic, filtered above
+            | WindowEvent::KeyboardInput { .. }
+            | WindowEvent::PointerEntered { .. }
             | WindowEvent::DragEntered { .. }
             | WindowEvent::DragMoved { .. }
             | WindowEvent::DragDropped { .. }
@@ -216,9 +191,8 @@ impl ApplicationHandler for PlatformHandler {
             // Drawing is handled by the main engine loop. Redraw requests
             // are thus ignored.
             | WindowEvent::RedrawRequested
-            | WindowEvent::ActivationTokenDone { .. }
             | WindowEvent::Ime(_)
-            | WindowEvent::Moved(_) => {}
+            | WindowEvent::Moved(_) => {},
         }
     }
 }
