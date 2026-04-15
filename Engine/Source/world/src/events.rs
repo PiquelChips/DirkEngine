@@ -37,12 +37,12 @@ impl WorldEvent {
 
 #[derive(Debug, Clone, Event)]
 pub struct PlayerUpdateEvent {
-    id: PlayerId,
-    world: WorldId,
-    entity: Entity,
-    window: WindowId,
-    region: PlayerRegion,
-    update_type: PlayerUpdateType,
+    pub id: PlayerId,
+    pub world: WorldId,
+    pub entity: Entity,
+    pub window: WindowId,
+    pub region: PlayerRegion,
+    pub update_type: PlayerUpdateType,
 }
 
 #[derive(Clone, Debug)]
