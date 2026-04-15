@@ -15,5 +15,7 @@ winit.workspace = true
 events.workspace = true
 macros.workspace = true
 
+glam.workspace = true
+
 [build-dependencies]
 build.workspace = true
