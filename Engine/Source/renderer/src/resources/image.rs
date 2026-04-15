@@ -63,7 +63,7 @@ impl Image {
         let image = unsafe { device.device.create_image(&image_info, None)? };
         let requirements = unsafe { device.device.get_image_memory_requirements(image) };
 
-        let allocation = device.allocator.lock().allocate(&AllocationCreateDesc {
+        let allocation = device.allocate(&AllocationCreateDesc {
             name: "image",
             requirements,
             location: info.location,

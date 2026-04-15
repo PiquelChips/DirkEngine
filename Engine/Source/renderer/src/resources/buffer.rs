@@ -58,7 +58,7 @@ impl<Type: BuffType> Buffer<Type> {
         let buffer = unsafe { device.device.create_buffer(&buffer_info, None)? };
         let requirements = unsafe { device.device.get_buffer_memory_requirements(buffer) };
 
-        let allocation = device.allocator.lock().allocate(&AllocationCreateDesc {
+        let allocation = device.allocate(&AllocationCreateDesc {
             name: "buffer",
             requirements,
             location,

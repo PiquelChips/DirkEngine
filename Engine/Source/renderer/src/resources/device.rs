@@ -10,7 +10,7 @@ use ash::{
     khr::{surface, swapchain},
     vk,
 };
-use gpu_allocator::vulkan::{Allocation, Allocator, AllocatorCreateDesc};
+use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, Allocator, AllocatorCreateDesc};
 use parking_lot::Mutex;
 
 use crate::{
@@ -159,6 +159,13 @@ impl RenderDevice {
             current_frame,
             event_manager,
         })))
+    }
+
+    pub fn allocate(&self, desc: &AllocationCreateDesc<'_>) -> Result<Allocation> {
+        Ok(self.allocator.lock().allocate(desc)?)
+    }
+    pub fn free(&mut self, allocation: Allocation) -> Result<()> {
+        Ok(self.allocator.lock().free(allocation)?)
     }
 
     pub fn destroy(&mut self, garbage: Garbage) {
