@@ -25,7 +25,7 @@ use tracing::{debug, info};
 use tracing::{error, trace, warn};
 
 use platform::{PlatformEvent, WindowEvent, WindowId};
-use world::events::WorldEvent;
+use world::{events::WorldEvent, player::PlayerId};
 
 mod utils;
 use ::utils::*;
@@ -47,9 +47,12 @@ use resources::{
     image::SwapchainImage,
 };
 
-use crate::assets::AssetManager;
-
 mod assets;
+use assets::AssetManager;
+
+mod proxy;
+use proxy::PlayerProxy;
+
 mod physical_device;
 mod pipeline;
 mod render_pass;
@@ -145,6 +148,9 @@ pub struct Renderer {
     windows: HashMap<WindowId, Window>,
     /// All of the internal [world::World] representations.
     scenes: HashMap<world::WorldId, Scene>,
+    /// All the players currently being managed by the engine.
+    /// The proxies are synchronised using [world::events::PlayerUpdateEvent].
+    players: HashMap<PlayerId, PlayerProxy>,
     /// Manages all renderer assets like meshes & stuff.
     asset_manager: AssetManager,
 
@@ -163,6 +169,7 @@ pub struct Renderer {
     window_consumer: events::Consumer<platform::WindowEvent>,
     platform_consumer: events::Consumer<platform::PlatformEvent>,
     world_consumer: events::Consumer<world::events::WorldEvent>,
+    player_consumer: events::Consumer<world::events::PlayerUpdateEvent>,
 
     /// The size of the output
     /// TODO: should be removed once we get the frame graph to
@@ -507,6 +514,7 @@ impl Renderer {
             window_consumer: event_manager.subscribe(),
             platform_consumer: event_manager.subscribe(),
             world_consumer: event_manager.subscribe(),
+            player_consumer: event_manager.subscribe(),
             event_manager,
         })
     }

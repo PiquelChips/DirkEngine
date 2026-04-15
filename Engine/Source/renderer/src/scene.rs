@@ -49,13 +49,6 @@ struct SceneUbo {
     proj: glam::Mat4,
 }
 
-struct CameraProxy {
-    /// View matrix calculated from camera position.
-    view: glam::Mat4,
-    /// Projection matrix calculated from camera settings.
-    proj: glam::Mat4,
-}
-
 impl Scene {
     /// Builds a [Scene].
     /// Constructs the renderer stuff like command pools, descriptor sets, ... from
