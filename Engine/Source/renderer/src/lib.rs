@@ -455,7 +455,7 @@ impl Renderer {
             event_manager.clone(),
         )?;
 
-        let asset_manager = AssetManager::new(&render_device)?;
+        let asset_manager = AssetManager::new(render_device.clone())?;
 
         // IN FLIGHT FRAMES
         let build_frame = || -> Result<Frame> {

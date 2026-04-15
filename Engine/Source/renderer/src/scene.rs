@@ -6,7 +6,7 @@ use world::{World, WorldId, components, events::WorldEvent};
 
 use crate::{
     Error, MAX_FRAMES_IN_FLIGHT, MAX_RENDERABLES, Result,
-    assets::AssetManager,
+    assets::{AssetManager, Handle, Mesh},
     pipeline::GraphicsPipeline,
     render_pass::RenderPass,
     resources::{
@@ -272,7 +272,7 @@ impl Scene {
             let Some(ref model) = proxy.model else {
                 continue;
             };
-            let Some(model) = assets.get(model) else {
+            let Some(model) = assets.get_mesh(model) else {
                 continue;
             };
 
@@ -338,7 +338,7 @@ pub struct SceneProxy {
     model_matrix: Option<glam::Mat4>,
     /// The name of the model. Used to request a [crate::model::Model] from the
     /// renderer at render time.
-    model: Option<String>,
+    model: Option<Handle<Mesh>>,
     /// An optional camera that could be attached to the mesh.
     camera: Option<CameraProxy>,
 
@@ -405,8 +405,8 @@ impl SceneProxy {
             sets,
         })
     }
-    pub fn set_model(&mut self, model: &str) {
-        self.model = Some(model.to_string());
+    pub fn set_model(&mut self, model: Handle<Mesh>) {
+        self.model = Some(model);
     }
     pub fn set_model_matrix(&mut self, mat: glam::Mat4) {
         self.model_matrix = Some(mat);
