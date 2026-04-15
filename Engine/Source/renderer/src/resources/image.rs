@@ -11,11 +11,11 @@ use gpu_allocator::{
 
 use crate::{
     Renderer, Result,
+    assets::Texture,
     resources::{
         buffer::CustomBuffer,
         command_pool::CommandBuffer,
         device::{Garbage, RenderDevice},
-        model::Texture,
     },
 };
 

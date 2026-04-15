@@ -13,7 +13,6 @@ use crate::{
         command_pool::CommandBuffer,
         device::{Garbage, RenderDevice},
         image::{Image, ImageCreateInfo},
-        model,
     },
 };
 

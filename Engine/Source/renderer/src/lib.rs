@@ -42,13 +42,12 @@ use window::Window;
 
 mod resources;
 use resources::{
-    buffer::{IndexBuffer, VertexBuffer},
     command_pool::{CommandPool, Graphics},
     device::RenderDevice,
-    image::{Image, SwapchainImage},
-    model::*,
+    image::SwapchainImage,
 };
 
+mod assets;
 mod physical_device;
 mod pipeline;
 mod render_pass;
@@ -57,8 +56,6 @@ mod render_pass;
 /// Used to construct Ubo samples.
 /// TODO: find a way to set this limit dynamically or have a error when the limit is reached.
 const MAX_RENDERABLES: u32 = 100;
-/// TODO: also find a way to do this dynamically
-const MAX_MATERIAL_DESCRIPTOR_SET: u32 = 256;
 
 const MAX_FRAMES_IN_FLIGHT: usize = 2;
 const DEVICE_EXTENSIONS: &[&str] =
@@ -140,16 +137,12 @@ pub struct RendererProperties {
 /// all rendering operations
 pub struct Renderer {
     entry: Entry,
-    render_device: RenderDevice,
 
     // Heavy renderer state:
     /// All of the [window::Window]s constructed from [platform::Window]s.
     windows: HashMap<WindowId, Window>,
-    /// All the uploaded [resource_manager::Model]s.
-    models: HashMap<String, Model>,
     /// All of the internal [world::World] representations.
     scenes: HashMap<world::WorldId, Scene>,
-    material_descriptor_pool: vk::DescriptorPool,
 
     frames: [Frame; MAX_FRAMES_IN_FLIGHT],
     current_frame: Arc<AtomicU64>,
@@ -171,6 +164,9 @@ pub struct Renderer {
     /// TODO: should be removed once we get the frame graph to
     /// handle transient resources
     extent: vk::Extent2D,
+
+    // last as should be dropped last
+    render_device: RenderDevice,
 }
 
 impl Renderer {
@@ -480,19 +476,6 @@ impl Renderer {
         // let frames: [Frame; MAX_FRAMES_IN_FLIGHT] = std::array::try_from_fn(|_| build_frame())?;
         // could be nice in the future
 
-        // MATERIAL DESCRIPTOR SETS
-        let material_descriptor_pool = {
-            let pool_size = vk::DescriptorPoolSize {
-                ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-                descriptor_count: MAX_MATERIAL_DESCRIPTOR_SET,
-            };
-            let pool_info = vk::DescriptorPoolCreateInfo::default()
-                .pool_sizes(std::slice::from_ref(&pool_size))
-                .max_sets(MAX_MATERIAL_DESCRIPTOR_SET);
-
-            unsafe { device.create_descriptor_pool(&pool_info, None)? }
-        };
-
         let extent = {
             let size = window.size();
             vk::Extent2D {
@@ -504,9 +487,7 @@ impl Renderer {
             entry,
             render_device,
             windows: HashMap::new(),
-            models: HashMap::new(),
             scenes: HashMap::new(),
-            material_descriptor_pool,
             frames,
             current_frame,
             #[cfg(validation)]
@@ -812,113 +793,7 @@ impl Renderer {
         Ok((swapchain, extent, swap_images))
     }
 
-    // UPLOADING TO THE RENDERER
-
-    fn upload_model(&mut self, model: resource_manager::Model) -> Result<&Model> {
-        let primitives = model
-            .meshes()
-            .iter()
-            .flat_map(|m| m.primitives().iter())
-            .map(|p| self.upload_primitive(p))
-            .collect::<Result<_>>()?;
-
-        let textures: Vec<_> = model
-            .textures()
-            .iter()
-            .map(|t| Image::upload_texture(self.render_device.clone(), t))
-            .collect::<Result<_>>()?;
-
-        let material_count = model.materials().len();
-        // Allocate one set per material
-        let layouts: Vec<vk::DescriptorSetLayout> =
-            vec![self.render_device.layouts.material; material_count];
-
-        let material_sets: Vec<vk::DescriptorSet> = if material_count > 0 {
-            let alloc_info = vk::DescriptorSetAllocateInfo::default()
-                .descriptor_pool(self.material_descriptor_pool)
-                .set_layouts(&layouts);
-
-            unsafe {
-                self.render_device
-                    .device
-                    .allocate_descriptor_sets(&alloc_info)?
-            }
-        } else {
-            Vec::new()
-        };
-
-        // Write the base-colour sampler into each set that has one
-        for (i, mat) in model.materials().iter().enumerate() {
-            let Some(&tex_idx) = mat.base_color_texture().as_ref() else {
-                continue; // leave this set in its default (null) state
-            };
-
-            let tex = &textures[tex_idx];
-
-            let image_info = vk::DescriptorImageInfo::default()
-                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .image_view(tex.image.view())
-                .sampler(tex.sampler);
-
-            let write = vk::WriteDescriptorSet::default()
-                .dst_set(material_sets[i])
-                .dst_binding(2) // matches layouts.material
-                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .image_info(std::slice::from_ref(&image_info));
-
-            unsafe {
-                self.render_device
-                    .device
-                    .update_descriptor_sets(&[write], &[])
-            };
-        }
-
-        self.models.insert(
-            model.name().to_string(),
-            Model {
-                name: model.name().to_owned(),
-                primitives,
-                textures,
-                materials: model.materials().to_vec(),
-                material_sets,
-            },
-        );
-        Ok(self.models.get(model.name()).unwrap())
-    }
-
-    fn get_or_upload_model(&mut self, name: &str) -> Result<&Model> {
-        if self.models.contains_key(name) {
-            return Ok(self.models.get(name).unwrap());
-        }
-
-        self.upload_model(resource_manager::ResourceManager::load_model(name)?)
-    }
-
-    fn upload_primitive(&mut self, prim: &resource_manager::Primitive) -> Result<Primitive> {
-        let vertices: Vec<Vertex> = prim
-            .positions()
-            .iter()
-            .enumerate()
-            .map(|(i, &position)| Vertex {
-                position,
-                normal: prim.normals().get(i).copied().unwrap_or([0.0, 1.0, 0.0]),
-                texcoord: prim.texcoords().get(i).copied().unwrap_or([0.0, 0.0]),
-            })
-            .collect();
-
-        let vertex_buffer = VertexBuffer::upload_slice(self.render_device.clone(), &vertices)?;
-        let index_buffer = IndexBuffer::upload_slice(self.render_device.clone(), prim.indices())?;
-
-        Ok(Primitive {
-            vertex_buffer,
-            index_buffer,
-            index_count: prim.indices().len() as u32,
-            material: *prim.material(),
-        })
-    }
-
-    // IMAGE UTILITIES
-
+    // EXTRA UTILS
     fn create_sampler(device: &RenderDevice, mip_levels: u32) -> Result<vk::Sampler> {
         let props = unsafe {
             device
@@ -946,8 +821,6 @@ impl Renderer {
         Ok(unsafe { device.device.create_sampler(&sampler_info, None)? })
     }
 
-    // EXTRA UTILS
-
     fn create_shader_module(
         device: &Device,
         shader: &'static shaders::Shader,
@@ -970,16 +843,9 @@ impl Drop for Renderer {
         info!("cleaning up renderer");
 
         self.scenes.clear();
-        self.models.clear();
         self.windows.clear();
         self.frames.iter().for_each(|f| f.destroy());
         self.render_device.flush_all();
-
-        unsafe {
-            self.render_device
-                .device
-                .destroy_descriptor_pool(self.material_descriptor_pool, None);
-        }
     }
 }
 
