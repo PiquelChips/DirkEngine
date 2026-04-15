@@ -11,10 +11,12 @@ use gpu_allocator::{
 
 use crate::{
     Renderer, Result,
-    buffer::CustomBuffer,
-    command_pool::CommandBuffer,
-    model::Texture,
-    resources::device::{Garbage, RenderDevice},
+    resources::{
+        buffer::CustomBuffer,
+        command_pool::CommandBuffer,
+        device::{Garbage, RenderDevice},
+        model::Texture,
+    },
 };
 
 /// An abstraction around vulkan windows.

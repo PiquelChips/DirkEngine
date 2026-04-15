@@ -3,8 +3,10 @@ use platform::WindowId;
 
 use crate::{
     Error, Renderer, Result,
-    image::SwapchainImage,
-    resources::device::{Garbage, RenderDevice},
+    resources::{
+        device::{Garbage, RenderDevice},
+        image::SwapchainImage,
+    },
 };
 
 /// The renderer's representation of a platform window.

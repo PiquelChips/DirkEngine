@@ -6,13 +6,15 @@ use world::{World, WorldId, components, events::WorldEvent};
 
 use crate::{
     Error, MAX_FRAMES_IN_FLIGHT, MAX_RENDERABLES, Result,
-    buffer::UniformBuffer,
-    command_pool::CommandBuffer,
-    image::{Image, ImageCreateInfo},
-    model,
     pipeline::GraphicsPipeline,
     render_pass::RenderPass,
-    resources::device::{Garbage, RenderDevice},
+    resources::{
+        buffer::UniformBuffer,
+        command_pool::CommandBuffer,
+        device::{Garbage, RenderDevice},
+        image::{Image, ImageCreateInfo},
+        model,
+    },
 };
 
 /// This scene is created from a [world::World].

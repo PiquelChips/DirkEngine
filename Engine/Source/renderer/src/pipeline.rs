@@ -1,7 +1,8 @@
 use ash::{Device, vk};
 
 use crate::{
-    DescriptorLayouts, Renderer, RendererProperties, Result, Vertex, command_pool::CommandBuffer,
+    DescriptorLayouts, Renderer, RendererProperties, Result, Vertex,
+    resources::command_pool::CommandBuffer,
 };
 
 /// This struct holds the graphics pipeline & stuff.

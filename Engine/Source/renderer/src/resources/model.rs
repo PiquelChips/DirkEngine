@@ -1,9 +1,9 @@
 use ash::vk;
 
-use crate::{
+use crate::resources::{
     buffer::{IndexBuffer, VertexBuffer},
+    device::{Garbage, RenderDevice},
     image::Image,
-    resources::device::{Garbage, RenderDevice},
 };
 
 /// Complete GPU model.

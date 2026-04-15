@@ -19,10 +19,6 @@ use ash::{
     vk,
 };
 use events::EventManager;
-use gpu_allocator::{
-    AllocatorDebugSettings,
-    vulkan::{Allocator, AllocatorCreateDesc},
-};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use tracing::{debug, info};
 #[cfg(validation)]
@@ -32,8 +28,8 @@ use platform::{PlatformEvent, WindowEvent, WindowId};
 use world::events::WorldEvent;
 
 mod utils;
-use crate::{image::SwapchainImage, resources::device::RenderDevice, utils::*};
 use ::utils::*;
+use utils::*;
 
 mod errors;
 pub use errors::{Error, Result};
@@ -44,17 +40,18 @@ use scene::Scene;
 mod window;
 use window::Window;
 
-use resources::*;
-
-use buffer::{IndexBuffer, VertexBuffer};
-use command_pool::{CommandPool, Graphics};
-use image::Image;
-use model::*;
+mod resources;
+use resources::{
+    buffer::{IndexBuffer, VertexBuffer},
+    command_pool::{CommandPool, Graphics},
+    device::RenderDevice,
+    image::{Image, SwapchainImage},
+    model::*,
+};
 
 mod physical_device;
 mod pipeline;
 mod render_pass;
-mod resources;
 
 /// The maximum numer of renderables in a scene.
 /// Used to construct Ubo samples.

@@ -1,6 +1,9 @@
 use ash::vk;
 
-use crate::{Error, Result, command_pool::CommandBuffer, image::Image};
+use crate::{
+    Error, Result,
+    resources::{command_pool::CommandBuffer, image::Image},
+};
 
 impl Image {
     pub fn transition_image_layout(
