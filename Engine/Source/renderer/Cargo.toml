@@ -14,7 +14,6 @@ parking_lot.workspace = true
 pastey.workspace = true
 
 utils.workspace = true
-types.workspace = true
 platform.workspace = true
 resource_manager.workspace = true
 world.workspace = true
