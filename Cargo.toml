@@ -3,6 +3,7 @@ resolver = "3"
 members = [
     "Engine/Source/build",
     "Engine/Source/utils",
+    "Engine/Source/types",
     "Engine/Source/engine",
     "Engine/Source/events",
     "Engine/Source/macros",
@@ -38,6 +39,7 @@ derive-getters = "0.5"
 # Engine modules
 build = { path = "Engine/Source/build" }
 utils = { path = "Engine/Source/utils" }
+types = { path = "Engine/Source/types" }
 logging = { path = "Engine/Source/logging" }
 engine = { path = "Engine/Source/engine" }
 events = { path = "Engine/Source/events" }
