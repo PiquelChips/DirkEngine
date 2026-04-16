@@ -1,6 +1,9 @@
 use ash::vk;
 use std::collections::HashMap;
 use std::marker::PhantomData;
+use types::handle::{
+    self, AssetHandle, AssetType, MaterialHandle, MeshHandle, ModelHandle, TextureHandle,
+};
 
 use crate::{
     Result,
@@ -11,22 +14,6 @@ use crate::{
     },
     utils::Vertex,
 };
-
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub struct Handle<T> {
-    id: u32,
-    _marker: PhantomData<T>,
-}
-
-impl<T> Copy for Handle<T> {}
-impl<T> Clone for Handle<T> {
-    fn clone(&self) -> Self {
-        Self {
-            id: self.id,
-            _marker: PhantomData,
-        }
-    }
-}
 
 pub struct Texture {
     pub device: RenderDevice,
@@ -45,7 +32,7 @@ pub struct Primitive {
     vertex_buffer: VertexBuffer,
     index_buffer: IndexBuffer,
     index_count: u32,
-    material_handle: Option<Handle<Material>>,
+    material_handle: Option<MaterialHandle>,
 }
 
 pub struct Mesh {
@@ -53,33 +40,38 @@ pub struct Mesh {
 }
 
 pub struct Material {
-    base_color: Handle<Texture>,
+    base_color: TextureHandle,
     descriptor_set: vk::DescriptorSet,
 }
 
 pub struct Model {
     // TODO: store transform with each mesh handle
-    pub mesh_instances: Vec<Handle<Mesh>>,
+    pub mesh_instances: Vec<MeshHandle>,
 }
 
 /// TODO: better storage type for assets
-struct AssetStorage<T> {
+struct AssetStorage<A: AssetType, T> {
     assets: Vec<Option<T>>,
+    // TODO: future
+    _assets: HashMap<AssetHandle<A>, T>,
 }
 
-impl<T> AssetStorage<T> {
+impl<A: AssetType, T> AssetStorage<A, T> {
     fn new() -> Self {
-        Self { assets: Vec::new() }
+        Self {
+            assets: Vec::new(),
+            _assets: HashMap::new(),
+        }
     }
-    fn insert(&mut self, asset: T) -> Handle<T> {
+    fn insert(&mut self, asset: T) -> AssetHandle<A> {
         let id = self.assets.len() as u32;
         self.assets.push(Some(asset));
-        Handle {
+        AssetHandle {
             id,
             _marker: PhantomData,
         }
     }
-    fn get(&self, handle: Handle<T>) -> &T {
+    fn get(&self, handle: AssetHandle<A>) -> &T {
         self.assets[handle.id as usize]
             .as_ref()
             .expect("Invalid Handle")
@@ -89,12 +81,12 @@ impl<T> AssetStorage<T> {
 pub struct AssetManager {
     device: RenderDevice,
 
-    textures: AssetStorage<Texture>,
-    meshes: AssetStorage<Mesh>,
-    materials: AssetStorage<Material>,
-    models: AssetStorage<Model>,
+    textures: AssetStorage<handle::Texture, Texture>,
+    meshes: AssetStorage<handle::Mesh, Mesh>,
+    materials: AssetStorage<handle::Material, Material>,
+    models: AssetStorage<handle::Model, Model>,
 
-    path_to_model: HashMap<String, Handle<Model>>,
+    path_to_model: HashMap<String, ModelHandle>,
 
     material_pool: vk::DescriptorPool,
 }
@@ -129,7 +121,7 @@ impl AssetManager {
         })
     }
 
-    pub fn load_model(&mut self, name: &str) -> Result<Handle<Model>> {
+    pub fn load_model(&mut self, name: &str) -> Result<ModelHandle> {
         if let Some(handle) = self.path_to_model.get(name) {
             return Ok(*handle);
         }
@@ -166,8 +158,8 @@ impl AssetManager {
     fn create_materials(
         &mut self,
         materials: Vec<gltf::Material>,
-        texture_refs: &[Handle<Texture>],
-    ) -> Result<Vec<Handle<Material>>> {
+        texture_refs: &[TextureHandle],
+    ) -> Result<Vec<MaterialHandle>> {
         let material_count = materials.len();
         // Allocate one set per material
         let layouts: Vec<vk::DescriptorSetLayout> =
@@ -217,7 +209,7 @@ impl AssetManager {
         &self,
         primitive: gltf::Primitive,
         buffers: &[gltf::buffer::Data],
-        mat_refs: &[Handle<Material>],
+        mat_refs: &[MaterialHandle],
     ) -> Result<Primitive> {
         let reader = primitive.reader(|buf| Some(&buffers[buf.index()]));
 
@@ -259,11 +251,11 @@ impl AssetManager {
         })
     }
 
-    pub fn get_mesh(&self, handle: Handle<Mesh>) -> &Mesh {
+    pub fn get_mesh(&self, handle: MeshHandle) -> &Mesh {
         self.meshes.get(handle)
     }
 
-    pub fn get_material(&self, handle: Handle<Material>) -> &Material {
+    pub fn get_material(&self, handle: MaterialHandle) -> &Material {
         self.materials.get(handle)
     }
 

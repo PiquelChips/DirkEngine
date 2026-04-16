@@ -1294,6 +1294,7 @@ dependencies = [
  "shaders",
  "thiserror 2.0.18",
  "tracing",
+ "types",
  "utils",
  "world",
 ]
