@@ -8,3 +8,4 @@ version.workspace = true
 
 [dependencies]
 thiserror.workspace = true
+pastey.workspace = true

@@ -4,3 +4,4 @@
 //! many small features, functions and structures.
 
 pub mod version;
+pub mod handle;
