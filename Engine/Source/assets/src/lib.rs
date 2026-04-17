@@ -84,24 +84,44 @@ impl AssetRegistry {
     pub fn init() -> Result<Self> {
         let mut registry = Self::default();
 
-        registry.load(&PathBuf::from(ASSETS_PATH))?;
+        let assets_path = PathBuf::from(ASSETS_PATH);
+        registry.load(&assets_path, &assets_path)?;
         registry.validate();
 
         Ok(registry)
     }
 
     /// Will recursively load assets from a specific dir.
-    fn load(&mut self, dir: &Path) -> Result<()> {
+    fn load(&mut self, base: &Path, dir: &Path) -> Result<()> {
         for entry in std::fs::read_dir(dir)? {
             let entry = entry?;
             let path = entry.path();
             let metadata = entry.metadata()?;
 
             if metadata.is_dir() {
-                self.load(&path)?;
+                self.load(base, &path)?;
             } else if metadata.is_file() {
                 if path.extension().and_then(|ext| ext.to_str()) == Some("dirkasset") {
-                    debug!("load asset {path:?}");
+                    let relative_path =
+                        path.strip_prefix(base)
+                            .map(|p| p.to_path_buf())
+                            .map_err(|_| {
+                                std::io::Error::new(
+                                    std::io::ErrorKind::InvalidInput,
+                                    format!(
+                                        "Path '{}' is not relative to base '{}'",
+                                        path.display(),
+                                        base.display()
+                                    ),
+                                )
+                            })?;
+
+                    debug!(
+                        "load asset:\n\tpath: {}\n\trelative: {}",
+                        path.display(),
+                        relative_path.display()
+                    );
+
                     // TODO: insert
                     // let content = std::fs::read(&path)?;
                     // self.assets.insery(DirkAsset { path, content });
