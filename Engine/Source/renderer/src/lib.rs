@@ -613,10 +613,8 @@ impl Renderer {
             return Err(Error::WorldDoesNotExist(world));
         };
 
-        let (render_finished_semaphore, image_available_semaphore) = window.current_semaphores();
         let size = window.extent();
-        let swapchain = window.swapchain();
-        let (swapchain_img, idx) = window.next_image(&self.render_device.swapchain_loader)?;
+        let render_image = window.next_image()?;
 
         unsafe {
             self.render_device.device.wait_for_fences(
@@ -638,15 +636,15 @@ impl Renderer {
                 .begin_command_buffer(cmd.raw(), &vk::CommandBufferBeginInfo::default())?
         }
 
-        swapchain_img.transition_image_layout(
+        render_image.image.transition_image_layout(
             &cmd,
             vk::ImageLayout::UNDEFINED,
             vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
         )?;
 
-        scene.render(&self.models, &cmd, size, swapchain_img.view(), camera)?;
+        scene.render(&self.models, &cmd, size, render_image.image.view(), camera)?;
 
-        swapchain_img.transition_image_layout(
+        render_image.image.transition_image_layout(
             &cmd,
             vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
             vk::ImageLayout::PRESENT_SRC_KHR,
@@ -659,8 +657,12 @@ impl Renderer {
                 &vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
             ))
             .command_buffers(std::slice::from_ref(&cmd))
-            .wait_semaphores(std::slice::from_ref(&image_available_semaphore))
-            .signal_semaphores(std::slice::from_ref(&render_finished_semaphore));
+            .wait_semaphores(std::slice::from_ref(
+                &render_image.image_available_semaphore,
+            ))
+            .signal_semaphores(std::slice::from_ref(
+                &render_image.render_finished_semaphore,
+            ));
 
         unsafe {
             self.render_device.device.queue_submit(
@@ -671,9 +673,11 @@ impl Renderer {
         }
 
         let present_info = vk::PresentInfoKHR::default()
-            .wait_semaphores(std::slice::from_ref(&render_finished_semaphore))
-            .swapchains(std::slice::from_ref(&swapchain))
-            .image_indices(std::slice::from_ref(&idx));
+            .wait_semaphores(std::slice::from_ref(
+                &render_image.render_finished_semaphore,
+            ))
+            .swapchains(std::slice::from_ref(&render_image.swapchain))
+            .image_indices(std::slice::from_ref(&render_image.image_index));
 
         unsafe {
             self.render_device
