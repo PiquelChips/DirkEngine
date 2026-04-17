@@ -605,6 +605,7 @@ impl Renderer {
         world: world::WorldId,
         camera: world::Entity,
     ) -> Result<()> {
+        let frame = &self.frames[self.current_frame()];
         let Some(window) = self.windows.get_mut(&window) else {
             return Err(Error::WindowDoesNotExist(window));
         };
@@ -616,8 +617,6 @@ impl Renderer {
         let size = window.extent();
         let swapchain = window.swapchain();
         let (swapchain_img, idx) = window.next_image(&self.render_device.swapchain_loader)?;
-
-        let frame = &self.frames[self.current_frame.load(Ordering::Relaxed) as usize];
 
         unsafe {
             self.render_device.device.wait_for_fences(
@@ -929,6 +928,7 @@ impl Renderer {
         let info = vk::ShaderModuleCreateInfo::default().code(code.as_slice());
         Ok(unsafe { device.create_shader_module(&info, None)? })
     }
+    #[inline]
     fn current_frame(&self) -> usize {
         self.current_frame
             .load(std::sync::atomic::Ordering::Relaxed) as usize
