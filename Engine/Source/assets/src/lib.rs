@@ -95,26 +95,27 @@ impl AssetRegistry {
     fn load(&mut self, base: &Path, dir: &Path) -> Result<()> {
         for entry in std::fs::read_dir(dir)? {
             let entry = entry?;
-            let path = entry.path();
+            let path = entry.path().canonicalize()?;
             let metadata = entry.metadata()?;
 
             if metadata.is_dir() {
                 self.load(base, &path)?;
             } else if metadata.is_file() {
                 if path.extension().and_then(|ext| ext.to_str()) == Some("dirkasset") {
-                    let relative_path =
-                        path.strip_prefix(base)
-                            .map(|p| p.to_path_buf())
-                            .map_err(|_| {
-                                std::io::Error::new(
-                                    std::io::ErrorKind::InvalidInput,
-                                    format!(
-                                        "Path '{}' is not relative to base '{}'",
-                                        path.display(),
-                                        base.display()
-                                    ),
-                                )
-                            })?;
+                    let relative_path = path
+                        .strip_prefix(base)
+                        .map(|p| p.to_path_buf())
+                        .map_err(|_| {
+                            std::io::Error::new(
+                                std::io::ErrorKind::InvalidInput,
+                                format!(
+                                    "Path '{}' is not relative to base '{}'",
+                                    path.display(),
+                                    base.display()
+                                ),
+                            )
+                        })?
+                        .canonicalize()?;
 
                     debug!(
                         "load asset:\n\tpath: {}\n\trelative: {}",
