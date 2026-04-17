@@ -5,6 +5,7 @@ mod validation;
 use serde::{Deserialize, Serialize};
 
 /// The type that is passed around to access assets.
+#[derive(Default)]
 pub struct AssetHandle {
     /// All assets are identified by their path.
     pub id: String,
@@ -22,8 +23,10 @@ impl AssetHandle {
 }
 
 /// Every possible asset type.
-#[derive(Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize)]
 pub enum AssetType {
+    #[default]
+    Unknown,
     Model,
     Sound,
 }
@@ -32,6 +35,9 @@ pub enum AssetType {
 #[derive(Serialize, Deserialize)]
 pub struct Metadata {
     pub asset_type: AssetType,
+    /// Should be populated at load time
+    #[serde(skip)]
+    handle: AssetHandle,
 }
 
 /// Type to be serialised to and from the `.dirkasset` files.
