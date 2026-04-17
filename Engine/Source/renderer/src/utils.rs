@@ -7,21 +7,21 @@ use crate::{
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct Vertex {
-    pub(crate) position: [f32; 3],
-    pub(crate) normal: [f32; 3],
-    pub(crate) texcoord: [f32; 2],
+pub struct Vertex {
+    pub position: [f32; 3],
+    pub normal: [f32; 3],
+    pub texcoord: [f32; 2],
 }
 
 impl Vertex {
-    pub(crate) const fn binding_description() -> vk::VertexInputBindingDescription {
+    pub const fn binding_description() -> vk::VertexInputBindingDescription {
         vk::VertexInputBindingDescription {
             binding: 0,
             stride: size_of::<Self>() as u32,
             input_rate: vk::VertexInputRate::VERTEX,
         }
     }
-    pub(crate) const fn attribute_description() -> [vk::VertexInputAttributeDescription; 3] {
+    pub const fn attribute_description() -> [vk::VertexInputAttributeDescription; 3] {
         [
             vk::VertexInputAttributeDescription {
                 location: 0,
@@ -45,23 +45,23 @@ impl Vertex {
     }
 }
 
-pub(crate) fn make_version(version: utils::Version) -> u32 {
+pub fn make_version(version: utils::Version) -> u32 {
     vk::make_api_version(0, version.major(), version.minor(), version.patch())
 }
 
-pub(crate) struct Frame {
-    pub(crate) device: Device,
+pub struct Frame {
+    pub device: Device,
     /// Command pool to allocate command buffers on every frame
-    pub(crate) command_pool: CommandPool<Graphics>,
+    pub command_pool: CommandPool<Graphics>,
     /// Main synchronization fence
-    pub(crate) fence: vk::Fence,
+    pub fence: vk::Fence,
     // TODO: have one primary command buffer that is allocated once and
     // secondary command for each scene. Should be allocated every time
     // there is a change in scene count. If not reallocated, reset.
 }
 
 impl Frame {
-    pub(crate) fn destroy(&self) {
+    pub fn destroy(&self) {
         self.command_pool.destroy();
         unsafe {
             self.device.destroy_fence(self.fence, None);
@@ -75,18 +75,18 @@ impl Frame {
 /// Every field should be a descriptor set layout with a
 /// propper comment explain what the layout is and where
 /// it is used.
-pub(crate) struct DescriptorLayouts {
+pub struct DescriptorLayouts {
     // TODO: much better comments for descriptor set layouts
     /// Per scene layout. Holds view & proj matrices for rendering.
-    pub(crate) scene: vk::DescriptorSetLayout,
+    pub scene: vk::DescriptorSetLayout,
     /// Per object layout. For model matrix.
-    pub(crate) object: vk::DescriptorSetLayout,
+    pub object: vk::DescriptorSetLayout,
     /// Per material layout. For texture descriptor.
-    pub(crate) material: vk::DescriptorSetLayout,
+    pub material: vk::DescriptorSetLayout,
 }
 
 impl DescriptorLayouts {
-    pub(crate) fn destroy(&self, device: &Device) {
+    pub fn destroy(&self, device: &Device) {
         unsafe {
             device.destroy_descriptor_set_layout(self.scene, None);
             device.destroy_descriptor_set_layout(self.object, None);
@@ -95,19 +95,19 @@ impl DescriptorLayouts {
     }
 }
 
-pub(crate) struct Queues {
-    pub(crate) graphics: vk::Queue,
-    pub(crate) compute: vk::Queue,
-    pub(crate) transfer: vk::Queue,
-    pub(crate) present: vk::Queue,
+pub struct Queues {
+    pub graphics: vk::Queue,
+    pub compute: vk::Queue,
+    pub transfer: vk::Queue,
+    pub present: vk::Queue,
 }
 
-pub(crate) struct RendererProperties {
-    pub(crate) msaa_samples: vk::SampleCountFlags,
+pub struct RendererProperties {
+    pub msaa_samples: vk::SampleCountFlags,
     #[allow(unused)]
-    pub(crate) anisotropy: bool,
-    pub(crate) surface_format: vk::SurfaceFormatKHR,
-    pub(crate) queue_family_indices: physical_device::QueueFamilyIndices,
-    pub(crate) depth_format: vk::Format,
-    pub(crate) present_mode: vk::PresentModeKHR,
+    pub anisotropy: bool,
+    pub surface_format: vk::SurfaceFormatKHR,
+    pub queue_family_indices: physical_device::QueueFamilyIndices,
+    pub depth_format: vk::Format,
+    pub present_mode: vk::PresentModeKHR,
 }

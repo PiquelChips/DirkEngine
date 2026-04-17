@@ -175,13 +175,6 @@ impl Image {
         image.generate_mipmaps(&cmd, *tex.width(), *tex.height(), mip_levels)?;
         cmd.end_and_submit()?;
 
-        // TODO: destroy buffer when it is no longer needed (maybe with VMA)
-        // currently it is destroyed too early, it is still in use
-        // unsafe {
-        //     device.device.destroy_buffer(staging_buf, None);
-        //     device.device.free_memory(staging_mem, None);
-        // }
-
         image.view = Self::create_image_view(
             device,
             image.image(),

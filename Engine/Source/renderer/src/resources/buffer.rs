@@ -120,13 +120,6 @@ impl<Type: BuffType> Buffer<Type> {
         )?;
 
         device_buf.copy(&staging_buf, size)?;
-        // TODO: destroy buffer when it is no longer needed (maybe with VMA)
-        // currently it is destroyed too early, it is still in use
-        // unsafe {
-        //     self.device.destroy_buffer(staging_buf, None);
-        //     self.device.free_memory(staging_mem, None);
-        // }
-
         Ok(device_buf)
     }
 
