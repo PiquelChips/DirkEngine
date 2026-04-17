@@ -1,6 +1,7 @@
 use std::{
     fs::{File, OpenOptions},
     io::Write,
+    path::PathBuf,
     sync::Mutex,
 };
 
@@ -10,8 +11,6 @@ use tracing_subscriber::{Layer, layer::Context};
 use super::format::{
     extract_event_data, format_level, format_line, format_timestamp, format_timestamp_filename,
 };
-
-const LOG_PATH: &str = env!("LOG_PATH");
 
 /// A [`tracing_subscriber::Layer`] that writes **plain-text** (no ANSI codes)
 /// log lines to two files simultaneously:
@@ -38,7 +37,8 @@ impl FileLayer {
     /// Returns an error if the directory cannot be created or either file
     /// cannot be opened.
     pub fn new() -> std::io::Result<Self> {
-        std::fs::create_dir_all(LOG_PATH)?;
+        let log_path = PathBuf::from(std::env!("SAVED_PATH")).join("log");
+        std::fs::create_dir_all(&log_path)?;
 
         let ts = format_timestamp_filename(&time::OffsetDateTime::now_utc());
 
@@ -47,14 +47,14 @@ impl FileLayer {
         let timestamped = OpenOptions::new()
             .create(true)
             .append(true)
-            .open(format!("{LOG_PATH}/{ts}.log"))?;
+            .open(log_path.join(format!("{ts}.log")))?;
 
         // Truncate latest.log so it only contains the current session.
         let latest = OpenOptions::new()
             .create(true)
             .write(true)
             .truncate(true)
-            .open(format!("{LOG_PATH}/latest.log"))?;
+            .open(log_path.join(format!("{ts}.log")))?;
 
         Ok(Self {
             writers: Mutex::new(FileWriters {

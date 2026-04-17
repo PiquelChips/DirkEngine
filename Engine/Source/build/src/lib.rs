@@ -1,5 +1,7 @@
 //! Some utilities for DirkEngine build scripts.
 
+use std::{collections::HashMap, path::PathBuf};
+
 /// Setup build for platform configuration.
 /// Run this function in build.rs of a crate that
 /// runs platform specific code.
@@ -23,8 +25,34 @@ pub fn configure_editor() {
     println!("cargo:rustc-cfg=editor");
 }
 
-/// Gets the path where all runtime generated files are
-/// stored (cache, logs, ...).
-pub fn get_run_dir() -> String {
-    String::from("Saved")
+/// Returns the directory of the current cargo workspace
+pub fn workspace_dir() -> PathBuf {
+    let metadata = cargo_metadata::MetadataCommand::new()
+        .exec()
+        .expect("failed to run cargo metadata");
+
+    metadata.workspace_root.into_std_path_buf()
+}
+
+/// Will add usefull relative paths to the compilation env.
+///
+/// Paths can be added in the function body inserting them into the HashMap
+pub fn setup_paths() {
+    println!(
+        "cargo:rustc-env=WORKSPACE_ROOT={}",
+        workspace_dir().display()
+    );
+
+    let workspace_root = PathBuf::from(".");
+
+    let mut paths = HashMap::new();
+    paths.insert("SAVED_PATH", "Saved");
+    paths.insert("ASSETS_PATH", "Engine/Assets");
+
+    for (name, path) in paths {
+        println!(
+            "cargo:rustc-env={name}={}",
+            workspace_root.join(path).display()
+        );
+    }
 }
