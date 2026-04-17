@@ -7,6 +7,7 @@ use crate::resources::{
 };
 
 /// Complete GPU model.
+#[allow(unused)]
 pub struct Model {
     pub name: String,
     pub primitives: Vec<Primitive>,
