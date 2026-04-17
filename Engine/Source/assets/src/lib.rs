@@ -13,9 +13,9 @@ const ASSET_PATH: &str = env!("ASSETS_PATH");
 #[derive(Default)]
 pub struct AssetHandle {
     /// All assets are identified by their path.
-    pub handle: String,
+    handle: String,
     /// Used for internal validation.
-    pub asset_type: AssetType,
+    asset_type: AssetType,
 }
 
 impl AssetHandle {
@@ -25,13 +25,16 @@ impl AssetHandle {
     pub fn path(&self) -> String {
         format!("{ASSET_PATH}/{}", self.handle)
     }
+    pub fn asset_type(&self) -> AssetType {
+        self.asset_type
+    }
     pub fn raw(&self) -> &str {
         &self.handle
     }
 }
 
 /// Every possible asset type.
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Default, Clone, Copy, Serialize, Deserialize)]
 pub enum AssetType {
     #[default]
     Unknown,
