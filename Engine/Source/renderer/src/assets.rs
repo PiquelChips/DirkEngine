@@ -42,19 +42,19 @@ impl Drop for Texture {
 }
 
 pub struct Primitive {
-    vertex_buffer: VertexBuffer,
-    index_buffer: IndexBuffer,
-    index_count: u32,
-    material_handle: Option<Handle<Material>>,
+    pub vertex_buffer: VertexBuffer,
+    pub index_buffer: IndexBuffer,
+    pub index_count: u32,
+    pub material_handle: Option<Handle<Material>>,
 }
 
 pub struct Mesh {
-    primitives: Vec<Primitive>,
+    pub primitives: Vec<Primitive>,
 }
 
 pub struct Material {
-    base_color: Handle<Texture>,
-    descriptor_set: vk::DescriptorSet,
+    pub base_color: Handle<Texture>,
+    pub descriptor_set: vk::DescriptorSet,
 }
 
 pub struct Model {

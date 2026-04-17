@@ -6,8 +6,9 @@ use world::{World, WorldId, components, events::WorldEvent};
 
 use crate::{
     Error, MAX_FRAMES_IN_FLIGHT, MAX_RENDERABLES, Result,
-    assets::{AssetManager, Handle, Mesh},
+    assets::{AssetManager, Handle, Mesh, Model},
     pipeline::GraphicsPipeline,
+    proxy::CameraProxy,
     render_pass::RenderPass,
     resources::{
         buffer::UniformBuffer,
@@ -157,7 +158,7 @@ impl Scene {
             graphics_pipeline,
         })
     }
-    pub fn tick(&mut self, world: &World) -> Result<()> {
+    pub fn tick(&mut self, world: &World, assets: &mut AssetManager) -> Result<()> {
         for event in self
             .world_consumer
             .consume_all()
@@ -184,7 +185,8 @@ impl Scene {
                     proxy.set_model_matrix(transform.matrix());
 
                     if let Some(renderable) = world.get::<components::Renderable>(entity) {
-                        proxy.set_model(&renderable.model);
+                        let handle = assets.load_model(&renderable.model)?;
+                        proxy.set_model(handle);
                     };
                     if let Some(camera) = world.get::<components::Camera>(entity) {
                         proxy.set_camera(transform.view(), camera.projection());
@@ -265,14 +267,12 @@ impl Scene {
             let Some(ref model) = proxy.model else {
                 continue;
             };
-            let Some(model) = assets.get_mesh(model) else {
-                continue;
-            };
+            let model = assets.get_mesh(*model);
 
             for prim in &model.primitives {
                 let mat_set = prim
-                    .material
-                    .and_then(|idx| model.material_sets.get(idx).copied())
+                    .material_handle
+                    .and_then(|mat| Some(assets.get_material(mat).descriptor_set))
                     .unwrap_or(vk::DescriptorSet::null());
 
                 descriptor_sets[1] = proxy.sets[frame];
@@ -331,7 +331,7 @@ pub struct SceneProxy {
     model_matrix: Option<glam::Mat4>,
     /// The name of the model. Used to request a [crate::model::Model] from the
     /// renderer at render time.
-    model: Option<Handle<Mesh>>,
+    model: Option<Handle<Model>>,
     /// An optional camera that could be attached to the mesh.
     camera: Option<CameraProxy>,
 
@@ -398,7 +398,7 @@ impl SceneProxy {
             sets,
         })
     }
-    pub fn set_model(&mut self, model: Handle<Mesh>) {
+    pub fn set_model(&mut self, model: Handle<Model>) {
         self.model = Some(model);
     }
     pub fn set_model_matrix(&mut self, mat: glam::Mat4) {
