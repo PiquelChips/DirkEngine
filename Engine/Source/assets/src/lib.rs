@@ -11,7 +11,9 @@ pub struct AssetHandle {
 }
 
 impl AssetHandle {
-    pub fn new() {}
+    pub fn new() {
+        todo!()
+    }
     pub fn path(&self) -> String {
         self.id.clone()
     }
