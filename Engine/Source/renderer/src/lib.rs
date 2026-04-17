@@ -209,11 +209,9 @@ impl Renderer {
         let instance = unsafe { entry.create_instance(&instance_create_info, None)? };
 
         #[cfg(validation)]
-        let (debug_utils_loader, debug_messenger) = {
+        let debug_messenger = {
             let loader = debug_utils::Instance::new(&entry, &instance);
-            let messenger =
-                unsafe { loader.create_debug_utils_messenger(&debug_create_info, None)? };
-            (loader, messenger)
+            unsafe { loader.create_debug_utils_messenger(&debug_create_info, None)? }
         };
 
         // this is a temporary surface, it is destroyed very soon
@@ -381,14 +379,12 @@ impl Renderer {
 
         // RENDER DEVICE
         let render_device = RenderDevice::new(
+            entry.clone(),
             instance.clone(),
             device.clone(),
-            surface_loader.clone(),
             physical_device,
             properties,
             current_frame.clone(),
-            #[cfg(validation)]
-            debug_utils_loader,
             #[cfg(validation)]
             debug_messenger,
         )?;
@@ -944,6 +940,12 @@ impl Drop for Renderer {
         self.windows.clear();
         self.frames.iter().for_each(|f| f.destroy());
         self.render_device.flush_all();
+
+        unsafe {
+            self.render_device
+                .device
+                .destroy_descriptor_pool(self.material_descriptor_pool, None);
+        }
     }
 }
 

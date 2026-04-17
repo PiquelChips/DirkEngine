@@ -61,13 +61,12 @@ pub struct RenderDeviceInner {
 
 impl RenderDevice {
     pub fn new(
+        entry: ash::Entry,
         instance: ash::Instance,
         device: ash::Device,
-        surface_loader: surface::Instance,
         physical_device: vk::PhysicalDevice,
         properties: RendererProperties,
         current_frame: Arc<AtomicU64>,
-        #[cfg(validation)] debug_utils_loader: debug_utils::Instance,
         #[cfg(validation)] debug_messenger: vk::DebugUtilsMessengerEXT,
     ) -> Result<Self> {
         // ALLOCATOR
@@ -150,9 +149,8 @@ impl RenderDevice {
 
         Ok(Self(Arc::new(RenderDeviceInner {
             device,
-            surface_loader,
+            surface_loader: surface::Instance::new(&entry, &instance),
             swapchain_loader,
-            instance,
             physical_device,
             queues,
             transfer_pool,
@@ -167,9 +165,11 @@ impl RenderDevice {
             current_frame,
 
             #[cfg(validation)]
-            debug_utils_loader,
+            debug_utils_loader: debug_utils::Instance::new(&entry, &instance),
             #[cfg(validation)]
             debug_messenger,
+
+            instance,
         })))
     }
 
