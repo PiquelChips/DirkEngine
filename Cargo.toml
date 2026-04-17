@@ -10,6 +10,7 @@ members = [
     "Engine/Source/platform",
     "Engine/Source/run",
     "Engine/Source/resource_manager",
+    "Engine/Source/assets",
     "Engine/Source/utils",
     "Engine/Source/renderer",
     "Engine/Source/world",
@@ -45,6 +46,7 @@ macros = { path = "Engine/Source/macros" }
 platform = { path = "Engine/Source/platform" }
 renderer = { path = "Engine/Source/renderer" }
 resource_manager = { path = "Engine/Source/resource_manager" }
+assets = { path = "Engine/Source/assets" }
 world = { path = "Engine/Source/world" }
 shaders = { path = "Engine/Shaders" }
 
