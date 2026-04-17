@@ -21,7 +21,7 @@ pub struct AssetHandle {
 }
 
 impl AssetHandle {
-    pub fn new() {
+    pub fn new() -> Self {
         todo!()
     }
     pub fn path(&self) -> String {
