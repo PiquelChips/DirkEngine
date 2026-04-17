@@ -245,7 +245,8 @@ impl DeletionQueue {
     pub fn enqueue(&mut self, garbage: Garbage) {
         self.pending.push(PendingDeletion {
             garbage: Some(garbage),
-            death_frame: self.current_frame.load(Ordering::Relaxed) + self.frames_in_flight as u64,
+            death_frame: self.current_frame.load(Ordering::Relaxed)
+                + 2 * self.frames_in_flight as u64, // wait two frames before destroying
         });
     }
 
