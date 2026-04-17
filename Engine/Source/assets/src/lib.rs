@@ -9,7 +9,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-const ASSET_PATH: &str = env!("ASSETS_PATH");
+const ASSETS_PATH: &str = env!("ASSETS_PATH");
 
 /// The type that is passed around to access assets.
 #[derive(Default)]
@@ -25,7 +25,7 @@ impl AssetHandle {
         todo!()
     }
     pub fn path(&self) -> String {
-        format!("{ASSET_PATH}/{}", self.handle)
+        format!("{ASSETS_PATH}/{}", self.handle)
     }
     pub fn asset_type(&self) -> AssetType {
         self.asset_type
@@ -81,7 +81,7 @@ impl AssetRegistry {
     pub fn init() -> Result<Self> {
         let mut registry = Self::default();
 
-        registry.load(ASSET_PATH)?;
+        registry.load(ASSETS_PATH)?;
         registry.validate();
 
         Ok(registry)
