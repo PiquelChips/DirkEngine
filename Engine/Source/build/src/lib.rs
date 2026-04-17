@@ -1,3 +1,5 @@
+//! Some utilities for DirkEngine build scripts.
+
 /// Setup build for platform configuration.
 /// Run this function in build.rs of a crate that
 /// runs platform specific code.
