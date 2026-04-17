@@ -42,14 +42,14 @@ impl Engine {
             .init()
             .context("initialising logger")?;
 
-        let mut event_manager = events::EventManager::new();
+        let event_manager = events::EventManager::new();
         let asset_registry =
             assets::AssetRegistry::init().context("initialising asset registry")?;
 
         let version = utils::Version::from_str(env!("CARGO_PKG_VERSION"))?;
         let name = "DirkEngine";
 
-        let platform = platform::Platform::init(&mut event_manager).context("platform init")?;
+        let platform = platform::Platform::init(&event_manager).context("platform init")?;
         let renderer = renderer::Renderer::init(
             renderer::RendererCreateInfo {
                 engine_name: CString::from_str(name)?,
