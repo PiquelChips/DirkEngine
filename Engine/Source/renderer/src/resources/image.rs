@@ -195,6 +195,7 @@ impl Image {
             device: device.clone(),
             image,
             sampler,
+            mip_levels,
         })
     }
 
