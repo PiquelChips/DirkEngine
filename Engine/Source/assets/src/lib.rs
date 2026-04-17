@@ -88,7 +88,22 @@ impl AssetRegistry {
 
     /// Will recursively load assets from a specific dir.
     fn load(&mut self, dir: &str) -> Result<()> {
-        todo!()
+        let dirs = std::fs::read_dir(dir)?
+            .filter_map(|result| {
+                let entry = result.ok()?;
+                if entry.metadata().ok()?.is_dir() {
+                    return Some(entry.path());
+                }
+
+                // TODO: load the file if it is a .dirkasset
+
+                None
+            })
+            .collect::<Vec<_>>();
+
+        dirs.iter()
+            .try_for_each(|dir| self.load(&dir.as_os_str().to_string_lossy()))?;
+        Ok(())
     }
 
     fn validate(&mut self) {
