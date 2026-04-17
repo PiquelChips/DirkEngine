@@ -187,7 +187,7 @@ impl RenderDevice {
     }
 }
 
-impl Drop for RenderDevice {
+impl Drop for RenderDeviceInner {
     fn drop(&mut self) {
         self.layouts.destroy(&self.device);
         self.graphics_pool.destroy();
