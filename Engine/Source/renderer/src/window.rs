@@ -1,19 +1,30 @@
-use ash::{
-    Device,
-    khr::{surface, swapchain},
-    vk,
-};
+use ash::vk;
 use platform::WindowId;
 
-use crate::{Error, Renderer, Result, image::SwapchainImage};
+use crate::{
+    Error, Renderer, Result,
+    resources::{
+        device::{Garbage, RenderDevice},
+        image::SwapchainImage,
+    },
+};
+
+/// This holds all the data required to render to the owning window's
+/// swap chain. These are created on window::next_image
+pub struct RenderImage<'a> {
+    pub image: &'a SwapchainImage,
+    pub image_index: u32,
+    pub swapchain: vk::SwapchainKHR,
+
+    pub image_available_semaphore: vk::Semaphore,
+    pub render_finished_semaphore: vk::Semaphore,
+}
 
 /// The renderer's representation of a platform window.
 /// Holds the swapchain, surface & other related state.
 /// Doesn't actually do any of the rendering of the game.
 pub struct Window {
-    device: Device,
-    swapchain_loader: swapchain::Device,
-    surface_loader: surface::Instance,
+    device: RenderDevice,
 
     id: WindowId,
     surface: vk::SurfaceKHR,
@@ -42,7 +53,12 @@ impl Window {
 
         let semaphore_info = vk::SemaphoreCreateInfo::default();
         let create_semaphore = || unsafe {
-            Ok::<vk::Semaphore, Error>(renderer.device.create_semaphore(&semaphore_info, None)?)
+            Ok::<vk::Semaphore, Error>(
+                renderer
+                    .render_device
+                    .device
+                    .create_semaphore(&semaphore_info, None)?,
+            )
         };
 
         let semaphores = (0..images.len())
@@ -50,11 +66,8 @@ impl Window {
             .collect::<Result<Vec<_>>>()?;
 
         Ok(Self {
-            device: renderer.device.clone(),
-            swapchain_loader: renderer.swapchain_loader.clone(),
-            surface_loader: renderer.surface_loader.clone(),
-
             id,
+            device: renderer.render_device.clone(),
             surface,
             swapchain,
             extent,
@@ -77,19 +90,13 @@ impl Window {
     pub fn surface(&self) -> vk::SurfaceKHR {
         self.surface
     }
-    /// (render_finished_semaphore, image_available_semaphore)
-    pub fn current_semaphores(&self) -> (vk::Semaphore, vk::Semaphore) {
-        self.semaphores[self.semaphore_count]
-    }
-    pub fn next_image(
-        &mut self,
-        swapchain_loader: &swapchain::Device,
-    ) -> Result<(&SwapchainImage, u32)> {
+    pub fn next_image(&mut self) -> Result<RenderImage<'_>> {
         self.semaphore_count = (self.semaphore_count + 1) % self.semaphores.len();
-        let (_, image_available_semaphore) = self.current_semaphores();
+        let (render_finished_semaphore, image_available_semaphore) =
+            self.semaphores[self.semaphore_count];
 
         let (image_index, suboptimal) = unsafe {
-            swapchain_loader.acquire_next_image(
+            self.device.swapchain_loader.acquire_next_image(
                 self.swapchain,
                 u64::MAX,
                 image_available_semaphore,
@@ -101,7 +108,13 @@ impl Window {
             return Err(Error::SuboptimalSurface);
         }
 
-        Ok((&self.images[image_index as usize], image_index))
+        Ok(RenderImage {
+            image: &self.images[image_index as usize],
+            image_index,
+            swapchain: self.swapchain,
+            image_available_semaphore,
+            render_finished_semaphore,
+        })
     }
     pub fn update_swapcahin(
         &mut self,
@@ -120,15 +133,11 @@ impl Window {
 
 impl Drop for Window {
     fn drop(&mut self) {
-        unsafe {
-            self.semaphores.iter().for_each(|&(s1, s2)| {
-                self.device.device_wait_idle().unwrap();
-                self.device.destroy_semaphore(s1, None);
-                self.device.destroy_semaphore(s2, None);
-            });
-            self.swapchain_loader
-                .destroy_swapchain(self.swapchain, None);
-            self.surface_loader.destroy_surface(self.surface, None);
-        }
+        self.semaphores.iter().for_each(|&(s1, s2)| {
+            self.device.destroy(Garbage::Semaphore(s1));
+            self.device.destroy(Garbage::Semaphore(s2));
+        });
+        self.device.destroy(Garbage::Swapchain(self.swapchain));
+        self.device.destroy(Garbage::Surface(self.surface));
     }
 }

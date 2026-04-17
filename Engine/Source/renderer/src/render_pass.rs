@@ -1,6 +1,6 @@
 use ash::{Device, vk};
 
-use crate::{command_pool::CommandBuffer, image::Image};
+use crate::resources::{command_pool::CommandBuffer, image::Image};
 
 /// This struct holds the graphics pipeline & stuff.
 /// It can be called on to begin the pass (begin rendering,

@@ -1,30 +1,34 @@
-use ash::{Device, vk};
+use ash::vk;
 
 use crate::{
-    DescriptorLayouts, Renderer, RendererProperties, Result, Vertex, command_pool::CommandBuffer,
+    DescriptorLayouts, Renderer, RendererProperties, Result, Vertex,
+    resources::{
+        command_pool::CommandBuffer,
+        device::{Garbage, RenderDevice},
+    },
 };
 
 /// This struct holds the graphics pipeline & stuff.
 pub struct GraphicsPipeline {
-    device: Device,
+    device: RenderDevice,
     pipeline_layout: vk::PipelineLayout,
     graphics_pipeline: vk::Pipeline,
 }
 
 impl GraphicsPipeline {
     pub fn build(
-        device: &Device,
+        device: &RenderDevice,
         layouts: &DescriptorLayouts,
         properties: &RendererProperties,
     ) -> Result<Self> {
         let set_layouts = [layouts.scene, layouts.object, layouts.material];
         let layout_info = vk::PipelineLayoutCreateInfo::default().set_layouts(&set_layouts);
-        let pipeline_layout = unsafe { device.create_pipeline_layout(&layout_info, None)? };
+        let pipeline_layout = unsafe { device.device.create_pipeline_layout(&layout_info, None)? };
 
-        let vert = Renderer::create_shader_module(device, &shaders::VERT)?;
+        let vert = Renderer::create_shader_module(&device.device, &shaders::VERT)?;
         let vert_name = shaders::VERT.entrypoint();
 
-        let frag = Renderer::create_shader_module(device, &shaders::FRAG)?;
+        let frag = Renderer::create_shader_module(&device.device, &shaders::FRAG)?;
         let frag_name = shaders::FRAG.entrypoint();
 
         let shader_stages = [
@@ -102,6 +106,7 @@ impl GraphicsPipeline {
 
         let graphics_pipeline = unsafe {
             device
+                .device
                 .create_graphics_pipelines(
                     vk::PipelineCache::null(),
                     std::slice::from_ref(&pipeline_info),
@@ -111,8 +116,8 @@ impl GraphicsPipeline {
         };
 
         unsafe {
-            device.destroy_shader_module(vert, None);
-            device.destroy_shader_module(frag, None);
+            device.device.destroy_shader_module(vert, None);
+            device.device.destroy_shader_module(frag, None);
         }
 
         Ok(Self {
@@ -123,7 +128,7 @@ impl GraphicsPipeline {
     }
     pub fn bind(&self, cmd: &CommandBuffer) {
         unsafe {
-            self.device.cmd_bind_pipeline(
+            self.device.device.cmd_bind_pipeline(
                 cmd.raw(),
                 vk::PipelineBindPoint::GRAPHICS,
                 self.graphics_pipeline,
@@ -133,17 +138,13 @@ impl GraphicsPipeline {
     pub fn layout(&self) -> vk::PipelineLayout {
         self.pipeline_layout
     }
-    pub fn destroy(&self) {
-        unsafe {
-            self.device
-                .destroy_pipeline_layout(self.pipeline_layout, None);
-            self.device.destroy_pipeline(self.graphics_pipeline, None);
-        }
-    }
 }
 
 impl Drop for GraphicsPipeline {
     fn drop(&mut self) {
-        self.destroy();
+        self.device
+            .destroy(Garbage::PipelineLayout(self.pipeline_layout));
+        self.device
+            .destroy(Garbage::Pipeline(self.graphics_pipeline));
     }
 }

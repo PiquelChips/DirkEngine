@@ -1,11 +1,13 @@
-use ash::{Device, vk};
+use ash::vk;
 
-use crate::{
+use crate::resources::{
     buffer::{IndexBuffer, VertexBuffer},
+    device::{Garbage, RenderDevice},
     image::Image,
 };
 
 /// Complete GPU model.
+#[allow(unused)]
 pub struct Model {
     pub name: String,
     pub primitives: Vec<Primitive>,
@@ -16,23 +18,18 @@ pub struct Model {
     pub material_sets: Vec<vk::DescriptorSet>,
 }
 
-/// All GPU-side handles for a single texture.
 pub struct Texture {
-    pub device: Device,
+    pub device: RenderDevice,
     pub image: Image,
     pub sampler: vk::Sampler,
-    pub mip_levels: u32,
 }
 
 impl Drop for Texture {
     fn drop(&mut self) {
-        unsafe {
-            self.device.destroy_sampler(self.sampler, None);
-        }
+        self.device.destroy(Garbage::Sampler(self.sampler));
     }
 }
 
-/// GPU-side handles for a single glTF primitive.
 pub struct Primitive {
     pub vertex_buffer: VertexBuffer,
     pub index_buffer: IndexBuffer,
