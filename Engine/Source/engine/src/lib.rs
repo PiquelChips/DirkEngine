@@ -14,6 +14,8 @@ pub struct Engine {
     exit_consumer: events::Consumer<platform::AppExit>,
     event_manager: events::EventManager,
 
+    asset_registry: assets::AssetRegistry,
+
     renderer: renderer::Renderer,
     platform: platform::Platform,
 
@@ -41,6 +43,8 @@ impl Engine {
             .context("initialising logger")?;
 
         let mut event_manager = events::EventManager::new();
+        let asset_registry =
+            assets::AssetRegistry::init().context("initialising asset registry")?;
 
         let version = utils::Version::from_str(env!("CARGO_PKG_VERSION"))?;
         let name = "DirkEngine";
@@ -63,6 +67,7 @@ impl Engine {
             exit_consumer: event_manager.subscribe(),
             event_manager,
             logger,
+            asset_registry,
 
             platform,
             renderer,
