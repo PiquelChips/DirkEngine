@@ -35,7 +35,7 @@ mod errors;
 pub use errors::{Error, Result};
 
 mod scene;
-use scene::Scene;
+use scene::{Scene, SceneProxy};
 
 mod window;
 use window::Window;
@@ -443,18 +443,21 @@ impl Renderer {
         Ok(Self {
             entry,
             render_device,
+
             windows: HashMap::new(),
-            scenes: HashMap::new(),
             models: HashMap::new(),
+            scenes: HashMap::new(),
+            material_descriptor_pool,
+
             frames,
             current_frame,
+
             #[cfg(validation)]
             debug_utils_loader,
             #[cfg(validation)]
             debug_messenger,
 
             extent,
-            material_descriptor_pool,
 
             window_consumer: event_manager.subscribe(),
             platform_consumer: event_manager.subscribe(),
