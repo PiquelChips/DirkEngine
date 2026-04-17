@@ -5,6 +5,8 @@ pub use crate::errors::{Error, Result};
 
 mod validation;
 
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 const ASSET_PATH: &str = env!("ASSETS_PATH");
@@ -68,4 +70,29 @@ pub struct ModelConfig {
 pub struct Model {
     pub meta: Metadata,
     pub config: ModelConfig,
+}
+
+#[derive(Default)]
+pub struct AssetRegistry {
+    assets: HashMap<AssetHandle, AssetConfig>,
+}
+
+impl AssetRegistry {
+    pub fn init() -> Result<Self> {
+        let mut registry = Self::default();
+
+        registry.load(ASSET_PATH)?;
+        registry.validate();
+
+        Ok(registry)
+    }
+
+    /// Will recursively load assets from a specific dir.
+    fn load(&mut self, dir: &str) -> Result<()> {
+        todo!()
+    }
+
+    fn validate(&mut self) {
+        self.assets.retain(|_, conf| conf.validate());
+    }
 }
