@@ -28,7 +28,7 @@ impl AssetConfig {
 }
 
 impl ModelConfig {
-    fn validate(&self, meta: &Metadata) -> bool {
-        todo!()
+    fn validate(&self, _meta: &Metadata) -> bool {
+        todo!("check if ModelConfig's glTF file actually exists")
     }
 }
