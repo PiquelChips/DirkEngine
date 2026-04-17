@@ -4,11 +4,13 @@ mod validation;
 
 use serde::{Deserialize, Serialize};
 
+const ASSET_PATH: &str = env!("ASSETS_PATH");
+
 /// The type that is passed around to access assets.
 #[derive(Default)]
 pub struct AssetHandle {
     /// All assets are identified by their path.
-    pub id: String,
+    pub handle: String,
     /// Used for internal validation.
     pub asset_type: AssetType,
 }
@@ -18,7 +20,10 @@ impl AssetHandle {
         todo!()
     }
     pub fn path(&self) -> String {
-        self.id.clone()
+        format!("{ASSET_PATH}/{}", self.handle)
+    }
+    pub fn raw(&self) -> &str {
+        &self.handle
     }
 }
 
