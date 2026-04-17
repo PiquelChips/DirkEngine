@@ -5,9 +5,13 @@ pub use crate::errors::{Error, Result};
 
 mod validation;
 
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
 use serde::{Deserialize, Serialize};
+use tracing::debug;
 
 const ASSETS_PATH: &str = env!("ASSETS_PATH");
 
@@ -80,29 +84,31 @@ impl AssetRegistry {
     pub fn init() -> Result<Self> {
         let mut registry = Self::default();
 
-        registry.load(ASSETS_PATH)?;
+        registry.load(&PathBuf::from(ASSETS_PATH))?;
         registry.validate();
 
         Ok(registry)
     }
 
     /// Will recursively load assets from a specific dir.
-    fn load(&mut self, dir: &str) -> Result<()> {
-        let dirs = std::fs::read_dir(dir)?
-            .filter_map(|result| {
-                let entry = result.ok()?;
-                if entry.metadata().ok()?.is_dir() {
-                    return Some(entry.file_name());
+    fn load(&mut self, dir: &Path) -> Result<()> {
+        for entry in std::fs::read_dir(dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            let metadata = entry.metadata()?;
+
+            if metadata.is_dir() {
+                self.load(&path)?;
+            } else if metadata.is_file() {
+                if path.extension().and_then(|ext| ext.to_str()) == Some("dirkasset") {
+                    debug!("load asset {path:?}");
+                    // TODO: insert
+                    // let content = std::fs::read(&path)?;
+                    // self.assets.insery(DirkAsset { path, content });
                 }
+            }
+        }
 
-                // TODO: load the file if it is a .dirkasset
-
-                None
-            })
-            .collect::<Vec<_>>();
-
-        dirs.iter()
-            .try_for_each(|sub_dir| self.load(&format!("{dir}/{sub_dir:?}")))?;
         Ok(())
     }
 
