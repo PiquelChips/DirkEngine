@@ -6,6 +6,8 @@ use std::{
     },
 };
 
+#[cfg(validation)]
+use ash::ext::debug_utils;
 use ash::{
     khr::{surface, swapchain},
     vk,
@@ -47,6 +49,11 @@ pub struct RenderDeviceInner {
     pub layouts: DescriptorLayouts,
     pub properties: RendererProperties,
 
+    #[cfg(validation)]
+    debug_utils_loader: debug_utils::Instance,
+    #[cfg(validation)]
+    debug_messenger: vk::DebugUtilsMessengerEXT,
+
     allocator: Mutex<Allocator>,
     deletion_queue: Mutex<DeletionQueue>,
     current_frame: Arc<AtomicU64>,
@@ -60,6 +67,8 @@ impl RenderDevice {
         physical_device: vk::PhysicalDevice,
         properties: RendererProperties,
         current_frame: Arc<AtomicU64>,
+        #[cfg(validation)] debug_utils_loader: debug_utils::Instance,
+        #[cfg(validation)] debug_messenger: vk::DebugUtilsMessengerEXT,
     ) -> Result<Self> {
         // ALLOCATOR
         let allocator = Allocator::new(&AllocatorCreateDesc {
@@ -156,6 +165,11 @@ impl RenderDevice {
                 MAX_FRAMES_IN_FLIGHT,
             )),
             current_frame,
+
+            #[cfg(validation)]
+            debug_utils_loader,
+            #[cfg(validation)]
+            debug_messenger,
         })))
     }
 
@@ -194,10 +208,9 @@ impl Drop for RenderDeviceInner {
         self.transfer_pool.destroy();
         unsafe {
             self.device.destroy_device(None);
-            // TODO: destroy debug stuff
-            // #[cfg(validation)]
-            // self.debug_utils_loader
-            //     .destroy_debug_utils_messenger(self.debug_messenger, None);
+            #[cfg(validation)]
+            self.debug_utils_loader
+                .destroy_debug_utils_messenger(self.debug_messenger, None);
 
             self.instance.destroy_instance(None);
         }

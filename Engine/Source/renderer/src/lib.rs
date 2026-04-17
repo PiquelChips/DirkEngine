@@ -91,11 +91,6 @@ pub struct Renderer {
     frames: [Frame; MAX_FRAMES_IN_FLIGHT],
     current_frame: Arc<AtomicU64>,
 
-    #[cfg(validation)]
-    debug_utils_loader: debug_utils::Instance,
-    #[cfg(validation)]
-    debug_messenger: vk::DebugUtilsMessengerEXT,
-
     // Events
     /// TODO: will be used to create listeners for scenes
     #[allow(unused)]
@@ -392,6 +387,10 @@ impl Renderer {
             physical_device,
             properties,
             current_frame.clone(),
+            #[cfg(validation)]
+            debug_utils_loader,
+            #[cfg(validation)]
+            debug_messenger,
         )?;
 
         // IN FLIGHT FRAMES
@@ -451,11 +450,6 @@ impl Renderer {
 
             frames,
             current_frame,
-
-            #[cfg(validation)]
-            debug_utils_loader,
-            #[cfg(validation)]
-            debug_messenger,
 
             extent,
 
