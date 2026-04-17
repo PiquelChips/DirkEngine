@@ -47,8 +47,6 @@ pub struct RenderDeviceInner {
     pub layouts: DescriptorLayouts,
     pub properties: RendererProperties,
 
-    pub event_manager: events::EventManager,
-
     allocator: Mutex<Allocator>,
     deletion_queue: Mutex<DeletionQueue>,
     current_frame: Arc<AtomicU64>,
@@ -62,7 +60,6 @@ impl RenderDevice {
         physical_device: vk::PhysicalDevice,
         properties: RendererProperties,
         current_frame: Arc<AtomicU64>,
-        event_manager: events::EventManager,
     ) -> Result<Self> {
         // ALLOCATOR
         let allocator = Allocator::new(&AllocatorCreateDesc {
@@ -159,7 +156,6 @@ impl RenderDevice {
                 MAX_FRAMES_IN_FLIGHT,
             )),
             current_frame,
-            event_manager,
         })))
     }
 
@@ -177,13 +173,13 @@ impl RenderDevice {
     /// Call once per frame from your render loop.
     pub fn flush_deletions(&self) {
         let mut queue = self.deletion_queue.lock();
-        queue.flush(&self, self.current_frame());
+        queue.flush(self, self.current_frame());
     }
 
     /// Call once before shutdown to flush the entire queue
     pub fn flush_all(&self) {
         let mut queue = self.deletion_queue.lock();
-        queue.flush_all(&self);
+        queue.flush_all(self);
     }
 
     pub fn current_frame(&self) -> u64 {

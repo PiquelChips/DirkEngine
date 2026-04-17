@@ -11,11 +11,11 @@ use gpu_allocator::{
 
 use crate::{
     Renderer, Result,
-    assets::Texture,
     resources::{
         buffer::CustomBuffer,
         command_pool::CommandBuffer,
         device::{Garbage, RenderDevice},
+        model::Texture,
     },
 };
 
@@ -45,7 +45,7 @@ pub struct ImageCreateInfo {
 }
 
 impl Image {
-    pub fn create_image(device: RenderDevice, info: ImageCreateInfo) -> Result<Self> {
+    pub fn create_image(device: &RenderDevice, info: ImageCreateInfo) -> Result<Self> {
         let image_info = vk::ImageCreateInfo::default()
             .image_type(vk::ImageType::TYPE_2D)
             .format(info.format)
@@ -83,7 +83,7 @@ impl Image {
             device: device.clone(),
             image,
             view: Self::create_image_view(
-                &device,
+                device,
                 image,
                 info.format,
                 info.aspect_flags,
@@ -100,23 +100,16 @@ impl Image {
         self.view
     }
 
-    pub fn upload_texture(device: RenderDevice, tex: &gltf::image::Data) -> Result<Texture> {
-        let pixels = match tex.format {
-            gltf::image::Format::R8G8B8 => tex
-                .pixels
-                .chunks_exact(3)
-                .flat_map(|rgb| [rgb[0], rgb[1], rgb[2], 255])
-                .collect(),
-            gltf::image::Format::R8G8B8A8 => tex.pixels.clone(),
-            fmt => panic!("Unsuported glTF image format: {fmt:?}"),
-        };
-
-        let mip_levels = Self::mip_levels(tex.width, tex.height);
-        let size = (pixels.len()) as vk::DeviceSize;
+    pub fn upload_texture(
+        device: &RenderDevice,
+        tex: &resource_manager::Texture,
+    ) -> Result<Texture> {
+        let mip_levels = Self::mip_levels(*tex.width(), *tex.height());
+        let size = (tex.pixels().len()) as vk::DeviceSize;
         let format = vk::Format::R8G8B8A8_SRGB;
 
         let staging_buf = CustomBuffer::create_custom(
-            device.clone(),
+            device,
             size,
             vk::BufferUsageFlags::TRANSFER_SRC,
             MemoryLocation::CpuToGpu,
@@ -124,13 +117,13 @@ impl Image {
 
         unsafe {
             let ptr = staging_buf.mapped().unwrap().as_ptr() as *mut u8;
-            ptr.copy_from_nonoverlapping(pixels.as_ptr(), pixels.len());
+            ptr.copy_from_nonoverlapping(tex.pixels().as_ptr(), tex.pixels().len());
         }
 
         let create_info = ImageCreateInfo {
             size: vk::Extent2D {
-                width: tex.width,
-                height: tex.height,
+                width: *tex.width(),
+                height: *tex.height(),
             },
             format,
             tiling: vk::ImageTiling::OPTIMAL,
@@ -143,7 +136,7 @@ impl Image {
             num_samples: vk::SampleCountFlags::TYPE_1,
             aspect_flags: vk::ImageAspectFlags::COLOR,
         };
-        let mut image = Self::create_image(device.clone(), create_info)?;
+        let mut image = Self::create_image(device, create_info)?;
 
         let cmd = device.graphics_pool.begin_single_time()?;
 
@@ -163,8 +156,8 @@ impl Image {
                 layer_count: 1,
             })
             .image_extent(vk::Extent3D {
-                width: tex.width,
-                height: tex.height,
+                width: *tex.width(),
+                height: *tex.height(),
                 depth: 1,
             });
 
@@ -179,30 +172,29 @@ impl Image {
         }
 
         // TODO: start in transfer queue, swap to graphics and then go back
-        image.generate_mipmaps(&cmd, tex.width, tex.height, mip_levels)?;
+        image.generate_mipmaps(&cmd, *tex.width(), *tex.height(), mip_levels)?;
         cmd.end_and_submit()?;
 
         // TODO: destroy buffer when it is no longer needed (maybe with VMA)
         // currently it is destroyed too early, it is still in use
         // unsafe {
-        //     renderer.device.destroy_buffer(staging_buf, None);
-        //     renderer.device.free_memory(staging_mem, None);
+        //     device.device.destroy_buffer(staging_buf, None);
+        //     device.device.free_memory(staging_mem, None);
         // }
 
         image.view = Self::create_image_view(
-            &device,
+            device,
             image.image(),
             format,
             vk::ImageAspectFlags::COLOR,
             mip_levels,
         )?;
-        let sampler = Renderer::create_sampler(&device, mip_levels)?;
+        let sampler = Renderer::create_sampler(device, mip_levels)?;
 
         Ok(Texture {
-            device,
+            device: device.clone(),
             image,
             sampler,
-            mip_levels,
         })
     }
 

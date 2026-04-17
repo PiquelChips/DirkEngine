@@ -25,7 +25,7 @@ use tracing::{debug, info};
 use tracing::{error, trace, warn};
 
 use platform::{PlatformEvent, WindowEvent, WindowId};
-use world::{events::WorldEvent, player::PlayerId};
+use world::{components, events::WorldEvent};
 
 mod utils;
 use ::utils::*;
@@ -43,11 +43,14 @@ use window::Window;
 mod resources;
 use resources::{command_pool::CommandPool, device::RenderDevice, image::SwapchainImage};
 
-mod assets;
-use assets::AssetManager;
-
-mod proxy;
-use proxy::PlayerProxy;
+use crate::{
+    resources::{
+        buffer::{IndexBuffer, VertexBuffer},
+        image::Image,
+        model::{Model, Primitive},
+    },
+    scene::SceneProxy,
+};
 
 mod physical_device;
 mod pipeline;
@@ -57,6 +60,8 @@ mod render_pass;
 /// Used to construct Ubo samples.
 /// TODO: find a way to set this limit dynamically or have a error when the limit is reached.
 const MAX_RENDERABLES: u32 = 100;
+/// TODO: also find a way to do this dynamically
+const MAX_MATERIAL_DESCRIPTOR_SET: u32 = 256;
 
 const MAX_FRAMES_IN_FLIGHT: usize = 2;
 const DEVICE_EXTENSIONS: &[&str] =
@@ -81,11 +86,8 @@ pub struct Renderer {
     windows: HashMap<WindowId, Window>,
     /// All of the internal [world::World] representations.
     scenes: HashMap<world::WorldId, Scene>,
-    /// All the players currently being managed by the engine.
-    /// The proxies are synchronised using [world::events::PlayerUpdateEvent].
-    players: HashMap<PlayerId, PlayerProxy>,
-    /// Manages all renderer assets like meshes & stuff.
-    asset_manager: AssetManager,
+    /// All the uploaded [resource_manager::Model]s.
+    models: HashMap<String, Model>,
 
     frames: [Frame; MAX_FRAMES_IN_FLIGHT],
     current_frame: Arc<AtomicU64>,
@@ -102,12 +104,12 @@ pub struct Renderer {
     window_consumer: events::Consumer<platform::WindowEvent>,
     platform_consumer: events::Consumer<platform::PlatformEvent>,
     world_consumer: events::Consumer<world::events::WorldEvent>,
-    player_consumer: events::Consumer<world::events::PlayerUpdateEvent>,
 
     /// The size of the output
     /// TODO: should be removed once we get the frame graph to
     /// handle transient resources
     extent: vk::Extent2D,
+    material_descriptor_pool: vk::DescriptorPool,
 
     // last as should be dropped last
     render_device: RenderDevice,
@@ -392,10 +394,7 @@ impl Renderer {
             physical_device,
             properties,
             current_frame.clone(),
-            event_manager.clone(),
         )?;
-
-        let asset_manager = AssetManager::new(render_device.clone())?;
 
         // IN FLIGHT FRAMES
         let build_frame = || -> Result<Frame> {
@@ -429,13 +428,26 @@ impl Renderer {
                 height: size.height,
             }
         };
+
+        // MATERIAL DESCRIPTOR SETS
+        let material_descriptor_pool = {
+            let pool_size = vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+                descriptor_count: MAX_MATERIAL_DESCRIPTOR_SET,
+            };
+            let pool_info = vk::DescriptorPoolCreateInfo::default()
+                .pool_sizes(std::slice::from_ref(&pool_size))
+                .max_sets(MAX_MATERIAL_DESCRIPTOR_SET);
+
+            unsafe { device.create_descriptor_pool(&pool_info, None)? }
+        };
+
         Ok(Self {
             entry,
             render_device,
             windows: HashMap::new(),
             scenes: HashMap::new(),
-            players: HashMap::new(),
-            asset_manager,
+            models: HashMap::new(),
             frames,
             current_frame,
             #[cfg(validation)]
@@ -444,11 +456,11 @@ impl Renderer {
             debug_messenger,
 
             extent,
+            material_descriptor_pool,
 
             window_consumer: event_manager.subscribe(),
             platform_consumer: event_manager.subscribe(),
             world_consumer: event_manager.subscribe(),
-            player_consumer: event_manager.subscribe(),
             event_manager,
         })
     }
@@ -463,15 +475,55 @@ impl Renderer {
         for event in world_events {
             match event {
                 WorldEvent::Created(id) => {
-                    let scene = Scene::build(self.render_device.clone(), self.extent, id)?;
+                    let scene = Scene::build(&self.render_device, self.extent, id)?;
                     self.scenes.insert(id, scene);
                 }
                 WorldEvent::Destroyed(id) => {
                     self.scenes.remove(&id);
                 }
-                WorldEvent::EntitySpawn { .. }
-                | WorldEvent::EntityUpdate { .. }
-                | WorldEvent::EntityDespawn { .. } => {}
+                WorldEvent::EntitySpawn { world, entity } => {
+                    let Some(scene) = self.scenes.get(&world) else {
+                        continue;
+                    };
+                    let proxy = SceneProxy::build(&self.render_device, scene)?;
+                    // this creates a completely empty proxy, no mesh or matrix
+                    let Some(scene) = self.scenes.get_mut(&world) else {
+                        continue;
+                    };
+                    scene.add_proxy(entity, proxy)?;
+                }
+                WorldEvent::EntityUpdate { world, entity } => {
+                    let Some(world) = worlds.get(&world) else {
+                        continue;
+                    };
+                    if let Some(renderable) = world.get::<components::Renderable>(entity) {
+                        self.get_or_upload_model(&renderable.model)?;
+                    }
+                    let Some(scene) = self.scenes.get_mut(&world.id()) else {
+                        continue;
+                    };
+                    let Some(proxy) = scene.get_proxy(entity) else {
+                        continue;
+                    };
+
+                    let Some(transform) = world.get::<components::Transform>(entity) else {
+                        continue;
+                    };
+                    proxy.set_model_matrix(transform.matrix());
+
+                    if let Some(renderable) = world.get::<components::Renderable>(entity) {
+                        proxy.set_model(&renderable.model);
+                    };
+                    if let Some(camera) = world.get::<components::Camera>(entity) {
+                        proxy.set_camera(transform.view(), camera.projection());
+                    }
+                }
+                WorldEvent::EntityDespawn { world, entity } => {
+                    let Some(scene) = self.scenes.get_mut(&world) else {
+                        continue;
+                    };
+                    scene.remove_proxy(entity);
+                }
             }
         }
 
@@ -543,13 +595,6 @@ impl Renderer {
             }
         }
 
-        self.scenes.values_mut().try_for_each(|scene| {
-            let Some(world) = worlds.get(&scene.world()) else {
-                return Ok(());
-            };
-            scene.tick(world)
-        })?;
-
         Ok(())
     }
 
@@ -599,13 +644,7 @@ impl Renderer {
             vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
         )?;
 
-        scene.render(
-            &self.asset_manager,
-            &cmd,
-            size,
-            swapchain_img.view(),
-            camera,
-        )?;
+        scene.render(&self.models, &cmd, size, swapchain_img.view(), camera)?;
 
         swapchain_img.transition_image_layout(
             &cmd,
@@ -746,6 +785,111 @@ impl Renderer {
         };
 
         Ok((swapchain, extent, swap_images))
+    }
+
+    // UPLOADING TO THE RENDERER
+
+    fn upload_model(&mut self, model: resource_manager::Model) -> Result<&Model> {
+        let primitives = model
+            .meshes()
+            .iter()
+            .flat_map(|m| m.primitives().iter())
+            .map(|p| self.upload_primitive(p))
+            .collect::<Result<_>>()?;
+
+        let textures: Vec<_> = model
+            .textures()
+            .iter()
+            .map(|t| Image::upload_texture(&self.render_device, t))
+            .collect::<Result<_>>()?;
+
+        let material_count = model.materials().len();
+        // Allocate one set per material
+        let layouts: Vec<vk::DescriptorSetLayout> =
+            vec![self.render_device.layouts.material; material_count];
+
+        let material_sets: Vec<vk::DescriptorSet> = if material_count > 0 {
+            let alloc_info = vk::DescriptorSetAllocateInfo::default()
+                .descriptor_pool(self.material_descriptor_pool)
+                .set_layouts(&layouts);
+
+            unsafe {
+                self.render_device
+                    .device
+                    .allocate_descriptor_sets(&alloc_info)?
+            }
+        } else {
+            Vec::new()
+        };
+
+        // Write the base-colour sampler into each set that has one
+        for (i, mat) in model.materials().iter().enumerate() {
+            let Some(&tex_idx) = mat.base_color_texture().as_ref() else {
+                continue; // leave this set in its default (null) state
+            };
+
+            let tex = &textures[tex_idx];
+
+            let image_info = vk::DescriptorImageInfo::default()
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image_view(tex.image.view())
+                .sampler(tex.sampler);
+
+            let write = vk::WriteDescriptorSet::default()
+                .dst_set(material_sets[i])
+                .dst_binding(2) // matches layouts.material
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .image_info(std::slice::from_ref(&image_info));
+
+            unsafe {
+                self.render_device
+                    .device
+                    .update_descriptor_sets(&[write], &[])
+            };
+        }
+
+        self.models.insert(
+            model.name().to_string(),
+            Model {
+                name: model.name().to_owned(),
+                primitives,
+                textures,
+                materials: model.materials().to_vec(),
+                material_sets,
+            },
+        );
+        Ok(self.models.get(model.name()).unwrap())
+    }
+
+    fn get_or_upload_model(&mut self, name: &str) -> Result<&Model> {
+        if self.models.contains_key(name) {
+            return Ok(self.models.get(name).unwrap());
+        }
+
+        self.upload_model(resource_manager::ResourceManager::load_model(name)?)
+    }
+
+    fn upload_primitive(&mut self, prim: &resource_manager::Primitive) -> Result<Primitive> {
+        let vertices: Vec<Vertex> = prim
+            .positions()
+            .iter()
+            .enumerate()
+            .map(|(i, &position)| Vertex {
+                position,
+                normal: prim.normals().get(i).copied().unwrap_or([0.0, 1.0, 0.0]),
+                texcoord: prim.texcoords().get(i).copied().unwrap_or([0.0, 0.0]),
+            })
+            .collect();
+
+        let vertex_buffer = VertexBuffer::upload_slice(&self.render_device, &vertices)?;
+        let index_buffer = IndexBuffer::upload_slice(&self.render_device, prim.indices())?;
+
+        Ok(Primitive {
+            vertex_buffer,
+            index_buffer,
+            index_count: prim.indices().len() as u32,
+            material: *prim.material(),
+        })
     }
 
     // EXTRA UTILS
