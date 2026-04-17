@@ -6,7 +6,7 @@ use world::{World, WorldId, components, events::WorldEvent};
 
 use crate::{
     Error, MAX_FRAMES_IN_FLIGHT, MAX_RENDERABLES, Result,
-    assets::{AssetManager, Handle, Mesh, Model},
+    assets::{AssetManager, Handle, Model},
     pipeline::GraphicsPipeline,
     proxy::CameraProxy,
     render_pass::RenderPass,

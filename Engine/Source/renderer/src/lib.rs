@@ -547,7 +547,7 @@ impl Renderer {
             let Some(world) = worlds.get(&scene.world()) else {
                 return Ok(());
             };
-            scene.tick(world)
+            scene.tick(world, &mut self.asset_manager)
         })?;
 
         Ok(())
