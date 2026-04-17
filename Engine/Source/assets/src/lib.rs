@@ -92,7 +92,7 @@ impl AssetRegistry {
             .filter_map(|result| {
                 let entry = result.ok()?;
                 if entry.metadata().ok()?.is_dir() {
-                    return Some(entry.path());
+                    return Some(entry.file_name());
                 }
 
                 // TODO: load the file if it is a .dirkasset
@@ -102,7 +102,7 @@ impl AssetRegistry {
             .collect::<Vec<_>>();
 
         dirs.iter()
-            .try_for_each(|dir| self.load(&dir.as_os_str().to_string_lossy()))?;
+            .try_for_each(|sub_dir| self.load(&format!("{dir}/{sub_dir:?}")))?;
         Ok(())
     }
 
