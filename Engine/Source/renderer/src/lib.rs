@@ -41,15 +41,13 @@ mod window;
 use window::Window;
 
 mod resources;
-use resources::{command_pool::CommandPool, device::RenderDevice, image::SwapchainImage};
-
-use crate::{
-    resources::{
-        buffer::{IndexBuffer, VertexBuffer},
-        image::Image,
-        model::{Model, Primitive},
-    },
-    scene::SceneProxy,
+use resources::{
+    buffer::{IndexBuffer, VertexBuffer},
+    command_pool::CommandPool,
+    device::RenderDevice,
+    image::Image,
+    image::SwapchainImage,
+    model::{Model, Primitive},
 };
 
 mod physical_device;
@@ -84,10 +82,11 @@ pub struct Renderer {
     // Heavy renderer state:
     /// All of the [window::Window]s constructed from [platform::Window]s.
     windows: HashMap<WindowId, Window>,
-    /// All of the internal [world::World] representations.
-    scenes: HashMap<world::WorldId, Scene>,
     /// All the uploaded [resource_manager::Model]s.
     models: HashMap<String, Model>,
+    /// All of the internal [world::World] representations.
+    scenes: HashMap<world::WorldId, Scene>,
+    material_descriptor_pool: vk::DescriptorPool,
 
     frames: [Frame; MAX_FRAMES_IN_FLIGHT],
     current_frame: Arc<AtomicU64>,
@@ -109,7 +108,6 @@ pub struct Renderer {
     /// TODO: should be removed once we get the frame graph to
     /// handle transient resources
     extent: vk::Extent2D,
-    material_descriptor_pool: vk::DescriptorPool,
 
     // last as should be dropped last
     render_device: RenderDevice,
