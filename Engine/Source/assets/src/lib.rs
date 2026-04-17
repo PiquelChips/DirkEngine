@@ -1,5 +1,8 @@
 //! This crate handles all the asset stuff.
 
+mod errors;
+pub use crate::errors::{Error, Result};
+
 mod validation;
 
 use serde::{Deserialize, Serialize};
