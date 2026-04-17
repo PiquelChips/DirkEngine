@@ -41,7 +41,6 @@ pub enum AssetType {
     #[default]
     Unknown,
     Model,
-    Sound,
 }
 
 /// Asset metadata, all assets have this.
