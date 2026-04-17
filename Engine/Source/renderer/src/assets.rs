@@ -139,7 +139,7 @@ impl AssetManager {
         let texture_handles = images
             .iter()
             .map(|image| {
-                let tex = Image::upload_texture(self.device.clone(), image)?;
+                let tex = Image::upload_texture(&self.device, image)?;
                 Ok(self.textures.insert(tex))
             })
             .collect::<Result<Vec<_>>>()?;
@@ -248,8 +248,8 @@ impl AssetManager {
             })
             .collect();
 
-        let vertex_buffer = VertexBuffer::upload_slice(self.device.clone(), &vertices)?;
-        let index_buffer = IndexBuffer::upload_slice(self.device.clone(), &indices)?;
+        let vertex_buffer = VertexBuffer::upload_slice(&self.device, &vertices)?;
+        let index_buffer = IndexBuffer::upload_slice(&self.device, &indices)?;
 
         Ok(Primitive {
             vertex_buffer,

@@ -1,4 +1,4 @@
-use ash::{khr::swapchain, vk};
+use ash::vk;
 use platform::WindowId;
 
 use crate::{
@@ -8,6 +8,17 @@ use crate::{
         image::SwapchainImage,
     },
 };
+
+/// This holds all the data required to render to the owning window's
+/// swap chain. These are created on window::next_image
+pub struct RenderImage<'a> {
+    pub image: &'a SwapchainImage,
+    pub image_index: u32,
+    pub swapchain: vk::SwapchainKHR,
+
+    pub image_available_semaphore: vk::Semaphore,
+    pub render_finished_semaphore: vk::Semaphore,
+}
 
 /// The renderer's representation of a platform window.
 /// Holds the swapchain, surface & other related state.
@@ -79,19 +90,13 @@ impl Window {
     pub fn surface(&self) -> vk::SurfaceKHR {
         self.surface
     }
-    /// (render_finished_semaphore, image_available_semaphore)
-    pub fn current_semaphores(&self) -> (vk::Semaphore, vk::Semaphore) {
-        self.semaphores[self.semaphore_count]
-    }
-    pub fn next_image(
-        &mut self,
-        swapchain_loader: &swapchain::Device,
-    ) -> Result<(&SwapchainImage, u32)> {
+    pub fn next_image(&mut self) -> Result<RenderImage<'_>> {
         self.semaphore_count = (self.semaphore_count + 1) % self.semaphores.len();
-        let (_, image_available_semaphore) = self.current_semaphores();
+        let (render_finished_semaphore, image_available_semaphore) =
+            self.semaphores[self.semaphore_count];
 
         let (image_index, suboptimal) = unsafe {
-            swapchain_loader.acquire_next_image(
+            self.device.swapchain_loader.acquire_next_image(
                 self.swapchain,
                 u64::MAX,
                 image_available_semaphore,
@@ -103,7 +108,13 @@ impl Window {
             return Err(Error::SuboptimalSurface);
         }
 
-        Ok((&self.images[image_index as usize], image_index))
+        Ok(RenderImage {
+            image: &self.images[image_index as usize],
+            image_index,
+            swapchain: self.swapchain,
+            image_available_semaphore,
+            render_finished_semaphore,
+        })
     }
     pub fn update_swapcahin(
         &mut self,

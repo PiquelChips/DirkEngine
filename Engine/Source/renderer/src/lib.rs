@@ -90,14 +90,7 @@ pub struct Renderer {
     frames: [Frame; MAX_FRAMES_IN_FLIGHT],
     current_frame: Arc<AtomicU64>,
 
-    #[cfg(validation)]
-    debug_utils_loader: debug_utils::Instance,
-    #[cfg(validation)]
-    debug_messenger: vk::DebugUtilsMessengerEXT,
-
     // Events
-    /// TODO: will be used to create listeners for scenes
-    #[allow(unused)]
     event_manager: EventManager,
     window_consumer: events::Consumer<platform::WindowEvent>,
     platform_consumer: events::Consumer<platform::PlatformEvent>,
@@ -214,11 +207,9 @@ impl Renderer {
         let instance = unsafe { entry.create_instance(&instance_create_info, None)? };
 
         #[cfg(validation)]
-        let (debug_utils_loader, debug_messenger) = {
+        let debug_messenger = {
             let loader = debug_utils::Instance::new(&entry, &instance);
-            let messenger =
-                unsafe { loader.create_debug_utils_messenger(&debug_create_info, None)? };
-            (loader, messenger)
+            unsafe { loader.create_debug_utils_messenger(&debug_create_info, None)? }
         };
 
         // this is a temporary surface, it is destroyed very soon
@@ -386,12 +377,14 @@ impl Renderer {
 
         // RENDER DEVICE
         let render_device = RenderDevice::new(
+            entry.clone(),
             instance.clone(),
             device.clone(),
-            surface_loader.clone(),
             physical_device,
             properties,
             current_frame.clone(),
+            #[cfg(validation)]
+            debug_messenger,
             event_manager.clone(),
         )?;
 
@@ -429,19 +422,18 @@ impl Renderer {
                 height: size.height,
             }
         };
+
         Ok(Self {
             entry,
             render_device,
+
             windows: HashMap::new(),
             scenes: HashMap::new(),
             players: HashMap::new(),
             asset_manager,
+
             frames,
             current_frame,
-            #[cfg(validation)]
-            debug_utils_loader,
-            #[cfg(validation)]
-            debug_messenger,
 
             extent,
 
@@ -463,7 +455,7 @@ impl Renderer {
         for event in world_events {
             match event {
                 WorldEvent::Created(id) => {
-                    let scene = Scene::build(self.render_device.clone(), self.extent, id)?;
+                    let scene = Scene::build(&self.render_device, self.extent, id)?;
                     self.scenes.insert(id, scene);
                 }
                 WorldEvent::Destroyed(id) => {
@@ -559,6 +551,7 @@ impl Renderer {
         world: world::WorldId,
         camera: world::Entity,
     ) -> Result<()> {
+        let frame = &self.frames[self.current_frame()];
         let Some(window) = self.windows.get_mut(&window) else {
             return Err(Error::WindowDoesNotExist(window));
         };
@@ -566,12 +559,8 @@ impl Renderer {
             return Err(Error::WorldDoesNotExist(world));
         };
 
-        let (render_finished_semaphore, image_available_semaphore) = window.current_semaphores();
         let size = window.extent();
-        let swapchain = window.swapchain();
-        let (swapchain_img, idx) = window.next_image(&self.render_device.swapchain_loader)?;
-
-        let frame = &self.frames[self.current_frame.load(Ordering::Relaxed) as usize];
+        let render_image = window.next_image()?;
 
         unsafe {
             self.render_device.device.wait_for_fences(
@@ -593,7 +582,7 @@ impl Renderer {
                 .begin_command_buffer(cmd.raw(), &vk::CommandBufferBeginInfo::default())?
         }
 
-        swapchain_img.transition_image_layout(
+        render_image.image.transition_image_layout(
             &cmd,
             vk::ImageLayout::UNDEFINED,
             vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
@@ -603,11 +592,11 @@ impl Renderer {
             &self.asset_manager,
             &cmd,
             size,
-            swapchain_img.view(),
+            render_image.image.view(),
             camera,
         )?;
 
-        swapchain_img.transition_image_layout(
+        render_image.image.transition_image_layout(
             &cmd,
             vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
             vk::ImageLayout::PRESENT_SRC_KHR,
@@ -620,8 +609,12 @@ impl Renderer {
                 &vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
             ))
             .command_buffers(std::slice::from_ref(&cmd))
-            .wait_semaphores(std::slice::from_ref(&image_available_semaphore))
-            .signal_semaphores(std::slice::from_ref(&render_finished_semaphore));
+            .wait_semaphores(std::slice::from_ref(
+                &render_image.image_available_semaphore,
+            ))
+            .signal_semaphores(std::slice::from_ref(
+                &render_image.render_finished_semaphore,
+            ));
 
         unsafe {
             self.render_device.device.queue_submit(
@@ -632,9 +625,11 @@ impl Renderer {
         }
 
         let present_info = vk::PresentInfoKHR::default()
-            .wait_semaphores(std::slice::from_ref(&render_finished_semaphore))
-            .swapchains(std::slice::from_ref(&swapchain))
-            .image_indices(std::slice::from_ref(&idx));
+            .wait_semaphores(std::slice::from_ref(
+                &render_image.render_finished_semaphore,
+            ))
+            .swapchains(std::slice::from_ref(&render_image.swapchain))
+            .image_indices(std::slice::from_ref(&render_image.image_index));
 
         unsafe {
             self.render_device
@@ -784,6 +779,7 @@ impl Renderer {
         let info = vk::ShaderModuleCreateInfo::default().code(code.as_slice());
         Ok(unsafe { device.create_shader_module(&info, None)? })
     }
+    #[inline]
     fn current_frame(&self) -> usize {
         self.current_frame
             .load(std::sync::atomic::Ordering::Relaxed) as usize

@@ -54,7 +54,7 @@ impl Scene {
     /// Builds a [Scene].
     /// Constructs the renderer stuff like command pools, descriptor sets, ... from
     /// the [Renderer].
-    pub fn build(device: RenderDevice, size: vk::Extent2D, world: WorldId) -> Result<Self> {
+    pub fn build(device: &RenderDevice, size: vk::Extent2D, world: WorldId) -> Result<Self> {
         let pool_sizes = [
             vk::DescriptorPoolSize {
                 ty: vk::DescriptorType::UNIFORM_BUFFER,
@@ -89,8 +89,7 @@ impl Scene {
         };
 
         let ubo_size = size_of::<SceneUbo>() as u64;
-        let build_ubo =
-            || UniformBuffer::create(device.clone(), ubo_size, MemoryLocation::CpuToGpu);
+        let build_ubo = || UniformBuffer::create(device, ubo_size, MemoryLocation::CpuToGpu);
         let ubo = [build_ubo()?, build_ubo()?];
 
         let buffer_infos: [vk::DescriptorBufferInfo; MAX_FRAMES_IN_FLIGHT] =
@@ -128,7 +127,7 @@ impl Scene {
             num_samples: device.properties.msaa_samples,
             aspect_flags: vk::ImageAspectFlags::COLOR,
         };
-        let color = Image::create_image(device.clone(), color_info)?;
+        let color = Image::create_image(device, color_info)?;
 
         let depth_info = ImageCreateInfo {
             size,
@@ -140,9 +139,9 @@ impl Scene {
             num_samples: device.properties.msaa_samples,
             aspect_flags: vk::ImageAspectFlags::DEPTH,
         };
-        let depth = Image::create_image(device.clone(), depth_info)?;
+        let depth = Image::create_image(device, depth_info)?;
         let graphics_pipeline =
-            GraphicsPipeline::build(&device, &device.layouts, &device.properties)?;
+            GraphicsPipeline::build(device, &device.layouts, &device.properties)?;
 
         Ok(Self {
             world,
@@ -168,7 +167,7 @@ impl Scene {
                 WorldEvent::Created(..) | WorldEvent::Destroyed(..) => {}
                 WorldEvent::EntitySpawn { world: _, entity } => {
                     self.proxies
-                        .insert(entity, SceneProxy::build(self.device.clone(), self)?);
+                        .insert(entity, SceneProxy::build(&self.device, self)?);
                 }
                 WorldEvent::EntityUpdate { world: _, entity } => {
                     // TODO: asset manager
@@ -348,9 +347,9 @@ struct ProxyUbo {
 }
 
 impl SceneProxy {
-    fn build(device: RenderDevice, scene: &Scene) -> Result<Self> {
+    pub fn build(device: &RenderDevice, scene: &Scene) -> Result<Self> {
         let size = size_of::<ProxyUbo>() as u64;
-        let build_ubo = || UniformBuffer::create(device.clone(), size, MemoryLocation::CpuToGpu);
+        let build_ubo = || UniformBuffer::create(device, size, MemoryLocation::CpuToGpu);
         let ubo = [build_ubo()?, build_ubo()?];
 
         // Allocate scene-level sets (one per frame)

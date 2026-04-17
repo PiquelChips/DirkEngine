@@ -45,7 +45,7 @@ define_buff_type!(Custom, vk::BufferUsageFlags::STORAGE_BUFFER);
 
 impl<Type: BuffType> Buffer<Type> {
     pub fn create_custom(
-        device: RenderDevice,
+        device: &RenderDevice,
         size: vk::DeviceSize,
         usage: vk::BufferUsageFlags,
         location: MemoryLocation,
@@ -73,14 +73,14 @@ impl<Type: BuffType> Buffer<Type> {
         };
 
         Ok(Self {
-            device,
+            device: device.clone(),
             buffer,
             allocation: Some(allocation),
             buffer_type: PhantomData,
         })
     }
     pub fn create(
-        device: RenderDevice,
+        device: &RenderDevice,
         size: vk::DeviceSize,
         location: MemoryLocation,
     ) -> Result<Self> {
@@ -97,11 +97,11 @@ impl<Type: BuffType> Buffer<Type> {
         }
     }
 
-    pub fn upload_slice<T: Copy>(device: RenderDevice, data: &[T]) -> Result<Self> {
+    pub fn upload_slice<T: Copy>(device: &RenderDevice, data: &[T]) -> Result<Self> {
         let size = std::mem::size_of_val(data) as vk::DeviceSize;
 
         let staging_buf = Buffer::create_custom(
-            device.clone(),
+            device,
             size,
             vk::BufferUsageFlags::TRANSFER_SRC,
             MemoryLocation::CpuToGpu,
@@ -120,13 +120,6 @@ impl<Type: BuffType> Buffer<Type> {
         )?;
 
         device_buf.copy(&staging_buf, size)?;
-        // TODO: destroy buffer when it is no longer needed (maybe with VMA)
-        // currently it is destroyed too early, it is still in use
-        // unsafe {
-        //     self.device.destroy_buffer(staging_buf, None);
-        //     self.device.free_memory(staging_mem, None);
-        // }
-
         Ok(device_buf)
     }
 

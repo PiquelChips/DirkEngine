@@ -6,6 +6,8 @@ use std::{
     },
 };
 
+#[cfg(validation)]
+use ash::ext::debug_utils;
 use ash::{
     khr::{surface, swapchain},
     vk,
@@ -49,6 +51,11 @@ pub struct RenderDeviceInner {
 
     pub event_manager: events::EventManager,
 
+    #[cfg(validation)]
+    debug_utils_loader: debug_utils::Instance,
+    #[cfg(validation)]
+    debug_messenger: vk::DebugUtilsMessengerEXT,
+
     allocator: Mutex<Allocator>,
     deletion_queue: Mutex<DeletionQueue>,
     current_frame: Arc<AtomicU64>,
@@ -56,12 +63,13 @@ pub struct RenderDeviceInner {
 
 impl RenderDevice {
     pub fn new(
+        entry: ash::Entry,
         instance: ash::Instance,
         device: ash::Device,
-        surface_loader: surface::Instance,
         physical_device: vk::PhysicalDevice,
         properties: RendererProperties,
         current_frame: Arc<AtomicU64>,
+        #[cfg(validation)] debug_messenger: vk::DebugUtilsMessengerEXT,
         event_manager: events::EventManager,
     ) -> Result<Self> {
         // ALLOCATOR
@@ -144,9 +152,8 @@ impl RenderDevice {
 
         Ok(Self(Arc::new(RenderDeviceInner {
             device,
-            surface_loader,
+            surface_loader: surface::Instance::new(&entry, &instance),
             swapchain_loader,
-            instance,
             physical_device,
             queues,
             transfer_pool,
@@ -160,6 +167,13 @@ impl RenderDevice {
             )),
             current_frame,
             event_manager,
+
+            #[cfg(validation)]
+            debug_utils_loader: debug_utils::Instance::new(&entry, &instance),
+            #[cfg(validation)]
+            debug_messenger,
+
+            instance,
         })))
     }
 
@@ -177,13 +191,13 @@ impl RenderDevice {
     /// Call once per frame from your render loop.
     pub fn flush_deletions(&self) {
         let mut queue = self.deletion_queue.lock();
-        queue.flush(&self, self.current_frame());
+        queue.flush(self, self.current_frame());
     }
 
     /// Call once before shutdown to flush the entire queue
     pub fn flush_all(&self) {
         let mut queue = self.deletion_queue.lock();
-        queue.flush_all(&self);
+        queue.flush_all(self);
     }
 
     pub fn current_frame(&self) -> u64 {
@@ -191,17 +205,16 @@ impl RenderDevice {
     }
 }
 
-impl Drop for RenderDevice {
+impl Drop for RenderDeviceInner {
     fn drop(&mut self) {
         self.layouts.destroy(&self.device);
         self.graphics_pool.destroy();
         self.transfer_pool.destroy();
         unsafe {
             self.device.destroy_device(None);
-            // TODO: destroy debug stuff
-            // #[cfg(validation)]
-            // self.debug_utils_loader
-            //     .destroy_debug_utils_messenger(self.debug_messenger, None);
+            #[cfg(validation)]
+            self.debug_utils_loader
+                .destroy_debug_utils_messenger(self.debug_messenger, None);
 
             self.instance.destroy_instance(None);
         }
@@ -249,7 +262,8 @@ impl DeletionQueue {
     pub fn enqueue(&mut self, garbage: Garbage) {
         self.pending.push(PendingDeletion {
             garbage: Some(garbage),
-            death_frame: self.current_frame.load(Ordering::Relaxed) + self.frames_in_flight as u64,
+            death_frame: self.current_frame.load(Ordering::Relaxed)
+                + 2 * self.frames_in_flight as u64, // wait two frames before destroying
         });
     }
 
