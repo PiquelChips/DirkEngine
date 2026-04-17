@@ -1,5 +1,7 @@
 //! This crate handles all the asset stuff.
 
+mod validation;
+
 use serde::{Deserialize, Serialize};
 
 /// The type that is passed around to access assets.
