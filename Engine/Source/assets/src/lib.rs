@@ -16,7 +16,7 @@ use tracing::debug;
 const ASSETS_PATH: &str = env!("ASSETS_PATH");
 
 /// The type that is passed around to access assets.
-#[derive(Default)]
+#[derive(Default, PartialEq, Eq, Hash)]
 pub struct AssetHandle {
     /// All assets are identified by their path.
     handle: String,
@@ -40,7 +40,7 @@ impl AssetHandle {
 }
 
 /// Every possible asset type.
-#[derive(Default, Clone, Copy, Serialize, Deserialize)]
+#[derive(Default, PartialEq, Eq, Hash, Clone, Copy, Serialize, Deserialize)]
 pub enum AssetType {
     #[default]
     Unknown,
@@ -122,9 +122,15 @@ impl AssetRegistry {
                         relative_path.display()
                     );
 
-                    // TODO: insert
-                    // let content = std::fs::read(&path)?;
-                    // self.assets.insery(DirkAsset { path, content });
+                    let data = std::fs::read(path)?;
+                    let config: AssetConfig = serde_json::from_slice(&data)?;
+                    self.assets.insert(
+                        AssetHandle {
+                            handle: relative_path.display().to_string(),
+                            asset_type: config.meta.asset_type,
+                        },
+                        config,
+                    );
                 }
             }
         }
