@@ -35,7 +35,7 @@ pub struct Platform {
 }
 
 impl Platform {
-    pub fn init(events: &mut events::EventManager) -> Result<Self> {
+    pub fn init(events: &events::EventManager) -> Result<Self> {
         let mut platform = Self {
             handler: PlatformHandler::new(events),
             event_loop: EventLoop::new().expect("failed to create winit event loop"),
