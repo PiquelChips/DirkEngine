@@ -59,6 +59,7 @@ glam = "0.32"
 gltf = "1"
 shaderc = "0.10"
 gpu-allocator = { version = "0.28", default-features = false, features = ["std", "vulkan"] }
+serde = { version = "1", features = ["derive"] }
 
 # Macro dependencies
 syn = "2.0"
