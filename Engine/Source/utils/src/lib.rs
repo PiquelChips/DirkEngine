@@ -4,6 +4,9 @@
 //! many small features, functions and structures.
 
 mod version;
+
+use std::path::PathBuf;
+
 pub use version::*;
 
 /// The up direction used for all world and
@@ -15,3 +18,22 @@ pub const UP_DIRECTION: glam::Vec3 = glam::Vec3::Y;
 /// renderer coordinate calcualtions.
 /// We use Z-forward because that is how Vulkan does it.
 pub const FORWARD_DIRECTION: glam::Vec3 = glam::Vec3::Z;
+
+const ROOT: &str = std::env!("WORKSPACE_ROOT");
+pub fn format_path(base: &PathBuf, path: &PathBuf) -> std::io::Result<PathBuf> {
+    let root = PathBuf::from(ROOT).join(base);
+    Ok(path
+        .canonicalize()?
+        .strip_prefix(std::env!("WORKSPACE_ROOT"))
+        .map_err(|_| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!(
+                    "Path '{}' is not relative to base '{}'",
+                    path.display(),
+                    root.display()
+                ),
+            )
+        })?
+        .to_path_buf())
+}

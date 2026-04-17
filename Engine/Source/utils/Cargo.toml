@@ -9,3 +9,6 @@ version.workspace = true
 [dependencies]
 thiserror.workspace = true
 glam.workspace = true
+
+[build-dependencies]
+build.workspace = true
