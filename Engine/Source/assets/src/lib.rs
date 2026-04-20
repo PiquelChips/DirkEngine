@@ -1,12 +1,16 @@
 //! Asset loading, lifetime management, and registry.
 
 mod errors;
-pub use crate::errors::{Error, Result};
+pub use errors::{Error, Result};
+
+mod events;
+pub use events::AssetUnloaded;
 
 mod validation;
 
 use std::{
     collections::HashMap,
+    fmt::Display,
     path::{Path, PathBuf},
 };
 
@@ -17,12 +21,19 @@ pub(crate) const DIRK_ASSET_EXT: &str = "dirkasset";
 pub(crate) const ASSETS_PATH: &str = env!("ASSETS_PATH");
 
 /// Identifies an asset. Cheap to clone — just two heap strings.
-#[derive(Default, PartialEq, Eq, Hash, Clone)]
+// TODO: should be serialisable for saving & stuff
+#[derive(Default, PartialEq, Eq, Hash, Clone, Debug)]
 pub struct AssetHandle {
     /// All assets are identified by their path.
     handle: String,
     /// Used for internal validation.
     asset_type: AssetType,
+}
+
+impl Display for AssetHandle {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}", self.handle)
+    }
 }
 
 impl AssetHandle {
@@ -39,7 +50,7 @@ impl AssetHandle {
 }
 
 /// Every possible asset type.
-#[derive(Default, PartialEq, Eq, Hash, Clone, Copy, Serialize, Deserialize)]
+#[derive(Default, PartialEq, Eq, Hash, Clone, Copy, Serialize, Deserialize, Debug)]
 pub enum AssetType {
     #[default]
     Unknown,
@@ -67,11 +78,6 @@ struct AssetConfig {
 pub struct ModelConfig {
     /// Path to .gltf
     pub gltf: String,
-}
-
-pub struct Model {
-    pub meta: Metadata,
-    pub config: ModelConfig,
 }
 
 #[derive(Default)]

@@ -15,6 +15,7 @@ parking_lot.workspace = true
 
 utils.workspace = true
 events.workspace = true
+macros.workspace = true
 
 [build-dependencies]
 build.workspace = true
