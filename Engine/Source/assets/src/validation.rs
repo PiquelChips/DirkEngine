@@ -2,9 +2,9 @@ use std::path::PathBuf;
 
 use tracing::warn;
 
-use crate::{ASSETS_PATH, AssetConfig, AssetType, Metadata, ModelConfig};
+use crate::{ASSETS_PATH, AssetType, DirkAsset, Metadata, ModelConfig};
 
-impl AssetConfig {
+impl DirkAsset {
     pub fn validate(&self) -> bool {
         match self.meta.asset_type {
             AssetType::Unknown => {

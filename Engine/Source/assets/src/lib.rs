@@ -77,13 +77,13 @@ pub struct Metadata {
 
 /// Type to be serialised to and from the `.dirkasset` files.
 #[derive(Serialize, Deserialize)]
-struct AssetConfig {
+struct DirkAsset {
     pub meta: Metadata,
     pub model: Option<ModelConfig>,
 }
 
 pub struct AssetRegistry {
-    assets: HashMap<AssetHandle, AssetConfig>,
+    assets: HashMap<AssetHandle, DirkAsset>,
 
     event_manager: EventManager,
     /// Receives drop notifications from every `AssetRef`.
@@ -121,11 +121,6 @@ impl AssetRegistry {
         }
     }
 
-    /// Returns the `ModelConfig` for the given handle, if it exists.
-    pub(crate) fn model_config(&self, handle: &AssetHandle) -> Option<&ModelConfig> {
-        self.assets.get(handle)?.model.as_ref()
-    }
-
     fn load(&mut self, base: &Path, dir: &Path) -> Result<()> {
         for entry in std::fs::read_dir(dir)? {
             let entry = entry?;
@@ -158,7 +153,7 @@ impl AssetRegistry {
                 );
 
                 let data = std::fs::read(path)?;
-                let config: AssetConfig = serde_json::from_slice(&data)?;
+                let config: DirkAsset = serde_json::from_slice(&data)?;
                 self.assets.insert(
                     AssetHandle {
                         handle: relative_path.display().to_string(),
@@ -175,31 +170,31 @@ impl AssetRegistry {
         self.assets.retain(|_, conf| conf.validate());
     }
 
-    // TODO: combine with load_asset function. It should be generic the whole
-    // way to avoid needing to specify asset types in registry itself.
-    pub fn load_model(&self, handle: AssetHandle) -> Result<Handle<ModelData>> {
-        if handle.asset_type() != AssetType::Model {
-            return Err(Error::TypeMismatch(handle.raw().to_owned()));
-        }
-        let config = self
-            .model_config(&handle)
-            .ok_or_else(|| Error::NotFound(handle.raw().to_owned()))?;
+    fn asset_config<T: Asset>(&self, handle: &AssetHandle) -> Option<T::Config<'_>> {
+        let asset = self.assets.get(handle)?;
 
-        self.load_asset::<ModelData>(handle, config)
+        match T::asset_type() {
+            AssetType::Unknown => None,
+            AssetType::Model => asset.model,
+        }
     }
 
     /// Generic core: loads data and wraps it in a [`Handle<T>`].
-    fn load_asset<T: Asset>(
-        &self,
-        asset_handle: AssetHandle,
-        config: &T::Config<'_>,
-    ) -> Result<Handle<T>> {
+    pub fn load_asset<T: Asset>(&self, handle: AssetHandle) -> Result<Handle<T>> {
+        if handle.asset_type() != T::asset_type() {
+            return Err(Error::TypeMismatch(handle.raw().to_owned()));
+        }
+
+        let config = self
+            .asset_config::<T>(&handle)
+            .ok_or_else(|| Error::NotFound(handle.raw().to_owned()))?;
+
         // Clone the dispatcher so this AssetRef has its own sender.
         // Cloning a Dispatcher registers a fresh producer in the EventManager,
         // which is exactly what we want — one producer per live asset.
         Ok(Handle::new(AssetRef::new(
-            asset_handle.clone(),
-            T::load(config, asset_handle)?,
+            handle.clone(),
+            T::load(&config, handle)?,
             self.event_manager.register(),
         )))
     }
