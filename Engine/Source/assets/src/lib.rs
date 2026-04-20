@@ -16,7 +16,6 @@ pub use handle::Handle;
 mod validation;
 
 use ::events::{Consumer, Dispatcher, EventManager};
-use core::{clone::Clone, todo};
 use std::{
     collections::HashMap,
     fmt::Display,
