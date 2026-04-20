@@ -15,6 +15,7 @@ mod tests;
 pub trait Event: Send + Clone + 'static {
     fn debug(&self) -> String;
 }
+pub use macros::Event;
 
 /// Private inner state, held behind the `Arc<Mutex<>>`.
 #[derive(Default)]
