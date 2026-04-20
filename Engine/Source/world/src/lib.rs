@@ -63,12 +63,12 @@ pub type WorldId = u32;
 ///
 /// ```rust
 /// use world::Component;
-/// use macros::Component;
 ///
 /// #[derive(Component)]
 /// struct Health(f32);
 /// ```
 pub trait Component: 'static + Sized {}
+pub use macros::Component;
 
 /// Type-erased storage for a single component type.
 ///
