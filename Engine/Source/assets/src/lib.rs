@@ -101,38 +101,38 @@ impl AssetRegistry {
 
             if metadata.is_dir() {
                 self.load(base, &path)?;
-            } else if metadata.is_file() {
-                if path.extension().and_then(|ext| ext.to_str()) == Some(DIRK_ASSET_EXT) {
-                    let relative_path =
-                        path.strip_prefix(base)
-                            .map(|p| p.to_path_buf())
-                            .map_err(|_| {
-                                std::io::Error::new(
-                                    std::io::ErrorKind::InvalidInput,
-                                    format!(
-                                        "Path '{}' is not relative to base '{}'",
-                                        path.display(),
-                                        base.display()
-                                    ),
-                                )
-                            })?;
+            } else if metadata.is_file()
+                && path.extension().and_then(|ext| ext.to_str()) == Some(DIRK_ASSET_EXT)
+            {
+                let relative_path =
+                    path.strip_prefix(base)
+                        .map(|p| p.to_path_buf())
+                        .map_err(|_| {
+                            std::io::Error::new(
+                                std::io::ErrorKind::InvalidInput,
+                                format!(
+                                    "Path '{}' is not relative to base '{}'",
+                                    path.display(),
+                                    base.display()
+                                ),
+                            )
+                        })?;
 
-                    debug!(
-                        "load asset:\n\tpath: {}\n\trelative: {}",
-                        path.display(),
-                        relative_path.display()
-                    );
+                debug!(
+                    "load asset:\n\tpath: {}\n\trelative: {}",
+                    path.display(),
+                    relative_path.display()
+                );
 
-                    let data = std::fs::read(path)?;
-                    let config: AssetConfig = serde_json::from_slice(&data)?;
-                    self.assets.insert(
-                        AssetHandle {
-                            handle: relative_path.display().to_string(),
-                            asset_type: config.meta.asset_type,
-                        },
-                        config,
-                    );
-                }
+                let data = std::fs::read(path)?;
+                let config: AssetConfig = serde_json::from_slice(&data)?;
+                self.assets.insert(
+                    AssetHandle {
+                        handle: relative_path.display().to_string(),
+                        asset_type: config.meta.asset_type,
+                    },
+                    config,
+                );
             }
         }
 
