@@ -3,19 +3,20 @@
 use std::ptr::NonNull;
 use std::{ffi::c_void, marker::PhantomData};
 
-use ash::{Device, vk};
+use ash::vk;
 use gpu_allocator::{
     MemoryLocation,
     vulkan::{Allocation, AllocationCreateDesc},
 };
 
-use crate::{Renderer, Result};
+use crate::resources::device::Garbage;
+use crate::{Result, resources::device::RenderDevice};
 
 /// An abstraction around the vulkan buffer.
 pub struct Buffer<Type: BuffType = Custom> {
-    device: Device,
+    device: RenderDevice,
     buffer: vk::Buffer,
-    allocation: Allocation,
+    allocation: Option<Allocation>,
     buffer_type: PhantomData<Type>,
 }
 
@@ -44,7 +45,7 @@ define_buff_type!(Custom, vk::BufferUsageFlags::STORAGE_BUFFER);
 
 impl<Type: BuffType> Buffer<Type> {
     pub fn create_custom(
-        renderer: &mut Renderer,
+        device: &RenderDevice,
         size: vk::DeviceSize,
         usage: vk::BufferUsageFlags,
         location: MemoryLocation,
@@ -54,10 +55,10 @@ impl<Type: BuffType> Buffer<Type> {
             .usage(usage)
             .sharing_mode(vk::SharingMode::EXCLUSIVE);
 
-        let buffer = unsafe { renderer.device.create_buffer(&buffer_info, None)? };
-        let requirements = unsafe { renderer.device.get_buffer_memory_requirements(buffer) };
+        let buffer = unsafe { device.device.create_buffer(&buffer_info, None)? };
+        let requirements = unsafe { device.device.get_buffer_memory_requirements(buffer) };
 
-        let allocation = renderer.allocator.allocate(&AllocationCreateDesc {
+        let allocation = device.allocate(&AllocationCreateDesc {
             name: "buffer",
             requirements,
             location,
@@ -66,37 +67,41 @@ impl<Type: BuffType> Buffer<Type> {
         })?;
 
         unsafe {
-            renderer
+            device
                 .device
                 .bind_buffer_memory(buffer, allocation.memory(), allocation.offset())?
         };
 
         Ok(Self {
-            device: renderer.device.clone(),
+            device: device.clone(),
             buffer,
-            allocation,
+            allocation: Some(allocation),
             buffer_type: PhantomData,
         })
     }
     pub fn create(
-        renderer: &mut Renderer,
+        device: &RenderDevice,
         size: vk::DeviceSize,
         location: MemoryLocation,
     ) -> Result<Self> {
-        Buffer::create_custom(renderer, size, Type::get_usage(), location)
+        Buffer::create_custom(device, size, Type::get_usage(), location)
     }
     pub fn buffer(&self) -> vk::Buffer {
         self.buffer
     }
     pub fn mapped(&self) -> Option<NonNull<c_void>> {
-        self.allocation.mapped_ptr()
+        if let Some(allocation) = &self.allocation {
+            allocation.mapped_ptr()
+        } else {
+            None
+        }
     }
 
-    pub fn upload_slice<T: Copy>(renderer: &mut Renderer, data: &[T]) -> Result<Self> {
+    pub fn upload_slice<T: Copy>(device: &RenderDevice, data: &[T]) -> Result<Self> {
         let size = std::mem::size_of_val(data) as vk::DeviceSize;
 
         let staging_buf = Buffer::create_custom(
-            renderer,
+            device,
             size,
             vk::BufferUsageFlags::TRANSFER_SRC,
             MemoryLocation::CpuToGpu,
@@ -108,26 +113,19 @@ impl<Type: BuffType> Buffer<Type> {
         }
 
         let device_buf = Buffer::create_custom(
-            renderer,
+            device,
             size,
             vk::BufferUsageFlags::TRANSFER_DST | Type::get_usage(),
             MemoryLocation::GpuOnly,
         )?;
 
-        device_buf.copy(renderer, &staging_buf, size)?;
-        // TODO: destroy buffer when it is no longer needed (maybe with VMA)
-        // currently it is destroyed too early, it is still in use
-        // unsafe {
-        //     self.device.destroy_buffer(staging_buf, None);
-        //     self.device.free_memory(staging_mem, None);
-        // }
-
+        device_buf.copy(&staging_buf, size)?;
         Ok(device_buf)
     }
 
     /// Copy src into self
-    pub fn copy(&self, renderer: &Renderer, src: &Buffer, size: vk::DeviceSize) -> Result<()> {
-        let cmd = renderer.transfer_pool.begin_single_time()?;
+    pub fn copy(&self, src: &Buffer, size: vk::DeviceSize) -> Result<()> {
+        let cmd = self.device.transfer_pool.begin_single_time()?;
 
         let region = vk::BufferCopy {
             src_offset: 0,
@@ -136,6 +134,7 @@ impl<Type: BuffType> Buffer<Type> {
         };
         unsafe {
             self.device
+                .device
                 .cmd_copy_buffer(cmd.raw(), src.buffer(), self.buffer(), &[region])
         };
 
@@ -146,8 +145,10 @@ impl<Type: BuffType> Buffer<Type> {
 
 impl<Type: BuffType> Drop for Buffer<Type> {
     fn drop(&mut self) {
-        unsafe { self.device.destroy_buffer(self.buffer, None) };
-        // TODO: free the allocation
+        self.device.destroy(Garbage::Buffer(self.buffer));
+        if let Some(alloc) = self.allocation.take() {
+            self.device.destroy(Garbage::Allocation(alloc));
+        }
     }
 }
 

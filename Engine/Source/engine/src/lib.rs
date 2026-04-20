@@ -1,14 +1,13 @@
-mod player;
-
 use std::{collections::HashMap, ffi::CString, str::FromStr, time::Instant};
 
 use anyhow::Context;
 use tracing::info;
-use world::{World, WorldId};
+use world::{
+    World, WorldId,
+    player::{Player, PlayerId},
+};
 
 use logging::Logger;
-
-use crate::player::Player;
 
 /// This is the main struct that holds global engine state.
 pub struct Engine {
@@ -20,13 +19,12 @@ pub struct Engine {
 
     next_world_id: WorldId,
     worlds: HashMap<WorldId, World>,
+    next_player_id: PlayerId,
+    players: HashMap<PlayerId, Player>,
 
     is_requesting_exit: bool,
     exit_error: Option<anyhow::Error>,
     last_tick: Instant,
-
-    /// The main player. Only populated on engine start.
-    player: Option<Player>,
 
     #[allow(unused)]
     logger: Logger,
@@ -43,7 +41,6 @@ impl Engine {
             .context("initialising logger")?;
 
         let event_manager = events::EventManager::new();
-        let exit_consumer = event_manager.subscribe();
 
         let version = utils::Version::from_str(env!("CARGO_PKG_VERSION"))?;
         let name = "DirkEngine";
@@ -63,8 +60,8 @@ impl Engine {
 
         info!("engine initialised");
         Ok(Self {
+            exit_consumer: event_manager.subscribe(),
             event_manager,
-            exit_consumer,
             logger,
 
             platform,
@@ -72,12 +69,12 @@ impl Engine {
 
             next_world_id: 0,
             worlds: HashMap::new(),
+            next_player_id: 0,
+            players: HashMap::new(),
 
             is_requesting_exit: false,
             exit_error: None,
             last_tick: Instant::now(),
-
-            player: None,
         })
     }
     /// Will start the main game/editor. This should be called
@@ -85,9 +82,8 @@ impl Engine {
     pub fn start(&mut self) -> anyhow::Result<()> {
         info!("starting engine");
         let world_id = self.create_test_world();
-        let world = self.worlds.get_mut(&world_id).unwrap();
 
-        self.player = Some(Player::spawn(world));
+        self.spawn_player(world_id);
 
         Ok(())
     }
@@ -115,15 +111,10 @@ impl Engine {
         Ok(!self.is_requesting_exit())
     }
     pub fn render(&mut self) -> anyhow::Result<()> {
-        let Some(ref player) = self.player else {
-            return Ok(());
-        };
-
-        self.renderer.render(
-            player.window().unwrap_or(self.platform.main_window().id()),
-            *player.world(),
-            *player.entity(),
-        )?;
+        for player in self.players.values() {
+            self.renderer
+                .render(player.window(), player.world(), player.entity())?;
+        }
         Ok(())
     }
 
@@ -160,13 +151,40 @@ impl Engine {
         let id = self.next_world_id;
         self.next_world_id += 1;
 
-        let world = World::new(id, &mut self.event_manager);
+        let world = World::new(id, &self.event_manager);
         self.worlds.insert(id, world);
         id
     }
     #[allow(unused)]
     fn destroy_world(&mut self, id: WorldId) {
         self.worlds.remove(&id);
+    }
+
+    fn spawn_player(&mut self, world: WorldId) -> PlayerId {
+        let id = self.next_player_id;
+        self.next_player_id += 1;
+
+        let world = self.worlds.get_mut(&world).unwrap();
+
+        let player = Player::spawn(
+            id,
+            world,
+            self.platform.main_window().id(),
+            &self.event_manager,
+        );
+
+        self.players.insert(id, player);
+        id
+    }
+    #[allow(unused)]
+    fn kill_player(&mut self, id: PlayerId) {
+        let Some(player) = self.players.remove(&id) else {
+            return;
+        };
+        let Some(world) = self.worlds.get_mut(&player.world()) else {
+            return;
+        };
+        player.despawn(world);
     }
 
     fn create_test_world(&mut self) -> WorldId {

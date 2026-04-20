@@ -9,7 +9,7 @@
 
 use crate::World;
 fn new_world(id: u32) -> World {
-    let mut event_manager = events::EventManager::new();
+    let mut event_manager = ::events::EventManager::new();
     World::new(id, &mut event_manager)
 }
 
@@ -480,5 +480,277 @@ mod queries {
         let results = w.query_single::<Transform>();
         assert!(!results.contains(&a));
         assert!(results.contains(&b));
+    }
+}
+
+mod player {
+    use crate::player::*;
+
+    // -----------------------------------------------------------------------
+    // Helpers / stubs
+    // -----------------------------------------------------------------------
+
+    /// Convenience constructor for a full-screen region.
+    fn full_screen() -> PlayerRegion {
+        PlayerRegion::default()
+    }
+
+    /// Left-half region (horizontal split-screen, player 1).
+    fn left_half() -> PlayerRegion {
+        PlayerRegion {
+            offset: glam::vec2(0.0, 0.0),
+            size: glam::vec2(0.5, 1.0),
+        }
+    }
+
+    /// Right-half region (horizontal split-screen, player 2).
+    fn right_half() -> PlayerRegion {
+        PlayerRegion {
+            offset: glam::vec2(0.5, 0.0),
+            size: glam::vec2(0.5, 1.0),
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Unit tests — PlayerRegion::default
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn default_region_covers_full_window() {
+        let region = full_screen();
+        assert_eq!(region.offset, glam::Vec2::ZERO);
+        assert_eq!(region.size, glam::Vec2::ONE);
+    }
+
+    // -----------------------------------------------------------------------
+    // Unit tests — PlayerRegion::contains
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn contains_centre_of_full_screen() {
+        assert!(full_screen().contains(glam::vec2(0.5, 0.5)));
+    }
+
+    #[test]
+    fn contains_top_left_corner_inclusive() {
+        // The top-left corner is the minimum inclusive bound.
+        assert!(full_screen().contains(glam::vec2(0.0, 0.0)));
+    }
+
+    #[test]
+    fn contains_bottom_right_corner_exclusive() {
+        // (1.0, 1.0) is the exclusive upper bound for a full-screen region.
+        assert!(!full_screen().contains(glam::vec2(1.0, 1.0)));
+    }
+
+    #[test]
+    fn contains_splits_boundary_correctly() {
+        // A point exactly on the shared boundary (x = 0.5) belongs to the
+        // right region only (half-open interval semantics).
+        let boundary = glam::vec2(0.5, 0.5);
+        assert!(
+            !left_half().contains(boundary),
+            "left half should exclude x=0.5"
+        );
+        assert!(
+            right_half().contains(boundary),
+            "right half should include x=0.5"
+        );
+    }
+
+    #[test]
+    fn contains_rejects_point_outside_region() {
+        let region = PlayerRegion {
+            offset: glam::vec2(0.1, 0.1),
+            size: glam::vec2(0.3, 0.3),
+        };
+        // Clearly outside on both axes.
+        assert!(!region.contains(glam::vec2(0.9, 0.9)));
+    }
+
+    #[test]
+    fn contains_rejects_negative_coordinates() {
+        assert!(!full_screen().contains(glam::vec2(-0.1, 0.5)));
+        assert!(!full_screen().contains(glam::vec2(0.5, -0.1)));
+    }
+
+    #[test]
+    fn contains_top_edge_inclusive_bottom_exclusive() {
+        let region = PlayerRegion {
+            offset: glam::vec2(0.0, 0.0),
+            size: glam::vec2(1.0, 0.5),
+        };
+        assert!(region.contains(glam::vec2(0.5, 0.0))); // top edge — in
+        assert!(!region.contains(glam::vec2(0.5, 0.5))); // bottom edge — out
+    }
+
+    // -----------------------------------------------------------------------
+    // Unit tests — PlayerRegion::to_local
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn to_local_centre_of_full_screen_maps_to_half_half() {
+        let local = full_screen().to_local(glam::vec2(0.5, 0.5));
+        assert!((local.x - 0.5).abs() < f32::EPSILON);
+        assert!((local.y - 0.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn to_local_origin_of_right_half_maps_to_zero_zero() {
+        // The left edge of the right-half region is at x=0.5 in window space.
+        let local = right_half().to_local(glam::vec2(0.5, 0.0));
+        assert!(local.x.abs() < f32::EPSILON);
+        assert!(local.y.abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn to_local_far_corner_of_right_half_approaches_one_one() {
+        // x=0.999…, y=0.999… in window space should be close to (1, 1) in local.
+        let local = right_half().to_local(glam::vec2(0.9999, 0.9999));
+        assert!(local.x > 0.999 && local.x <= 1.0);
+        assert!(local.y > 0.999 && local.y <= 1.0);
+    }
+
+    #[test]
+    fn to_local_zero_width_region_returns_zero() {
+        let degenerate = PlayerRegion {
+            offset: glam::vec2(0.5, 0.0),
+            size: glam::vec2(0.0, 1.0), // zero width
+        };
+        assert_eq!(degenerate.to_local(glam::vec2(0.5, 0.5)), glam::Vec2::ZERO);
+    }
+
+    #[test]
+    fn to_local_zero_height_region_returns_zero() {
+        let degenerate = PlayerRegion {
+            offset: glam::vec2(0.0, 0.5),
+            size: glam::vec2(1.0, 0.0), // zero height
+        };
+        assert_eq!(degenerate.to_local(glam::vec2(0.5, 0.5)), glam::Vec2::ZERO);
+    }
+
+    #[test]
+    fn to_local_and_contains_are_consistent() {
+        // For any point inside the region, to_local must produce a value in [0,1)².
+        let region = left_half();
+        let points = [
+            glam::vec2(0.0, 0.0),
+            glam::vec2(0.1, 0.9),
+            glam::vec2(0.49, 0.5),
+        ];
+        for p in points {
+            assert!(region.contains(p), "expected {p:?} to be inside left half");
+            let local = region.to_local(p);
+            assert!(
+                local.x >= 0.0 && local.x < 1.0 && local.y >= 0.0 && local.y < 1.0,
+                "to_local({p:?}) = {local:?} is outside [0,1)²"
+            );
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Unit tests — PlayerRegion edge cases
+    // -----------------------------------------------------------------------
+
+    #[test]
+    #[allow(unused)]
+    fn region_clone_is_independent() {
+        let original = left_half();
+        let mut cloned = original.clone();
+        cloned.size = glam::vec2(1.0, 1.0);
+        // Original must be unaffected.
+        assert_eq!(original.size, glam::vec2(0.5, 1.0));
+    }
+}
+
+mod events {
+    use crate::events::*;
+
+    // -----------------------------------------------------------------------
+    // Unit tests — WorldEvent::world()
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn world_event_created_returns_correct_world_id() {
+        let id = 1;
+        assert_eq!(WorldEvent::Created(id).world(), id);
+    }
+
+    #[test]
+    fn world_event_destroyed_returns_correct_world_id() {
+        let id = 2;
+        assert_eq!(WorldEvent::Destroyed(id).world(), id);
+    }
+
+    #[test]
+    fn world_event_entity_spawn_returns_correct_world_id() {
+        let id = 3;
+        let evt = WorldEvent::EntitySpawn {
+            world: id,
+            entity: 0,
+        };
+        assert_eq!(evt.world(), id);
+    }
+
+    #[test]
+    fn world_event_entity_update_returns_correct_world_id() {
+        let id = 4;
+        let evt = WorldEvent::EntityUpdate {
+            world: id,
+            entity: 0,
+        };
+        assert_eq!(evt.world(), id);
+    }
+
+    #[test]
+    fn world_event_entity_despawn_returns_correct_world_id() {
+        let id = 5;
+        let evt = WorldEvent::EntityDespawn {
+            world: id,
+            entity: 0,
+        };
+        assert_eq!(evt.world(), id);
+    }
+
+    #[test]
+    fn world_event_different_ids_do_not_alias() {
+        // Regression: ensure the match arms don't inadvertently return the
+        // same constant regardless of what was stored.
+        assert_ne!(
+            WorldEvent::Created(10).world(),
+            WorldEvent::Created(20).world()
+        );
+    }
+
+    #[test]
+    fn world_event_clone_is_equal_to_original() {
+        let evt = WorldEvent::EntitySpawn {
+            world: 6,
+            entity: 7,
+        };
+        let cloned = evt.clone();
+        assert_eq!(evt.world(), cloned.world());
+    }
+
+    // -----------------------------------------------------------------------
+    // Unit tests — PlayerUpdateType
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn player_update_type_variants_are_distinct() {
+        assert_ne!(PlayerUpdateType::Spawned, PlayerUpdateType::Updated);
+        assert_ne!(PlayerUpdateType::Updated, PlayerUpdateType::Despawned);
+        assert_ne!(PlayerUpdateType::Spawned, PlayerUpdateType::Despawned);
+    }
+
+    #[test]
+    fn player_update_type_clone_equals_original() {
+        for variant in [
+            PlayerUpdateType::Spawned,
+            PlayerUpdateType::Updated,
+            PlayerUpdateType::Despawned,
+        ] {
+            assert_eq!(variant.clone(), variant);
+        }
     }
 }

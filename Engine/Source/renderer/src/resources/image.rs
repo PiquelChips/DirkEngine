@@ -3,17 +3,25 @@
 pub mod layouts;
 pub mod mips;
 
-use ash::{Device, vk};
+use ash::vk;
 use gpu_allocator::{
     MemoryLocation,
     vulkan::{Allocation, AllocationCreateDesc},
 };
 
-use crate::{Renderer, Result, buffer::CustomBuffer, command_pool::CommandBuffer, model::Texture};
+use crate::{
+    Renderer, Result,
+    resources::{
+        buffer::CustomBuffer,
+        command_pool::CommandBuffer,
+        device::{Garbage, RenderDevice},
+        model::Texture,
+    },
+};
 
 /// An abstraction around vulkan windows.
 pub struct Image {
-    device: Device,
+    device: RenderDevice,
     image: vk::Image,
     view: vk::ImageView,
     /// Wether to destroy the image on [Drop]. This is only
@@ -37,7 +45,7 @@ pub struct ImageCreateInfo {
 }
 
 impl Image {
-    pub fn create_image(renderer: &mut Renderer, info: ImageCreateInfo) -> Result<Self> {
+    pub fn create_image(device: &RenderDevice, info: ImageCreateInfo) -> Result<Self> {
         let image_info = vk::ImageCreateInfo::default()
             .image_type(vk::ImageType::TYPE_2D)
             .format(info.format)
@@ -54,10 +62,10 @@ impl Image {
             .sharing_mode(vk::SharingMode::EXCLUSIVE)
             .initial_layout(vk::ImageLayout::UNDEFINED);
 
-        let image = unsafe { renderer.device.create_image(&image_info, None)? };
-        let requirements = unsafe { renderer.device.get_image_memory_requirements(image) };
+        let image = unsafe { device.device.create_image(&image_info, None)? };
+        let requirements = unsafe { device.device.get_image_memory_requirements(image) };
 
-        let allocation = renderer.allocator.allocate(&AllocationCreateDesc {
+        let allocation = device.allocate(&AllocationCreateDesc {
             name: "image",
             requirements,
             location: info.location,
@@ -66,16 +74,16 @@ impl Image {
         })?;
 
         unsafe {
-            renderer
+            device
                 .device
                 .bind_image_memory(image, allocation.memory(), allocation.offset())?
         };
 
         Ok(Self {
-            device: renderer.device.clone(),
+            device: device.clone(),
             image,
             view: Self::create_image_view(
-                renderer,
+                device,
                 image,
                 info.format,
                 info.aspect_flags,
@@ -93,7 +101,7 @@ impl Image {
     }
 
     pub fn upload_texture(
-        renderer: &mut Renderer,
+        device: &RenderDevice,
         tex: &resource_manager::Texture,
     ) -> Result<Texture> {
         let mip_levels = Self::mip_levels(*tex.width(), *tex.height());
@@ -101,7 +109,7 @@ impl Image {
         let format = vk::Format::R8G8B8A8_SRGB;
 
         let staging_buf = CustomBuffer::create_custom(
-            renderer,
+            device,
             size,
             vk::BufferUsageFlags::TRANSFER_SRC,
             MemoryLocation::CpuToGpu,
@@ -128,9 +136,9 @@ impl Image {
             num_samples: vk::SampleCountFlags::TYPE_1,
             aspect_flags: vk::ImageAspectFlags::COLOR,
         };
-        let mut image = Self::create_image(renderer, create_info)?;
+        let mut image = Self::create_image(device, create_info)?;
 
-        let cmd = renderer.graphics_pool.begin_single_time()?;
+        let cmd = device.graphics_pool.begin_single_time()?;
 
         image.transition_image_layout(
             &cmd,
@@ -154,7 +162,7 @@ impl Image {
             });
 
         unsafe {
-            renderer.device.cmd_copy_buffer_to_image(
+            device.device.cmd_copy_buffer_to_image(
                 cmd.raw(),
                 staging_buf.buffer(),
                 image.image(),
@@ -167,33 +175,25 @@ impl Image {
         image.generate_mipmaps(&cmd, *tex.width(), *tex.height(), mip_levels)?;
         cmd.end_and_submit()?;
 
-        // TODO: destroy buffer when it is no longer needed (maybe with VMA)
-        // currently it is destroyed too early, it is still in use
-        // unsafe {
-        //     renderer.device.destroy_buffer(staging_buf, None);
-        //     renderer.device.free_memory(staging_mem, None);
-        // }
-
         image.view = Self::create_image_view(
-            renderer,
+            device,
             image.image(),
             format,
             vk::ImageAspectFlags::COLOR,
             mip_levels,
         )?;
-        let sampler = renderer.create_sampler(mip_levels)?;
+        let sampler = Renderer::create_sampler(device, mip_levels)?;
 
         Ok(Texture {
-            device: renderer.device.clone(),
+            device: device.clone(),
             image,
             sampler,
-            mip_levels,
         })
     }
 
     /// Utility function. Not a member as it is used to create swapchain images
     fn create_image_view(
-        renderer: &Renderer,
+        device: &RenderDevice,
         image: vk::Image,
         format: vk::Format,
         aspect_flags: vk::ImageAspectFlags,
@@ -211,19 +211,19 @@ impl Image {
                 layer_count: 1,
             });
 
-        Ok(unsafe { renderer.device.create_image_view(&create_info, None)? })
+        Ok(unsafe { device.device.create_image_view(&create_info, None)? })
     }
 }
 
 impl Drop for Image {
     fn drop(&mut self) {
-        unsafe {
-            if self.destroy_image {
-                self.device.destroy_image(self.image, None);
-            }
-            self.device.destroy_image_view(self.view, None);
-        };
-        // TODO: free the allocation
+        if self.destroy_image {
+            self.device.destroy(Garbage::Image(self.image));
+        }
+        self.device.destroy(Garbage::ImageView(self.view));
+        if let Some(alloc) = self.allocation.take() {
+            self.device.destroy(Garbage::Allocation(alloc));
+        }
     }
 }
 
@@ -232,13 +232,13 @@ pub struct SwapchainImage {
 }
 
 impl SwapchainImage {
-    pub fn new(renderer: &Renderer, image: vk::Image, format: vk::Format) -> Result<Self> {
+    pub fn new(device: &RenderDevice, image: vk::Image, format: vk::Format) -> Result<Self> {
         Ok(Self {
             image: Image {
-                device: renderer.device.clone(),
+                device: device.clone(),
                 image,
                 view: Image::create_image_view(
-                    renderer,
+                    device,
                     image,
                     format,
                     vk::ImageAspectFlags::COLOR,

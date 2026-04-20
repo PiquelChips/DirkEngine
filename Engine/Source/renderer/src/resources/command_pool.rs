@@ -108,12 +108,6 @@ impl<Type: Pool> CommandPool<Type> {
     }
 }
 
-impl<Type: Pool> Drop for CommandPool<Type> {
-    fn drop(&mut self) {
-        self.destroy();
-    }
-}
-
 /// Wrapper for [vk::CommandBuffer].
 pub struct CommandBuffer {
     device: Device,

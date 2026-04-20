@@ -1,4 +1,9 @@
-use ash::vk;
+use ash::{Device, vk};
+
+use crate::{
+    physical_device,
+    resources::command_pool::{CommandPool, Graphics},
+};
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -42,4 +47,67 @@ impl Vertex {
 
 pub fn make_version(version: utils::Version) -> u32 {
     vk::make_api_version(0, version.major(), version.minor(), version.patch())
+}
+
+pub struct Frame {
+    pub device: Device,
+    /// Command pool to allocate command buffers on every frame
+    pub command_pool: CommandPool<Graphics>,
+    /// Main synchronization fence
+    pub fence: vk::Fence,
+    // TODO: have one primary command buffer that is allocated once and
+    // secondary command for each scene. Should be allocated every time
+    // there is a change in scene count. If not reallocated, reset.
+}
+
+impl Frame {
+    pub fn destroy(&self) {
+        self.command_pool.destroy();
+        unsafe {
+            self.device.destroy_fence(self.fence, None);
+        }
+    }
+}
+
+/// This struct is owned by [Renderer] and stores
+/// all the different descriptor set layouts used by
+/// the renderer.
+/// Every field should be a descriptor set layout with a
+/// propper comment explain what the layout is and where
+/// it is used.
+pub struct DescriptorLayouts {
+    // TODO: much better comments for descriptor set layouts
+    /// Per scene layout. Holds view & proj matrices for rendering.
+    pub scene: vk::DescriptorSetLayout,
+    /// Per object layout. For model matrix.
+    pub object: vk::DescriptorSetLayout,
+    /// Per material layout. For texture descriptor.
+    pub material: vk::DescriptorSetLayout,
+}
+
+impl DescriptorLayouts {
+    pub fn destroy(&self, device: &Device) {
+        unsafe {
+            device.destroy_descriptor_set_layout(self.scene, None);
+            device.destroy_descriptor_set_layout(self.object, None);
+            device.destroy_descriptor_set_layout(self.material, None);
+        }
+    }
+}
+
+pub struct Queues {
+    pub graphics: vk::Queue,
+    pub compute: vk::Queue,
+    pub transfer: vk::Queue,
+    pub present: vk::Queue,
+}
+
+pub struct RendererProperties {
+    pub msaa_samples: vk::SampleCountFlags,
+    #[allow(unused)]
+    pub anisotropy: bool,
+    pub surface_format: vk::SurfaceFormatKHR,
+    pub queue_family_indices: physical_device::QueueFamilyIndices,
+    pub depth_format: vk::Format,
+    pub present_mode: vk::PresentModeKHR,
 }

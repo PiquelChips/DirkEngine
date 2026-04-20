@@ -1286,6 +1286,7 @@ dependencies = [
  "events",
  "glam",
  "gpu-allocator",
+ "parking_lot",
  "pastey",
  "platform",
  "raw-window-handle",
@@ -2374,6 +2375,7 @@ dependencies = [
  "events",
  "glam",
  "macros",
+ "platform",
  "tracing",
  "utils",
 ]

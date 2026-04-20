@@ -1,6 +1,9 @@
 use ash::vk;
 
-use crate::{Result, command_pool::CommandBuffer, image::Image};
+use crate::{
+    Result,
+    resources::{command_pool::CommandBuffer, image::Image},
+};
 
 impl Image {
     pub fn mip_levels(width: u32, height: u32) -> u32 {
@@ -62,7 +65,7 @@ impl Image {
                 ]);
 
             unsafe {
-                self.device.cmd_blit_image(
+                self.device.device.cmd_blit_image(
                     cmd.raw(),
                     self.image(),
                     vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
