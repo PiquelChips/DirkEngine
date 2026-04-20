@@ -1,8 +1,6 @@
-use std::path::PathBuf;
-
 use tracing::warn;
 
-use crate::{ASSETS_PATH, AssetType, DirkAsset, Metadata, ModelConfig};
+use crate::{AssetType, DirkAsset, Metadata, ModelConfig};
 
 impl DirkAsset {
     pub fn validate(&self) -> bool {
@@ -31,8 +29,7 @@ impl DirkAsset {
 
 impl ModelConfig {
     fn validate(&self, meta: &Metadata) -> bool {
-        // TODO: relateiive to asset path not ASSETS_PATH
-        let path = PathBuf::from(ASSETS_PATH).join(&self.gltf);
+        let path = meta.handle.dir().join(&self.gltf);
         if !path.exists() {
             warn!(
                 "asset {}: glTF file not found at '{}'",
