@@ -28,3 +28,5 @@ pub enum AssetType {
 
 /// Marker trait for every asset configuration struct.
 pub trait AssetConfig: Serialize + DeserializeOwned {}
+#[doc(hidden)]
+pub use macros::AssetConfig;
