@@ -26,7 +26,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
-use crate::events::InternalAssetUnloaded;
+use crate::{assets::model::ModelConfig, events::InternalAssetUnloaded};
 
 pub(crate) const DIRK_ASSET_EXT: &str = "dirkasset";
 pub(crate) const ASSETS_PATH: &str = std::env!("ASSETS_PATH");
@@ -80,13 +80,6 @@ pub struct Metadata {
 struct AssetConfig {
     pub meta: Metadata,
     pub model: Option<ModelConfig>,
-}
-
-/// Type to configure a model.
-#[derive(Serialize, Deserialize, Clone)]
-pub struct ModelConfig {
-    /// Path to .gltf. Relative to asset dir
-    pub gltf: String,
 }
 
 pub struct AssetRegistry {

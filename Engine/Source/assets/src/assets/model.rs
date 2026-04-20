@@ -1,6 +1,14 @@
-use crate::{Asset, AssetHandle, AssetType, ModelConfig, Result};
+use crate::{Asset, AssetHandle, AssetType, Result, assets::AssetConfig};
 
-// ── Concrete asset types ─────────────────────────────────────────────────────
+use serde::{Deserialize, Serialize};
+
+/// Type to configure a model.
+#[derive(Serialize, Deserialize, Clone)]
+pub struct ModelConfig {
+    /// Path to .gltf. Relative to asset dir
+    pub gltf: String,
+}
+impl AssetConfig<'_> for ModelConfig {}
 
 /// Raw glTF bytes for a model asset. The renderer is responsible for
 /// uploading this to the GPU after calling [`Handle::consume`].

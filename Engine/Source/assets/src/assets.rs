@@ -25,3 +25,6 @@ pub enum AssetType {
     Unknown,
     Model,
 }
+
+/// Marker trait for every asset configuration struct.
+pub trait AssetConfig<'a>: Serialize + Deserialize<'a> {}
