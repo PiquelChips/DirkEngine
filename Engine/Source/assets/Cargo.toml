@@ -11,8 +11,10 @@ thiserror.workspace = true
 tracing.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+parking_lot.workspace = true
 
 utils.workspace = true
+events.workspace = true
 
 [build-dependencies]
 build.workspace = true
