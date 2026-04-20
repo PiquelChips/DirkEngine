@@ -1,3 +1,6 @@
+//! This module has the main [`Asset`] trait and is the parent
+//! of all asset types declared in this crate.
+
 use serde::{Deserialize, Serialize};
 
 pub mod model;
