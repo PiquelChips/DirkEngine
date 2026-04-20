@@ -1,4 +1,4 @@
-//! This crate handles all the asset stuff.
+//! Asset loading, lifetime management, and registry.
 
 mod errors;
 pub use crate::errors::{Error, Result};
@@ -13,11 +13,11 @@ use std::{
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
-const DIRK_ASSET_EXT: &str = "dirkasset";
-const ASSETS_PATH: &str = env!("ASSETS_PATH");
+pub(crate) const DIRK_ASSET_EXT: &str = "dirkasset";
+pub(crate) const ASSETS_PATH: &str = env!("ASSETS_PATH");
 
-/// The type that is passed around to access assets.
-#[derive(Default, PartialEq, Eq, Hash)]
+/// Identifies an asset. Cheap to clone — just two heap strings.
+#[derive(Default, PartialEq, Eq, Hash, Clone)]
 pub struct AssetHandle {
     /// All assets are identified by their path.
     handle: String,
@@ -26,9 +26,6 @@ pub struct AssetHandle {
 }
 
 impl AssetHandle {
-    pub fn new() -> Self {
-        todo!()
-    }
     // TODO: name function that gets just the name of the file (not ext)
     pub fn path(&self) -> String {
         format!("{ASSETS_PATH}/{}", self.handle)
@@ -66,7 +63,7 @@ struct AssetConfig {
 }
 
 /// Type to configure a model.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct ModelConfig {
     /// Path to .gltf
     pub gltf: String,
@@ -93,7 +90,11 @@ impl AssetRegistry {
         Ok(registry)
     }
 
-    /// Will recursively load assets from a specific dir.
+    /// Returns the `ModelConfig` for the given handle, if it exists.
+    pub(crate) fn model_config(&self, handle: &AssetHandle) -> Option<&ModelConfig> {
+        self.assets.get(handle)?.model.as_ref()
+    }
+
     fn load(&mut self, base: &Path, dir: &Path) -> Result<()> {
         for entry in std::fs::read_dir(dir)? {
             let entry = entry?;
@@ -103,7 +104,7 @@ impl AssetRegistry {
             if metadata.is_dir() {
                 self.load(base, &path)?;
             } else if metadata.is_file()
-                && path.extension().and_then(|ext| ext.to_str()) == Some(DIRK_ASSET_EXT)
+                && path.extension().and_then(|e| e.to_str()) == Some(DIRK_ASSET_EXT)
             {
                 let relative_path =
                     path.strip_prefix(base)
@@ -112,7 +113,7 @@ impl AssetRegistry {
                             std::io::Error::new(
                                 std::io::ErrorKind::InvalidInput,
                                 format!(
-                                    "Path '{}' is not relative to base '{}'",
+                                    "path '{}' is not relative to base '{}'",
                                     path.display(),
                                     base.display()
                                 ),
@@ -136,7 +137,6 @@ impl AssetRegistry {
                 );
             }
         }
-
         Ok(())
     }
 
