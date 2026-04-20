@@ -5,10 +5,8 @@ use macros::Event;
 /// Fired internally when the last [`Handle`] to an asset is dropped.
 /// The [`AssetManager`] listens for this, cleans up, then fires [`AssetUnloaded`].
 #[derive(Event, Clone, Debug)]
-#[event("unload asset {handle}")]
-pub(crate) struct InternalAssetUnloaded {
-    pub handle: AssetHandle,
-}
+#[event("unload asset {0}")]
+pub(crate) struct InternalAssetUnloaded(pub AssetHandle);
 
 /// Public event dispatched by [`AssetManager`] when an asset has been fully
 /// unloaded. The renderer (or any other system) should use this to clean up

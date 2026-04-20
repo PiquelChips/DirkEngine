@@ -6,6 +6,9 @@ pub use errors::{Error, Result};
 mod events;
 pub use events::AssetUnloaded;
 
+mod handle;
+pub use handle::Handle;
+
 mod validation;
 
 use std::{
