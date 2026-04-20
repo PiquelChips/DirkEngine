@@ -6,7 +6,7 @@ pub use errors::{Error, Result};
 mod events;
 pub use events::AssetUnloaded;
 
-mod assets;
+pub mod assets;
 pub use assets::{Asset, AssetType};
 
 mod handle;
@@ -179,6 +179,7 @@ impl AssetRegistry {
     fn asset_config<T: Asset>(&self, handle: &AssetHandle) -> Option<T::Config> {
         let asset = self.assets.get(handle)?;
 
+        // TODO: look for a better way to do this without weird type workarounds
         let raw = match T::asset_type() {
             AssetType::Unknown => return None,
             AssetType::Model => serde_json::to_value(asset.model.as_ref()?).ok()?,
