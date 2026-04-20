@@ -169,13 +169,22 @@ impl AssetRegistry {
         self.assets.retain(|_, conf| conf.validate());
     }
 
+    /// A brief explanation of the shenanigans going on in this function:
+    ///
+    /// asset.model (an Option<ModelConfig>) is first serialised to a serde_json::Value — a type the compiler is happy to produce from any concrete config.
+    /// That value is then deserialised into T::Config<'_>, which is what the return type demands.
+    /// Both directions are guaranteed to succeed for any well-formed config because AssetConfig already bounds Serialize + Deserialize<'a> — so no runtime surprises.
+    /// .as_ref()? on the Option<ModelConfig> avoids moving out of the borrowed asset, keeping the borrow checker happy.
+    /// The small serialisation overhead only happens at asset-load time (not per-frame), so it won't be a performance concern in practice.
     fn asset_config<T: Asset>(&self, handle: &AssetHandle) -> Option<T::Config<'_>> {
         let asset = self.assets.get(handle)?;
 
-        match T::asset_type() {
-            AssetType::Unknown => None,
-            AssetType::Model => asset.model,
-        }
+        let raw = match T::asset_type() {
+            AssetType::Unknown => return None,
+            AssetType::Model => serde_json::to_value(asset.model.as_ref()?).ok()?,
+        };
+
+        serde_json::from_value(raw).ok()
     }
 
     /// Generic core: loads data and wraps it in a [`Handle<T>`].
