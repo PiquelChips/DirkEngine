@@ -192,7 +192,7 @@ impl AssetRegistry {
     fn load_asset<T: Asset>(
         &self,
         asset_handle: AssetHandle,
-        config: &T::Config,
+        config: &T::Config<'_>,
     ) -> Result<Handle<T>> {
         // Clone the dispatcher so this AssetRef has its own sender.
         // Cloning a Dispatcher registers a fresh producer in the EventManager,

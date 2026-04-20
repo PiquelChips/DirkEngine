@@ -19,9 +19,9 @@ pub struct ModelData {
 }
 
 impl Asset for ModelData {
-    type Config = ModelConfig;
+    type Config<'a> = ModelConfig;
 
-    fn load(config: &Self::Config, handle: AssetHandle) -> Result<Self> {
+    fn load(config: &Self::Config<'_>, handle: AssetHandle) -> Result<Self> {
         let path = handle.dir().join(&config.gltf);
         // TODO: actually load import glTF file using the glTF library
         let gltf_bytes = std::fs::read(path)?;
