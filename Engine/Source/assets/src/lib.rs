@@ -176,7 +176,7 @@ impl AssetRegistry {
     /// Both directions are guaranteed to succeed for any well-formed config because AssetConfig already bounds Serialize + Deserialize<'a> — so no runtime surprises.
     /// .as_ref()? on the Option<ModelConfig> avoids moving out of the borrowed asset, keeping the borrow checker happy.
     /// The small serialisation overhead only happens at asset-load time (not per-frame), so it won't be a performance concern in practice.
-    fn asset_config<T: Asset>(&self, handle: &AssetHandle) -> Option<T::Config<'_>> {
+    fn asset_config<T: Asset>(&self, handle: &AssetHandle) -> Option<T::Config> {
         let asset = self.assets.get(handle)?;
 
         let raw = match T::asset_type() {

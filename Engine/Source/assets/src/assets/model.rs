@@ -8,7 +8,7 @@ pub struct ModelConfig {
     /// Path to .gltf. Relative to asset dir
     pub gltf: String,
 }
-impl AssetConfig<'_> for ModelConfig {}
+impl AssetConfig for ModelConfig {}
 
 /// Raw glTF bytes for a model asset. The renderer is responsible for
 /// uploading this to the GPU after calling [`Handle::consume`].
@@ -19,9 +19,9 @@ pub struct ModelData {
 }
 
 impl Asset for ModelData {
-    type Config<'a> = ModelConfig;
+    type Config = ModelConfig;
 
-    fn load(config: &Self::Config<'_>, handle: AssetHandle) -> Result<Self> {
+    fn load(config: &Self::Config, handle: AssetHandle) -> Result<Self> {
         let path = handle.dir().join(&config.gltf);
         // TODO: actually load import glTF file using the glTF library
         let gltf_bytes = std::fs::read(path)?;

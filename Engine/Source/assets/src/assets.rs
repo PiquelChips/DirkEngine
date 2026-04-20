@@ -1,7 +1,7 @@
 //! This module has the main [`Asset`] trait and is the parent
 //! of all asset types declared in this crate.
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 pub mod model;
 
@@ -10,10 +10,10 @@ use crate::{AssetHandle, Result};
 /// Implemented by every concrete asset data type.
 pub trait Asset: Clone + Sized + Send + 'static {
     /// The config section from the `.dirkasset` file for this type.
-    type Config<'a>: AssetConfig<'a>;
+    type Config: AssetConfig;
 
     /// Fully loads the asset into memory from disk.
-    fn load(config: &Self::Config<'_>, handle: AssetHandle) -> Result<Self>;
+    fn load(config: &Self::Config, handle: AssetHandle) -> Result<Self>;
     /// Get what kind of asset this is
     fn asset_type() -> AssetType;
 }
@@ -27,4 +27,4 @@ pub enum AssetType {
 }
 
 /// Marker trait for every asset configuration struct.
-pub trait AssetConfig<'a>: Serialize + Deserialize<'a> {}
+pub trait AssetConfig: Serialize + DeserializeOwned {}
