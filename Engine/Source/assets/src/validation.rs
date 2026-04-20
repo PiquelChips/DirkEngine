@@ -1,13 +1,15 @@
+use std::path::PathBuf;
+
 use tracing::warn;
 
-use crate::{AssetConfig, AssetType, Metadata, ModelConfig};
+use crate::{ASSETS_PATH, AssetConfig, AssetType, Metadata, ModelConfig};
 
 impl AssetConfig {
     pub fn validate(&self) -> bool {
         match self.meta.asset_type {
             AssetType::Unknown => {
                 warn!(
-                    "asset {} can not be of type Unknown, please specify an asset_type",
+                    "asset {} cannot be of type Unknown, please specify an asset_type",
                     self.meta.handle.raw()
                 );
                 false
@@ -17,7 +19,7 @@ impl AssetConfig {
                     model_config.validate(&self.meta)
                 } else {
                     warn!(
-                        "asset {} must specify a model configuration if it is of type model",
+                        "asset {} must specify a [model] section when asset_type = Model",
                         self.meta.handle.raw()
                     );
                     false
@@ -28,7 +30,17 @@ impl AssetConfig {
 }
 
 impl ModelConfig {
-    fn validate(&self, _meta: &Metadata) -> bool {
-        todo!("check if ModelConfig's glTF file actually exists")
+    fn validate(&self, meta: &Metadata) -> bool {
+        // TODO: relateiive to asset path not ASSETS_PATH
+        let path = PathBuf::from(ASSETS_PATH).join(&self.gltf);
+        if !path.exists() {
+            warn!(
+                "asset {}: glTF file not found at '{}'",
+                meta.handle.raw(),
+                path.display()
+            );
+            return false;
+        }
+        true
     }
 }
