@@ -29,6 +29,7 @@ impl AssetHandle {
     pub fn new() -> Self {
         todo!()
     }
+    // TODO: name function that gets just the name of the file (not ext)
     pub fn path(&self) -> String {
         format!("{ASSETS_PATH}/{}", self.handle)
     }
