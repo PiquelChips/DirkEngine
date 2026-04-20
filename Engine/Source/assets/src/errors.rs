@@ -14,4 +14,6 @@ pub enum Error {
     NotFound(String),
     #[error("asset {0} has wrong type for the requested load")]
     TypeMismatch(String),
+    #[error("Asset load error: {0}")]
+    AssetLoadError(#[source] anyhow::Error),
 }
