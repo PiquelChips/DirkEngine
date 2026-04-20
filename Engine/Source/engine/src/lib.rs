@@ -48,7 +48,7 @@ impl Engine {
 
         let event_manager = events::EventManager::new();
         let asset_registry =
-            assets::AssetRegistry::init().context("initialising asset registry")?;
+            assets::AssetRegistry::init(&event_manager).context("initialising asset registry")?;
 
         let version = utils::Version::from_str(env!("CARGO_PKG_VERSION"))?;
         let name = "DirkEngine";

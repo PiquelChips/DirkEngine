@@ -16,7 +16,7 @@ pub use handle::Handle;
 mod validation;
 
 use ::events::{Consumer, Dispatcher, EventManager};
-use core::todo;
+use core::{clone::Clone, todo};
 use std::{
     collections::HashMap,
     fmt::Display,
@@ -100,13 +100,13 @@ pub struct AssetRegistry {
 }
 
 impl AssetRegistry {
-    pub fn init(event_manager: EventManager) -> Result<Self> {
+    pub fn init(event_manager: &EventManager) -> Result<Self> {
         let mut registry = Self {
             assets: HashMap::new(),
 
             unload_dispatcher: event_manager.register(),
             internal_unload_consumer: event_manager.subscribe(),
-            event_manager,
+            event_manager: event_manager.clone(),
         };
 
         let assets_path = PathBuf::from(ASSETS_PATH).canonicalize()?;
