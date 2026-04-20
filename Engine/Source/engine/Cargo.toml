@@ -22,3 +22,6 @@ resource_manager.workspace = true
 assets.workspace = true
 
 glam.workspace = true
+
+[build-dependencies]
+build.workspace = true

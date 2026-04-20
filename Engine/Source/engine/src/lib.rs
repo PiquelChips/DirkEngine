@@ -35,7 +35,11 @@ pub struct Engine {
 impl Engine {
     /// Constructs and initialises the gine
     pub fn init() -> anyhow::Result<Self> {
+        #[cfg(editor)]
+        info!("starting editor");
+
         info!("initialising engine");
+
         let logger = logging::Logger::new()
             .write_fs(true)
             .max_level(logging::LogLevel::Debug)
