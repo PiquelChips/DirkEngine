@@ -1,6 +1,8 @@
-use crate::{Asset, AssetHandle, AssetType, Result, assets::AssetConfig};
+use crate::{Asset, AssetHandle, AssetType, Error, Result, assets::AssetConfig};
 
 use serde::{Deserialize, Serialize};
+
+use anyhow::Context;
 
 /// Type to configure a model.
 #[derive(Serialize, Deserialize, Clone, AssetConfig)]
@@ -14,7 +16,9 @@ pub struct ModelConfig {
 // TODO: properly import the glTF file and attach all the data to this function
 #[derive(Clone)]
 pub struct ModelData {
-    pub gltf_bytes: Vec<u8>,
+    pub gltf: gltf::Document,
+    pub images: Vec<gltf::image::Data>,
+    pub buffers: Vec<gltf::buffer::Data>,
 }
 
 impl Asset for ModelData {
@@ -22,9 +26,15 @@ impl Asset for ModelData {
 
     fn load(config: &Self::Config, handle: AssetHandle) -> Result<Self> {
         let path = handle.dir().join(&config.gltf);
-        // TODO: actually load import glTF file using the glTF library
-        let gltf_bytes = std::fs::read(path)?;
-        Ok(Self { gltf_bytes })
+        let (gltf, buffers, images) = gltf::import(path)
+            .context("loading glTF model")
+            .map_err(|err| Error::AssetLoadError(err))?;
+
+        Ok(Self {
+            gltf,
+            buffers,
+            images,
+        })
     }
     fn asset_type() -> AssetType {
         AssetType::Model

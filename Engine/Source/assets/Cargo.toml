@@ -18,5 +18,7 @@ utils.workspace = true
 events.workspace = true
 macros.workspace = true
 
+gltf.workspace = true
+
 [build-dependencies]
 build.workspace = true
