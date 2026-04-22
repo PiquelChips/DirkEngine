@@ -1,6 +1,5 @@
 use crate::{Asset, AssetHandle, Handle};
 use events::Event;
-use macros::Event;
 
 /// Fired internally when the last [`Handle`] to an asset is dropped.
 /// The [`AssetManager`] listens for this, cleans up, then fires [`AssetUnloaded`].
