@@ -68,6 +68,7 @@ pub type WorldId = u32;
 /// struct Health(f32);
 /// ```
 pub trait Component: 'static + Sized {}
+#[doc(hidden)]
 pub use macros::Component;
 
 /// Type-erased storage for a single component type.
