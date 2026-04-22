@@ -5,7 +5,6 @@
 //! simulations, and concurrency safety.
 
 use events::{Consumer, Dispatcher, Event, EventManager};
-use macros::Event;
 use std::thread;
 
 // =============================================================================
