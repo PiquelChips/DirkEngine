@@ -1145,7 +1145,6 @@ dependencies = [
  "anyhow",
  "build",
  "events",
- "macros",
  "thiserror 2.0.18",
  "tracing",
  "winit",

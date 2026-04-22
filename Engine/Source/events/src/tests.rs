@@ -9,8 +9,6 @@
 
 #![cfg(test)]
 
-use macros::Event;
-
 use crate::{Consumer, Dispatcher, Event, EventManager};
 
 // =========================================================================
