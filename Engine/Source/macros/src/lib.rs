@@ -19,6 +19,9 @@ pub fn derive_event(input: TokenStream) -> TokenStream {
 
 fn derive_event_enum(input: &DeriveInput, data: &DataEnum) -> proc_macro::TokenStream {
     let name = &input.ident;
+    // Split generics into the three parts needed for an impl block:
+    // <T: Any>  |  <T>  |  where T: Any
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
     // Generate the match arms for a "message" method
     let arms = data.variants.iter().map(|variant| {
@@ -59,13 +62,12 @@ fn derive_event_enum(input: &DeriveInput, data: &DataEnum) -> proc_macro::TokenS
     };
 
     if data.variants.is_empty() {
-        content = quote! {
-            format!("{self:?}")
-        }
+        content = quote! { format!("{self:?}") }
     }
 
     let expanded = quote! {
-        impl Event for #name {
+        // Add #impl_generics after `impl`, and #ty_generics after the type name.
+        impl #impl_generics Event for #name #ty_generics #where_clause {
             fn debug(&self) -> String {
                 #content
             }
@@ -77,6 +79,7 @@ fn derive_event_enum(input: &DeriveInput, data: &DataEnum) -> proc_macro::TokenS
 
 fn derive_event_struct(input: &DeriveInput, data: &DataStruct) -> proc_macro::TokenStream {
     let name = &input.ident;
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
     // Look for #[event("foo")]
     let message_format = get_message_format_from_attrs(&input.attrs); // Default message
@@ -108,7 +111,7 @@ fn derive_event_struct(input: &DeriveInput, data: &DataStruct) -> proc_macro::To
 
     // Build the output
     let expanded = quote! {
-        impl Event for #name {
+        impl #impl_generics Event for #name #ty_generics #where_clause {
             fn debug(&self) -> String {
                 #content
             }
@@ -157,9 +160,12 @@ fn get_idents_for_unnamed(format: &str, fields: &FieldsUnnamed) -> (String, Vec<
 pub fn derive_component(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = input.ident;
+    // Split generics into the three parts needed for an impl block:
+    // <T: Any>  |  <T>  |  where T: Any
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
     let expanded = quote! {
-        impl Component for #name {}
+        impl #impl_generics Component for #name #ty_generics #where_clause {}
     };
 
     TokenStream::from(expanded)
