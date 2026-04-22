@@ -3,10 +3,9 @@
 //! No actual engine systems live in this crate. It just has
 //! many small features, functions and structures.
 
-mod version;
-
 use std::path::{Path, PathBuf};
 
+mod version;
 pub use version::*;
 
 /// The up direction used for all world and
