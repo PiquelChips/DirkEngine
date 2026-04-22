@@ -3,13 +3,13 @@ use std::sync::Arc;
 use events::Dispatcher;
 use parking_lot::Mutex;
 
-use crate::{AssetHandle, Error, Result, events::InternalAssetUnloaded};
+use crate::{Asset, AssetHandle, Error, Result, events::InternalAssetUnloaded};
 
 /// Private inner state. Holds the asset data and fires the unload event on drop.
 ///
 /// Wrapped in `Arc<Mutex<>>` so that all [`Handle<T>`] clones share it —
 /// the unload event is fired only when the *last* handle is dropped.
-pub(crate) struct AssetRef<T> {
+pub(crate) struct AssetRef<T: Asset> {
     pub(crate) asset_handle: AssetHandle,
     /// `None` after `consume()` is called in a release build.
     data: Option<T>,
@@ -18,7 +18,7 @@ pub(crate) struct AssetRef<T> {
     unload_dispatcher: Dispatcher<InternalAssetUnloaded>,
 }
 
-impl<T> AssetRef<T> {
+impl<T: Asset> AssetRef<T> {
     pub(crate) fn new(
         asset_handle: AssetHandle,
         data: T,
@@ -32,7 +32,7 @@ impl<T> AssetRef<T> {
     }
 }
 
-impl<T> Drop for AssetRef<T> {
+impl<T: Asset> Drop for AssetRef<T> {
     fn drop(&mut self) {
         // The last Handle<T> has been dropped. Signal the AssetManager so it
         // can dispatch the public AssetUnloaded event to e.g. the renderer.
@@ -43,9 +43,9 @@ impl<T> Drop for AssetRef<T> {
 
 /// A reference-counted, cheaply-cloneable public handle to a loaded asset.
 #[derive(Clone)]
-pub struct Handle<T>(Arc<Mutex<AssetRef<T>>>);
+pub struct Handle<T: Asset>(Arc<Mutex<AssetRef<T>>>);
 
-impl<T: Clone> Handle<T> {
+impl<T: Asset> Handle<T> {
     pub(crate) fn new(asset_ref: AssetRef<T>) -> Self {
         Self(Arc::new(Mutex::new(asset_ref)))
     }
@@ -68,7 +68,7 @@ impl<T: Clone> Handle<T> {
     }
 }
 
-impl<T> std::fmt::Debug for Handle<T> {
+impl<T: Asset> std::fmt::Debug for Handle<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Handle")
             .field("asset", &self.0.lock().asset_handle.raw())

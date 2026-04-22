@@ -17,6 +17,7 @@ mod validation;
 
 use ::events::{Consumer, Dispatcher, EventManager};
 use std::{
+    any::{Any, TypeId},
     collections::HashMap,
     fmt::Display,
     path::{Path, PathBuf},
@@ -25,7 +26,10 @@ use std::{
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
-use crate::{assets::model::ModelConfig, events::InternalAssetUnloaded};
+use crate::{
+    assets::model::ModelConfig,
+    events::{AssetLoaded, InternalAssetUnloaded},
+};
 
 pub(crate) const DIRK_ASSET_EXT: &str = "dirkasset";
 pub(crate) const ASSETS_PATH: &str = std::env!("ASSETS_PATH");
@@ -89,6 +93,8 @@ pub struct AssetRegistry {
     internal_unload_consumer: Consumer<InternalAssetUnloaded>,
     /// Public event — subscribe to this to know when to clean up GPU resources.
     unload_dispatcher: Dispatcher<AssetUnloaded>,
+    /// Dispatchers for the different load event types
+    load_dispatchers: HashMap<TypeId, Box<dyn Any>>,
 }
 
 impl AssetRegistry {
@@ -99,6 +105,8 @@ impl AssetRegistry {
             unload_dispatcher: event_manager.register(),
             internal_unload_consumer: event_manager.subscribe(),
             event_manager: event_manager.clone(),
+
+            load_dispatchers: HashMap::new(),
         };
 
         let assets_path = PathBuf::from(ASSETS_PATH).canonicalize()?;
@@ -189,7 +197,8 @@ impl AssetRegistry {
     }
 
     /// Generic core: loads data and wraps it in a [`Handle<T>`].
-    pub fn load_asset<T: Asset>(&self, handle: AssetHandle) -> Result<Handle<T>> {
+    pub fn load_asset<T: Asset>(&mut self, handle: AssetHandle) -> Result<Handle<T>> {
+        let type_id = TypeId::of::<T>();
         if handle.asset_type() != T::asset_type() {
             return Err(Error::TypeMismatch(handle.raw().to_owned()));
         }
@@ -198,15 +207,27 @@ impl AssetRegistry {
             .asset_config::<T>(&handle)
             .ok_or_else(|| Error::NotFound(handle.raw().to_owned()))?;
 
-        // TODO: find a way to broadcast the handle
-
         // Clone the dispatcher so this AssetRef has its own sender.
         // Cloning a Dispatcher registers a fresh producer in the EventManager,
         // which is exactly what we want — one producer per live asset.
-        Ok(Handle::new(AssetRef::new(
+        let handle = Handle::new(AssetRef::new(
             handle.clone(),
             T::load(&config, handle)?,
             self.event_manager.register(),
-        )))
+        ));
+
+        let dispatcher = self
+            .load_dispatchers
+            .entry(type_id)
+            .or_insert(Box::new(self.event_manager.register::<AssetLoaded<T>>()))
+            .downcast_ref::<Dispatcher<AssetLoaded<T>>>()
+            // we unwrap as this should never cause an error
+            .expect("dispatcher should be of type Dispatcher<AssetLoaded<T>>");
+
+        dispatcher.dispatch(AssetLoaded {
+            handle: handle.clone(),
+        });
+
+        Ok(handle)
     }
 }

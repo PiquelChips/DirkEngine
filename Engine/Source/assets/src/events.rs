@@ -1,4 +1,4 @@
-use crate::AssetHandle;
+use crate::{Asset, AssetHandle, Handle};
 use events::Event;
 use macros::Event;
 
@@ -15,4 +15,13 @@ pub(crate) struct InternalAssetUnloaded(pub AssetHandle);
 #[event("asset {handle} unloaded")]
 pub struct AssetUnloaded {
     pub handle: AssetHandle,
+}
+
+/// Public event dispatched by [`AssetManager`] when an asset has been fully
+/// unloaded. The renderer (or any other system) should use this to clean up
+/// GPU-side resources.
+#[derive(Event, Clone, Debug)]
+#[event("asset {handle:?} unloaded")]
+pub struct AssetLoaded<T: Asset> {
+    pub handle: Handle<T>,
 }
