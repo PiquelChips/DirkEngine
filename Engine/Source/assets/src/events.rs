@@ -8,19 +8,19 @@ use events::Event;
 pub(crate) struct InternalAssetUnloaded(pub AssetHandle);
 
 /// Public event dispatched by [`AssetManager`] when an asset has been fully
-/// unloaded. The renderer (or any other system) should use this to clean up
+/// loaded. The renderer (or any other system) should use this to create
 /// GPU-side resources.
 #[derive(Event, Clone, Debug)]
-#[event("asset {handle} unloaded")]
-pub struct AssetUnloaded {
-    pub handle: AssetHandle,
+#[event("asset {handle:?} unloaded")]
+pub struct AssetLoaded<T: Asset> {
+    pub handle: Handle<T>,
 }
 
 /// Public event dispatched by [`AssetManager`] when an asset has been fully
 /// unloaded. The renderer (or any other system) should use this to clean up
 /// GPU-side resources.
 #[derive(Event, Clone, Debug)]
-#[event("asset {handle:?} unloaded")]
-pub struct AssetLoaded<T: Asset> {
-    pub handle: Handle<T>,
+#[event("asset {handle} unloaded")]
+pub struct AssetUnloaded {
+    pub handle: AssetHandle,
 }
