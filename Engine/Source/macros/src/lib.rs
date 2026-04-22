@@ -20,7 +20,7 @@ pub fn derive_event(input: TokenStream) -> TokenStream {
 fn derive_event_enum(input: &DeriveInput, data: &DataEnum) -> proc_macro::TokenStream {
     let name = &input.ident;
     // Split generics into the three parts needed for an impl block:
-    // <T: Asset>  |  <T>  |  where T: Asset
+    // <T: Any>  |  <T>  |  where T: Any
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
     // Generate the match arms for a "message" method

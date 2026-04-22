@@ -13,7 +13,6 @@ pub struct ModelConfig {
 
 /// Raw glTF bytes for a model asset. The renderer is responsible for
 /// uploading this to the GPU after calling [`Handle::consume`].
-// TODO: properly import the glTF file and attach all the data to this function
 #[derive(Clone)]
 pub struct ModelData {
     pub gltf: gltf::Document,

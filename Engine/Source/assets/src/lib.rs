@@ -35,8 +35,7 @@ pub(crate) const DIRK_ASSET_EXT: &str = "dirkasset";
 pub(crate) const ASSETS_PATH: &str = std::env!("ASSETS_PATH");
 
 /// Identifies an asset. Cheap to clone — just two heap strings.
-// TODO: should be serialisable for saving & stuff
-#[derive(Default, PartialEq, Eq, Hash, Clone, Debug)]
+#[derive(Default, PartialEq, Eq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct AssetHandle {
     /// All assets are identified by their path.
     handle: String,
@@ -56,10 +55,17 @@ impl AssetHandle {
         PathBuf::from(format!("{ASSETS_PATH}/{}", self.handle))
     }
     pub fn dir(&self) -> PathBuf {
-        todo!("return the directory that the asset is in")
+        self.path()
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new(ASSETS_PATH))
+            .to_path_buf()
     }
     pub fn name(&self) -> String {
-        todo!("return just the name of the asset not its full path handle")
+        self.path()
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned()
     }
     pub fn asset_type(&self) -> AssetType {
         self.asset_type
