@@ -198,6 +198,8 @@ impl AssetRegistry {
             .asset_config::<T>(&handle)
             .ok_or_else(|| Error::NotFound(handle.raw().to_owned()))?;
 
+        // TODO: find a way to broadcast the handle
+
         // Clone the dispatcher so this AssetRef has its own sender.
         // Cloning a Dispatcher registers a fresh producer in the EventManager,
         // which is exactly what we want — one producer per live asset.
