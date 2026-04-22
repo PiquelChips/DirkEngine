@@ -14,6 +14,7 @@ pub struct Engine {
     exit_consumer: events::Consumer<platform::AppExit>,
     event_manager: events::EventManager,
 
+    #[allow(unused)]
     asset_registry: assets::AssetRegistry,
 
     renderer: renderer::Renderer,

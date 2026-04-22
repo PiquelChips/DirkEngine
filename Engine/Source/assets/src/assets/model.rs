@@ -28,7 +28,7 @@ impl Asset for ModelData {
         let path = handle.dir().join(&config.gltf);
         let (gltf, buffers, images) = gltf::import(path)
             .context("loading glTF model")
-            .map_err(|err| Error::AssetLoadError(err))?;
+            .map_err(Error::AssetLoadError)?;
 
         Ok(Self {
             gltf,
