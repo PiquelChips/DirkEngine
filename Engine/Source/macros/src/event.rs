@@ -1,0 +1,142 @@
+use proc_macro::TokenStream;
+use quote::quote;
+use syn::{Attribute, DataEnum, DataStruct, DeriveInput, Fields, FieldsUnnamed, Ident, LitStr};
+
+pub fn derive_event_enum(input: &DeriveInput, data: &DataEnum) -> proc_macro::TokenStream {
+    let name = &input.ident;
+    // Split generics into the three parts needed for an impl block:
+    // <T: Any>  |  <T>  |  where T: Any
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+
+    // Generate the match arms for a "message" method
+    let arms = data.variants.iter().map(|variant| {
+        let var_name = &variant.ident;
+
+        // Look for #[event("foo")]
+        let message_format = get_message_format_from_attrs(&variant.attrs); // Default message
+
+        match &variant.fields {
+            Fields::Named(fields) => {
+                // Get all field names: { system, source, .. }
+                let idents = fields.named.iter().map(|f| &f.ident);
+                quote! {
+                    #[allow(unused_variables)]
+                    Self::#var_name { #(#idents,)* .. } => format!(#message_format),
+                }
+            }
+            Fields::Unnamed(fields) => {
+                let (message_format, idents) = get_idents_for_unnamed(&message_format, fields);
+                quote! {
+                    #[allow(unused_variables)]
+                    Self::#var_name ( #(#idents,)* .. ) => format!(#message_format),
+                }
+            }
+            Fields::Unit => {
+                quote! {
+                    #[allow(unused_variables)]
+                    Self::#var_name => format!(#message_format),
+                }
+            }
+        }
+    });
+
+    let mut content = quote! {
+        match self {
+            #(#arms)*
+        }
+    };
+
+    if data.variants.is_empty() {
+        content = quote! { format!("{self:?}") }
+    }
+
+    let expanded = quote! {
+        // Add #impl_generics after `impl`, and #ty_generics after the type name.
+        impl #impl_generics Event for #name #ty_generics #where_clause {
+            fn debug(&self) -> String {
+                #content
+            }
+        }
+    };
+
+    TokenStream::from(expanded)
+}
+
+pub fn derive_event_struct(input: &DeriveInput, data: &DataStruct) -> proc_macro::TokenStream {
+    let name = &input.ident;
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+
+    // Look for #[event("foo")]
+    let message_format = get_message_format_from_attrs(&input.attrs); // Default message
+
+    let content = match &data.fields {
+        Fields::Named(fields) => {
+            // Get all field names: { system, source, .. }
+            let idents = fields.named.iter().map(|f| &f.ident);
+            quote! {
+                #[allow(unused_variables)]
+                let Self { #(#idents,)* .. } = self;
+                format!(#message_format)
+            }
+        }
+        Fields::Unnamed(fields) => {
+            let (message_format, idents) = get_idents_for_unnamed(&message_format, fields);
+            quote! {
+                #[allow(unused_variables)]
+                let Self ( #(#idents,)* .. ) = self;
+                format!(#message_format)
+            }
+        }
+        Fields::Unit => {
+            quote! {
+                format!(#message_format)
+            }
+        }
+    };
+
+    // Build the output
+    let expanded = quote! {
+        impl #impl_generics Event for #name #ty_generics #where_clause {
+            fn debug(&self) -> String {
+                #content
+            }
+        }
+    };
+
+    // Hand the generated code back to the compiler
+    TokenStream::from(expanded)
+}
+
+fn get_message_format_from_attrs(attrs: &Vec<Attribute>) -> String {
+    for attr in attrs {
+        if attr.path().is_ident("event") {
+            return attr
+                .parse_args::<LitStr>()
+                .inspect_err(|e| panic!("parsing event attribute: {e}"))
+                .unwrap()
+                .value();
+        }
+    }
+    String::from("{self:?}")
+}
+
+fn get_idents_for_unnamed(format: &str, fields: &FieldsUnnamed) -> (String, Vec<Ident>) {
+    // Create the list of potential variables (_0, _1, etc.)
+    let idents: Vec<_> = fields
+        .unnamed
+        .iter()
+        .enumerate()
+        .map(|(i, _)| quote::format_ident!("_{}", i))
+        .collect();
+
+    let mut new_format = format.to_string();
+    for i in 0..idents.len() {
+        let search_pattern = format!("{{{i}}}"); // e.g., "{0}"
+        let new_pattern = format!("{{_{i}}}"); // e.g., "{_0}"
+        if format.contains(&search_pattern) {
+            new_format = new_format.replace(&search_pattern, &new_pattern);
+        }
+    }
+
+    (new_format, idents)
+}
