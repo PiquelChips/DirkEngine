@@ -166,14 +166,15 @@ impl AssetRegistry {
                 );
 
                 let data = std::fs::read(path)?;
-                let config: DirkAsset = serde_json::from_slice(&data)?;
-                self.assets.insert(
-                    AssetHandle {
-                        handle: relative_path.display().to_string(),
-                        asset_type: config.meta.asset_type,
-                    },
-                    config,
-                );
+                let mut config: DirkAsset = serde_json::from_slice(&data)?;
+
+                let handle = AssetHandle {
+                    handle: relative_path.display().to_string(),
+                    asset_type: config.meta.asset_type,
+                };
+                config.meta.handle = handle.clone();
+
+                self.assets.insert(handle, config);
             }
         }
         Ok(())
