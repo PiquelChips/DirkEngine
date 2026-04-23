@@ -16,3 +16,6 @@ events.workspace = true
 
 [build-dependencies]
 build.workspace = true
+
+[lints]
+workspace = true
