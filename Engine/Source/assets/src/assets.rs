@@ -3,7 +3,8 @@
 
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
-pub mod model;
+mod model;
+pub use model::*;
 
 use crate::{AssetHandle, Metadata, Result};
 

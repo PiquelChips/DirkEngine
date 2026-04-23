@@ -3,11 +3,11 @@
 //! A *model* asset binds a `.dirkasset` metadata file to one or more glTF
 //! files on disk. On load, the raw glTF document, all referenced buffers
 //! (geometry, animation data, …), and all embedded or external images
-//! (textures) are read into memory as [`ModelData`].
+//! (textures) are read into memory as [`Model`].
 //!
 //! The renderer is responsible for uploading this data to the GPU. It should
-//! subscribe to the [`AssetLoaded<ModelData>`] event, call
-//! [`Handle::consume`] to take ownership of the [`ModelData`], create GPU
+//! subscribe to the [`AssetLoaded<Model>`] event, call
+//! [`Handle::consume`] to take ownership of the [`Model`], create GPU
 //! resources, and then let the handle drop. When the last handle drops, the
 //! [`AssetUnloaded`] event fires and the renderer can clean up GPU-side
 //! resources.
@@ -27,7 +27,7 @@
 //! `.dirkasset` file, so assets can be moved freely within the asset tree
 //! without updating absolute paths.
 //!
-//! [`AssetLoaded<ModelData>`]: crate::events::AssetLoaded
+//! [`AssetLoaded<Model>`]: crate::events::AssetLoaded
 //! [`AssetUnloaded`]: crate::AssetUnloaded
 //! [`Handle::consume`]: crate::Handle::consume
 
@@ -44,7 +44,7 @@ use tracing::warn;
 /// # Serialisation
 ///
 /// ```rust
-/// # use assets::assets::model::ModelConfig;
+/// # use assets::ModelConfig;
 /// let json = r#"{"gltf":"meshes/hero.gltf"}"#;
 /// let config: ModelConfig = serde_json::from_str(json).unwrap();
 /// assert_eq!(config.gltf, "meshes/hero.gltf");
@@ -86,7 +86,7 @@ impl AssetConfig for ModelConfig {
 
 /// Raw glTF data for a model asset, ready for GPU upload.
 ///
-/// `ModelData` is a thin wrapper around the three components that the
+/// `Model` is a thin wrapper around the three components that the
 /// [`gltf`] crate returns from [`gltf::import`]:
 ///
 /// | Field | Contents |
@@ -97,14 +97,14 @@ impl AssetConfig for ModelConfig {
 ///
 /// # Ownership & lifecycle
 ///
-/// `ModelData` is designed to be short-lived on the CPU. The intended
+/// `Model` is designed to be short-lived on the CPU. The intended
 /// workflow is:
 ///
 /// ```text
-/// AssetLoaded<ModelData> event fires
+/// AssetLoaded<Model> event fires
 ///     └─► renderer calls Handle::consume()
 ///             └─► renderer uploads data to GPU
-///                     └─► ModelData is dropped, freeing CPU memory
+///                     └─► Model is dropped, freeing CPU memory
 /// ```
 ///
 /// In **editor** builds [`Handle::consume`] clones the data so it remains
@@ -114,15 +114,15 @@ impl AssetConfig for ModelConfig {
 /// # Cloning
 ///
 /// [`Clone`] is derived to satisfy the [`Asset`] bound, but cloning a
-/// `ModelData` duplicates potentially large buffer and image vecs. Prefer
+/// `Model` duplicates potentially large buffer and image vecs. Prefer
 /// consuming and uploading over repeated clones.
 ///
-/// [`gltf`]: ModelData::gltf
-/// [`buffers`]: ModelData::buffers
-/// [`images`]: ModelData::images
+/// [`gltf`]: Model::gltf
+/// [`buffers`]: Model::buffers
+/// [`images`]: Model::images
 /// [`Handle::consume`]: crate::Handle::consume
-#[derive(Clone)]
-pub struct ModelData {
+#[derive(Debug, Clone)]
+pub struct Model {
     /// The parsed glTF document describing the scene hierarchy, meshes,
     /// materials, animations, and skins.
     pub gltf: gltf::Document,
@@ -135,13 +135,13 @@ pub struct ModelData {
     pub images: Vec<gltf::image::Data>,
 
     /// Binary buffer blobs (vertex data, index data, animation keyframes,
-    /// …) referenced by accessors in [`ModelData::gltf`].
+    /// …) referenced by accessors in [`Model::gltf`].
     ///
     /// Indexed by the `buffer.index()` of any [`gltf::Buffer`] view.
     pub buffers: Vec<gltf::buffer::Data>,
 }
 
-impl Asset for ModelData {
+impl Asset for Model {
     type Config = ModelConfig;
 
     /// Loads a glTF model from disk.

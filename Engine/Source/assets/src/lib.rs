@@ -4,10 +4,10 @@ mod errors;
 pub use errors::{Error, Result};
 
 mod events;
-pub use events::AssetUnloaded;
+pub use events::{AssetLoaded, AssetUnloaded};
 
-pub mod assets;
-pub use assets::{Asset, AssetType};
+mod assets;
+pub use assets::*;
 
 mod handle;
 use handle::AssetRef;
@@ -26,10 +26,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
-use crate::{
-    assets::model::ModelConfig,
-    events::{AssetLoaded, InternalAssetUnloaded},
-};
+use crate::events::InternalAssetUnloaded;
 
 pub(crate) const DIRK_ASSET_EXT: &str = "dirkasset";
 pub(crate) const ASSETS_PATH: &str = std::env!("ASSETS_PATH");
