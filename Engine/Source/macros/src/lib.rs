@@ -1,166 +1,94 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{
-    Attribute, Data, DataEnum, DataStruct, DeriveInput, Fields, FieldsUnnamed, Ident, LitStr,
-    parse_macro_input,
-};
+use syn::{Data, DeriveInput, parse_macro_input};
 
+mod event;
+
+/// Derive the `Event` trait for a `struct` or `enum`.
+///
+/// Generates a `debug(&self) -> String` implementation that formats the value
+/// using a caller-supplied template, or falls back to `"{self:?}"` when none
+/// is provided.
+///
+/// # The `#[event("…")]` attribute
+///
+/// Attach `#[event("…")]` to the type (for structs) or to individual variants
+/// (for enums) to control the debug message.
+///
+/// ## Named-field structs / variants
+///
+/// All field names are bound in scope so you can interpolate them:
+///
+/// ```rust
+/// # pub trait Event: Send + Clone + 'static { fn debug(&self) -> String; }
+/// # use macros::Event;
+/// #[derive(Event, Clone)]
+/// #[event("player {name} joined with {hp} hp")]
+/// struct PlayerJoined { name: String, hp: u32 }
+/// ```
+///
+/// ## Tuple (unnamed) structs / variants
+///
+/// Use positional placeholders `{0}`, `{1}`, … which are rewritten to the
+/// internal bindings `_0`, `_1`, …:
+///
+/// ```rust
+/// # pub trait Event: Send + Clone + 'static { fn debug(&self) -> String; }
+/// # use macros::Event;
+/// #[derive(Event, Clone)]
+/// enum Msg {
+///     #[event("moved to ({0}, {1})")]
+///     Moved(f32, f32),
+/// }
+/// ```
+///
+/// ## Unit structs / variants
+///
+/// The `{self:?}` fallback (or a static string) works fine:
+///
+/// ```rust
+/// # pub trait Event: Send + Clone + 'static { fn debug(&self) -> String; }
+/// # use macros::Event;
+/// #[derive(Event, Clone)]
+/// #[event("server stopped")]
+/// struct ServerStopped;
+/// ```
 #[proc_macro_derive(Event, attributes(event))]
-pub fn derive_event(input: TokenStream) -> TokenStream {
-    // Parse the representation
+pub fn derive_event(input: proc_macro::TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
-    match input.data {
-        Data::Enum(ref data) => derive_event_enum(&input, data),
-        Data::Struct(ref data) => derive_event_struct(&input, data),
-        _ => panic!("can only derive event from struct or enum"),
-    }
-}
-
-fn derive_event_enum(input: &DeriveInput, data: &DataEnum) -> proc_macro::TokenStream {
-    let name = &input.ident;
-
-    // Generate the match arms for a "message" method
-    let arms = data.variants.iter().map(|variant| {
-        let var_name = &variant.ident;
-
-        // Look for #[event("foo")]
-        let message_format = get_message_format_from_attrs(&variant.attrs); // Default message
-
-        match &variant.fields {
-            Fields::Named(fields) => {
-                // Get all field names: { system, source, .. }
-                let idents = fields.named.iter().map(|f| &f.ident);
-                quote! {
-                    #[allow(unused_variables)]
-                    Self::#var_name { #(#idents,)* .. } => format!(#message_format),
-                }
-            }
-            Fields::Unnamed(fields) => {
-                let (message_format, idents) = get_idents_for_unnamed(&message_format, fields);
-                quote! {
-                    #[allow(unused_variables)]
-                    Self::#var_name ( #(#idents,)* .. ) => format!(#message_format),
-                }
-            }
-            Fields::Unit => {
-                quote! {
-                    #[allow(unused_variables)]
-                    Self::#var_name => format!(#message_format),
-                }
-            }
-        }
-    });
-
-    let mut content = quote! {
-        match self {
-            #(#arms)*
-        }
+    let result: syn::Result<proc_macro2::TokenStream> = match input.data {
+        Data::Enum(ref data) => event::derive_event_enum(&input, data),
+        Data::Struct(ref data) => event::derive_event_struct(&input, data),
+        _ => Err(syn::Error::new(
+            input.ident.span(),
+            "`Event` can only be derived for structs and enums",
+        )),
     };
 
-    if data.variants.is_empty() {
-        content = quote! {
-            format!("{self:?}")
-        }
-    }
-
-    let expanded = quote! {
-        impl Event for #name {
-            fn debug(&self) -> String {
-                #content
-            }
-        }
-    };
-
-    TokenStream::from(expanded)
+    result.unwrap_or_else(|e| e.to_compile_error()).into()
 }
 
-fn derive_event_struct(input: &DeriveInput, data: &DataStruct) -> proc_macro::TokenStream {
-    let name = &input.ident;
-
-    // Look for #[event("foo")]
-    let message_format = get_message_format_from_attrs(&input.attrs); // Default message
-
-    let content = match &data.fields {
-        Fields::Named(fields) => {
-            // Get all field names: { system, source, .. }
-            let idents = fields.named.iter().map(|f| &f.ident);
-            quote! {
-                #[allow(unused_variables)]
-                let Self { #(#idents,)* .. } = self;
-                format!(#message_format)
-            }
-        }
-        Fields::Unnamed(fields) => {
-            let (message_format, idents) = get_idents_for_unnamed(&message_format, fields);
-            quote! {
-                #[allow(unused_variables)]
-                let Self ( #(#idents,)* .. ) = self;
-                format!(#message_format)
-            }
-        }
-        Fields::Unit => {
-            quote! {
-                format!(#message_format)
-            }
-        }
-    };
-
-    // Build the output
-    let expanded = quote! {
-        impl Event for #name {
-            fn debug(&self) -> String {
-                #content
-            }
-        }
-    };
-
-    // Hand the generated code back to the compiler
-    TokenStream::from(expanded)
-}
-
-fn get_message_format_from_attrs(attrs: &Vec<Attribute>) -> String {
-    for attr in attrs {
-        if attr.path().is_ident("event") {
-            return attr
-                .parse_args::<LitStr>()
-                .inspect_err(|e| panic!("parsing event attribute: {e}"))
-                .unwrap()
-                .value();
-        }
-    }
-    String::from("{self:?}")
-}
-
-fn get_idents_for_unnamed(format: &str, fields: &FieldsUnnamed) -> (String, Vec<Ident>) {
-    // Create the list of potential variables (_0, _1, etc.)
-    let idents: Vec<_> = fields
-        .unnamed
-        .iter()
-        .enumerate()
-        .map(|(i, _)| quote::format_ident!("_{}", i))
-        .collect();
-
-    let mut new_format = format.to_string();
-    for i in 0..idents.len() {
-        let search_pattern = format!("{{{i}}}"); // e.g., "{0}"
-        let new_pattern = format!("{{_{i}}}"); // e.g., "{_0}"
-        if format.contains(&search_pattern) {
-            new_format = new_format.replace(&search_pattern, &new_pattern);
-        }
-    }
-
-    (new_format, idents)
-}
-
+/// Derive the `Component` marker trait for any type.
+///
+/// This is a zero-boilerplate derive that simply emits an empty `impl Component
+/// for …` block, respecting any generics on the type:
+///
+/// ```rust
+/// # trait Component {}
+/// # use macros::Component;
+/// #[derive(Component)]
+/// #[derive(Clone)]
+/// struct Transform { position: (i32, i32) }
+/// ```
 #[proc_macro_derive(Component)]
 pub fn derive_component(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = input.ident;
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
-    let expanded = quote! {
-        impl Component for #name {}
-    };
-
-    TokenStream::from(expanded)
+    quote! {
+        impl #impl_generics Component for #name #ty_generics #where_clause {}
+    }
+    .into()
 }
