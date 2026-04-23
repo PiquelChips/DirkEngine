@@ -373,16 +373,6 @@ impl<T: Event> std::fmt::Debug for Dispatcher<T> {
     }
 }
 
-pub trait Dispatch<T: Event> {
-    fn dispatch(&self, event: T);
-}
-
-impl<T: Event> Dispatch<T> for Dispatcher<T> {
-    fn dispatch(&self, event: T) {
-        self.dispatch(event);
-    }
-}
-
 /// Receives events forwarded by [`EventManager::dispatch_all`].
 ///
 /// Created by [`EventManager::subscribe`]. Each `Consumer` holds an independent

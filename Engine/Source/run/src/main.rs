@@ -1,3 +1,6 @@
+//! This is the main entrypoint crate. No real logic is contained here,
+//! just engine init & tick looping
+
 use anyhow::Context;
 use tracing::error;
 

@@ -40,5 +40,5 @@ macro_rules! shader {
     };
 }
 
-pub const VERT: Shader = shader!("shader.vert", c"main");
-pub const FRAG: Shader = shader!("shader.frag", c"main");
+mod blobs;
+pub use blobs::*;

@@ -162,6 +162,7 @@ impl WorldEvent {
 /// # }
 /// ```
 #[derive(Clone, Debug, Event)]
+#[allow(missing_docs)]
 pub struct PlayerUpdateEvent {
     pub id: PlayerId,
     pub world: WorldId,

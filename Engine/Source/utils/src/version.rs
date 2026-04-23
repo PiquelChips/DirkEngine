@@ -16,7 +16,9 @@ impl Default for Version {
 }
 
 impl Version {
+    /// Version 0.0.0
     pub const ZERO: Self = Self(0);
+    /// Create a new version object with specified numbers
     pub fn new(major: u32, minor: u32, patch: u32) -> Self {
         assert!(
             major < (1 << 10),
@@ -32,12 +34,15 @@ impl Version {
         );
         Self(((major) << 22) | ((minor) << 12) | (patch))
     }
+    /// Returns the major number of the [Version]
     pub fn major(&self) -> u32 {
         self.0 >> 22
     }
+    /// Returns the minor number of the [Version]
     pub fn minor(&self) -> u32 {
         (self.0 >> 12) & 0x3ff
     }
+    /// Returns the patch number of the [Version]
     pub fn patch(&self) -> u32 {
         self.0 & 0xfff
     }
@@ -103,6 +108,7 @@ impl fmt::Debug for Version {
     }
 }
 
+/// An error occured in parsing the version string.
 #[derive(Debug, PartialEq, Error)]
 pub struct ParseVersionError(String);
 

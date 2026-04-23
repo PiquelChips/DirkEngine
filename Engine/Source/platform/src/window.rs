@@ -6,6 +6,8 @@ use winit::{
 
 use crate::event::WindowEvent;
 
+/// Internal platform representation of a window. Holds the
+/// [winit::window::Window] and other state.
 pub struct Window {
     window: Box<dyn winit::window::Window>,
     focused: bool,
@@ -16,6 +18,7 @@ pub struct Window {
 }
 
 impl Window {
+    /// Creates a new default window object using the [winit::window::Window].
     pub fn new(window: Box<dyn winit::window::Window>) -> Self {
         Self {
             focused: false,
@@ -24,9 +27,12 @@ impl Window {
             window,
         }
     }
+    /// Returns the unique ID of the window
     pub fn id(&self) -> WindowId {
         self.window.id()
     }
+    /// Returns the size of the window's renderable surface. Used by
+    /// renderer to create correct surface sizes
     pub fn size(&self) -> PhysicalSize<u32> {
         self.window.surface_size()
     }

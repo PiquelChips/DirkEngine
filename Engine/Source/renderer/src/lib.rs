@@ -1,3 +1,6 @@
+//! The Renderer. This monolithic crate handles all the rendering of
+//! the engine. All of the GPU operations are handled by [ash].
+
 #[cfg(validation)]
 use std::os::raw::c_void;
 use std::{
@@ -67,10 +70,16 @@ const DEVICE_EXTENSIONS: &[&str] =
 #[cfg(validation)]
 const VALIDATION_LAYERS: &[*const i8] = &[c"VK_LAYER_KHRONOS_validation".as_ptr()];
 
+/// The information needed to create the renderer. This is primarily metadata
+/// used for Vulkan initialisation.
 pub struct RendererCreateInfo {
+    /// The name of the engine. Used for vulkan initialisation.
     pub engine_name: CString,
+    /// The version of the engine. Used for vulkan initialisation.
     pub engine_version: Version,
+    /// The name of the application. Used for vulkan initialisation.
     pub app_name: CString,
+    /// The version of the application. Used for vulkan initialisation.
     pub app_version: Version,
 }
 
@@ -109,6 +118,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
+    /// Renderer initialisation. Creates all Vulkan & other renderer objects.
     pub fn init(
         create_info: RendererCreateInfo,
         window: &platform::Window,
@@ -456,6 +466,9 @@ impl Renderer {
         })
     }
 
+    /// Ticks the renderer. Used to improve the various internal representations
+    /// of external engine objects.
+    /// The renderer listens to events to properly sync windows, scenes, ...
     pub fn tick(
         &mut self,
         _delta_time: f32,
@@ -589,6 +602,8 @@ impl Renderer {
         Ok(())
     }
 
+    /// The actual rendering. This records render commands & submits them to
+    /// the GPU.
     pub fn render(
         &mut self,
         window: WindowId,

@@ -1,3 +1,5 @@
+//! This crate has a bunch of frequently used and central [`crate::Component`]s
+
 use crate::Component;
 use glam::{Mat4, Vec3};
 use tracing::warn;

@@ -1,3 +1,6 @@
+//! The [Engine] crate. The engine holds all the state & manages
+//! all the systems for the engine to run properly.
+
 use std::{collections::HashMap, ffi::CString, str::FromStr, time::Instant};
 
 use anyhow::Context;
@@ -110,6 +113,8 @@ impl Engine {
         self.render().context("rendering")?;
         Ok(!self.is_requesting_exit())
     }
+
+    /// Will render the surfaces for every player owned by the engine
     pub fn render(&mut self) -> anyhow::Result<()> {
         for player in self.players.values() {
             self.renderer
@@ -118,6 +123,9 @@ impl Engine {
         Ok(())
     }
 
+    /// This function cleans up the engine and shuts systems down.
+    /// All lot of work is left to the destructor, so this function
+    /// doesn't do much for now.
     pub fn shutdown(&self) -> anyhow::Result<()> {
         info!("engine shutting down");
         Ok(())
@@ -127,6 +135,8 @@ impl Engine {
             self.exit(None);
         }
     }
+    /// Returns if the engine is planning to exit. i.e., if the engine
+    /// will shutdown at the next tick.
     pub fn is_requesting_exit(&self) -> bool {
         self.is_requesting_exit || self.exit_error.is_some()
     }

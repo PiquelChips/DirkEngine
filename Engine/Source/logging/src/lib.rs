@@ -106,6 +106,7 @@ use crate::layers::{console::ConsoleLayer, file::FileLayer};
 /// This ordering is what powers [`Filter::min_level`]: passing
 /// `LogLevel::Warn` keeps `Error` and `Warn` (both ≤ `Warn` in severity).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[allow(missing_docs)]
 pub enum LogLevel {
     Error = 0,
     Warn = 1,

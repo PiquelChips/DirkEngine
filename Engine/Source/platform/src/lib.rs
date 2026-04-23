@@ -35,6 +35,8 @@ pub struct Platform {
 }
 
 impl Platform {
+    /// Initialise the platform wrapper. Essentially just creates
+    /// the handler for [winit] platform events.
     pub fn init(events: &events::EventManager) -> Result<Self> {
         let mut platform = Self {
             handler: PlatformHandler::new(events),
@@ -86,13 +88,18 @@ impl Platform {
         });
     }
 
+    /// Returns a reference to the main window. The main window is just the
+    /// first window ever created.
     pub fn main_window(&self) -> &Window {
         self.handler.main_window()
     }
 
+    /// Returns a reference to the HashMap of all the windows currently
+    /// owned by the engine.
     pub fn windows(&self) -> &HashMap<WindowId, Window> {
         &self.handler.windows
     }
+    /// Same as [`Platform::windows`] but returns a mutable HashMap
     pub fn windows_mut(&mut self) -> &HashMap<WindowId, Window> {
         &self.handler.windows
     }

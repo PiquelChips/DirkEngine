@@ -1,3 +1,5 @@
+//! This crate exports all the proc-macros used in the engine.
+
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{Data, DeriveInput, parse_macro_input};
