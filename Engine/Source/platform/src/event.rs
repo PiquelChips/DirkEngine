@@ -1,5 +1,4 @@
 use events::Event;
-use macros::Event;
 use winit::window::WindowId;
 
 #[derive(Debug, Clone, Event)]

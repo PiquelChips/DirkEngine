@@ -21,7 +21,6 @@
 //! world.
 
 use events::Event;
-use macros::Event;
 use platform::WindowId;
 
 use crate::{

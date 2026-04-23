@@ -1,6 +1,5 @@
 use crate::Component;
 use glam::{Mat4, Vec3};
-use macros::Component;
 use tracing::warn;
 
 /// Marks an entity as having a renderable mesh.
