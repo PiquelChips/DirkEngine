@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 pub mod model;
 
-use crate::{AssetHandle, Result};
+use crate::{AssetHandle, Metadata, Result};
 
 /// Implemented by every concrete asset data type.
 pub trait Asset: Clone + Sized + Send + 'static {
@@ -26,7 +26,7 @@ pub enum AssetType {
     Model,
 }
 
-/// Marker trait for every asset configuration struct.
-pub trait AssetConfig: Serialize + DeserializeOwned {}
-#[doc(hidden)]
-pub use macros::AssetConfig;
+pub trait AssetConfig: Serialize + DeserializeOwned {
+    /// Validates the configuration for the asset
+    fn validate(&self, meta: &Metadata) -> bool;
+}

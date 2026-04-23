@@ -1,6 +1,6 @@
 use tracing::warn;
 
-use crate::{AssetType, DirkAsset, Metadata, ModelConfig};
+use crate::{AssetType, DirkAsset, assets::AssetConfig};
 
 impl DirkAsset {
     pub fn validate(&self) -> bool {
@@ -24,20 +24,5 @@ impl DirkAsset {
                 }
             }
         }
-    }
-}
-
-impl ModelConfig {
-    fn validate(&self, meta: &Metadata) -> bool {
-        let path = meta.handle.dir().join(&self.gltf);
-        if !path.exists() {
-            warn!(
-                "asset {}: glTF file not found at '{}'",
-                meta.handle.raw(),
-                path.display()
-            );
-            return false;
-        }
-        true
     }
 }

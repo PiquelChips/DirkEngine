@@ -86,23 +86,6 @@ pub fn derive_component(input: TokenStream) -> TokenStream {
     empty_derive(input, format_ident!("Component"))
 }
 
-/// Derive the `AssetConfig` marker trait for any type.
-///
-/// This is a zero-boilerplate derive that simply emits an empty `impl AssetConfig
-/// for …` block, respecting any generics on the type:
-///
-/// ```rust
-/// # trait AssetConfig {}
-/// # use macros::AssetConfig;
-/// #[derive(AssetConfig)]
-/// #[derive(Clone)]
-/// struct ModelConfig { vertices: Vec<[f32; 3]> }
-/// ```
-#[proc_macro_derive(AssetConfig)]
-pub fn derive_asset_config(input: TokenStream) -> TokenStream {
-    empty_derive(input, format_ident!("AssetConfig"))
-}
-
 fn empty_derive(input: TokenStream, trait_ident: Ident) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = input.ident;
