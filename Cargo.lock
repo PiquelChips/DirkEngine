@@ -114,7 +114,6 @@ dependencies = [
  "build",
  "events",
  "gltf",
- "macros",
  "parking_lot",
  "serde",
  "serde_json",

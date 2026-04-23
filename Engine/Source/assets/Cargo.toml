@@ -15,7 +15,6 @@ serde_json.workspace = true
 parking_lot.workspace = true
 
 events.workspace = true
-macros.workspace = true
 
 gltf.workspace = true
 
