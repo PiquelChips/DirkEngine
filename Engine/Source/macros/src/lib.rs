@@ -93,7 +93,7 @@ pub fn derive_component(input: TokenStream) -> TokenStream {
 ///
 /// ```rust
 /// # trait AssetConfig {}
-/// # use macros::Component;
+/// # use macros::AssetConfig;
 /// #[derive(AssetConfig)]
 /// #[derive(Clone)]
 /// struct ModelConfig { vertices: Vec<[f32; 3]> }
