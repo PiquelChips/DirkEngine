@@ -48,6 +48,12 @@ impl Display for AssetHandle {
 
 impl AssetHandle {
     /// Returns the absolute path to the asset file
+    pub fn from_raw(path: impl Into<String>, asset_type: AssetType) -> Self {
+        Self {
+            handle: path.into(),
+            asset_type,
+        }
+    }
     pub fn path(&self) -> PathBuf {
         PathBuf::from(format!("{ASSETS_PATH}/{}", self.handle))
     }
