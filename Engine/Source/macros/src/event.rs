@@ -133,3 +133,83 @@ fn rewrite_unnamed_placeholders(format: &str, fields: &FieldsUnnamed) -> (String
 
     (new_format, idents)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use syn::{DeriveInput, parse_str};
+
+    // ── rewrite_unnamed_placeholders ──────────────────────────────────────────
+
+    fn unnamed_fields_from(src: &str) -> FieldsUnnamed {
+        let input: DeriveInput = parse_str(src).unwrap();
+        match input.data {
+            syn::Data::Struct(s) => match s.fields {
+                Fields::Unnamed(u) => u,
+                _ => panic!("expected unnamed fields"),
+            },
+            _ => panic!("expected a struct"),
+        }
+    }
+
+    #[test]
+    fn rewrite_replaces_all_positional_placeholders() {
+        let fields = unnamed_fields_from("struct Foo(u32, String);");
+        let (fmt, idents) = rewrite_unnamed_placeholders("{0} and {1}", &fields);
+        assert_eq!(fmt, "{_0} and {_1}");
+        assert_eq!(idents.len(), 2);
+        assert_eq!(idents[0], quote::format_ident!("_0"));
+        assert_eq!(idents[1], quote::format_ident!("_1"));
+    }
+
+    #[test]
+    fn rewrite_leaves_non_positional_format_intact() {
+        let fields = unnamed_fields_from("struct Foo(u32);");
+        let (fmt, idents) = rewrite_unnamed_placeholders("no placeholders", &fields);
+        assert_eq!(fmt, "no placeholders");
+        assert_eq!(idents.len(), 1);
+    }
+
+    #[test]
+    fn rewrite_handles_partial_placeholder_use() {
+        let fields = unnamed_fields_from("struct Foo(u32, String, bool);");
+        let (fmt, _) = rewrite_unnamed_placeholders("only {1} matters", &fields);
+        assert_eq!(fmt, "only {_1} matters");
+    }
+
+    #[test]
+    fn rewrite_handles_repeated_placeholder() {
+        let fields = unnamed_fields_from("struct Foo(u32, String);");
+        let (fmt, _) = rewrite_unnamed_placeholders("{0} then {0} again", &fields);
+        assert_eq!(fmt, "{_0} then {_0} again");
+    }
+
+    // ── get_message_format_from_attrs ─────────────────────────────────────────
+
+    #[test]
+    fn format_falls_back_to_debug_repr_when_no_attr() {
+        let input: DeriveInput = parse_str("struct Foo;").unwrap();
+        let result = get_message_format_from_attrs(&input.attrs).unwrap();
+        assert_eq!(result, "{self:?}");
+    }
+
+    #[test]
+    fn format_extracts_literal_from_event_attr() {
+        let input: DeriveInput = parse_str(r#"#[event("hello world")] struct Foo;"#).unwrap();
+        let result = get_message_format_from_attrs(&input.attrs).unwrap();
+        assert_eq!(result, "hello world");
+    }
+
+    #[test]
+    fn format_returns_error_for_non_string_arg() {
+        let input: DeriveInput = parse_str(r#"#[event(42)] struct Foo;"#).unwrap();
+        assert!(get_message_format_from_attrs(&input.attrs).is_err());
+    }
+
+    #[test]
+    fn format_ignores_unrelated_attributes() {
+        let input: DeriveInput = parse_str(r#"#[derive(Debug)] struct Foo;"#).unwrap();
+        let result = get_message_format_from_attrs(&input.attrs).unwrap();
+        assert_eq!(result, "{self:?}");
+    }
+}
