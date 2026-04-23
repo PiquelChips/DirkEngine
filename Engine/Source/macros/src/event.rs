@@ -1,8 +1,8 @@
-use proc_macro::TokenStream;
+use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{Attribute, DataEnum, DataStruct, DeriveInput, Fields, FieldsUnnamed, Ident, LitStr};
 
-pub fn derive_event_enum(input: &DeriveInput, data: &DataEnum) -> proc_macro::TokenStream {
+pub fn derive_event_enum(input: &DeriveInput, data: &DataEnum) -> syn::Result<TokenStream> {
     let name = &input.ident;
     // Split generics into the three parts needed for an impl block:
     // <T: Any>  |  <T>  |  where T: Any
