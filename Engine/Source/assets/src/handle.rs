@@ -57,7 +57,9 @@ impl<T: Asset> Handle<T> {
     /// - **Release builds**: data is moved out and freed after the first
     ///   call. Subsequent calls return [`Error::AlreadyConsumed`].
     pub fn consume(&self) -> Result<T> {
-        let inner = self.0.lock();
+        // the mut is used in `editor` builds
+        #[allow(unused_mut)]
+        let mut inner = self.0.lock();
 
         #[cfg(editor)]
         let result = inner.data.clone().ok_or(Error::AlreadyConsumed);

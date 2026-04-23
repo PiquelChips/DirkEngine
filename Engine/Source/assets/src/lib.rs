@@ -128,8 +128,6 @@ impl AssetRegistry {
     /// `AssetUnloaded` event that other systems (e.g. the renderer) consume.
     pub fn tick(&self) {
         for InternalAssetUnloaded(handle) in self.internal_unload_consumer.consume_all() {
-            // TODO: see about how to also store some kind of reference on which
-            // assets are still loaded.
             self.unload_dispatcher.dispatch(AssetUnloaded { handle });
         }
     }
@@ -194,7 +192,6 @@ impl AssetRegistry {
     fn asset_config<T: Asset>(&self, handle: &AssetHandle) -> Option<T::Config> {
         let asset = self.assets.get(handle)?;
 
-        // TODO: look for a better way to do this without weird type workarounds
         let raw = match T::asset_type() {
             AssetType::Unknown => return None,
             AssetType::Model => serde_json::to_value(asset.model.as_ref()?).ok()?,
@@ -214,27 +211,27 @@ impl AssetRegistry {
             .asset_config::<T>(&handle)
             .ok_or_else(|| Error::NotFound(handle.raw().to_owned()))?;
 
-        // Clone the dispatcher so this AssetRef has its own sender.
-        // Cloning a Dispatcher registers a fresh producer in the EventManager,
-        // which is exactly what we want — one producer per live asset.
-        let handle = Handle::new(AssetRef::new(
+        // Give this AssetRef its own dispatcher clone so it can fire
+        // InternalAssetUnloaded from inside its Drop impl, independent of the
+        // registry's own lifetime.
+        let typed_handle = Handle::new(AssetRef::new(
             handle.clone(),
             T::load(&config, handle)?,
             self.event_manager.register(),
         ));
 
+        // Lazily create and cache a Dispatcher<AssetLoaded<T>> for this type.
         let dispatcher = self
             .load_dispatchers
             .entry(type_id)
             .or_insert(Box::new(self.event_manager.register::<AssetLoaded<T>>()))
             .downcast_ref::<Dispatcher<AssetLoaded<T>>>()
-            // we unwrap as this should never cause an error
-            .expect("dispatcher should be of type Dispatcher<AssetLoaded<T>>");
+            .expect("dispatcher type invariant violated: TypeId key must match Dispatcher<T>");
 
         dispatcher.dispatch(AssetLoaded {
-            handle: handle.clone(),
+            handle: typed_handle.clone(),
         });
 
-        Ok(handle)
+        Ok(typed_handle)
     }
 }
