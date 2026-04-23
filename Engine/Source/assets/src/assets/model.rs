@@ -1,18 +1,66 @@
+//! Model asset: glTF mesh data loaded from disk.
+//!
+//! A *model* asset binds a `.dirkasset` metadata file to one or more glTF
+//! files on disk. On load, the raw glTF document, all referenced buffers
+//! (geometry, animation data, …), and all embedded or external images
+//! (textures) are read into memory as [`ModelData`].
+//!
+//! The renderer is responsible for uploading this data to the GPU. It should
+//! subscribe to the [`AssetLoaded<ModelData>`] event, call
+//! [`Handle::consume`] to take ownership of the [`ModelData`], create GPU
+//! resources, and then let the handle drop. When the last handle drops, the
+//! [`AssetUnloaded`] event fires and the renderer can clean up GPU-side
+//! resources.
+//!
+//! # `.dirkasset` file format
+//!
+//! ```json
+//! {
+//!   "meta": { "asset_type": "Model" },
+//!   "model": {
+//!     "gltf": "hero.gltf"
+//!   }
+//! }
+//! ```
+//!
+//! The `gltf` path is **relative to the directory** containing the
+//! `.dirkasset` file, so assets can be moved freely within the asset tree
+//! without updating absolute paths.
+//!
+//! [`AssetLoaded<ModelData>`]: crate::events::AssetLoaded
+//! [`AssetUnloaded`]: crate::AssetUnloaded
+//! [`Handle::consume`]: crate::Handle::consume
+
 use crate::{Asset, AssetHandle, AssetType, Error, Metadata, Result, assets::AssetConfig};
 
 use serde::{Deserialize, Serialize};
 
 use anyhow::Context;
+use tracing::warn;
 
-/// Type to configure a model.
+/// Configuration for a model asset, deserialised from the `"model"` section
+/// of a `.dirkasset` file.
+///
+/// # Serialisation
+///
+/// ```rust
+/// # use assets::assets::model::ModelConfig;
+/// let json = r#"{"gltf":"meshes/hero.gltf"}"#;
+/// let config: ModelConfig = serde_json::from_str(json).unwrap();
+/// assert_eq!(config.gltf, "meshes/hero.gltf");
+///
+/// let round_tripped = serde_json::to_string(&config).unwrap();
+/// assert_eq!(round_tripped, json);
+/// ```
 #[derive(Serialize, Deserialize, Clone)]
 pub struct ModelConfig {
-    /// Path to .gltf. Relative to asset dir
+    /// Path to the `.gltf` (or `.glb`) file, **relative to the directory**
+    /// that contains the `.dirkasset` file.
+    ///
+    /// Example values: `"hero.gltf"`, `"../shared/cube.glb"`.
     pub gltf: String,
 }
 
-/// Raw glTF bytes for a model asset. The renderer is responsible for
-/// uploading this to the GPU after calling [`Handle::consume`].
 impl AssetConfig for ModelConfig {
     /// Validates that the glTF file actually exists on disk.
     ///
@@ -36,16 +84,81 @@ impl AssetConfig for ModelConfig {
     }
 }
 
+/// Raw glTF data for a model asset, ready for GPU upload.
+///
+/// `ModelData` is a thin wrapper around the three components that the
+/// [`gltf`] crate returns from [`gltf::import`]:
+///
+/// | Field | Contents |
+/// |-------|----------|
+/// [`gltf`] | The parsed glTF document (scene graph, meshes, materials, …) |
+/// [`buffers`] | Binary geometry/animation blobs referenced by the document |
+/// [`images`] | Decoded pixel data for all textures |
+///
+/// # Ownership & lifecycle
+///
+/// `ModelData` is designed to be short-lived on the CPU. The intended
+/// workflow is:
+///
+/// ```text
+/// AssetLoaded<ModelData> event fires
+///     └─► renderer calls Handle::consume()
+///             └─► renderer uploads data to GPU
+///                     └─► ModelData is dropped, freeing CPU memory
+/// ```
+///
+/// In **editor** builds [`Handle::consume`] clones the data so it remains
+/// available for inspection tools. In **release** builds the data is moved
+/// out and freed after the first call.
+///
+/// # Cloning
+///
+/// [`Clone`] is derived to satisfy the [`Asset`] bound, but cloning a
+/// `ModelData` duplicates potentially large buffer and image vecs. Prefer
+/// consuming and uploading over repeated clones.
+///
+/// [`gltf`]: ModelData::gltf
+/// [`buffers`]: ModelData::buffers
+/// [`images`]: ModelData::images
+/// [`Handle::consume`]: crate::Handle::consume
 #[derive(Clone)]
 pub struct ModelData {
+    /// The parsed glTF document describing the scene hierarchy, meshes,
+    /// materials, animations, and skins.
     pub gltf: gltf::Document,
+
+    /// Decoded texture image data (RGBA pixels, dimensions, format) for all
+    /// images referenced by the glTF document.
+    ///
+    /// Indexed by the `image.index()` of any [`gltf::Image`] in the
+    /// document.
     pub images: Vec<gltf::image::Data>,
+
+    /// Binary buffer blobs (vertex data, index data, animation keyframes,
+    /// …) referenced by accessors in [`ModelData::gltf`].
+    ///
+    /// Indexed by the `buffer.index()` of any [`gltf::Buffer`] view.
     pub buffers: Vec<gltf::buffer::Data>,
 }
 
 impl Asset for ModelData {
     type Config = ModelConfig;
 
+    /// Loads a glTF model from disk.
+    ///
+    /// Resolves the glTF path relative to the asset directory
+    /// (`handle.dir().join(&config.gltf)`), then delegates to
+    /// [`gltf::import`] which reads the document, decodes all buffers, and
+    /// decodes all referenced images in one pass.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::AssetLoadError`] if:
+    /// - The resolved path does not exist.
+    /// - The file is not valid glTF/GLB.
+    /// - A referenced external buffer or image cannot be read.
+    ///
+    /// [`Error::AssetLoadError`]: crate::Error::AssetLoadError
     fn load(config: &Self::Config, handle: AssetHandle) -> Result<Self> {
         let path = handle.dir().join(&config.gltf);
         let (gltf, buffers, images) = gltf::import(path)
@@ -58,6 +171,7 @@ impl Asset for ModelData {
             images,
         })
     }
+
     fn asset_type() -> AssetType {
         AssetType::Model
     }
