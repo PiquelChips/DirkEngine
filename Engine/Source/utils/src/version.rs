@@ -19,6 +19,15 @@ impl Version {
     /// Version 0.0.0
     pub const ZERO: Self = Self(0);
     /// Create a new version object with specified numbers
+    ///
+    /// # Panics
+    ///
+    /// Will panic if the specified [major], [minor] & [patch]
+    /// do not fit the storage.
+    /// [major] version must fit in 10 bits (0–1023).
+    /// [minor] version must fit in 10 bits (0–1023).
+    /// [patch] version must fit in 12 bits (0–4095).
+    #[must_use]
     pub fn new(major: u32, minor: u32, patch: u32) -> Self {
         assert!(
             major < (1 << 10),
@@ -35,35 +44,43 @@ impl Version {
         Self(((major) << 22) | ((minor) << 12) | (patch))
     }
     /// Returns the major number of the [Version]
+    #[must_use]
     pub fn major(&self) -> u32 {
         self.0 >> 22
     }
     /// Returns the minor number of the [Version]
+    #[must_use]
     pub fn minor(&self) -> u32 {
         (self.0 >> 12) & 0x3ff
     }
     /// Returns the patch number of the [Version]
+    #[must_use]
     pub fn patch(&self) -> u32 {
         self.0 & 0xfff
     }
     /// Increments major, resets minor and patch to 0.
+    #[must_use]
     pub fn bump_major(self) -> Self {
         Self::new(self.major() + 1, 0, 0)
     }
     /// Increments minor, resets patch to 0.
+    #[must_use]
     pub fn bump_minor(self) -> Self {
         Self::new(self.major(), self.minor() + 1, 0)
     }
     /// Increments patch.
+    #[must_use]
     pub fn bump_patch(self) -> Self {
         Self::new(self.major(), self.minor(), self.patch() + 1)
     }
     /// Returns true if `self` is semver-compatible with `required`
     /// (same major, self.minor >= required.minor).
+    #[must_use]
     pub fn is_compatible_with(self, required: Self) -> bool {
         self.major() == required.major() && self >= required
     }
     /// If the major is 0, then this is a prerelease version.
+    #[must_use]
     pub fn is_prerelease(self) -> bool {
         self.major() == 0
     }
@@ -176,13 +193,13 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_major_overflow_panics() {
-        Version::new(1024, 0, 0);
+        let _ = Version::new(1024, 0, 0);
     }
 
     #[test]
     #[should_panic]
     fn test_patch_overflow_panics() {
-        Version::new(0, 0, 4096);
+        let _ = Version::new(0, 0, 4096);
     }
 
     // -- Bumping --
