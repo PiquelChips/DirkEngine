@@ -12,7 +12,7 @@ use crate::{
 pub struct GraphicsPipeline {
     device: RenderDevice,
     pipeline_layout: vk::PipelineLayout,
-    graphics_pipeline: vk::Pipeline,
+    pipeline: vk::Pipeline,
 }
 
 impl GraphicsPipeline {
@@ -104,7 +104,7 @@ impl GraphicsPipeline {
             .base_pipeline_index(-1)
             .push_next(&mut pipeline_rendering_info);
 
-        let graphics_pipeline = unsafe {
+        let pipeline = unsafe {
             device
                 .device
                 .create_graphics_pipelines(
@@ -122,7 +122,7 @@ impl GraphicsPipeline {
 
         Ok(Self {
             device: device.clone(),
-            graphics_pipeline,
+            pipeline,
             pipeline_layout,
         })
     }
@@ -131,8 +131,8 @@ impl GraphicsPipeline {
             self.device.device.cmd_bind_pipeline(
                 cmd.raw(),
                 vk::PipelineBindPoint::GRAPHICS,
-                self.graphics_pipeline,
-            )
+                self.pipeline,
+            );
         }
     }
     pub fn layout(&self) -> vk::PipelineLayout {
@@ -144,7 +144,6 @@ impl Drop for GraphicsPipeline {
     fn drop(&mut self) {
         self.device
             .destroy(Garbage::PipelineLayout(self.pipeline_layout));
-        self.device
-            .destroy(Garbage::Pipeline(self.graphics_pipeline));
+        self.device.destroy(Garbage::Pipeline(self.pipeline));
     }
 }

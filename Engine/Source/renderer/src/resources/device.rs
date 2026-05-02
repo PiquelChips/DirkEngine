@@ -2,7 +2,7 @@ use std::{
     ops::Deref,
     sync::{
         Arc,
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicUsize, Ordering},
     },
 };
 
@@ -12,7 +12,10 @@ use ash::{
     khr::{surface, swapchain},
     vk,
 };
-use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, Allocator, AllocatorCreateDesc};
+use gpu_allocator::{
+    AllocationSizes, AllocatorDebugSettings,
+    vulkan::{Allocation, AllocationCreateDesc, Allocator, AllocatorCreateDesc},
+};
 use parking_lot::Mutex;
 
 use crate::{
@@ -56,17 +59,17 @@ pub struct RenderDeviceInner {
 
     allocator: Mutex<Allocator>,
     deletion_queue: Mutex<DeletionQueue>,
-    current_frame: Arc<AtomicU64>,
+    current_frame: Arc<AtomicUsize>,
 }
 
 impl RenderDevice {
     pub fn new(
-        entry: ash::Entry,
+        entry: &ash::Entry,
         instance: ash::Instance,
         device: ash::Device,
         physical_device: vk::PhysicalDevice,
         properties: RendererProperties,
-        current_frame: Arc<AtomicU64>,
+        current_frame: Arc<AtomicUsize>,
         #[cfg(validation)] debug_messenger: vk::DebugUtilsMessengerEXT,
     ) -> Result<Self> {
         // ALLOCATOR
@@ -74,9 +77,9 @@ impl RenderDevice {
             instance: instance.clone(),
             device: device.clone(),
             physical_device,
-            debug_settings: Default::default(),
+            debug_settings: AllocatorDebugSettings::default(),
             buffer_device_address: true,
-            allocation_sizes: Default::default(),
+            allocation_sizes: AllocationSizes::default(),
         })?;
 
         // SWAP CHAIN
@@ -149,7 +152,7 @@ impl RenderDevice {
 
         Ok(Self(Arc::new(RenderDeviceInner {
             device,
-            surface_loader: surface::Instance::new(&entry, &instance),
+            surface_loader: surface::Instance::new(entry, &instance),
             swapchain_loader,
             physical_device,
             queues,
@@ -165,7 +168,7 @@ impl RenderDevice {
             current_frame,
 
             #[cfg(validation)]
-            debug_utils_loader: debug_utils::Instance::new(&entry, &instance),
+            debug_utils_loader: debug_utils::Instance::new(entry, &instance),
             #[cfg(validation)]
             debug_messenger,
 
@@ -196,7 +199,7 @@ impl RenderDevice {
         queue.flush_all(self);
     }
 
-    pub fn current_frame(&self) -> u64 {
+    pub fn current_frame(&self) -> usize {
         self.current_frame.load(Ordering::Relaxed)
     }
 }
@@ -236,17 +239,17 @@ pub enum Garbage {
 
 struct PendingDeletion {
     garbage: Option<Garbage>,
-    death_frame: u64, // frame index after which it's safe to delete
+    death_frame: usize, // frame index after which it's safe to delete
 }
 
 pub struct DeletionQueue {
     pending: Vec<PendingDeletion>,
-    current_frame: Arc<AtomicU64>,
+    current_frame: Arc<AtomicUsize>,
     frames_in_flight: usize,
 }
 
 impl DeletionQueue {
-    pub fn new(current_frame: Arc<AtomicU64>, frames_in_flight: usize) -> Self {
+    pub fn new(current_frame: Arc<AtomicUsize>, frames_in_flight: usize) -> Self {
         Self {
             pending: Vec::new(),
             current_frame,
@@ -258,13 +261,12 @@ impl DeletionQueue {
     pub fn enqueue(&mut self, garbage: Garbage) {
         self.pending.push(PendingDeletion {
             garbage: Some(garbage),
-            death_frame: self.current_frame.load(Ordering::Relaxed)
-                + 2 * self.frames_in_flight as u64, // wait two frames before destroying
+            death_frame: self.current_frame.load(Ordering::Relaxed) + 2 * self.frames_in_flight, // wait two frames before destroying
         });
     }
 
     /// Call once per frame. Destroys anything safe to destroy.
-    pub fn flush(&mut self, device: &RenderDevice, current_frame: u64) {
+    pub fn flush(&mut self, device: &RenderDevice, current_frame: usize) {
         self.pending.retain_mut(|item| {
             if current_frame >= item.death_frame {
                 if let Some(garbage) = item.garbage.take() {
@@ -304,7 +306,7 @@ impl Garbage {
                 Self::DescriptorPool(pool) => device.destroy_descriptor_pool(pool, None),
                 Self::Semaphore(semaphore) => device.destroy_semaphore(semaphore, None),
                 Self::Surface(surface) => {
-                    render_device.surface_loader.destroy_surface(surface, None)
+                    render_device.surface_loader.destroy_surface(surface, None);
                 }
                 Self::Swapchain(swapchain) => render_device
                     .swapchain_loader

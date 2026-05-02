@@ -22,11 +22,11 @@ use crate::{
 /// An abstraction around vulkan windows.
 pub struct Image {
     device: RenderDevice,
-    image: vk::Image,
+    raw: vk::Image,
     view: vk::ImageView,
     /// Wether to destroy the image on [Drop]. This is only
-    /// disabled for [SwapchainImage].
-    destroy_image: bool,
+    /// disabled for [`SwapchainImage`].
+    destroy: bool,
     #[allow(unused)]
     allocation: Option<Allocation>,
     // TODO: store current queue?
@@ -45,7 +45,7 @@ pub struct ImageCreateInfo {
 }
 
 impl Image {
-    pub fn create_image(device: &RenderDevice, info: ImageCreateInfo) -> Result<Self> {
+    pub fn create_image(device: &RenderDevice, info: &ImageCreateInfo) -> Result<Self> {
         let image_info = vk::ImageCreateInfo::default()
             .image_type(vk::ImageType::TYPE_2D)
             .format(info.format)
@@ -76,12 +76,12 @@ impl Image {
         unsafe {
             device
                 .device
-                .bind_image_memory(image, allocation.memory(), allocation.offset())?
+                .bind_image_memory(image, allocation.memory(), allocation.offset())?;
         };
 
         Ok(Self {
             device: device.clone(),
-            image,
+            raw: image,
             view: Self::create_image_view(
                 device,
                 image,
@@ -89,12 +89,12 @@ impl Image {
                 info.aspect_flags,
                 info.mip_levels,
             )?,
-            destroy_image: true,
+            destroy: true,
             allocation: Some(allocation),
         })
     }
     pub fn image(&self) -> vk::Image {
-        self.image
+        self.raw
     }
     pub fn view(&self) -> vk::ImageView {
         self.view
@@ -116,7 +116,11 @@ impl Image {
         )?;
 
         unsafe {
-            let ptr = staging_buf.mapped().unwrap().as_ptr() as *mut u8;
+            let ptr = staging_buf
+                .mapped()
+                .expect("the buffer should be host visible")
+                .as_ptr()
+                .cast::<u8>();
             ptr.copy_from_nonoverlapping(tex.pixels().as_ptr(), tex.pixels().len());
         }
 
@@ -136,7 +140,7 @@ impl Image {
             num_samples: vk::SampleCountFlags::TYPE_1,
             aspect_flags: vk::ImageAspectFlags::COLOR,
         };
-        let mut image = Self::create_image(device, create_info)?;
+        let mut image = Self::create_image(device, &create_info)?;
 
         let cmd = device.graphics_pool.begin_single_time()?;
 
@@ -217,8 +221,8 @@ impl Image {
 
 impl Drop for Image {
     fn drop(&mut self) {
-        if self.destroy_image {
-            self.device.destroy(Garbage::Image(self.image));
+        if self.destroy {
+            self.device.destroy(Garbage::Image(self.raw));
         }
         self.device.destroy(Garbage::ImageView(self.view));
         if let Some(alloc) = self.allocation.take() {
@@ -236,7 +240,7 @@ impl SwapchainImage {
         Ok(Self {
             image: Image {
                 device: device.clone(),
-                image,
+                raw: image,
                 view: Image::create_image_view(
                     device,
                     image,
@@ -244,7 +248,7 @@ impl SwapchainImage {
                     vk::ImageAspectFlags::COLOR,
                     1,
                 )?,
-                destroy_image: false,
+                destroy: false,
                 allocation: None,
             },
         })
