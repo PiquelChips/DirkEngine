@@ -106,6 +106,7 @@ use crate::layers::{console::ConsoleLayer, file::FileLayer};
 /// This ordering is what powers [`Filter::min_level`]: passing
 /// `LogLevel::Warn` keeps `Error` and `Warn` (both ≤ `Warn` in severity).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[allow(missing_docs)]
 pub enum LogLevel {
     Error = 0,
     Warn = 1,
@@ -230,6 +231,7 @@ impl Logger {
     /// - `max_level`: `Info` (same as `verbose(false)`)
     /// - `write_fs`: `false`
     /// - all targets allowed
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -238,6 +240,7 @@ impl Logger {
     ///
     /// Ignored if [`max_level`](Self::max_level) is also called; the explicit
     /// level always wins.
+    #[must_use]
     pub fn verbose(mut self, verbose: bool) -> Self {
         self.verbose = verbose;
         self
@@ -256,6 +259,7 @@ impl Logger {
     /// Logger::new().max_level(LogLevel::Info).init()?;
     /// # Ok(()) };
     /// ```
+    #[must_use]
     pub fn max_level(mut self, level: LogLevel) -> Self {
         self.max_level = Some(level);
         self
@@ -265,6 +269,7 @@ impl Logger {
     ///
     /// When `true`, two files are written into the configured log directory:
     /// `latest.log` (truncated each run) and a timestamped archive.
+    #[must_use]
     pub fn write_fs(mut self, write_fs: bool) -> Self {
         self.write_fs = write_fs;
         self
@@ -285,6 +290,7 @@ impl Logger {
     ///     .init()?;
     /// # Ok(()) };
     /// ```
+    #[must_use]
     pub fn allowed_targets(mut self, targets: impl IntoIterator<Item = impl Into<String>>) -> Self {
         self.allowed_targets = targets.into_iter().map(Into::into).collect();
         self
@@ -319,18 +325,21 @@ impl Logger {
     /// ```
     pub fn init(self) -> Result<Self, InitError> {
         // max_level wins over the verbose shorthand.
-        let max_level: LevelFilter = self.max_level.map(Into::into).unwrap_or_else(|| {
-            if self.verbose {
-                LevelFilter::TRACE
-            } else {
-                LevelFilter::INFO
-            }
-        });
+        let max_level: LevelFilter = self.max_level.map_or_else(
+            || {
+                if self.verbose {
+                    LevelFilter::TRACE
+                } else {
+                    LevelFilter::INFO
+                }
+            },
+            Into::into,
+        );
 
         let targets_filter = if self.allowed_targets.is_empty() {
             None
         } else {
-            let targets = self.allowed_targets.to_vec();
+            let targets = self.allowed_targets.clone();
             Some(filter_fn(move |metadata| {
                 targets.contains(&metadata.target().to_string())
             }))
@@ -395,6 +404,7 @@ impl Logger {
     ///     .count();
     /// ```
     #[cfg(editor)]
+    #[must_use]
     pub fn query(&self, filter: Filter) -> StoreFilter {
         filter.with_store(Arc::clone(&self.store))
     }

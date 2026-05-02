@@ -63,6 +63,7 @@ pub struct LogFilter {
 
 impl LogFilter {
     /// Create a new, empty filter that matches every [`LogEntry`].
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -82,6 +83,7 @@ impl LogFilter {
     /// assert!(!f.filter(&make("AudioManager"))); // substring — does not match
     /// assert!(!f.filter(&make("Rendering")));
     /// ```
+    #[must_use]
     pub fn of_target(mut self, target: impl Into<String>) -> Self {
         let cat = target.into();
         self.filters.push(Box::new(move |e| e.target == cat));
@@ -106,6 +108,7 @@ impl LogFilter {
     /// assert!(f.filter(&make("Rendering/Shadows")));
     /// assert!(!f.filter(&make("Physics")));
     /// ```
+    #[must_use]
     pub fn target_contains(mut self, substring: impl Into<String>) -> Self {
         let sub = substring.into();
         self.filters
@@ -131,6 +134,7 @@ impl LogFilter {
     /// assert!(!f.filter(&make(LogLevel::Error))); // more severe — excluded
     /// assert!(!f.filter(&make(LogLevel::Info)));  // less severe — excluded
     /// ```
+    #[must_use]
     pub fn of_level(mut self, level: LogLevel) -> Self {
         self.filters.push(Box::new(move |e| e.level == level));
         self
@@ -157,6 +161,7 @@ impl LogFilter {
     /// assert!(!f.filter(&make(LogLevel::Debug))); //              ✗
     /// assert!(!f.filter(&make(LogLevel::Trace))); //              ✗
     /// ```
+    #[must_use]
     pub fn min_level(mut self, level: LogLevel) -> Self {
         self.filters.push(Box::new(move |e| e.level <= level));
         self
@@ -180,6 +185,7 @@ impl LogFilter {
     /// };
     /// assert!(!f.filter(&old));
     /// ```
+    #[must_use]
     pub fn since(mut self, time: OffsetDateTime) -> Self {
         self.filters.push(Box::new(move |e| e.timestamp >= time));
         self
@@ -199,6 +205,7 @@ impl LogFilter {
     ///     .since(now - time::Duration::seconds(10))
     ///     .until(now);
     /// ```
+    #[must_use]
     pub fn until(mut self, time: OffsetDateTime) -> Self {
         self.filters.push(Box::new(move |e| e.timestamp <= time));
         self
@@ -218,6 +225,7 @@ impl LogFilter {
     ///     .of_target("Physics")
     ///     .within_last_seconds(60);
     /// ```
+    #[must_use]
     pub fn within_last_seconds(self, seconds: i64) -> Self {
         let cutoff = OffsetDateTime::now_utc() - time::Duration::seconds(seconds);
         self.since(cutoff)
@@ -239,6 +247,7 @@ impl LogFilter {
     /// assert!(!f.filter(&make("Broad-phase Overflow detected"))); // case-sensitive
     /// assert!(!f.filter(&make("All contacts resolved")));
     /// ```
+    #[must_use]
     pub fn matching(mut self, pattern: impl Into<String>) -> Self {
         let pat = pattern.into();
         self.filters
@@ -250,6 +259,7 @@ impl LogFilter {
     ///
     /// Returns `true` only when **all** predicates pass (AND semantics).
     /// An empty filter (no predicates added) always returns `true`.
+    #[must_use]
     pub fn filter(&self, entry: &LogEntry) -> bool {
         self.filters.iter().all(|f| f(entry))
     }
@@ -299,6 +309,7 @@ impl StoreFilter {
     ///     .query(Filter::new().min_level(LogLevel::Warn))
     ///     .execute();
     /// ```
+    #[must_use]
     pub fn execute(self) -> Vec<LogEntry> {
         self.store.with_entries(|entries| {
             entries
@@ -323,6 +334,7 @@ impl StoreFilter {
     ///     .query(Filter::new().of_target("Rendering"))
     ///     .last(50);
     /// ```
+    #[must_use]
     pub fn last(self, n: usize) -> Vec<LogEntry> {
         let mut results = self.execute();
         let len = results.len();
@@ -345,6 +357,7 @@ impl StoreFilter {
     ///     .query(Filter::new().of_level(LogLevel::Error))
     ///     .count();
     /// ```
+    #[must_use]
     pub fn count(self) -> usize {
         self.store
             .with_entries(|entries| entries.iter().filter(|e| self.filter.filter(e)).count())

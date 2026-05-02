@@ -1,3 +1,5 @@
+//! This crate exports all the proc-macros used in the engine.
+
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{Data, DeriveInput, parse_macro_input};
@@ -60,7 +62,7 @@ pub fn derive_event(input: proc_macro::TokenStream) -> TokenStream {
     let result: syn::Result<proc_macro2::TokenStream> = match input.data {
         Data::Enum(ref data) => event::derive_event_enum(&input, data),
         Data::Struct(ref data) => event::derive_event_struct(&input, data),
-        _ => Err(syn::Error::new(
+        Data::Union(_) => Err(syn::Error::new(
             input.ident.span(),
             "`Event` can only be derived for structs and enums",
         )),

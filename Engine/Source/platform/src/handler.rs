@@ -18,9 +18,9 @@ pub struct PlatformHandler {
     pub windows: HashMap<WindowId, Window>,
     main_window: Option<WindowId>,
 
-    /// Dispatch [PlatformEvent]
+    /// Dispatch [`PlatformEvent`]
     platform_dispatcher: events::Dispatcher<PlatformEvent>,
-    /// Dispatch [PlatformWindowEvent]
+    /// Dispatch [`PlatformWindowEvent`]
     window_dispatcher: events::Dispatcher<PlatformWindowEvent>,
 }
 
@@ -110,7 +110,9 @@ impl ApplicationHandler for PlatformHandler {
                 trace!("Modifiers changed to {:?}", window.get_modifiers());
             */
             }
-            WindowEvent::MouseWheel { delta: _, .. } => {}
+            WindowEvent::MouseWheel { delta, .. } => {
+                trace!("Mouse wheel event: {delta:?}");
+            }
             /* TODO: input events
             match delta {
                 MouseScrollDelta::LineDelta(x, y) => {
@@ -122,10 +124,11 @@ impl ApplicationHandler for PlatformHandler {
             },
             */
             WindowEvent::KeyboardInput {
-                event: _,
-                is_synthetic: false,
+                event,
+                is_synthetic,
                 ..
             } => {
+                trace!("Input Event: {:?} {:?}, {is_synthetic}", event.logical_key, event.state);
                 /* TODO: input events
                 let mods = window.modifiers;
 
@@ -182,7 +185,6 @@ impl ApplicationHandler for PlatformHandler {
             | WindowEvent::DoubleTapGesture { .. }
             | WindowEvent::TouchpadPressure { .. }
             | WindowEvent::DragLeft { .. }
-            | WindowEvent::KeyboardInput { .. }
             | WindowEvent::PointerEntered { .. }
             | WindowEvent::DragEntered { .. }
             | WindowEvent::DragMoved { .. }

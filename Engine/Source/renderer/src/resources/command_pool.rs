@@ -12,7 +12,7 @@ pub struct Transfer;
 #[allow(unused)]
 pub struct Compute;
 
-/// Wrapper for [vk::CommandPool].
+/// Wrapper for [`vk::CommandPool`].
 pub struct CommandPool<Type: Pool> {
     device: Device,
     /// The command pool
@@ -108,7 +108,7 @@ impl<Type: Pool> CommandPool<Type> {
     }
 }
 
-/// Wrapper for [vk::CommandBuffer].
+/// Wrapper for [`vk::CommandBuffer`].
 pub struct CommandBuffer {
     device: Device,
     /// The buffer
@@ -124,7 +124,7 @@ impl CommandBuffer {
     pub fn submit(&self, submit_info: vk::SubmitInfo, fence: vk::Fence) -> Result<()> {
         unsafe {
             self.device
-                .queue_submit(self.queue, std::slice::from_ref(&submit_info), fence)?
+                .queue_submit(self.queue, std::slice::from_ref(&submit_info), fence)?;
         };
         Ok(())
     }

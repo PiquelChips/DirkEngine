@@ -119,13 +119,13 @@ impl WorldEvent {
     ///     .collect();
     /// # }
     /// ```
+    #[must_use]
     pub fn world(&self) -> WorldId {
         match &self {
-            Self::Created(id) => *id,
-            Self::Destroyed(id) => *id,
-            Self::EntitySpawn { world, .. } => *world,
-            Self::EntityUpdate { world, .. } => *world,
-            Self::EntityDespawn { world, .. } => *world,
+            Self::Created(id) | Self::Destroyed(id) => *id,
+            Self::EntitySpawn { world, .. }
+            | Self::EntityUpdate { world, .. }
+            | Self::EntityDespawn { world, .. } => *world,
         }
     }
 }
@@ -163,11 +163,17 @@ impl WorldEvent {
 /// ```
 #[derive(Clone, Debug, Event)]
 pub struct PlayerUpdateEvent {
+    /// The player's ID
     pub id: PlayerId,
+    /// The world the player currently is in
     pub world: WorldId,
+    /// The entity that the player possesses in the world
     pub entity: Entity,
+    /// The window the player's viewport is being drawn to
     pub window: WindowId,
+    /// The region of the window that the player's viewport is being draw to
     pub region: PlayerRegion,
+    /// The kind of update that triggered this event. See [`PlayerUpdateType`]
     pub update_type: PlayerUpdateType,
 }
 
@@ -197,6 +203,7 @@ impl PlayerUpdateEvent {
     ///
     /// * `player`      — the player whose state should be snapshotted.
     /// * `update_type` — the reason for the event.
+    #[must_use]
     pub fn from_player(player: &Player, update_type: PlayerUpdateType) -> Self {
         Self {
             id: player.id(),
