@@ -66,6 +66,7 @@ impl Transform {
     ///
     /// Rotation is applied in **YXZ** order (yaw around Y, then pitch around X,
     /// then roll around Z).
+    #[must_use]
     pub fn matrix(&self) -> Mat4 {
         let translation = Mat4::from_translation(self.location);
         let scale = Mat4::from_scale(self.scale);
@@ -77,6 +78,7 @@ impl Transform {
     }
 
     /// Returns the orientation as a unit quaternion (YXZ Euler decomposition).
+    #[must_use]
     pub fn rotation_quat(&self) -> glam::Quat {
         glam::Quat::from_euler(
             glam::EulerRot::YXZ,
@@ -90,6 +92,7 @@ impl Transform {
     ///
     /// The result is obtained by rotating the engine's canonical forward
     /// direction ([`utils::FORWARD_DIRECTION`]) by the current orientation.
+    #[must_use]
     pub fn forward(&self) -> Vec3 {
         self.rotation_quat() * utils::FORWARD_DIRECTION
     }
@@ -149,6 +152,7 @@ impl Camera {
     ///
     /// The Y axis of the resulting matrix is negated so that clip-space Y
     /// increases *downward*, matching Vulkan / wgpu NDC conventions.
+    #[must_use]
     pub fn projection(&self) -> Mat4 {
         let mut proj = Mat4::perspective_rh(
             self.fov,
@@ -162,13 +166,14 @@ impl Camera {
     }
 
     /// Returns the aspect ratio (`width / height`).
+    #[must_use]
     pub fn aspect_ratio(&self) -> f32 {
         self.width / self.height
     }
 }
 
 impl Default for Camera {
-    /// Returns a camera with a 45° FoV, near = 1, far = 100, and a square
+    /// Returns a camera with a 45° `FoV`, near = 1, far = 100, and a square
     /// 100 × 100 viewport.
     fn default() -> Self {
         Self {

@@ -119,13 +119,13 @@ impl WorldEvent {
     ///     .collect();
     /// # }
     /// ```
+    #[must_use]
     pub fn world(&self) -> WorldId {
         match &self {
-            Self::Created(id) => *id,
-            Self::Destroyed(id) => *id,
-            Self::EntitySpawn { world, .. } => *world,
-            Self::EntityUpdate { world, .. } => *world,
-            Self::EntityDespawn { world, .. } => *world,
+            Self::Created(id) | Self::Destroyed(id) => *id,
+            Self::EntitySpawn { world, .. }
+            | Self::EntityUpdate { world, .. }
+            | Self::EntityDespawn { world, .. } => *world,
         }
     }
 }
@@ -198,6 +198,7 @@ impl PlayerUpdateEvent {
     ///
     /// * `player`      — the player whose state should be snapshotted.
     /// * `update_type` — the reason for the event.
+    #[must_use]
     pub fn from_player(player: &Player, update_type: PlayerUpdateType) -> Self {
         Self {
             id: player.id(),
