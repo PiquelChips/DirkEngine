@@ -28,6 +28,11 @@ pub fn configure_editor() {
 }
 
 /// Returns the directory of the current cargo workspace
+///
+/// # Panics
+///
+/// Will panic if it fails to run `cargo metadata`
+#[must_use] 
 pub fn workspace_dir() -> PathBuf {
     let metadata = cargo_metadata::MetadataCommand::new()
         .exec()
@@ -38,7 +43,7 @@ pub fn workspace_dir() -> PathBuf {
 
 /// Will add usefull relative paths to the compilation env.
 ///
-/// Paths can be added in the function body inserting them into the HashMap
+/// Paths can be added in the function body inserting them into the [`HashMap`]
 pub fn setup_paths() {
     println!(
         "cargo:rustc-env=WORKSPACE_ROOT={}",

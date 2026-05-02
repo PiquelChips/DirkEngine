@@ -19,6 +19,12 @@ pub const UP_DIRECTION: glam::Vec3 = glam::Vec3::Y;
 pub const FORWARD_DIRECTION: glam::Vec3 = glam::Vec3::Z;
 
 const ROOT: &str = std::env!("WORKSPACE_ROOT");
+
+/// We format the path to make it relative to the workspace root.
+///
+/// # Errors
+///
+/// If the path is not relative to the base, an error will be thrown.
 pub fn format_path(base: &PathBuf, path: &Path) -> std::io::Result<PathBuf> {
     let root = PathBuf::from(ROOT).join(base);
     Ok(path
