@@ -1,9 +1,9 @@
 //! This crate has all the platform level functionnality. It should be the
-//! only place where any kind of platform dependent code or #[cfg()] attributes
+//! only place where any kind of platform dependent code or #[`cfg()`] attributes
 //! should be used. This allows us to create a central platform API for eaiser
 //! development.
 //!
-//! The DirkEngine's platform API is build on the winit crate.
+//! The `DirkEngine`'s platform API is build on the winit crate.
 
 use std::{collections::HashMap, time::Duration};
 
@@ -37,10 +37,15 @@ pub struct Platform {
 impl Platform {
     /// Initialise the platform wrapper. Essentially just creates
     /// the handler for [winit] platform events.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the [winit] App exited while trying
+    /// to start it.
     pub fn init(events: &events::EventManager) -> Result<Self> {
         let mut platform = Self {
             handler: PlatformHandler::new(events),
-            event_loop: EventLoop::new().expect("failed to create winit event loop"),
+            event_loop: EventLoop::new()?,
             exit_dispatcher: events.register(),
             window_consumer: events.subscribe(),
         };
@@ -83,7 +88,7 @@ impl Platform {
 
         self.window_consumer.consume_all().for_each(|event| {
             if let Some(window) = self.handler.windows.get_mut(event.id()) {
-                window.handle_event(event.clone());
+                window.handle_event(&event);
             }
         });
     }
@@ -94,12 +99,12 @@ impl Platform {
         self.handler.main_window()
     }
 
-    /// Returns a reference to the HashMap of all the windows currently
+    /// Returns a reference to the `HashMap` of all the windows currently
     /// owned by the engine.
     pub fn windows(&self) -> &HashMap<WindowId, Window> {
         &self.handler.windows
     }
-    /// Same as [`Platform::windows`] but returns a mutable HashMap
+    /// Same as [`Platform::windows`] but returns a mutable `HashMap`
     pub fn windows_mut(&mut self) -> &HashMap<WindowId, Window> {
         &self.handler.windows
     }

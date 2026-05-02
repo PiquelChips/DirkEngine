@@ -20,7 +20,7 @@ pub enum PlatformEvent {
     WindowCloseRequested { id: WindowId },
     /// The window has been finally destroyed. This event should not be
     /// used as all window related objects should have been destroyed on
-    /// [Self::WindowCloseRequested].
+    /// [`Self::WindowCloseRequested`].
     WindowDestroyed { id: WindowId },
 }
 
@@ -50,12 +50,13 @@ pub enum WindowEvent {
 impl WindowEvent {
     /// Returns the ID of the window referenced in the event. This is
     /// just a match that extracts the ID out of every variant.
+    #[must_use]
     pub fn id(&self) -> &WindowId {
         match self {
-            Self::Resized { id, .. } => id,
-            Self::Occluded { id, .. } => id,
-            Self::FocusChanged { id, .. } => id,
-            Self::ThemeChanged { id, .. } => id,
+            Self::Resized { id, .. }
+            | Self::Occluded { id, .. }
+            | Self::FocusChanged { id, .. }
+            | Self::ThemeChanged { id, .. } => id,
         }
     }
 }
