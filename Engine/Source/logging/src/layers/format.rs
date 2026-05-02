@@ -14,7 +14,7 @@ impl Visit for EventVisitor {
     /// Handles string fields set via `field = "value"` syntax.
     fn record_str(&mut self, field: &Field, value: &str) {
         if field.name() == "message" {
-            self.message = value.to_owned();
+            value.clone_into(&mut self.message);
         }
     }
 
@@ -48,8 +48,8 @@ pub(crate) fn format_timestamp_filename(ts: &OffsetDateTime) -> String {
 }
 
 /// ANSI color codes for each log level.
-fn level_color_code(level: &tracing::Level) -> u8 {
-    match *level {
+fn level_color_code(level: tracing::Level) -> u8 {
+    match level {
         tracing::Level::ERROR => 31, // Red
         tracing::Level::WARN => 33,  // Yellow
         tracing::Level::INFO => 32,  // Green
@@ -66,15 +66,15 @@ fn ansi_wrap(code: u8, text: &str) -> String {
 ///
 /// `colored = true`  → `[\x1b[32mINFO\x1b[0m]`
 /// `colored = false` → `[INFO]`
-pub(crate) fn format_level(level: &tracing::Level, colored: bool) -> String {
+pub(crate) fn format_level(level: tracing::Level, colored: bool) -> String {
     let name = level.to_string(); // "ERROR" | "WARN" | "INFO" | "DEBUG" | "TRACE"
     let text = if colored {
-        ansi_wrap(level_color_code(level), &name).to_string()
+        ansi_wrap(level_color_code(level), &name).clone()
     } else {
         name
     };
-    let mut fmt = format!("[{}]", text);
-    if *level == tracing::Level::WARN || *level == tracing::Level::INFO {
+    let mut fmt = format!("[{text}]");
+    if level == tracing::Level::WARN || level == tracing::Level::INFO {
         fmt = format!("{fmt} ");
     }
 

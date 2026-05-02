@@ -35,6 +35,8 @@ pub struct QueueFamilyIndices {
 }
 
 impl QueueFamilyIndices {
+    // the queue indices never get anywhere near u32::MAX.
+    #[allow(clippy::cast_possible_truncation)]
     pub fn resolve(
         info: &PhysicalDeviceInfo,
         surface_loader: &surface::Instance,
@@ -110,7 +112,7 @@ fn score_device(info: &PhysicalDeviceInfo) -> u32 {
 type Requirement = dyn Fn(&PhysicalDeviceInfo) -> bool;
 
 /// A simple struct to help select a physical device for vulkan.
-/// Add requirements that implement the [DeviceRequirement] trait.
+/// Add requirements that implement the [`DeviceRequirement`] trait.
 /// When selecting, will make sure all requirements are met, or will
 /// return [None].
 pub struct PhysicalDeviceSelector {

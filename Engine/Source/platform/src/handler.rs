@@ -23,9 +23,9 @@ pub struct PlatformHandler {
     /// TODO: should only be tracked by input manager
     modifiers: ModifiersState,
 
-    /// Dispatch [PlatformEvent]
+    /// Dispatch [`PlatformEvent`]
     platform_dispatcher: events::Dispatcher<PlatformEvent>,
-    /// Dispatch [PlatformWindowEvent]
+    /// Dispatch [`PlatformWindowEvent`]
     window_dispatcher: events::Dispatcher<PlatformWindowEvent>,
     /// Dispatch [InputEvent]
     input_dispatch: events::Dispatcher<InputEvent>,

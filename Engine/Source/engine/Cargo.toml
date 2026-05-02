@@ -21,3 +21,6 @@ world.workspace = true
 resource_manager.workspace = true
 
 glam.workspace = true
+
+[lints]
+workspace = true

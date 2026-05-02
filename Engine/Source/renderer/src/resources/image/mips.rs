@@ -17,8 +17,11 @@ impl Image {
         height: u32,
         mip_levels: u32,
     ) -> Result<()> {
-        let mut mip_width = width;
-        let mut mip_height = height;
+        // heigh & width never get anywhere near i32::MAX, so no real problem
+        #[allow(clippy::cast_possible_wrap)]
+        let mut mip_width = width as i32;
+        #[allow(clippy::cast_possible_wrap)]
+        let mut mip_height = height as i32;
 
         for level in 1..mip_levels {
             let base_mip = level - 1;
@@ -44,8 +47,8 @@ impl Image {
                 .src_offsets([
                     vk::Offset3D { x: 0, y: 0, z: 0 },
                     vk::Offset3D {
-                        x: mip_width as i32,
-                        y: mip_height as i32,
+                        x: mip_width,
+                        y: mip_height,
                         z: 1,
                     },
                 ])
@@ -58,8 +61,8 @@ impl Image {
                 .dst_offsets([
                     vk::Offset3D { x: 0, y: 0, z: 0 },
                     vk::Offset3D {
-                        x: next_w as i32,
-                        y: next_h as i32,
+                        x: next_w,
+                        y: next_h,
                         z: 1,
                     },
                 ]);
