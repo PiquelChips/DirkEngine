@@ -10,7 +10,6 @@ fn run() -> anyhow::Result<()> {
     let mut engine = engine::Engine::init().context("engine init")?;
     engine.start().context("start engine")?;
     while engine.tick().context("engine tick")? {}
-    engine.shutdown().context("engine shutdown")?;
 
     if let Some(err) = engine.get_exit_error() {
         error!("{err:#}");
@@ -20,7 +19,7 @@ fn run() -> anyhow::Result<()> {
 
 fn main() {
     match run() {
-        Ok(_) => {}
+        Ok(()) => {}
         Err(err) => {
             error!("{err:#}");
             panic!("Error: {err:#}");

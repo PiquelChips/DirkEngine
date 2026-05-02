@@ -4,7 +4,7 @@
 use std::{collections::HashMap, ffi::CString, str::FromStr, time::Instant};
 
 use anyhow::Context;
-use tracing::info;
+use tracing::{info, warn};
 use world::{
     World, WorldId,
     player::{Player, PlayerId},
@@ -35,6 +35,10 @@ pub struct Engine {
 
 impl Engine {
     /// Constructs and initialises the gine
+    ///
+    /// # Errors
+    ///
+    /// Errors can be returned during platform & renderer initialisation
     pub fn init() -> anyhow::Result<Self> {
         info!("initialising engine");
         let logger = logging::Logger::new()
@@ -82,16 +86,28 @@ impl Engine {
     }
     /// Will start the main game/editor. This should be called
     /// once right after init.
+    ///
+    /// # Errors
+    ///
+    /// None for now, will be one if an error occurs when creating the world.
     pub fn start(&mut self) -> anyhow::Result<()> {
         info!("starting engine");
         let world_id = self.create_test_world();
 
-        self.spawn_player(world_id);
+        if self.spawn_player(world_id).is_none() {
+            // TODO: return a proper error (one received from the universe)
+            warn!("unable to spawn player in world {world_id}");
+        }
 
         Ok(())
     }
     /// Ticks the engine. This is the master function that calls
     /// every other system's tick function.
+    ///
+    /// # Errors
+    ///
+    /// Errors can occure if the various ticking systems have errors.
+    /// For now, only rendering can return an error.
     pub fn tick(&mut self) -> anyhow::Result<bool> {
         let delta_time = self.capture_delta_time();
         self.event_manager.dispatch_all();
@@ -115,6 +131,10 @@ impl Engine {
     }
 
     /// Will render the surfaces for every player owned by the engine
+    ///
+    /// # Errors
+    ///
+    /// Any error that is returned during rendering.
     pub fn render(&mut self) -> anyhow::Result<()> {
         for player in self.players.values() {
             self.renderer
@@ -123,13 +143,6 @@ impl Engine {
         Ok(())
     }
 
-    /// This function cleans up the engine and shuts systems down.
-    /// All lot of work is left to the destructor, so this function
-    /// doesn't do much for now.
-    pub fn shutdown(&self) -> anyhow::Result<()> {
-        info!("engine shutting down");
-        Ok(())
-    }
     fn process_events(&mut self) {
         if let Some(platform::AppExit(_)) = self.exit_consumer.try_consume() {
             self.exit(None);
@@ -170,11 +183,11 @@ impl Engine {
         self.worlds.remove(&id);
     }
 
-    fn spawn_player(&mut self, world: WorldId) -> PlayerId {
+    fn spawn_player(&mut self, world: WorldId) -> Option<PlayerId> {
         let id = self.next_player_id;
         self.next_player_id += 1;
 
-        let world = self.worlds.get_mut(&world).unwrap();
+        let world = self.worlds.get_mut(&world)?;
 
         let player = Player::spawn(
             id,
@@ -184,7 +197,7 @@ impl Engine {
         );
 
         self.players.insert(id, player);
-        id
+        Some(id)
     }
     #[allow(unused)]
     fn kill_player(&mut self, id: PlayerId) {
@@ -198,9 +211,13 @@ impl Engine {
     }
 
     fn create_test_world(&mut self) -> WorldId {
+        use world::components::{Renderable, Transform};
+
         let world_id = self.create_world();
-        use world::components::*;
-        let world = self.worlds.get_mut(&world_id).unwrap();
+        let world = self
+            .worlds
+            .get_mut(&world_id)
+            .expect("world was just created, ID should be valid");
 
         let shrek = world.spawn();
         world.insert(
