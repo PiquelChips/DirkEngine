@@ -13,7 +13,6 @@ thiserror.workspace = true
 winit.workspace = true
 
 events.workspace = true
-macros.workspace = true
 
 glam.workspace = true
 

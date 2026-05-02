@@ -1,5 +1,4 @@
 use events::Event;
-use macros::Event;
 use winit::{
     event::{ButtonSource, MouseScrollDelta},
     keyboard::{Key, ModifiersState, PhysicalKey},
