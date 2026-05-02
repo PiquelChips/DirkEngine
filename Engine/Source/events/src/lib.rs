@@ -112,6 +112,7 @@ impl EventManager {
     ///
     /// let mgr = EventManager::new();
     /// ```
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -143,6 +144,7 @@ impl EventManager {
     /// ```
     ///
     /// [`dispatch_all`]: EventManager::dispatch_all
+    #[must_use]
     pub fn register<T: Event>(&self) -> Dispatcher<T> {
         let (sender, receiver) = mpsc::channel::<T>();
         self.inner.lock().producers.push(Box::new(TypedProducer {
@@ -180,6 +182,7 @@ impl EventManager {
     /// // Type annotation on the binding:
     /// let c2: Consumer<MyEvent> = mgr.subscribe();
     /// ```
+    #[must_use]
     pub fn subscribe<T: Event>(&self) -> Consumer<T> {
         let (sender, receiver) = mpsc::channel::<T>();
         let type_id = TypeId::of::<T>();
@@ -249,7 +252,7 @@ impl EventManager {
 }
 
 /// The Type Erasure Trait.
-/// Allows the EventManager to forward pending events without knowing `T`.
+/// Allows the `EventManager` to forward pending events without knowing `T`.
 trait AnyProducer: Send {
     fn forward_pending(&self, subscribers: &mut HashMap<TypeId, Vec<Subscriber>>);
 }
@@ -259,7 +262,7 @@ trait AnyProducer: Send {
 /// producer and collects pending events.
 ///
 /// This is a typed producer as it stores the actual type of the
-/// event it is producing. It is then wrapped by the [AnyProducer]
+/// event it is producing. It is then wrapped by the [`AnyProducer`]
 /// trait to hide the event type from the event manager.
 struct TypedProducer<T: Event> {
     type_id: TypeId,
@@ -445,7 +448,7 @@ impl<T: Event> Consumer<T> {
     pub fn try_consume(&self) -> Option<T> {
         let res = self.receiver.try_recv().ok();
         if let Some(event) = res.clone() {
-            trace!("consuming {}", event.debug())
+            trace!("consuming {}", event.debug());
         }
         res
     }

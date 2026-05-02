@@ -54,7 +54,7 @@ impl Engine {
 
         let platform = platform::Platform::init(&event_manager).context("platform init")?;
         let renderer = renderer::Renderer::init(
-            renderer::RendererCreateInfo {
+            &renderer::RendererCreateInfo {
                 engine_name: CString::from_str(name)?,
                 engine_version: version,
                 app_name: CString::from_str(name)?,

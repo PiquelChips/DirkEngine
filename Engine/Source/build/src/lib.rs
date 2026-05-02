@@ -27,6 +27,7 @@ pub fn configure_editor() {
 
 /// Gets the path where all runtime generated files are
 /// stored (cache, logs, ...).
+#[must_use]
 pub fn get_run_dir() -> String {
     String::from("Saved")
 }
