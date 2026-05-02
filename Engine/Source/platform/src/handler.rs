@@ -19,7 +19,7 @@ pub struct PlatformHandler {
     pub windows: HashMap<WindowId, Window>,
     main_window: Option<WindowId>,
 
-    /// Current keyboard modifier state, updated on every ModifiersChanged event.
+    /// Current keyboard modifier state, updated on every `ModifiersChanged` event.
     /// TODO: should only be tracked by input manager
     modifiers: ModifiersState,
 
@@ -27,7 +27,7 @@ pub struct PlatformHandler {
     platform_dispatcher: events::Dispatcher<PlatformEvent>,
     /// Dispatch [`PlatformWindowEvent`]
     window_dispatcher: events::Dispatcher<PlatformWindowEvent>,
-    /// Dispatch [InputEvent]
+    /// Dispatch [`InputEvent`]
     input_dispatch: events::Dispatcher<InputEvent>,
 }
 
