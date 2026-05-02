@@ -1,3 +1,6 @@
+//! The Renderer. This monolithic crate handles all the rendering of
+//! the engine. All of the GPU operations are handled by [ash].
+
 #[cfg(validation)]
 use std::os::raw::c_void;
 use std::{
@@ -5,7 +8,7 @@ use std::{
     ffi::{CStr, CString},
     sync::{
         Arc,
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicUsize, Ordering},
     },
 };
 
@@ -28,8 +31,8 @@ use platform::{PlatformEvent, WindowEvent, WindowId};
 use world::{events::WorldEvent, player::PlayerId};
 
 mod utils;
-use ::utils::*;
-use utils::*;
+use ::utils::Version;
+use utils::{DescriptorLayouts, Frame, Queues, RendererProperties, Vertex, make_version};
 
 mod errors;
 pub use errors::{Error, Result};
@@ -64,10 +67,16 @@ const DEVICE_EXTENSIONS: &[&str] =
 #[cfg(validation)]
 const VALIDATION_LAYERS: &[*const i8] = &[c"VK_LAYER_KHRONOS_validation".as_ptr()];
 
+/// The information needed to create the renderer. This is primarily metadata
+/// used for Vulkan initialisation.
 pub struct RendererCreateInfo {
+    /// The name of the engine. Used for vulkan initialisation.
     pub engine_name: CString,
+    /// The version of the engine. Used for vulkan initialisation.
     pub engine_version: Version,
+    /// The name of the application. Used for vulkan initialisation.
     pub app_name: CString,
+    /// The version of the application. Used for vulkan initialisation.
     pub app_version: Version,
 }
 
@@ -77,7 +86,7 @@ pub struct Renderer {
     entry: Entry,
 
     // Heavy renderer state:
-    /// All of the [window::Window]s constructed from [platform::Window]s.
+    /// All of the [`window::Window`]s constructed from [`platform::Window`]s.
     windows: HashMap<WindowId, Window>,
     /// All of the internal [world::World] representations.
     scenes: HashMap<world::WorldId, Scene>,
@@ -88,7 +97,7 @@ pub struct Renderer {
     asset_manager: AssetManager,
 
     frames: [Frame; MAX_FRAMES_IN_FLIGHT],
-    current_frame: Arc<AtomicU64>,
+    current_frame: Arc<AtomicUsize>,
 
     // Events
     event_manager: EventManager,
@@ -107,8 +116,16 @@ pub struct Renderer {
 }
 
 impl Renderer {
+    /// Renderer initialisation. Creates all Vulkan & other renderer objects.
+    ///
+    /// # Errors
+    ///
+    /// Plenty of Vulkan & platform errors can occur during renderer intializing
+    // TODO: shorten this function by dividing into smaller functions. maybe
+    // even create a separate init module with all the init functions in it
+    #[allow(clippy::too_many_lines)]
     pub fn init(
-        create_info: RendererCreateInfo,
+        create_info: &RendererCreateInfo,
         window: &platform::Window,
         event_manager: events::EventManager,
     ) -> Result<Self> {
@@ -338,7 +355,7 @@ impl Renderer {
                 properties.queue_family_indices.transfer,
             ]
             .iter()
-            .cloned()
+            .copied()
             .collect();
 
             // only one queue per family, so all 1.0 priority
@@ -361,7 +378,7 @@ impl Renderer {
 
             let extensions: Vec<*const i8> = DEVICE_EXTENSIONS
                 .iter()
-                .map(|name| unsafe { std::mem::transmute(name.as_ptr()) })
+                .map(|name| name.as_ptr().cast())
                 .collect();
             let device_create_info = vk::DeviceCreateInfo::default()
                 .queue_create_infos(&queue_create_infos)
@@ -373,11 +390,11 @@ impl Renderer {
             unsafe { instance.create_device(physical_device, &device_create_info, None)? }
         };
 
-        let current_frame = Arc::new(AtomicU64::new(0));
+        let current_frame = Arc::new(AtomicUsize::new(0));
 
         // RENDER DEVICE
         let render_device = RenderDevice::new(
-            entry.clone(),
+            &entry,
             instance.clone(),
             device.clone(),
             physical_device,
@@ -445,6 +462,16 @@ impl Renderer {
         })
     }
 
+    /// Ticks the renderer. Used to improve the various internal representations
+    /// of external engine objects.
+    /// The renderer listens to events to properly sync windows, scenes, ...
+    ///
+    /// # Errors
+    ///
+    /// Errors can occur when updating the scene & world (if one is missing for example)
+    /// Some platform errors can also occur when handling windows
+    // TODO: This will be removed with the updated render system
+    #[allow(clippy::too_many_lines)]
     pub fn tick(
         &mut self,
         _delta_time: f32,
@@ -545,6 +572,12 @@ impl Renderer {
         Ok(())
     }
 
+    /// The actual rendering. This records render commands & submits them to
+    /// the GPU.
+    ///
+    /// # Errors
+    ///
+    /// Vulkan errors can occur during rendering
     pub fn render(
         &mut self,
         window: WindowId,
@@ -579,7 +612,7 @@ impl Renderer {
         unsafe {
             self.render_device
                 .device
-                .begin_command_buffer(cmd.raw(), &vk::CommandBufferBeginInfo::default())?
+                .begin_command_buffer(cmd.raw(), &vk::CommandBufferBeginInfo::default())?;
         }
 
         render_image.image.transition_image_layout(
@@ -621,7 +654,7 @@ impl Renderer {
                 self.render_device.queues.graphics,
                 std::slice::from_ref(&submit_info),
                 frame.fence,
-            )?
+            )?;
         }
 
         let present_info = vk::PresentInfoKHR::default()
@@ -638,9 +671,7 @@ impl Renderer {
         };
 
         self.current_frame.store(
-            ((self.current_frame() + 1) % MAX_FRAMES_IN_FLIGHT)
-                .try_into()
-                .unwrap(),
+            (self.current_frame() + 1) % MAX_FRAMES_IN_FLIGHT,
             Ordering::Relaxed,
         );
         Ok(())
@@ -663,9 +694,7 @@ impl Renderer {
                 )?
         };
 
-        let extent = if capabilities.current_extent.width != u32::MAX {
-            capabilities.current_extent
-        } else {
+        let extent = if capabilities.current_extent.width == u32::MAX {
             vk::Extent2D {
                 width: window_size.width.clamp(
                     capabilities.min_image_extent.width,
@@ -676,6 +705,8 @@ impl Renderer {
                     capabilities.max_image_extent.height,
                 ),
             }
+        } else {
+            capabilities.current_extent
         };
 
         let mut image_count = capabilities.min_image_count + 1;
@@ -737,7 +768,7 @@ impl Renderer {
         unsafe {
             self.render_device
                 .swapchain_loader
-                .destroy_swapchain(old_swapchain, None)
+                .destroy_swapchain(old_swapchain, None);
         };
 
         Ok((swapchain, extent, swap_images))
@@ -752,6 +783,10 @@ impl Renderer {
         };
         let max_aniso = props.limits.max_sampler_anisotropy;
 
+        // the max_lod cast loses precision, as there are only a
+        // small number of mip_levels, there should be no real
+        // precision loss.
+        #[allow(clippy::cast_precision_loss)]
         let sampler_info = vk::SamplerCreateInfo::default()
             .mag_filter(vk::Filter::LINEAR)
             .min_filter(vk::Filter::LINEAR)
@@ -782,7 +817,7 @@ impl Renderer {
     #[inline]
     fn current_frame(&self) -> usize {
         self.current_frame
-            .load(std::sync::atomic::Ordering::Relaxed) as usize
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
 }
 
@@ -795,7 +830,7 @@ impl Drop for Renderer {
 
         self.scenes.clear();
         self.windows.clear();
-        self.frames.iter().for_each(|f| f.destroy());
+        self.frames.iter().for_each(utils::Frame::destroy);
         self.render_device.flush_all();
     }
 }
@@ -811,16 +846,17 @@ extern "system" fn debug_callback(
 
     match severity {
         vk::DebugUtilsMessageSeverityFlagsEXT::ERROR => {
-            error!(target: "vulkan::validation", "{}", message)
+            error!(target: "vulkan::validation", "{}", message);
         }
+
         vk::DebugUtilsMessageSeverityFlagsEXT::WARNING => {
-            warn! (target: "vulkan::validation", "{}", message)
+            warn! (target: "vulkan::validation", "{}", message);
         }
         vk::DebugUtilsMessageSeverityFlagsEXT::INFO => {
-            info! (target: "vulkan::validation", "{}", message)
+            info! (target: "vulkan::validation", "{}", message);
         }
         vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE => {
-            debug!(target: "vulkan::validation", "{}", message)
+            debug!(target: "vulkan::validation", "{}", message);
         }
         _ => trace!(target: "vulkan::validation", "{}", message),
     }

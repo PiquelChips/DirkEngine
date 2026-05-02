@@ -72,7 +72,7 @@ impl<S: Subscriber> Layer<S> for FileLayer {
 
         let ts_str = format_timestamp(&timestamp);
         // `colored = false` — ANSI escape codes must not appear in log files.
-        let level_str = format_level(level, /* colored = */ false);
+        let level_str = format_level(*level, /* colored = */ false);
         let line = format_line(&ts_str, &level_str, &target, &message);
 
         // Best-effort writes: silently ignore I/O errors so logging never

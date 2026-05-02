@@ -1,12 +1,14 @@
+#![allow(missing_docs)]
+
 use shaderc::{CompileOptions, Compiler, ShaderKind};
 use std::{fs, path::PathBuf};
 
 fn main() {
     let shader_dir = PathBuf::from("shaders");
-    let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
+    let out_dir = PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR env var present"));
 
     let compiler = Compiler::new().expect("Failed to init shaderc");
-    let options = CompileOptions::new().unwrap();
+    let options = CompileOptions::new().expect("failed to init shaderc compile options");
 
     let shaders = [
         ("shader.vert", ShaderKind::Vertex),
@@ -15,7 +17,7 @@ fn main() {
 
     for (filename, kind) in &shaders {
         let src_path = shader_dir.join(filename);
-        let spv_path = out_dir.join(format!("{}.spv", filename));
+        let spv_path = out_dir.join(format!("{filename}.spv"));
 
         // Tell Cargo to re-run if the shader changes
         println!("cargo:rerun-if-changed={}", src_path.display());
@@ -25,7 +27,7 @@ fn main() {
 
         let artifact = compiler
             .compile_into_spirv(&src, *kind, filename, "main", Some(&options))
-            .unwrap_or_else(|e| panic!("Shader compile error in {}: {}", filename, e));
+            .unwrap_or_else(|e| panic!("Shader compile error in {filename}: {e}"));
 
         fs::write(&spv_path, artifact.as_binary_u8()).expect("Failed to write .spv file");
     }

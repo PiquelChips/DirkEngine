@@ -1,3 +1,7 @@
+//! This crate has a bunch of utilities for the engine build scripts.
+//! This mainly avoids duplicating the code of stuff like platform
+//! configuration and the editor.
+
 /// Setup build for platform configuration.
 /// Run this function in build.rs of a crate that
 /// runs platform specific code.
@@ -23,18 +27,23 @@ pub fn configure_editor() {
 
 /// Gets the path where all runtime generated files are
 /// stored (cache, logs, ...).
+#[must_use]
 pub fn get_run_dir() -> String {
     String::from("Saved")
 }
 
 /// Adds the paths for assets & models.
+///
+/// # Panics
+///
+/// Will panic if the `CARGO_MANIFEST_DIR` env var is not set
 pub fn setup_assets() {
     let assets_path = format!(
         "{}/../../Assets",
-        std::env::var("CARGO_MANIFEST_DIR").unwrap()
+        std::env::var("CARGO_MANIFEST_DIR").expect("couldn't find cargo manifest dir")
     );
     println!("cargo:rustc-env=ASSETS_PATH={assets_path}");
 
-    let models_path = format!("{}/models", assets_path);
+    let models_path = format!("{assets_path}/models");
     println!("cargo:rustc-env=MODELS_PATH={models_path}");
 }

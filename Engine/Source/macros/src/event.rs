@@ -45,14 +45,15 @@ pub fn derive_event_struct(input: &DeriveInput, data: &DataStruct) -> syn::Resul
     let fmt = get_message_format_from_attrs(&input.attrs)?;
     let (pattern, format_expr) = create_field_bindings(&data.fields, &fmt);
 
-    let content = match data.fields {
-        // Unit structs need no destructuring; everything else gets a `let Self …`.
-        Fields::Unit => format_expr,
-        _ => quote! {
+    // Unit structs need no destructuring; everything else gets a `let Self …`.
+    let content = if let Fields::Unit = data.fields {
+        format_expr
+    } else {
+        quote! {
             #[allow(unused_variables)]
             let Self #pattern = self;
             #format_expr
-        },
+        }
     };
 
     Ok(quote! {

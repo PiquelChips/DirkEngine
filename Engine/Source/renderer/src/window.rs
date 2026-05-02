@@ -10,7 +10,7 @@ use crate::{
 };
 
 /// This holds all the data required to render to the owning window's
-/// swap chain. These are created on window::next_image
+/// swap chain. These are created on `window::next_image`
 pub struct RenderImage<'a> {
     pub image: &'a SwapchainImage,
     pub image_index: u32,
@@ -127,7 +127,7 @@ impl Window {
         self.images = images;
     }
     pub fn set_occluded(&mut self, occluded: bool) {
-        self.occluded = occluded
+        self.occluded = occluded;
     }
 }
 

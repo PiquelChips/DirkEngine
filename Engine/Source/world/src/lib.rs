@@ -45,7 +45,7 @@ mod tests;
 pub mod components;
 pub mod events;
 pub mod player;
-use crate::events::*;
+use crate::events::WorldEvent;
 
 /// A unique, opaque identifier for a spawned entity.
 ///
@@ -135,7 +135,7 @@ impl Components {
             })
             .as_any_mut()
             .downcast_mut::<TypedStorage<C>>()
-            .unwrap() // safe: we just inserted exactly this type
+            .expect("we just inserted exactly this type")
     }
 
     fn insert<C: Component>(&mut self, entity: Entity, component: C) {
@@ -203,6 +203,7 @@ impl World {
     ///
     /// The `id` is an arbitrary tag used to distinguish worlds when more than
     /// one exists simultaneously (e.g. a game world and a UI world).
+    #[must_use]
     pub fn new(id: WorldId, event_manager: &::events::EventManager) -> Self {
         let dispatcher = event_manager.register();
         dispatcher.dispatch(WorldEvent::Created(id));
@@ -216,6 +217,7 @@ impl World {
     }
 
     /// Returns this world's [`WorldId`].
+    #[must_use]
     pub fn id(&self) -> WorldId {
         self.id
     }
@@ -249,16 +251,19 @@ impl World {
     }
 
     /// Returns a slice of all currently alive entity IDs in spawn order.
+    #[must_use]
     pub fn alive(&self) -> &[Entity] {
         &self.alive
     }
 
     /// Returns the total number of alive entities.
+    #[must_use]
     pub fn entity_count(&self) -> usize {
         self.alive.len()
     }
 
     /// Returns if the specified entity is alive
+    #[must_use]
     pub fn is_alive(&self, entity: Entity) -> bool {
         self.alive.contains(&entity)
     }
@@ -281,6 +286,7 @@ impl World {
 
     /// Returns a shared reference to a component, or `None` if the entity
     /// does not have one.
+    #[must_use]
     pub fn get<C: Component>(&self, entity: Entity) -> Option<&C> {
         self.components.get(entity)
     }
@@ -320,25 +326,28 @@ impl World {
     /// let results = w.query_single::<Transform>();
     /// assert!(results.contains(&e));
     /// ```
+    #[must_use]
     pub fn query_single<A: Component>(&self) -> Vec<Entity> {
         self.alive
             .iter()
             .filter(|&&e| self.components.contains::<A>(e))
-            .cloned()
+            .copied()
             .collect()
     }
 
     /// Returns all alive entities that have **both** components `A` and `B`.
+    #[must_use]
     pub fn query_double<A: Component, B: Component>(&self) -> Vec<Entity> {
         self.alive
             .iter()
             .filter(|&&e| self.components.contains::<A>(e) && self.components.contains::<B>(e))
-            .cloned()
+            .copied()
             .collect()
     }
 
     /// Returns all alive entities that have **all three** components `A`, `B`,
     /// and `C`.
+    #[must_use]
     pub fn query_triple<A: Component, B: Component, C: Component>(&self) -> Vec<Entity> {
         self.alive
             .iter()
@@ -347,12 +356,13 @@ impl World {
                     && self.components.contains::<B>(e)
                     && self.components.contains::<C>(e)
             })
-            .cloned()
+            .copied()
             .collect()
     }
 
     /// Returns all alive entities that have **all four** components `A`, `B`,
     /// `C`, and `D`.
+    #[must_use]
     pub fn query_quadruple<A: Component, B: Component, C: Component, D: Component>(
         &self,
     ) -> Vec<Entity> {
@@ -364,7 +374,7 @@ impl World {
                     && self.components.contains::<C>(e)
                     && self.components.contains::<D>(e)
             })
-            .cloned()
+            .copied()
             .collect()
     }
 }

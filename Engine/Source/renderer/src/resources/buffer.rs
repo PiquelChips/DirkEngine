@@ -15,9 +15,9 @@ use crate::{Result, resources::device::RenderDevice};
 /// An abstraction around the vulkan buffer.
 pub struct Buffer<Type: BuffType = Custom> {
     device: RenderDevice,
-    buffer: vk::Buffer,
+    raw: vk::Buffer,
     allocation: Option<Allocation>,
-    buffer_type: PhantomData<Type>,
+    _type: PhantomData<Type>,
 }
 
 pub trait BuffType {
@@ -69,14 +69,14 @@ impl<Type: BuffType> Buffer<Type> {
         unsafe {
             device
                 .device
-                .bind_buffer_memory(buffer, allocation.memory(), allocation.offset())?
+                .bind_buffer_memory(buffer, allocation.memory(), allocation.offset())?;
         };
 
         Ok(Self {
             device: device.clone(),
-            buffer,
+            raw: buffer,
             allocation: Some(allocation),
-            buffer_type: PhantomData,
+            _type: PhantomData,
         })
     }
     pub fn create(
@@ -87,8 +87,10 @@ impl<Type: BuffType> Buffer<Type> {
         Buffer::create_custom(device, size, Type::get_usage(), location)
     }
     pub fn buffer(&self) -> vk::Buffer {
-        self.buffer
+        self.raw
     }
+    /// Returns a valid mapped pointer if the memory is host visible, otherwise it will return None.
+    /// The pointer already points to the exact memory region of the suballocation, so no offset needs to be applied.
     pub fn mapped(&self) -> Option<NonNull<c_void>> {
         if let Some(allocation) = &self.allocation {
             allocation.mapped_ptr()
@@ -108,7 +110,11 @@ impl<Type: BuffType> Buffer<Type> {
         )?;
 
         unsafe {
-            let ptr = staging_buf.mapped().unwrap().as_ptr() as *mut T;
+            let ptr = staging_buf
+                .mapped()
+                .expect("should be host visible")
+                .as_ptr()
+                .cast::<T>();
             ptr.copy_from_nonoverlapping(data.as_ptr(), data.len());
         }
 
@@ -135,7 +141,7 @@ impl<Type: BuffType> Buffer<Type> {
         unsafe {
             self.device
                 .device
-                .cmd_copy_buffer(cmd.raw(), src.buffer(), self.buffer(), &[region])
+                .cmd_copy_buffer(cmd.raw(), src.buffer(), self.buffer(), &[region]);
         };
 
         cmd.end_and_submit()?;
@@ -145,7 +151,7 @@ impl<Type: BuffType> Buffer<Type> {
 
 impl<Type: BuffType> Drop for Buffer<Type> {
     fn drop(&mut self) {
-        self.device.destroy(Garbage::Buffer(self.buffer));
+        self.device.destroy(Garbage::Buffer(self.raw));
         if let Some(alloc) = self.allocation.take() {
             self.device.destroy(Garbage::Allocation(alloc));
         }
@@ -165,8 +171,15 @@ impl UniformBuffer {
         let ptr = self
             .mapped()
             .expect("UBO allocation must be host-visible")
-            .as_ptr() as *mut u8;
-        unsafe { std::ptr::copy_nonoverlapping(data as *const T as *const u8, ptr, size_of::<T>()) }
+            .as_ptr()
+            .cast::<u8>();
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                std::ptr::from_ref::<T>(data).cast::<u8>(),
+                ptr,
+                size_of::<T>(),
+            );
+        }
     }
 }
 

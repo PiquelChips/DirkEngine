@@ -18,10 +18,10 @@ use crate::{
     },
 };
 
-/// This scene is created from a [world::World].
+/// This scene is created from a [`world::World`].
 /// It should then be updated whenever the world is updated.
 ///
-/// Handles rendering all the [world::components::Renderable] objects
+/// Handles rendering all the [`world::components::Renderable`] objects
 /// of the world.
 pub struct Scene {
     world: WorldId,
@@ -55,6 +55,8 @@ impl Scene {
     /// Constructs the renderer stuff like command pools, descriptor sets, ... from
     /// the [Renderer].
     pub fn build(device: &RenderDevice, size: vk::Extent2D, world: WorldId) -> Result<Self> {
+        // MAX_FRAMES_IN_FLIGHT never gets anywhere near u32::MAX
+        #[allow(clippy::cast_possible_truncation)]
         let pool_sizes = [
             vk::DescriptorPoolSize {
                 ty: vk::DescriptorType::UNIFORM_BUFFER,
@@ -68,6 +70,8 @@ impl Scene {
             },
         ];
 
+        // MAX_FRAMES_IN_FLIGHT never gets anywhere near u32::MAX
+        #[allow(clippy::cast_possible_truncation)]
         let pool_info = vk::DescriptorPoolCreateInfo::default()
             .pool_sizes(&pool_sizes)
             .max_sets((1 + MAX_RENDERABLES * 2) * MAX_FRAMES_IN_FLIGHT as u32);
@@ -85,7 +89,7 @@ impl Scene {
                 .device
                 .allocate_descriptor_sets(&alloc_info)?
                 .try_into()
-                .unwrap()
+                .expect("should be able to convert desc_sets to array")
         };
 
         let ubo_size = size_of::<SceneUbo>() as u64;
@@ -112,7 +116,7 @@ impl Scene {
         unsafe {
             device
                 .device
-                .update_descriptor_sets(&descriptor_writes, &[])
+                .update_descriptor_sets(&descriptor_writes, &[]);
         };
 
         // TEMP
@@ -127,7 +131,7 @@ impl Scene {
             num_samples: device.properties.msaa_samples,
             aspect_flags: vk::ImageAspectFlags::COLOR,
         };
-        let color = Image::create_image(device, color_info)?;
+        let color = Image::create_image(device, &color_info)?;
 
         let depth_info = ImageCreateInfo {
             size,
@@ -139,7 +143,7 @@ impl Scene {
             num_samples: device.properties.msaa_samples,
             aspect_flags: vk::ImageAspectFlags::DEPTH,
         };
-        let depth = Image::create_image(device, depth_info)?;
+        let depth = Image::create_image(device, &depth_info)?;
         let graphics_pipeline =
             GraphicsPipeline::build(device, &device.layouts, &device.properties)?;
 
@@ -206,7 +210,7 @@ impl Scene {
         view: vk::ImageView,
         camera: world::Entity,
     ) -> Result<()> {
-        let frame = self.device.current_frame() as usize;
+        let frame = self.device.current_frame();
         // CAMERA
         {
             let proxy = &self
@@ -240,6 +244,8 @@ impl Scene {
         );
         self.graphics_pipeline.bind(cmd);
 
+        // the window size never gets anywhere near 2^23
+        #[allow(clippy::cast_precision_loss)]
         let viewport = vk::Viewport::default()
             .width(size.width as f32)
             .height(size.height as f32)
@@ -248,7 +254,7 @@ impl Scene {
         unsafe {
             self.device
                 .device
-                .cmd_set_viewport(cmd.raw(), 0, &[viewport])
+                .cmd_set_viewport(cmd.raw(), 0, &[viewport]);
         };
 
         let scissor = vk::Rect2D::default()
@@ -317,18 +323,18 @@ impl Scene {
 impl Drop for Scene {
     fn drop(&mut self) {
         self.device
-            .destroy(Garbage::DescriptorPool(self.descriptor_pool))
+            .destroy(Garbage::DescriptorPool(self.descriptor_pool));
     }
 }
 
 /// A renderable entity's representation for the renderer.
-/// Owned by [Scene], constructed from [world::components::Renderable] and
-/// [world::components::Transform].
+/// Owned by [Scene], constructed from [`world::components::Renderable`] and
+/// [`world::components::Transform`].
 pub struct SceneProxy {
     /// The model matrix used for rendering. Constructed from the
-    /// [world::components::Transform] of the entity.
+    /// [`world::components::Transform`] of the entity.
     model_matrix: Option<glam::Mat4>,
-    /// The name of the model. Used to request a [crate::model::Model] from the
+    /// The name of the model. Used to request a [`crate::model::Model`] from the
     /// renderer at render time.
     model: Option<Handle<Model>>,
     /// An optional camera that could be attached to the mesh.
@@ -363,7 +369,7 @@ impl SceneProxy {
                 .device
                 .allocate_descriptor_sets(&alloc_info)?
                 .try_into()
-                .unwrap()
+                .expect("vec should be MAX_FRAMES_IN_FLIGHT large so Into shouldn't fail")
         };
 
         let buffer_infos: [vk::DescriptorBufferInfo; MAX_FRAMES_IN_FLIGHT] =
@@ -386,7 +392,7 @@ impl SceneProxy {
         unsafe {
             device
                 .device
-                .update_descriptor_sets(&descriptor_writes, &[])
+                .update_descriptor_sets(&descriptor_writes, &[]);
         };
 
         Ok(Self {
@@ -409,7 +415,7 @@ impl SceneProxy {
         }
     }
     pub fn set_camera(&mut self, view: glam::Mat4, proj: glam::Mat4) {
-        self.camera = Some(CameraProxy { view, proj })
+        self.camera = Some(CameraProxy { view, proj });
     }
     fn write_ubo(&self, frame: usize) {
         let Some(model) = self.model_matrix else {

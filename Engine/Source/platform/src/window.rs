@@ -6,8 +6,10 @@ use winit::{
 
 use crate::event::WindowEvent;
 
+/// Internal platform representation of a window. Holds the
+/// [`winit::window::Window`] and other state.
 pub struct Window {
-    window: Box<dyn winit::window::Window>,
+    raw: Box<dyn winit::window::Window>,
     focused: bool,
     theme: Theme,
     /// If the window is completely hidden (minized or covered by another
@@ -16,28 +18,35 @@ pub struct Window {
 }
 
 impl Window {
+    /// Creates a new default window object using the [`winit::window::Window`].
+    #[must_use]
     pub fn new(window: Box<dyn winit::window::Window>) -> Self {
         Self {
             focused: false,
             theme: window.theme().unwrap_or(Theme::Dark),
             occluded: false,
-            window,
+            raw: window,
         }
     }
+    /// Returns the unique ID of the window
+    #[must_use]
     pub fn id(&self) -> WindowId {
-        self.window.id()
+        self.raw.id()
     }
+    /// Returns the size of the window's renderable surface. Used by
+    /// renderer to create correct surface sizes
+    #[must_use]
     pub fn size(&self) -> PhysicalSize<u32> {
-        self.window.surface_size()
+        self.raw.surface_size()
     }
-    /// Handles [WindowEvent]. These should first be proccessed
+    /// Handles [`WindowEvent`]. These should first be proccessed
     /// and accepted by the window.
-    pub fn handle_event(&mut self, event: WindowEvent) {
+    pub fn handle_event(&mut self, event: &WindowEvent) {
         if *event.id() != self.id() {
             return;
         }
 
-        match event {
+        match *event {
             // Resizing is handled by the renderer.
             WindowEvent::Resized { .. } => {}
             WindowEvent::Occluded { id: _, occluded } => self.occluded = occluded,
@@ -52,7 +61,7 @@ impl HasWindowHandle for Window {
         &self,
     ) -> Result<winit::raw_window_handle::WindowHandle<'_>, winit::raw_window_handle::HandleError>
     {
-        self.window.window_handle()
+        self.raw.window_handle()
     }
 }
 
@@ -61,6 +70,6 @@ impl HasDisplayHandle for Window {
         &self,
     ) -> Result<winit::raw_window_handle::DisplayHandle<'_>, winit::raw_window_handle::HandleError>
     {
-        self.window.display_handle()
+        self.raw.display_handle()
     }
 }
