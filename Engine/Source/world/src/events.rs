@@ -162,13 +162,18 @@ impl WorldEvent {
 /// # }
 /// ```
 #[derive(Clone, Debug, Event)]
-#[allow(missing_docs)]
 pub struct PlayerUpdateEvent {
+    /// The player's ID
     pub id: PlayerId,
+    /// The world the player currently is in
     pub world: WorldId,
+    /// The entity that the player possesses in the world
     pub entity: Entity,
+    /// The window the player's viewport is being drawn to
     pub window: WindowId,
+    /// The region of the window that the player's viewport is being draw to
     pub region: PlayerRegion,
+    /// The kind of update that triggered this event. See [`PlayerUpdateType`]
     pub update_type: PlayerUpdateType,
 }
 
