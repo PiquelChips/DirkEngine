@@ -8,3 +8,6 @@ version.workspace = true
 
 [dependencies]
 cargo_metadata.workspace = true
+
+[lints]
+workspace = true

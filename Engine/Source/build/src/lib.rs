@@ -1,4 +1,6 @@
-//! Some utilities for DirkEngine build scripts.
+//! This crate has a bunch of utilities for the engine build scripts.
+//! This mainly avoids duplicating the code of stuff like platform
+//! configuration and the editor.
 
 use std::{collections::HashMap, path::PathBuf};
 

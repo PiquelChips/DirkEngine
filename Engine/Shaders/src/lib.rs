@@ -11,10 +11,17 @@ pub struct Shader {
 
 impl Shader {
     /// Returns the shader code
+    #[must_use]
     pub const fn code(&self) -> &[u8] {
         self.code
     }
     /// Returns the code but in blocks of u32
+    ///
+    /// # Panics
+    ///
+    /// If the SPIR-V code size is not a multiple of
+    /// 4. This would be invalid SPIR-V
+    #[must_use]
     pub fn code_as_u32(&self) -> Vec<u32> {
         assert!(
             self.code.len().is_multiple_of(4),
@@ -22,10 +29,11 @@ impl Shader {
         );
         self.code
             .chunks_exact(4)
-            .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+            .map(|c| u32::from_le_bytes(c.try_into().expect("4 byte chunks")))
             .collect()
     }
     /// Returns the entrypoint of this shader
+    #[must_use]
     pub const fn entrypoint(&self) -> &CStr {
         self.entrypoint
     }
@@ -40,5 +48,5 @@ macro_rules! shader {
     };
 }
 
-pub const VERT: Shader = shader!("shader.vert", c"main");
-pub const FRAG: Shader = shader!("shader.frag", c"main");
+mod blobs;
+pub use blobs::*;

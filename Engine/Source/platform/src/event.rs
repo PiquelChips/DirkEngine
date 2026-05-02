@@ -1,6 +1,7 @@
 use events::Event;
 use winit::window::WindowId;
 
+/// An event to signal that the application has exited
 #[derive(Debug, Clone, Event)]
 #[event("App Exit with code {0}")]
 pub struct AppExit(pub i32);
@@ -10,6 +11,7 @@ pub struct AppExit(pub i32);
 /// specific events are listed here.
 /// The only exeptions are window closing and creating events.
 #[derive(Debug, Clone, Event)]
+#[allow(missing_docs)]
 pub enum PlatformEvent {
     /// Window created event.
     WindowCreated { id: WindowId },
@@ -18,12 +20,13 @@ pub enum PlatformEvent {
     WindowCloseRequested { id: WindowId },
     /// The window has been finally destroyed. This event should not be
     /// used as all window related objects should have been destroyed on
-    /// [Self::WindowCloseRequested].
+    /// [`Self::WindowCloseRequested`].
     WindowDestroyed { id: WindowId },
 }
 
 /// All window specific events.
 #[derive(Debug, Clone, Event)]
+#[allow(missing_docs)]
 pub enum WindowEvent {
     Resized {
         id: WindowId,
@@ -45,12 +48,15 @@ pub enum WindowEvent {
 }
 
 impl WindowEvent {
+    /// Returns the ID of the window referenced in the event. This is
+    /// just a match that extracts the ID out of every variant.
+    #[must_use]
     pub fn id(&self) -> &WindowId {
         match self {
-            Self::Resized { id, .. } => id,
-            Self::Occluded { id, .. } => id,
-            Self::FocusChanged { id, .. } => id,
-            Self::ThemeChanged { id, .. } => id,
+            Self::Resized { id, .. }
+            | Self::Occluded { id, .. }
+            | Self::FocusChanged { id, .. }
+            | Self::ThemeChanged { id, .. } => id,
         }
     }
 }

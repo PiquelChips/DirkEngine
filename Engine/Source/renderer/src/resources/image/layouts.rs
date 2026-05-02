@@ -24,7 +24,7 @@ impl Image {
             .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
             .src_access_mask(src_access)
             .dst_access_mask(dst_access)
-            .image(self.image)
+            .image(self.raw)
             .subresource_range(vk::ImageSubresourceRange {
                 aspect_mask: vk::ImageAspectFlags::COLOR,
                 base_mip_level: base_mip,
@@ -42,7 +42,7 @@ impl Image {
                 &[],
                 &[],
                 &[barrier],
-            )
+            );
         };
         Ok(())
     }

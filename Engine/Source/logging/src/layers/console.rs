@@ -17,7 +17,7 @@ impl<S: Subscriber> Layer<S> for ConsoleLayer {
         let level = event.metadata().level();
 
         let ts_str = format_timestamp(&timestamp);
-        let level_str = format_level(level, /* colored = */ true);
+        let level_str = format_level(*level, /* colored = */ true);
         let line = format_line(&ts_str, &level_str, &target, &message);
 
         if *level == Level::ERROR {

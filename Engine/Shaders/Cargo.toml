@@ -8,3 +8,6 @@ version.workspace = true
 
 [build-dependencies]
 shaderc.workspace = true
+
+[lints]
+workspace = true

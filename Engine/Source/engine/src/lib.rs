@@ -1,7 +1,10 @@
+//! The [Engine] crate. The engine holds all the state & manages
+//! all the systems for the engine to run properly.
+
 use std::{collections::HashMap, ffi::CString, str::FromStr, time::Instant};
 
 use anyhow::Context;
-use tracing::info;
+use tracing::{info, warn};
 use world::{
     World, WorldId,
     player::{Player, PlayerId},
@@ -35,6 +38,10 @@ pub struct Engine {
 
 impl Engine {
     /// Constructs and initialises the gine
+    ///
+    /// # Errors
+    ///
+    /// Errors can be returned during platform & renderer initialisation
     pub fn init() -> anyhow::Result<Self> {
         #[cfg(editor)]
         info!("starting editor");
@@ -56,7 +63,7 @@ impl Engine {
 
         let platform = platform::Platform::init(&event_manager).context("platform init")?;
         let renderer = renderer::Renderer::init(
-            renderer::RendererCreateInfo {
+            &renderer::RendererCreateInfo {
                 engine_name: CString::from_str(name)?,
                 engine_version: version,
                 app_name: CString::from_str(name)?,
@@ -89,16 +96,28 @@ impl Engine {
     }
     /// Will start the main game/editor. This should be called
     /// once right after init.
+    ///
+    /// # Errors
+    ///
+    /// None for now, will be one if an error occurs when creating the world.
     pub fn start(&mut self) -> anyhow::Result<()> {
         info!("starting engine");
         let world_id = self.create_test_world();
 
-        self.spawn_player(world_id);
+        if self.spawn_player(world_id).is_none() {
+            // TODO: return a proper error (one received from the universe)
+            warn!("unable to spawn player in world {world_id}");
+        }
 
         Ok(())
     }
     /// Ticks the engine. This is the master function that calls
     /// every other system's tick function.
+    ///
+    /// # Errors
+    ///
+    /// Errors can occure if the various ticking systems have errors.
+    /// For now, only rendering can return an error.
     pub fn tick(&mut self) -> anyhow::Result<bool> {
         let delta_time = self.capture_delta_time();
         self.event_manager.dispatch_all();
@@ -120,6 +139,12 @@ impl Engine {
         self.render().context("rendering")?;
         Ok(!self.is_requesting_exit())
     }
+
+    /// Will render the surfaces for every player owned by the engine
+    ///
+    /// # Errors
+    ///
+    /// Any error that is returned during rendering.
     pub fn render(&mut self) -> anyhow::Result<()> {
         for player in self.players.values() {
             self.renderer
@@ -128,15 +153,13 @@ impl Engine {
         Ok(())
     }
 
-    pub fn shutdown(&self) -> anyhow::Result<()> {
-        info!("engine shutting down");
-        Ok(())
-    }
     fn process_events(&mut self) {
         if let Some(platform::AppExit(_)) = self.exit_consumer.try_consume() {
             self.exit(None);
         }
     }
+    /// Returns if the engine is planning to exit. i.e., if the engine
+    /// will shutdown at the next tick.
     pub fn is_requesting_exit(&self) -> bool {
         self.is_requesting_exit || self.exit_error.is_some()
     }
@@ -170,11 +193,11 @@ impl Engine {
         self.worlds.remove(&id);
     }
 
-    fn spawn_player(&mut self, world: WorldId) -> PlayerId {
+    fn spawn_player(&mut self, world: WorldId) -> Option<PlayerId> {
         let id = self.next_player_id;
         self.next_player_id += 1;
 
-        let world = self.worlds.get_mut(&world).unwrap();
+        let world = self.worlds.get_mut(&world)?;
 
         let player = Player::spawn(
             id,
@@ -184,7 +207,7 @@ impl Engine {
         );
 
         self.players.insert(id, player);
-        id
+        Some(id)
     }
     #[allow(unused)]
     fn kill_player(&mut self, id: PlayerId) {
@@ -198,9 +221,13 @@ impl Engine {
     }
 
     fn create_test_world(&mut self) -> WorldId {
+        use world::components::{Renderable, Transform};
+
         let world_id = self.create_world();
-        use world::components::*;
-        let world = self.worlds.get_mut(&world_id).unwrap();
+        let world = self
+            .worlds
+            .get_mut(&world_id)
+            .expect("world was just created, ID should be valid");
 
         let shrek = world.spawn();
         world.insert(

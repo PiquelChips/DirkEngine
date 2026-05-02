@@ -121,6 +121,7 @@ impl PlayerRegion {
     /// assert!(!region.contains(glam::vec2(0.75, 0.75))); // bottom-right corner — exclusive
     /// assert!(!region.contains(glam::vec2(0.1, 0.5)));  // left of region
     /// ```
+    #[must_use]
     pub fn contains(&self, norm_pos: glam::Vec2) -> bool {
         let max = self.offset + self.size;
         norm_pos.cmpge(self.offset).all() && norm_pos.cmplt(max).all()
@@ -153,6 +154,7 @@ impl PlayerRegion {
     /// assert!((local.x - 0.5).abs() < f32::EPSILON);
     /// assert!((local.y - 0.5).abs() < f32::EPSILON);
     /// ```
+    #[must_use]
     pub fn to_local(&self, norm_pos: glam::Vec2) -> glam::Vec2 {
         if self.size.x == 0.0 || self.size.y == 0.0 {
             return glam::Vec2::ZERO;
@@ -275,26 +277,31 @@ impl Player {
     }
 
     /// Returns the player's unique [`PlayerId`].
+    #[must_use]
     pub fn id(&self) -> PlayerId {
         self.id
     }
 
     /// Returns the [`WorldId`] of the world this player lives in.
+    #[must_use]
     pub fn world(&self) -> WorldId {
         self.world
     }
 
     /// Returns the ECS [`Entity`] associated with this player.
+    #[must_use]
     pub fn entity(&self) -> Entity {
         self.entity
     }
 
     /// Returns the [`WindowId`] of the window this player renders into.
+    #[must_use]
     pub fn window(&self) -> WindowId {
         self.window
     }
 
     /// Returns a shared reference to the player's current [`PlayerRegion`].
+    #[must_use]
     pub fn region(&self) -> &PlayerRegion {
         &self.region
     }

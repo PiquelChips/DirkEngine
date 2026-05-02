@@ -15,12 +15,16 @@ pub struct Vertex {
 
 impl Vertex {
     pub const fn binding_description() -> vk::VertexInputBindingDescription {
+        // the size_of::<Self> is far from u32::MAX
+        #[allow(clippy::cast_possible_truncation)]
         vk::VertexInputBindingDescription {
             binding: 0,
             stride: size_of::<Self>() as u32,
             input_rate: vk::VertexInputRate::VERTEX,
         }
     }
+    // the offset is far from u32::MAX
+    #[allow(clippy::cast_possible_truncation)]
     pub const fn attribute_description() -> [vk::VertexInputAttributeDescription; 3] {
         [
             vk::VertexInputAttributeDescription {
