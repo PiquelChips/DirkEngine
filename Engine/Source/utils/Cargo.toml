@@ -10,5 +10,8 @@ version.workspace = true
 thiserror.workspace = true
 glam.workspace = true
 
+[build-dependencies]
+build.workspace = true
+
 [lints]
 workspace = true
