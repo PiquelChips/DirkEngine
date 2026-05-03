@@ -350,7 +350,7 @@ impl Drop for ModelRegistry {
         unsafe {
             self.device
                 .device
-                .destroy_descriptor_pool(self.material_pool, None)
+                .destroy_descriptor_pool(self.material_pool, None);
         };
     }
 }

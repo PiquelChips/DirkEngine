@@ -531,7 +531,7 @@ impl AssetRegistry {
         }
 
         let config = self
-            .asset_config::<T>(&handle)
+            .asset_config::<T>(handle)
             .ok_or_else(|| Error::NotFound(handle.raw().to_owned()))?;
 
         // Give this AssetRef its own dispatcher clone so it can fire
