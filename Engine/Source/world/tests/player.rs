@@ -109,8 +109,8 @@ fn spawn_attaches_transform_component() {
         .get::<world::components::Transform>(player.entity())
         .expect("Transform should be attached on spawn");
     // Default location: y = 1000, z = 1000.
-    assert!((transform.location.y - 1000.0).abs() < f32::EPSILON);
-    assert!((transform.location.z - 1000.0).abs() < f32::EPSILON);
+    assert!((transform.location.y - 500.0).abs() < f32::EPSILON);
+    assert!((transform.location.z - 500.0).abs() < f32::EPSILON);
 }
 
 #[test]

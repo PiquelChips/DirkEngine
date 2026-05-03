@@ -227,7 +227,7 @@ impl Player {
         world.insert(
             entity,
             components::Transform {
-                location: glam::vec3(0.0, 1000.0, 1000.0),
+                location: glam::vec3(0.0, 500.0, 500.0),
                 rotation: glam::vec3(-PI / 4.0, 0.0, 0.0),
                 scale: glam::Vec3::ONE,
             },

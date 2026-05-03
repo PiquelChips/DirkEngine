@@ -39,7 +39,7 @@
 //!
 //! // 2. Load an asset by its handle string (path relative to ASSETS_PATH).
 //! let handle = registry.load_asset::<Model>(
-//!     AssetHandle::from_raw("models/hero.dirkasset", AssetType::Model))?;
+//!     &AssetHandle::from_raw("models/hero.dirkasset", AssetType::Model))?;
 //!
 //! // 3. Subscribe to receive load events for future loads.
 //! let loaded_consumer = events.subscribe::<AssetLoaded<Model>>();
@@ -521,17 +521,17 @@ impl AssetRegistry {
     /// use assets::Model;
     ///
     /// let handle = AssetHandle::from_raw("models/hero.dirkasset", AssetType::Model);
-    /// let typed_handle = registry.load_asset::<Model>(handle)?;
+    /// let typed_handle = registry.load_asset::<Model>(&handle)?;
     /// # Ok(()) }
     /// ```
-    pub fn load_asset<T: Asset>(&mut self, handle: AssetHandle) -> Result<Handle<T>> {
+    pub fn load_asset<T: Asset>(&mut self, handle: &AssetHandle) -> Result<Handle<T>> {
         let type_id = TypeId::of::<T>();
         if handle.asset_type() != T::asset_type() {
             return Err(Error::TypeMismatch(handle.raw().to_owned()));
         }
 
         let config = self
-            .asset_config::<T>(&handle)
+            .asset_config::<T>(handle)
             .ok_or_else(|| Error::NotFound(handle.raw().to_owned()))?;
 
         // Give this AssetRef its own dispatcher clone so it can fire

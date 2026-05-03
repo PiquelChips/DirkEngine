@@ -6,7 +6,7 @@ use world::{World, WorldId, components, events::WorldEvent};
 
 use crate::{
     Error, MAX_FRAMES_IN_FLIGHT, MAX_RENDERABLES, Result,
-    assets::{AssetManager, Handle, Model},
+    models::ModelRegistry,
     pipeline::GraphicsPipeline,
     proxy::CameraProxy,
     render_pass::RenderPass,
@@ -161,7 +161,7 @@ impl Scene {
             graphics_pipeline,
         })
     }
-    pub fn tick(&mut self, world: &World, assets: &mut AssetManager) -> Result<()> {
+    pub fn tick(&mut self, world: &World) -> Result<()> {
         for event in self
             .world_consumer
             .consume_all()
@@ -188,8 +188,7 @@ impl Scene {
                     proxy.set_model_matrix(transform.matrix());
 
                     if let Some(renderable) = world.get::<components::Renderable>(entity) {
-                        let handle = assets.load_model(&renderable.model)?;
-                        proxy.set_model(handle);
+                        proxy.set_model(renderable.model.clone());
                     };
                     if let Some(camera) = world.get::<components::Camera>(entity) {
                         proxy.set_camera(transform.view(), camera.projection());
@@ -204,7 +203,7 @@ impl Scene {
     }
     pub fn render(
         &self,
-        assets: &AssetManager,
+        models: &ModelRegistry,
         cmd: &CommandBuffer,
         size: vk::Extent2D,
         view: vk::ImageView,
@@ -262,53 +261,18 @@ impl Scene {
             .extent(size);
         unsafe { self.device.device.cmd_set_scissor(cmd.raw(), 0, &[scissor]) };
 
-        let mut descriptor_sets = [
-            self.descriptor_sets[frame],
-            vk::DescriptorSet::null(),
-            vk::DescriptorSet::null(),
-        ];
-
         for proxy in self.proxies.values() {
             let Some(ref model) = proxy.model else {
                 continue;
             };
-            let model = assets.get_mesh(*model);
 
-            for prim in &model.primitives {
-                let mat_set = prim
-                    .material_handle
-                    .and_then(|mat| Some(assets.get_material(mat).descriptor_set))
-                    .unwrap_or(vk::DescriptorSet::null());
-
-                descriptor_sets[1] = proxy.sets[frame];
-                descriptor_sets[2] = mat_set;
-
-                unsafe {
-                    self.device.device.cmd_bind_descriptor_sets(
-                        cmd.raw(),
-                        vk::PipelineBindPoint::GRAPHICS,
-                        self.graphics_pipeline.layout(),
-                        0,
-                        &descriptor_sets,
-                        &[],
-                    );
-                    self.device.device.cmd_bind_vertex_buffers(
-                        cmd.raw(),
-                        0,
-                        &[prim.vertex_buffer.buffer()],
-                        &[0],
-                    );
-                    self.device.device.cmd_bind_index_buffer(
-                        cmd.raw(),
-                        prim.index_buffer.buffer(),
-                        0,
-                        vk::IndexType::UINT32,
-                    );
-                    self.device
-                        .device
-                        .cmd_draw_indexed(cmd.raw(), prim.index_count, 1, 0, 0, 0);
-                }
-            }
+            models.render_model(
+                model,
+                cmd,
+                self.descriptor_sets[frame],
+                proxy.sets[frame],
+                self.graphics_pipeline.layout(),
+            )?;
         }
 
         RenderPass::end(&self.device.device, cmd);
@@ -336,7 +300,7 @@ pub struct SceneProxy {
     model_matrix: Option<glam::Mat4>,
     /// The name of the model. Used to request a [`crate::model::Model`] from the
     /// renderer at render time.
-    model: Option<Handle<Model>>,
+    model: Option<assets::AssetHandle>,
     /// An optional camera that could be attached to the mesh.
     camera: Option<CameraProxy>,
 
@@ -403,7 +367,7 @@ impl SceneProxy {
             sets,
         })
     }
-    pub fn set_model(&mut self, model: Handle<Model>) {
+    pub fn set_model(&mut self, model: assets::AssetHandle) {
         self.model = Some(model);
     }
     pub fn set_model_matrix(&mut self, mat: glam::Mat4) {

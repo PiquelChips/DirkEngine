@@ -11,7 +11,7 @@ use gpu_allocator::{
 
 use crate::{
     Renderer, Result,
-    assets::Texture,
+    models::Texture,
     resources::{
         buffer::CustomBuffer,
         command_pool::CommandBuffer,
@@ -128,7 +128,7 @@ impl Image {
                 .expect("the buffer should be host visible")
                 .as_ptr()
                 .cast::<u8>();
-            ptr.copy_from_nonoverlapping(tex.pixels.as_ptr(), tex.pixels.len());
+            ptr.copy_from_nonoverlapping(pixels.as_ptr(), pixels.len());
         }
 
         let create_info = ImageCreateInfo {
@@ -199,7 +199,6 @@ impl Image {
             device: device.clone(),
             image,
             sampler,
-            mip_levels,
         })
     }
 

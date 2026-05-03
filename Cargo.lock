@@ -425,17 +425,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "derive-getters"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "74ef43543e701c01ad77d3a5922755c6a1d71b22d942cb8042be4994b380caff"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "dispatch2"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -473,13 +462,11 @@ dependencies = [
  "anyhow",
  "assets",
  "build",
- "derive-getters",
  "events",
  "glam",
  "logging",
  "platform",
  "renderer",
- "resource_manager",
  "thiserror 2.0.18",
  "tracing",
  "utils",
@@ -1341,6 +1328,7 @@ dependencies = [
  "anyhow",
  "ash",
  "ash-window",
+ "assets",
  "build",
  "events",
  "glam",
@@ -1350,22 +1338,12 @@ dependencies = [
  "pastey",
  "platform",
  "raw-window-handle",
- "resource_manager",
  "shaders",
+ "slotmap",
  "thiserror 2.0.18",
  "tracing",
  "utils",
  "world",
-]
-
-[[package]]
-name = "resource_manager"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "derive-getters",
- "gltf",
- "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -1571,6 +1549,15 @@ name = "slab"
 version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
+
+[[package]]
+name = "slotmap"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bdd58c3c93c3d278ca835519292445cb4b0d4dc59ccfdf7ceadaab3f8aeb4038"
+dependencies = [
+ "version_check",
+]
 
 [[package]]
 name = "smallvec"
@@ -2450,6 +2437,7 @@ checksum = "d7249219f66ced02969388cf2bb044a09756a083d0fab1e566056b04d9fbcaa5"
 name = "world"
 version = "0.1.0"
 dependencies = [
+ "assets",
  "events",
  "glam",
  "macros",

@@ -214,6 +214,7 @@ impl Drop for RenderDeviceInner {
         self.graphics_pool.destroy();
         self.transfer_pool.destroy();
         unsafe {
+            // TODO: this causes a segfault (idk)
             self.device.destroy_device(None);
             #[cfg(validation)]
             self.debug_utils_loader

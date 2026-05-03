@@ -9,7 +9,7 @@ fn run() -> anyhow::Result<()> {
 
     let mut engine = engine::Engine::init().context("engine init")?;
     engine.start().context("start engine")?;
-    while engine.tick().context("engine tick")? {}
+    while engine.tick() {}
 
     if let Some(err) = engine.get_exit_error() {
         error!("{err:#}");

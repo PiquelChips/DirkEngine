@@ -18,14 +18,12 @@ pub enum Error {
     /// An error loading Vulkan function
     #[error("Error loading Vulkan functions: {0}")]
     Loading(#[from] ash::LoadingError),
-    /// A wrapper for platform errors
+    /// Error produced by the [`platform`] crate.
     #[error("platform error: {0}")]
     Platform(#[from] platform::Error),
-    /// Wrapper for resource manager errors
-    #[error("resource manager error: {0}")]
-    ResourceManager(#[from] resource_manager::Error),
-    #[error("gltf error: {0}")]
-    GltfError(#[from] gltf::Error),
+    /// Error produced by the [`assets`] crate.
+    #[error("assets error: {0}")]
+    AssetError(#[from] assets::Error),
 
     /// If no physical device is found
     #[error("no suitable graphics device found")]

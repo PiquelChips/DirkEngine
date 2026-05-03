@@ -28,7 +28,7 @@ use tracing::{debug, info};
 use tracing::{error, trace, warn};
 
 use platform::{PlatformEvent, WindowEvent, WindowId};
-use world::{events::WorldEvent, player::PlayerId};
+use world::{World, WorldId, events::WorldEvent, player::PlayerId};
 
 mod utils;
 use ::utils::Version;
@@ -46,12 +46,10 @@ use window::Window;
 mod resources;
 use resources::{command_pool::CommandPool, device::RenderDevice, image::SwapchainImage};
 
-mod assets;
-use assets::AssetManager;
-
 mod proxy;
 use proxy::PlayerProxy;
 
+mod models;
 mod physical_device;
 mod pipeline;
 mod render_pass;
@@ -88,13 +86,13 @@ pub struct Renderer {
     // Heavy renderer state:
     /// All of the [`window::Window`]s constructed from [`platform::Window`]s.
     windows: HashMap<WindowId, Window>,
-    /// All of the internal [world::World] representations.
+    /// All of the internal [`world::World`] representations.
     scenes: HashMap<world::WorldId, Scene>,
+    /// The management for all the models.
+    models: models::ModelRegistry,
     /// All the players currently being managed by the engine.
     /// The proxies are synchronised using [world::events::PlayerUpdateEvent].
     players: HashMap<PlayerId, PlayerProxy>,
-    /// Manages all renderer assets like meshes & stuff.
-    asset_manager: AssetManager,
 
     frames: [Frame; MAX_FRAMES_IN_FLIGHT],
     current_frame: Arc<AtomicUsize>,
@@ -127,7 +125,7 @@ impl Renderer {
     pub fn init(
         create_info: &RendererCreateInfo,
         window: &platform::Window,
-        event_manager: events::EventManager,
+        event_manager: &events::EventManager,
     ) -> Result<Self> {
         info!("Intializing Vulkan...");
 
@@ -405,8 +403,6 @@ impl Renderer {
             event_manager.clone(),
         )?;
 
-        let asset_manager = AssetManager::new(render_device.clone())?;
-
         // IN FLIGHT FRAMES
         let build_frame = || -> Result<Frame> {
             let command_pool = CommandPool::build(
@@ -440,6 +436,8 @@ impl Renderer {
             }
         };
 
+        let models = models::ModelRegistry::new(&render_device, event_manager)?;
+
         Ok(Self {
             entry,
             render_device,
@@ -447,7 +445,7 @@ impl Renderer {
             windows: HashMap::new(),
             scenes: HashMap::new(),
             players: HashMap::new(),
-            asset_manager,
+            models,
 
             frames,
             current_frame,
@@ -458,7 +456,7 @@ impl Renderer {
             platform_consumer: event_manager.subscribe(),
             world_consumer: event_manager.subscribe(),
             player_consumer: event_manager.subscribe(),
-            event_manager,
+            event_manager: event_manager.clone(),
         })
     }
 
@@ -475,7 +473,7 @@ impl Renderer {
     pub fn tick(
         &mut self,
         _delta_time: f32,
-        worlds: &HashMap<world::WorldId, world::World>,
+        worlds: &HashMap<WorldId, World>,
         windows: &HashMap<WindowId, platform::Window>,
     ) -> Result<()> {
         let world_events: Vec<_> = self.world_consumer.consume_all().collect();
@@ -562,11 +560,12 @@ impl Renderer {
             }
         }
 
+        self.models.tick()?;
         self.scenes.values_mut().try_for_each(|scene| {
             let Some(world) = worlds.get(&scene.world()) else {
                 return Ok(());
             };
-            scene.tick(world, &mut self.asset_manager)
+            scene.tick(world)
         })?;
 
         Ok(())
@@ -621,13 +620,7 @@ impl Renderer {
             vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
         )?;
 
-        scene.render(
-            &self.asset_manager,
-            &cmd,
-            size,
-            render_image.image.view(),
-            camera,
-        )?;
+        scene.render(&self.models, &cmd, size, render_image.image.view(), camera)?;
 
         render_image.image.transition_image_layout(
             &cmd,
