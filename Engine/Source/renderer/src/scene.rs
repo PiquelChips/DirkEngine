@@ -2,12 +2,13 @@ use std::collections::HashMap;
 
 use ash::vk;
 use gpu_allocator::MemoryLocation;
-use world::WorldId;
+use world::{World, WorldId, components, events::WorldEvent};
 
 use crate::{
     Error, MAX_FRAMES_IN_FLIGHT, MAX_RENDERABLES, Result,
     models::ModelRegistry,
     pipeline::GraphicsPipeline,
+    proxy::CameraProxy,
     render_pass::RenderPass,
     resources::{
         buffer::UniformBuffer,
@@ -44,13 +45,6 @@ pub struct Scene {
 #[allow(unused)]
 struct SceneUbo {
     view: glam::Mat4,
-    proj: glam::Mat4,
-}
-
-struct CameraProxy {
-    /// View matrix calculated from camera position.
-    view: glam::Mat4,
-    /// Projection matrix calculated from camera settings.
     proj: glam::Mat4,
 }
 
@@ -164,6 +158,35 @@ impl Scene {
             graphics_pipeline,
         })
     }
+    pub fn process_event(&mut self, world: &World, event: &WorldEvent) -> Result<()> {
+        match *event {
+            WorldEvent::Created(..) | WorldEvent::Destroyed(..) => {}
+            WorldEvent::EntitySpawn { world: _, entity } => {
+                self.proxies
+                    .insert(entity, SceneProxy::build(&self.device, self)?);
+            }
+            WorldEvent::EntityUpdate { world: _, entity } => {
+                let Some(proxy) = self.proxies.get_mut(&entity) else {
+                    return Ok(());
+                };
+                let Some(transform) = world.get::<components::Transform>(entity) else {
+                    return Ok(());
+                };
+                proxy.set_model_matrix(transform.matrix());
+
+                if let Some(renderable) = world.get::<components::Renderable>(entity) {
+                    proxy.set_model(renderable.model.clone());
+                }
+                if let Some(camera) = world.get::<components::Camera>(entity) {
+                    proxy.set_camera(transform.view(), camera.projection());
+                }
+            }
+            WorldEvent::EntityDespawn { world: _, entity } => {
+                self.proxies.remove(&entity);
+            }
+        }
+        Ok(())
+    }
     pub fn render(
         &self,
         models: &ModelRegistry,
@@ -240,16 +263,6 @@ impl Scene {
 
         RenderPass::end(&self.device.device, cmd);
         Ok(())
-    }
-
-    pub fn add_proxy(&mut self, entity: world::Entity, proxy: SceneProxy) {
-        self.proxies.insert(entity, proxy);
-    }
-    pub fn get_proxy(&mut self, entity: world::Entity) -> Option<&mut SceneProxy> {
-        self.proxies.get_mut(&entity)
-    }
-    pub fn remove_proxy(&mut self, entity: world::Entity) {
-        self.proxies.remove(&entity);
     }
 }
 

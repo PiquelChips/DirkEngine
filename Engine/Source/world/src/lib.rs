@@ -42,6 +42,7 @@
 
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
+use std::fmt::Debug;
 
 mod tests;
 
@@ -67,10 +68,10 @@ pub type WorldId = u32;
 /// ```rust
 /// use world::Component;
 ///
-/// #[derive(Component)]
+/// #[derive(Debug, Component)]
 /// struct Health(f32);
 /// ```
-pub trait Component: 'static + Sized {}
+pub trait Component: 'static + Sized + Debug {}
 #[doc(hidden)]
 pub use macros::Component;
 

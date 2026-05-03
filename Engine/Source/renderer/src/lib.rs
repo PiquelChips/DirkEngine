@@ -27,7 +27,11 @@ use tracing::{debug, info};
 use tracing::{error, trace, warn};
 
 use platform::{PlatformEvent, WindowEvent, WindowId};
-use world::{World, WorldId, components, events::WorldEvent};
+use world::{
+    World, WorldId,
+    events::{PlayerUpdateType, WorldEvent},
+    player::PlayerId,
+};
 
 mod utils;
 use ::utils::Version;
@@ -45,7 +49,8 @@ use window::Window;
 mod resources;
 use resources::{command_pool::CommandPool, device::RenderDevice, image::SwapchainImage};
 
-use crate::scene::SceneProxy;
+mod proxy;
+use proxy::PlayerProxy;
 
 mod models;
 mod physical_device;
@@ -88,6 +93,9 @@ pub struct Renderer {
     scenes: HashMap<world::WorldId, Scene>,
     /// The management for all the models.
     models: models::ModelRegistry,
+    /// All the players currently being managed by the engine.
+    /// The proxies are synchronised using [`world::events::PlayerUpdateEvent`].
+    players: HashMap<PlayerId, PlayerProxy>,
 
     frames: [Frame; MAX_FRAMES_IN_FLIGHT],
     current_frame: Arc<AtomicUsize>,
@@ -96,6 +104,7 @@ pub struct Renderer {
     window_consumer: events::Consumer<platform::WindowEvent>,
     platform_consumer: events::Consumer<platform::PlatformEvent>,
     world_consumer: events::Consumer<world::events::WorldEvent>,
+    player_consumer: events::Consumer<world::events::PlayerUpdateEvent>,
 
     /// The size of the output
     /// TODO: should be removed once we get the frame graph to
@@ -436,6 +445,7 @@ impl Renderer {
 
             windows: HashMap::new(),
             scenes: HashMap::new(),
+            players: HashMap::new(),
             models,
 
             frames,
@@ -446,6 +456,7 @@ impl Renderer {
             window_consumer: event_manager.subscribe(),
             platform_consumer: event_manager.subscribe(),
             world_consumer: event_manager.subscribe(),
+            player_consumer: event_manager.subscribe(),
         })
     }
 
@@ -457,8 +468,11 @@ impl Renderer {
     ///
     /// Errors can occur when updating the scene & world (if one is missing for example)
     /// Some platform errors can also occur when handling windows
-    // TODO: This will be removed with the updated render system
-    #[allow(clippy::too_many_lines)]
+    ///
+    /// # Panics
+    ///
+    /// Will panic if the scene object does not exist for the specified
+    /// world (unless in [`WorldEvent::Created`] or [`WorldEvent::Destroyed`].
     pub fn tick(
         &mut self,
         _delta_time: f32,
@@ -475,45 +489,14 @@ impl Renderer {
                 WorldEvent::Destroyed(id) => {
                     self.scenes.remove(&id);
                 }
-                WorldEvent::EntitySpawn { world, entity } => {
-                    let Some(scene) = self.scenes.get(&world) else {
-                        continue;
-                    };
-                    let proxy = SceneProxy::build(&self.render_device, scene)?;
-                    // this creates a completely empty proxy, no mesh or matrix
-                    let Some(scene) = self.scenes.get_mut(&world) else {
-                        continue;
-                    };
-                    scene.add_proxy(entity, proxy);
-                }
-                WorldEvent::EntityUpdate { world, entity } => {
-                    let Some(world) = worlds.get(&world) else {
-                        continue;
-                    };
-                    let Some(scene) = self.scenes.get_mut(&world.id()) else {
-                        continue;
-                    };
-                    let Some(proxy) = scene.get_proxy(entity) else {
-                        continue;
-                    };
-
-                    let Some(transform) = world.get::<components::Transform>(entity) else {
-                        continue;
-                    };
-                    proxy.set_model_matrix(transform.matrix());
-
-                    if let Some(renderable) = world.get::<components::Renderable>(entity) {
-                        proxy.set_model(renderable.model.clone());
-                    }
-                    if let Some(camera) = world.get::<components::Camera>(entity) {
-                        proxy.set_camera(transform.view(), camera.projection());
-                    }
-                }
-                WorldEvent::EntityDespawn { world, entity } => {
-                    let Some(scene) = self.scenes.get_mut(&world) else {
-                        continue;
-                    };
-                    scene.remove_proxy(entity);
+                // TODO: move this to a scene tick function when it uses a
+                // universe system
+                WorldEvent::EntitySpawn { world, .. }
+                | WorldEvent::EntityUpdate { world, .. }
+                | WorldEvent::EntityDespawn { world, .. } => {
+                    let scene = self.scenes.get_mut(&world).expect("scene should exist");
+                    let world = &worlds[&world];
+                    scene.process_event(world, &event)?;
                 }
             }
         }
@@ -586,6 +569,15 @@ impl Renderer {
             }
         }
 
+        for event in self.player_consumer.consume_all() {
+            if let PlayerUpdateType::Despawned = event.update_type {
+                self.players.remove(&event.id);
+                continue;
+            }
+
+            self.players.insert(event.id, event.into());
+        }
+
         self.models.tick()?;
 
         Ok(())
@@ -597,96 +589,99 @@ impl Renderer {
     /// # Errors
     ///
     /// Vulkan errors can occur during rendering
-    pub fn render(
-        &mut self,
-        window: WindowId,
-        world: world::WorldId,
-        camera: world::Entity,
-    ) -> Result<()> {
-        let frame = &self.frames[self.current_frame()];
-        let Some(window) = self.windows.get_mut(&window) else {
-            return Err(Error::WindowDoesNotExist(window));
-        };
-        let Some(scene) = self.scenes.get(&world) else {
-            return Err(Error::WorldDoesNotExist(world));
-        };
+    pub fn render(&mut self) -> Result<()> {
+        for player in self.players.values() {
+            let frame = &self.frames[self.current_frame()];
+            let Some(window) = self.windows.get_mut(&player.window) else {
+                return Err(Error::WindowDoesNotExist(player.window));
+            };
+            let Some(scene) = self.scenes.get(&player.world) else {
+                return Err(Error::WorldDoesNotExist(player.world));
+            };
 
-        let size = window.extent();
-        let render_image = window.next_image()?;
+            let size = window.extent();
+            let render_image = window.next_image()?;
 
-        unsafe {
-            self.render_device.device.wait_for_fences(
-                std::slice::from_ref(&frame.fence),
-                true,
-                u64::MAX,
+            unsafe {
+                self.render_device.device.wait_for_fences(
+                    std::slice::from_ref(&frame.fence),
+                    true,
+                    u64::MAX,
+                )?;
+                self.render_device
+                    .device
+                    .reset_fences(std::slice::from_ref(&frame.fence))?;
+            }
+            self.render_device.flush_deletions();
+
+            let cmd = frame.command_pool.allocate_buffer()?;
+
+            unsafe {
+                self.render_device
+                    .device
+                    .begin_command_buffer(cmd.raw(), &vk::CommandBufferBeginInfo::default())?;
+            }
+
+            render_image.image.transition_image_layout(
+                &cmd,
+                vk::ImageLayout::UNDEFINED,
+                vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
             )?;
-            self.render_device
-                .device
-                .reset_fences(std::slice::from_ref(&frame.fence))?;
-        }
-        self.render_device.flush_deletions();
 
-        let cmd = frame.command_pool.allocate_buffer()?;
-
-        unsafe {
-            self.render_device
-                .device
-                .begin_command_buffer(cmd.raw(), &vk::CommandBufferBeginInfo::default())?;
-        }
-
-        render_image.image.transition_image_layout(
-            &cmd,
-            vk::ImageLayout::UNDEFINED,
-            vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-        )?;
-
-        scene.render(&self.models, &cmd, size, render_image.image.view(), camera)?;
-
-        render_image.image.transition_image_layout(
-            &cmd,
-            vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-            vk::ImageLayout::PRESENT_SRC_KHR,
-        )?;
-
-        unsafe { self.render_device.device.end_command_buffer(cmd.raw())? }
-
-        let submit_info = vk::SubmitInfo::default()
-            .wait_dst_stage_mask(std::slice::from_ref(
-                &vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
-            ))
-            .command_buffers(std::slice::from_ref(&cmd))
-            .wait_semaphores(std::slice::from_ref(
-                &render_image.image_available_semaphore,
-            ))
-            .signal_semaphores(std::slice::from_ref(
-                &render_image.render_finished_semaphore,
-            ));
-
-        unsafe {
-            self.render_device.device.queue_submit(
-                self.render_device.queues.graphics,
-                std::slice::from_ref(&submit_info),
-                frame.fence,
+            scene.render(
+                &self.models,
+                &cmd,
+                size,
+                render_image.image.view(),
+                player.entity,
             )?;
+
+            render_image.image.transition_image_layout(
+                &cmd,
+                vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                vk::ImageLayout::PRESENT_SRC_KHR,
+            )?;
+
+            unsafe { self.render_device.device.end_command_buffer(cmd.raw())? }
+
+            let submit_info = vk::SubmitInfo::default()
+                .wait_dst_stage_mask(std::slice::from_ref(
+                    &vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+                ))
+                .command_buffers(std::slice::from_ref(&cmd))
+                .wait_semaphores(std::slice::from_ref(
+                    &render_image.image_available_semaphore,
+                ))
+                .signal_semaphores(std::slice::from_ref(
+                    &render_image.render_finished_semaphore,
+                ));
+
+            unsafe {
+                self.render_device.device.queue_submit(
+                    self.render_device.queues.graphics,
+                    std::slice::from_ref(&submit_info),
+                    frame.fence,
+                )?;
+            }
+
+            let present_info = vk::PresentInfoKHR::default()
+                .wait_semaphores(std::slice::from_ref(
+                    &render_image.render_finished_semaphore,
+                ))
+                .swapchains(std::slice::from_ref(&render_image.swapchain))
+                .image_indices(std::slice::from_ref(&render_image.image_index));
+
+            unsafe {
+                self.render_device
+                    .swapchain_loader
+                    .queue_present(self.render_device.queues.present, &present_info)?
+            };
+
+            self.current_frame.store(
+                (self.current_frame() + 1) % MAX_FRAMES_IN_FLIGHT,
+                Ordering::Relaxed,
+            );
         }
-
-        let present_info = vk::PresentInfoKHR::default()
-            .wait_semaphores(std::slice::from_ref(
-                &render_image.render_finished_semaphore,
-            ))
-            .swapchains(std::slice::from_ref(&render_image.swapchain))
-            .image_indices(std::slice::from_ref(&render_image.image_index));
-
-        unsafe {
-            self.render_device
-                .swapchain_loader
-                .queue_present(self.render_device.queues.present, &present_info)?
-        };
-
-        self.current_frame.store(
-            (self.current_frame() + 1) % MAX_FRAMES_IN_FLIGHT,
-            Ordering::Relaxed,
-        );
         Ok(())
     }
 
