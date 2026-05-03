@@ -3,7 +3,7 @@ use std::{
     fmt::Debug,
 };
 
-use crate::{Component, Entity, Universe, World, query::Query};
+use crate::{Entity, Universe, World, components::Component, query::Query};
 
 /// A dyn-compatible wrapper around Component, used wherever
 /// type-erased component values must be passed around at runtime.

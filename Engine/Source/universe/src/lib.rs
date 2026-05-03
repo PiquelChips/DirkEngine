@@ -2,9 +2,11 @@
 //!
 //! The **Universe** is `DirkEngine`'s ECS system.
 
-use serde::{Serialize, de::DeserializeOwned};
-use std::{collections::HashMap, fmt::Debug};
+use std::collections::HashMap;
 
+use crate::components::Components;
+
+pub mod components;
 pub mod query;
 pub mod systems;
 
@@ -13,11 +15,6 @@ pub type Entity = u32;
 /// An identifier that distinguishes multiple [`World`] instances from each other.
 pub type WorldId = u32;
 
-/// Marker trait for component types.
-pub trait Component: 'static + Sized + Debug + Serialize + DeserializeOwned {}
-#[doc(hidden)]
-pub use macros::Component;
-
 /// This struct is the manager for all the worlds.
 pub struct Universe {
     worlds: HashMap<WorldId, World>,
@@ -25,4 +22,9 @@ pub struct Universe {
 }
 
 /// This is a world. It has entities and components.
-pub struct World {}
+pub struct World {
+    id: WorldId,
+    next_id: Entity,
+    alive: Vec<Entity>,
+    components: Components,
+}

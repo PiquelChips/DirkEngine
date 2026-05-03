@@ -1,7 +1,7 @@
 //! This module handles querying entities from a [`World`] based on what
 //! components they have (or don't have).
 
-use crate::{Component, Entity, World};
+use crate::{Entity, World, components::Component};
 
 /// A struct to query entities from a [`World`].
 ///
