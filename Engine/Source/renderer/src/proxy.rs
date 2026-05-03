@@ -14,11 +14,11 @@ pub struct CameraProxy {
 }
 
 pub struct PlayerProxy {
-    id: PlayerId,
-    world: WorldId,
-    entity: Entity,
-    window: WindowId,
-    region: PlayerRegion,
+    pub id: PlayerId,
+    pub world: WorldId,
+    pub entity: Entity,
+    pub window: WindowId,
+    pub region: PlayerRegion,
 }
 
 impl From<world::events::PlayerUpdateEvent> for PlayerProxy {
