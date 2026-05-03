@@ -1,9 +1,12 @@
 //! This crate holds the entire universe.
 //!
-//! The **Universe** is DirkEngine's ECS system.
+//! The **Universe** is `DirkEngine`'s ECS system.
 
 use serde::{Serialize, de::DeserializeOwned};
 use std::{collections::HashMap, fmt::Debug};
+
+pub mod query;
+pub mod systems;
 
 /// A unique, opaque identifier for a spawned entity.
 pub type Entity = u32;
