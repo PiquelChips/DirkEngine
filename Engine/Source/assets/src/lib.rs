@@ -524,7 +524,7 @@ impl AssetRegistry {
     /// let typed_handle = registry.load_asset::<Model>(handle)?;
     /// # Ok(()) }
     /// ```
-    pub fn load_asset<T: Asset>(&mut self, handle: AssetHandle) -> Result<Handle<T>> {
+    pub fn load_asset<T: Asset>(&mut self, handle: &AssetHandle) -> Result<Handle<T>> {
         let type_id = TypeId::of::<T>();
         if handle.asset_type() != T::asset_type() {
             return Err(Error::TypeMismatch(handle.raw().to_owned()));

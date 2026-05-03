@@ -117,7 +117,7 @@ pub trait Asset: Clone + Sized + Send + 'static {
     /// ```
     ///
     /// [`Error::AssetLoadError`]: crate::Error::AssetLoadError
-    fn load(config: &Self::Config, handle: AssetHandle) -> Result<Self>;
+    fn load(config: &Self::Config, handle: &AssetHandle) -> Result<Self>;
 
     /// Returns the [`AssetType`] discriminant for this asset type.
     ///

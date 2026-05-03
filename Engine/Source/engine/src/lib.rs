@@ -102,7 +102,7 @@ impl Engine {
     /// None for now, will be one if an error occurs when creating the world.
     pub fn start(&mut self) -> anyhow::Result<()> {
         info!("starting engine");
-        let world_id = self.create_test_world();
+        let world_id = self.create_test_world().context("creating test world")?;
 
         if self.spawn_player(world_id).is_none() {
             // TODO: return a proper error (one received from the universe)
@@ -230,8 +230,22 @@ impl Engine {
         player.despawn(world);
     }
 
-    fn create_test_world(&mut self) -> WorldId {
+    fn create_test_world(&mut self) -> anyhow::Result<WorldId> {
         use world::components::{Renderable, Transform};
+
+        // TODO: with universe system, will be able to listen to events when
+        // specific components are added. This means some subsystem will
+        // be able to listen for when a renderable is added, and load the
+        // asset appropriately
+        let duck_model =
+            assets::AssetHandle::from_raw("models/Duck/Duck.dirkasset", assets::AssetType::Model);
+        self.asset_registry
+            .load_asset::<assets::Model>(&duck_model)?;
+
+        let shrek_model =
+            assets::AssetHandle::from_raw("models/Shrek/Shrek.dirkasset", assets::AssetType::Model);
+        self.asset_registry
+            .load_asset::<assets::Model>(&shrek_model)?;
 
         let world_id = self.create_world();
         let world = self
@@ -248,15 +262,7 @@ impl Engine {
                 scale: glam::Vec3::splat(1.),
             },
         );
-        world.insert(
-            shrek,
-            Renderable {
-                model: assets::AssetHandle::from_raw(
-                    "models/Shrek/Shrek.dirkasset",
-                    assets::AssetType::Model,
-                ),
-            },
-        );
+        world.insert(shrek, Renderable { model: shrek_model });
 
         let duck = world.spawn();
         world.insert(
@@ -267,15 +273,7 @@ impl Engine {
                 scale: glam::Vec3::splat(1.),
             },
         );
-        world.insert(
-            duck,
-            Renderable {
-                model: assets::AssetHandle::from_raw(
-                    "models/Duck/Duck.dirkasset",
-                    assets::AssetType::Model,
-                ),
-            },
-        );
-        world_id
+        world.insert(duck, Renderable { model: duck_model });
+        Ok(world_id)
     }
 }
