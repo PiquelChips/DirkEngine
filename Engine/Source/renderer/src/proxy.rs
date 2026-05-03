@@ -20,3 +20,15 @@ pub struct PlayerProxy {
     window: WindowId,
     region: PlayerRegion,
 }
+
+impl From<world::events::PlayerUpdateEvent> for PlayerProxy {
+    fn from(event: world::events::PlayerUpdateEvent) -> Self {
+        Self {
+            id: event.id,
+            world: event.world,
+            entity: event.entity,
+            window: event.window,
+            region: event.region,
+        }
+    }
+}

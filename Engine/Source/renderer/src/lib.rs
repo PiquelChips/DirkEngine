@@ -28,7 +28,11 @@ use tracing::{debug, info};
 use tracing::{error, trace, warn};
 
 use platform::{PlatformEvent, WindowEvent, WindowId};
-use world::{World, WorldId, events::WorldEvent, player::PlayerId};
+use world::{
+    World, WorldId,
+    events::{PlayerUpdateType, WorldEvent},
+    player::PlayerId,
+};
 
 mod utils;
 use ::utils::Version;
@@ -98,7 +102,6 @@ pub struct Renderer {
     current_frame: Arc<AtomicUsize>,
 
     // Events
-    event_manager: EventManager,
     window_consumer: events::Consumer<platform::WindowEvent>,
     platform_consumer: events::Consumer<platform::PlatformEvent>,
     world_consumer: events::Consumer<world::events::WorldEvent>,
@@ -456,7 +459,6 @@ impl Renderer {
             platform_consumer: event_manager.subscribe(),
             world_consumer: event_manager.subscribe(),
             player_consumer: event_manager.subscribe(),
-            event_manager: event_manager.clone(),
         })
     }
 
@@ -468,8 +470,6 @@ impl Renderer {
     ///
     /// Errors can occur when updating the scene & world (if one is missing for example)
     /// Some platform errors can also occur when handling windows
-    // TODO: This will be removed with the updated render system
-    #[allow(clippy::too_many_lines)]
     pub fn tick(
         &mut self,
         _delta_time: f32,
@@ -558,6 +558,15 @@ impl Renderer {
                 // don't care about these
                 WindowEvent::FocusChanged { .. } | WindowEvent::ThemeChanged { .. } => {}
             }
+        }
+
+        for event in self.player_consumer.consume_all() {
+            if let PlayerUpdateType::Despawned = event.update_type {
+                self.players.remove(&event.id);
+                continue;
+            }
+
+            self.players.insert(event.id, event.into());
         }
 
         self.models.tick()?;
