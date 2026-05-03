@@ -32,7 +32,7 @@ pub fn configure_editor() {
 /// # Panics
 ///
 /// Will panic if it fails to run `cargo metadata`
-#[must_use] 
+#[must_use]
 pub fn workspace_dir() -> PathBuf {
     let metadata = cargo_metadata::MetadataCommand::new()
         .exec()
