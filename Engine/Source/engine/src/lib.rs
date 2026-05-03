@@ -145,7 +145,7 @@ impl Engine {
     /// # Errors
     ///
     /// Any error that is returned during rendering.
-    pub fn render(&mut self) -> anyhow::Result<()> {
+    fn render(&mut self) -> anyhow::Result<()> {
         for player in self.players.values() {
             self.renderer
                 .render(player.window(), player.world(), player.entity())?;
