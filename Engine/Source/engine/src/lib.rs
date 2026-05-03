@@ -146,6 +146,13 @@ impl Engine {
             .tick(delta_time, &self.worlds, self.platform.windows_mut())
             .context("renderer")?;
 
+        self.players.values_mut().for_each(|player| {
+            let Some(world) = self.worlds.get_mut(&player.world()) else {
+                return;
+            };
+            player.tick(world);
+        });
+
         self.renderer.render().context("rendering")?;
         Ok(!self.is_requesting_exit())
     }

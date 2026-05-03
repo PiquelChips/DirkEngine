@@ -41,11 +41,12 @@
 
 use std::f32::consts::PI;
 
-use events::{Dispatcher, EventManager};
-use platform::WindowId;
+use events::{Consumer, Dispatcher, EventManager};
+use platform::{WindowEvent, WindowId};
 
 use crate::{
     Entity, World, WorldId,
+    components::Camera,
     events::{PlayerUpdateEvent, PlayerUpdateType},
 };
 
@@ -185,6 +186,7 @@ pub struct Player {
     window: WindowId,
     region: PlayerRegion,
     dispatcher: Dispatcher<PlayerUpdateEvent>,
+    platform_consumer: Consumer<WindowEvent>,
 }
 
 impl Player {
@@ -243,15 +245,14 @@ impl Player {
             },
         );
 
-        let dispatcher = event_manager.register();
-
         let player = Self {
             id,
             world: world.id(),
             entity,
             window,
             region: PlayerRegion::default(),
-            dispatcher,
+            dispatcher: event_manager.register(),
+            platform_consumer: event_manager.subscribe(),
         };
         player.dispatcher.dispatch(PlayerUpdateEvent::from_player(
             &player,
@@ -328,6 +329,32 @@ impl Player {
     pub fn set_region(&mut self, region: PlayerRegion) {
         self.region = region;
         self.dispatch_update();
+    }
+
+    /// Updates the player's information. This mainly listens for
+    /// [`WindowEvent::Resized`] & updates the camera accordingly.
+    ///
+    /// # Panics
+    ///
+    /// Will panic if the player entity does not have a [`Camera`] component.
+    // the window size will never get close to 2^23
+    #[allow(clippy::cast_precision_loss)]
+    pub fn tick(&mut self, world: &mut World) {
+        for event in self.platform_consumer.consume_all() {
+            let WindowEvent::Resized { id, width, height } = event else {
+                continue;
+            };
+            if id != self.window {
+                continue;
+            }
+
+            let camera = world
+                .get_mut::<Camera>(self.entity)
+                .expect("player should have his own camera");
+
+            camera.width = width as f32;
+            camera.height = height as f32;
+        }
     }
 
     fn dispatch_update(&self) {
