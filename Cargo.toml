@@ -34,7 +34,6 @@ tempfile = "3"
 
 thiserror = "2"
 anyhow = "1"
-derive-getters = "0.5"
 cargo_metadata = "0.23"
 
 # Engine modules
