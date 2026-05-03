@@ -178,9 +178,8 @@ pub enum AssetType {
 /// crate) rather than implementing this trait by hand:
 ///
 /// ```rust
-/// use assets::AssetConfig;
+/// use assets::{AssetConfig, Metadata};
 /// use serde::{Deserialize, Serialize};
-/// # use assets::Metadata;
 ///
 /// #[derive(Serialize, Deserialize, Clone)]
 /// pub struct MyConfig {
@@ -202,6 +201,6 @@ pub enum AssetType {
 ///
 /// [`AssetRegistry::asset_config`]: crate::AssetRegistry::asset_config
 pub trait AssetConfig: Serialize + DeserializeOwned {
-    /// Validates the configuration for the asset
+    /// Validates the configuration for the asset.
     fn validate(&self, meta: &Metadata) -> bool;
 }
