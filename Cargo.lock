@@ -1843,6 +1843,10 @@ checksum = "9629274872b2bfaf8d66f5f15725007f635594914870f65218920345aa11aa8c"
 [[package]]
 name = "universe"
 version = "0.1.0"
+dependencies = [
+ "macros",
+ "serde",
+]
 
 [[package]]
 name = "urlencoding"
