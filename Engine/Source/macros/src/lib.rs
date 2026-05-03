@@ -1,8 +1,8 @@
 //! This crate exports all the proc-macros used in the engine.
 
 use proc_macro::TokenStream;
-use quote::quote;
-use syn::{Data, DeriveInput, parse_macro_input};
+use quote::{format_ident, quote};
+use syn::{Data, DeriveInput, Ident, parse_macro_input};
 
 mod event;
 
@@ -85,12 +85,16 @@ pub fn derive_event(input: proc_macro::TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_derive(Component)]
 pub fn derive_component(input: TokenStream) -> TokenStream {
+    empty_derive(input, &format_ident!("Component"))
+}
+
+fn empty_derive(input: TokenStream, trait_ident: &Ident) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
     quote! {
-        impl #impl_generics Component for #name #ty_generics #where_clause {}
+        impl #impl_generics #trait_ident for #name #ty_generics #where_clause {}
     }
     .into()
 }

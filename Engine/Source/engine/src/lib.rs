@@ -17,6 +17,9 @@ pub struct Engine {
     exit_consumer: events::Consumer<platform::AppExit>,
     event_manager: events::EventManager,
 
+    #[allow(unused)]
+    asset_registry: assets::AssetRegistry,
+
     renderer: renderer::Renderer,
     platform: platform::Platform,
 
@@ -40,7 +43,11 @@ impl Engine {
     ///
     /// Errors can be returned during platform & renderer initialisation
     pub fn init() -> anyhow::Result<Self> {
+        #[cfg(editor)]
+        info!("starting editor");
+
         info!("initialising engine");
+
         let logger = logging::Logger::new()
             .write_fs(true)
             .max_level(logging::LogLevel::Debug)
@@ -48,6 +55,8 @@ impl Engine {
             .context("initialising logger")?;
 
         let event_manager = events::EventManager::new();
+        let asset_registry =
+            assets::AssetRegistry::init(&event_manager).context("initialising asset registry")?;
 
         let version = utils::Version::from_str(env!("CARGO_PKG_VERSION"))?;
         let name = "DirkEngine";
@@ -70,6 +79,7 @@ impl Engine {
             exit_consumer: event_manager.subscribe(),
             event_manager,
             logger,
+            asset_registry,
 
             platform,
             renderer,
@@ -135,7 +145,7 @@ impl Engine {
     /// # Errors
     ///
     /// Any error that is returned during rendering.
-    pub fn render(&mut self) -> anyhow::Result<()> {
+    fn render(&mut self) -> anyhow::Result<()> {
         for player in self.players.values() {
             self.renderer
                 .render(player.window(), player.world(), player.entity())?;
