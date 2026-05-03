@@ -12,13 +12,14 @@ use tracing::warn;
 /// # Examples
 /// ```
 /// # use world::components::Renderable;
-/// let r = Renderable { model: "meshes/cube.glb".into() };
-/// assert_eq!(r.model, "meshes/cube.glb");
+/// use assets::{AssetHandle, AssetType};
+/// let r = Renderable { model: AssetHandle::from_raw("meshes/cube.glb", AssetType::Model) };
+/// assert_eq!(r.model.raw(), "meshes/cube.glb");
 /// ```
 #[derive(Debug, Clone, Component)]
 pub struct Renderable {
     /// Asset-registry key for the mesh to render (e.g. `"meshes/cube.glb"`).
-    pub model: String,
+    pub model: assets::AssetHandle,
 }
 
 /// Spatial transform for an entity: position, orientation, and scale.
