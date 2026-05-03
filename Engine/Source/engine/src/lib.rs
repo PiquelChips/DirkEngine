@@ -70,7 +70,7 @@ impl Engine {
                 app_version: version,
             },
             platform.main_window(),
-            event_manager.clone(),
+            &event_manager,
         )
         .context("renderer init")?;
 

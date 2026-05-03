@@ -3,7 +3,7 @@
 //! centralised system that has all textures, meshes, materials, ...
 //!
 //! When someone needs to render a model to the screen, all they have to do
-//! is call [`Models::render`] with their asset handle & a command buffer.
+//! is call [`ModelRegistry::render`] with their asset handle & a command buffer.
 //! We handle the rest.
 
 use std::{collections::HashMap, marker::PhantomData};
@@ -30,10 +30,7 @@ pub struct Handle<T> {
 impl<T> Copy for Handle<T> {}
 impl<T> Clone for Handle<T> {
     fn clone(&self) -> Self {
-        Self {
-            id: self.id,
-            _marker: PhantomData,
-        }
+        *self
     }
 }
 
@@ -41,6 +38,7 @@ pub struct Texture {
     pub device: RenderDevice,
     pub image: Image,
     pub sampler: vk::Sampler,
+    #[allow(unused)]
     pub mip_levels: u32,
 }
 
@@ -62,6 +60,7 @@ pub struct Mesh {
 }
 
 pub struct Material {
+    #[allow(unused)]
     pub base_color: Handle<Texture>,
     pub descriptor_set: vk::DescriptorSet,
 }
@@ -82,6 +81,7 @@ impl<T> AssetStorage<T> {
         Self { assets: Vec::new() }
     }
     fn insert(&mut self, asset: T) -> Handle<T> {
+        #[allow(clippy::cast_possible_truncation)]
         let id = self.assets.len() as u32;
         self.assets.push(Some(asset));
         Handle {
@@ -96,7 +96,7 @@ impl<T> AssetStorage<T> {
     }
 }
 
-pub struct Models {
+pub struct ModelRegistry {
     device: RenderDevice,
 
     textures: AssetStorage<Texture>,
@@ -113,7 +113,7 @@ pub struct Models {
 /// TODO: descriptor pool
 const MAX_MATERIAL_DESCRIPTOR_SET: u32 = 256;
 
-impl Models {
+impl ModelRegistry {
     pub fn new(device: &RenderDevice, events: &events::EventManager) -> Result<Self> {
         let material_pool = {
             let pool_size = vk::DescriptorPoolSize {
@@ -142,7 +142,7 @@ impl Models {
     pub fn tick(&mut self) -> Result<()> {
         let events = self.asset_load_consumer.consume_all().collect::<Vec<_>>();
         for event in events {
-            self.load_model(event.handle)?;
+            self.load_model(&event.handle)?;
         }
 
         let events = self.asset_unload_consumer.consume_all().collect::<Vec<_>>();
@@ -158,19 +158,27 @@ impl Models {
         scene_set: vk::DescriptorSet,
         proxy_set: vk::DescriptorSet,
         pipeline_layout: vk::PipelineLayout,
-    ) {
+    ) -> assets::Result<()> {
         let mut descriptor_sets = [scene_set, proxy_set, vk::DescriptorSet::null()];
 
-        // TODO: this is weird
-        let model = self.models.get(handle).unwrap();
-        let model = &model.mesh_instances[0];
-        let model = self.meshes.get(*model);
+        if handle.asset_type() != assets::AssetType::Model {
+            return Err(assets::Error::TypeMismatch(handle.to_string()));
+        }
 
-        for prim in &model.primitives {
+        let model = self
+            .models
+            .get(handle)
+            .ok_or(assets::Error::NotFound(handle.to_string()))?;
+        // TODO: render all the meshes
+        let mesh_handle = &model.mesh_instances[0];
+        let mesh = self.meshes.get(*mesh_handle);
+
+        for prim in &mesh.primitives {
             let mat_set = prim
                 .material_handle
-                .and_then(|mat| Some(self.materials.get(mat).descriptor_set))
-                .unwrap_or(vk::DescriptorSet::null());
+                .map_or(vk::DescriptorSet::null(), |mat| {
+                    self.materials.get(mat).descriptor_set
+                });
 
             descriptor_sets[2] = mat_set;
 
@@ -200,9 +208,10 @@ impl Models {
                     .cmd_draw_indexed(cmd.raw(), prim.index_count, 1, 0, 0, 0);
             }
         }
+        Ok(())
     }
 
-    fn load_model(&mut self, handle: assets::Handle<assets::Model>) -> Result<()> {
+    fn load_model(&mut self, handle: &assets::Handle<assets::Model>) -> Result<()> {
         let assets::Model {
             gltf,
             buffers,
@@ -225,7 +234,7 @@ impl Models {
             .map(|mesh| {
                 let primitives = mesh
                     .primitives()
-                    .map(|prim| Ok(self.upload_primitive(prim, &buffers, &material_handles)?))
+                    .map(|prim| self.upload_primitive(&prim, &buffers, &material_handles))
                     .collect::<Result<Vec<_>>>()?;
                 Ok(self.meshes.insert(Mesh { primitives }))
             })
@@ -262,6 +271,7 @@ impl Models {
             .map(|(i, mat)| {
                 let pbr = mat.pbr_metallic_roughness();
                 // TODO: actually PBR materials
+                #[allow(clippy::unwrap_used)]
                 let tex = pbr.base_color_texture().unwrap().texture().source().index();
 
                 let tex_handle = texture_refs[tex];
@@ -288,7 +298,7 @@ impl Models {
 
     fn upload_primitive(
         &self,
-        primitive: gltf::Primitive,
+        primitive: &gltf::Primitive,
         buffers: &[gltf::buffer::Data],
         mat_refs: &[Handle<Material>],
     ) -> Result<Primitive> {
@@ -324,6 +334,8 @@ impl Models {
         let vertex_buffer = VertexBuffer::upload_slice(&self.device, &vertices)?;
         let index_buffer = IndexBuffer::upload_slice(&self.device, &indices)?;
 
+        // indices.len() will not surpass u32::MAX
+        #[allow(clippy::cast_possible_truncation)]
         Ok(Primitive {
             vertex_buffer,
             index_buffer,

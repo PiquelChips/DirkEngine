@@ -6,7 +6,7 @@ use world::WorldId;
 
 use crate::{
     Error, MAX_FRAMES_IN_FLIGHT, MAX_RENDERABLES, Result,
-    models::Models,
+    models::ModelRegistry,
     pipeline::GraphicsPipeline,
     render_pass::RenderPass,
     resources::{
@@ -166,7 +166,7 @@ impl Scene {
     }
     pub fn render(
         &self,
-        models: &Models,
+        models: &ModelRegistry,
         cmd: &CommandBuffer,
         size: vk::Extent2D,
         view: vk::ImageView,
@@ -235,7 +235,7 @@ impl Scene {
                 self.descriptor_sets[frame],
                 proxy.sets[frame],
                 self.graphics_pipeline.layout(),
-            );
+            )?;
         }
 
         RenderPass::end(&self.device.device, cmd);

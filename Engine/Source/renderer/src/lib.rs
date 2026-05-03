@@ -84,10 +84,10 @@ pub struct Renderer {
     // Heavy renderer state:
     /// All of the [`window::Window`]s constructed from [`platform::Window`]s.
     windows: HashMap<WindowId, Window>,
-    /// All of the internal [world::World] representations.
+    /// All of the internal [`world::World`] representations.
     scenes: HashMap<world::WorldId, Scene>,
     /// The management for all the models.
-    models: models::Models,
+    models: models::ModelRegistry,
 
     frames: [Frame; MAX_FRAMES_IN_FLIGHT],
     current_frame: Arc<AtomicUsize>,
@@ -118,7 +118,7 @@ impl Renderer {
     pub fn init(
         create_info: &RendererCreateInfo,
         window: &platform::Window,
-        event_manager: events::EventManager,
+        event_manager: &events::EventManager,
     ) -> Result<Self> {
         info!("Intializing Vulkan...");
 
@@ -428,7 +428,7 @@ impl Renderer {
             }
         };
 
-        let models = models::Models::new(&render_device, &event_manager)?;
+        let models = models::ModelRegistry::new(&render_device, event_manager)?;
 
         Ok(Self {
             entry,
