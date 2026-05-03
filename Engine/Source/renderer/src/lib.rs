@@ -21,7 +21,6 @@ use ash::{
     khr::{surface, swapchain},
     vk,
 };
-use events::EventManager;
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use tracing::{debug, info};
 #[cfg(validation)]
@@ -403,7 +402,6 @@ impl Renderer {
             current_frame.clone(),
             #[cfg(validation)]
             debug_messenger,
-            event_manager.clone(),
         )?;
 
         // IN FLIGHT FRAMES
@@ -470,6 +468,11 @@ impl Renderer {
     ///
     /// Errors can occur when updating the scene & world (if one is missing for example)
     /// Some platform errors can also occur when handling windows
+    ///
+    /// # Panics
+    ///
+    /// Will panic if the scene object does not exist for the specified
+    /// world (unless in [`WorldEvent::Created`] or [`WorldEvent::Destroyed`].
     pub fn tick(
         &mut self,
         _delta_time: f32,
@@ -486,9 +489,15 @@ impl Renderer {
                 WorldEvent::Destroyed(id) => {
                     self.scenes.remove(&id);
                 }
-                WorldEvent::EntitySpawn { .. }
-                | WorldEvent::EntityUpdate { .. }
-                | WorldEvent::EntityDespawn { .. } => {}
+                // TODO: move this to a scene tick function when it uses a
+                // universe system
+                WorldEvent::EntitySpawn { world, .. }
+                | WorldEvent::EntityUpdate { world, .. }
+                | WorldEvent::EntityDespawn { world, .. } => {
+                    let scene = self.scenes.get_mut(&world).expect("scene should exist");
+                    let world = &worlds[&world];
+                    scene.process_event(world, &event)?;
+                }
             }
         }
 
@@ -570,12 +579,6 @@ impl Renderer {
         }
 
         self.models.tick()?;
-        self.scenes.values_mut().try_for_each(|scene| {
-            let Some(world) = worlds.get(&scene.world()) else {
-                return Ok(());
-            };
-            scene.tick(world)
-        })?;
 
         Ok(())
     }

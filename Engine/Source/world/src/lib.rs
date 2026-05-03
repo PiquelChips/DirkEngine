@@ -68,7 +68,7 @@ pub type WorldId = u32;
 /// ```rust
 /// use world::Component;
 ///
-/// #[derive(Component)]
+/// #[derive(Debug, Component)]
 /// struct Health(f32);
 /// ```
 pub trait Component: 'static + Sized + Debug {}

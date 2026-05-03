@@ -33,8 +33,6 @@ pub struct Scene {
     ubo: [UniformBuffer; MAX_FRAMES_IN_FLIGHT],
     descriptor_sets: [vk::DescriptorSet; MAX_FRAMES_IN_FLIGHT],
 
-    world_consumer: events::Consumer<world::events::WorldEvent>,
-
     // TODO: these need to be removed
     color: Image,
     depth: Image,
@@ -154,44 +152,37 @@ impl Scene {
             descriptor_pool,
             ubo,
             descriptor_sets: scene_desc_sets,
-            world_consumer: device.event_manager.subscribe(),
 
             color,
             depth,
             graphics_pipeline,
         })
     }
-    pub fn tick(&mut self, world: &World) -> Result<()> {
-        for event in self
-            .world_consumer
-            .consume_all()
-            .filter(|e| e.world() == self.world)
-        {
-            match event {
-                WorldEvent::Created(..) | WorldEvent::Destroyed(..) => {}
-                WorldEvent::EntitySpawn { world: _, entity } => {
-                    self.proxies
-                        .insert(entity, SceneProxy::build(&self.device, self)?);
-                }
-                WorldEvent::EntityUpdate { world: _, entity } => {
-                    let Some(proxy) = self.proxies.get_mut(&entity) else {
-                        continue;
-                    };
-                    let Some(transform) = world.get::<components::Transform>(entity) else {
-                        continue;
-                    };
-                    proxy.set_model_matrix(transform.matrix());
+    pub fn process_event(&mut self, world: &World, event: &WorldEvent) -> Result<()> {
+        match *event {
+            WorldEvent::Created(..) | WorldEvent::Destroyed(..) => {}
+            WorldEvent::EntitySpawn { world: _, entity } => {
+                self.proxies
+                    .insert(entity, SceneProxy::build(&self.device, self)?);
+            }
+            WorldEvent::EntityUpdate { world: _, entity } => {
+                let Some(proxy) = self.proxies.get_mut(&entity) else {
+                    return Ok(());
+                };
+                let Some(transform) = world.get::<components::Transform>(entity) else {
+                    return Ok(());
+                };
+                proxy.set_model_matrix(transform.matrix());
 
-                    if let Some(renderable) = world.get::<components::Renderable>(entity) {
-                        proxy.set_model(renderable.model.clone());
-                    }
-                    if let Some(camera) = world.get::<components::Camera>(entity) {
-                        proxy.set_camera(transform.view(), camera.projection());
-                    }
+                if let Some(renderable) = world.get::<components::Renderable>(entity) {
+                    proxy.set_model(renderable.model.clone());
                 }
-                WorldEvent::EntityDespawn { world: _, entity } => {
-                    self.proxies.remove(&entity);
+                if let Some(camera) = world.get::<components::Camera>(entity) {
+                    proxy.set_camera(transform.view(), camera.projection());
                 }
+            }
+            WorldEvent::EntityDespawn { world: _, entity } => {
+                self.proxies.remove(&entity);
             }
         }
         Ok(())
@@ -272,10 +263,6 @@ impl Scene {
 
         RenderPass::end(&self.device.device, cmd);
         Ok(())
-    }
-
-    pub fn world(&self) -> WorldId {
-        self.world
     }
 }
 
