@@ -6,6 +6,21 @@ use std::{
     fmt::Debug,
 };
 
+/// A dyn-compatible wrapper around Component, used wherever
+/// type-erased component values must be passed around at runtime.
+#[doc(hidden)]
+pub trait AnyComponent: Any + Debug + 'static {
+    /// Converts the box into `Box<dyn Any>` so it can be downcast.
+    fn as_any_box(self: Box<Self>) -> Box<dyn Any>;
+}
+
+// Blanket impl: every concrete Component automatically becomes an AnyComponent.
+impl<T: Component> AnyComponent for T {
+    fn as_any_box(self: Box<Self>) -> Box<dyn Any> {
+        self
+    }
+}
+
 /// Marker trait for component types.
 pub trait Component: 'static + Sized + Debug + Serialize + DeserializeOwned {}
 
@@ -45,7 +60,7 @@ impl<C: Component> AnyStorage for TypedStorage<C> {
 /// [`TypeId`].  No central registration is required — storage for a type is
 /// created on the first `insert` and lives until the `World` is dropped.
 #[derive(Default)]
-pub struct Components {
+pub(crate) struct Components {
     storages: HashMap<TypeId, Box<dyn AnyStorage>>,
 }
 

@@ -1,24 +1,10 @@
-use std::{
-    any::{Any, TypeId},
-    fmt::Debug,
+use std::any::TypeId;
+
+use crate::{
+    Entity, Universe, World,
+    components::{AnyComponent, Component},
+    query::Query,
 };
-
-use crate::{Entity, Universe, World, components::Component, query::Query};
-
-/// A dyn-compatible wrapper around Component, used wherever
-/// type-erased component values must be passed around at runtime.
-#[doc(hidden)]
-pub trait AnyComponent: Any + Debug + 'static {
-    /// Converts the box into `Box<dyn Any>` so it can be downcast.
-    fn as_any_box(self: Box<Self>) -> Box<dyn Any>;
-}
-
-// Blanket impl: every concrete Component automatically becomes an AnyComponent.
-impl<T: Component> AnyComponent for T {
-    fn as_any_box(self: Box<Self>) -> Box<dyn Any> {
-        self
-    }
-}
 
 /// All systems must implement this trait.
 pub trait System: Clone {
@@ -88,7 +74,7 @@ pub trait ComponentSystem: System {
 }
 
 /// Private type-erasure trait for storage in [`World`] & [`Universe`]
-trait AnyComponentSystem {
+pub(crate) trait AnyComponentSystem {
     fn type_id(&self) -> TypeId;
     // Uses Box<dyn AnyComponent> — dyn-compatible and downcasting-capable
     fn added(&self, entity: Entity, component: Box<dyn AnyComponent>);
