@@ -124,7 +124,7 @@ impl AssetConfig for FakeConfig {
 impl Asset for FakeAsset {
     type Config = FakeConfig;
 
-    fn load(_config: &FakeConfig, _handle: AssetHandle) -> Result<Self> {
+    fn load(_config: &FakeConfig, _handle: &AssetHandle) -> Result<Self> {
         Ok(FakeAsset { value: 0 })
     }
 
@@ -830,7 +830,7 @@ mod registry {
 
         // Pass a handle whose AssetType is Unknown but request Model — must be TypeMismatch.
         let bad_handle = AssetHandle::from_raw("anything.dirkasset", AssetType::Unknown);
-        let result = registry.load_asset::<Model>(bad_handle);
+        let result = registry.load_asset::<Model>(&bad_handle);
         assert!(
             matches!(result, Err(Error::TypeMismatch(_))),
             "Wrong type tag must produce TypeMismatch"
@@ -850,7 +850,10 @@ mod registry {
             AssetType::Model,
         );
         assert!(
-            matches!(registry.load_asset::<Model>(ghost), Err(Error::NotFound(_))),
+            matches!(
+                registry.load_asset::<Model>(&ghost),
+                Err(Error::NotFound(_))
+            ),
             "Unknown handle must produce NotFound"
         );
     }
@@ -865,7 +868,7 @@ mod registry {
 
         let path = "specific/path.dirkasset";
         let bad = AssetHandle::from_raw(path, AssetType::Unknown);
-        match registry.load_asset::<Model>(bad) {
+        match registry.load_asset::<Model>(&bad) {
             Err(Error::TypeMismatch(p)) => assert_eq!(p, path),
             other => panic!("expected TypeMismatch, got {other:?}"),
         }
@@ -881,7 +884,7 @@ mod registry {
 
         let path = "no/such/asset.dirkasset";
         let ghost = AssetHandle::from_raw(path, AssetType::Model);
-        match registry.load_asset::<Model>(ghost) {
+        match registry.load_asset::<Model>(&ghost) {
             Err(Error::NotFound(p)) => assert_eq!(p, path),
             other => panic!("expected NotFound, got {other:?}"),
         }
@@ -926,7 +929,7 @@ mod registry {
             let raw = format!("{sub}/hero.dirkasset");
             let handle = AssetHandle::from_raw(raw, AssetType::Model);
             assert!(
-                r2.load_asset::<Model>(handle).is_ok(),
+                r2.load_asset::<Model>(&handle).is_ok(),
                 "Valid model asset must load without error"
             );
         });
@@ -944,7 +947,7 @@ mod registry {
 
             let raw = format!("{sub}/ship.dirkasset");
             let handle_id = AssetHandle::from_raw(raw, AssetType::Model);
-            let _handle = r2.load_asset::<Model>(handle_id).unwrap();
+            let _handle = r2.load_asset::<Model>(&handle_id).unwrap();
 
             events2.dispatch_all();
             let events_fired: Vec<_> = loaded_consumer.consume_all().collect();
@@ -964,7 +967,7 @@ mod registry {
 
             let raw = format!("{sub}/tank.dirkasset");
             let _handle = r2
-                .load_asset::<Model>(AssetHandle::from_raw(raw, AssetType::Model))
+                .load_asset::<Model>(&AssetHandle::from_raw(raw, AssetType::Model))
                 .unwrap();
 
             events2.dispatch_all();
@@ -987,7 +990,7 @@ mod registry {
 
             let raw = format!("{sub}/barrel.dirkasset");
             let handle = r2
-                .load_asset::<Model>(AssetHandle::from_raw(raw, AssetType::Model))
+                .load_asset::<Model>(&AssetHandle::from_raw(raw, AssetType::Model))
                 .unwrap();
 
             // Drop all references → InternalAssetUnloaded is queued.
@@ -1017,7 +1020,7 @@ mod registry {
 
             let raw = format!("{sub}/plane.dirkasset");
             let handle = r2
-                .load_asset::<Model>(AssetHandle::from_raw(raw, AssetType::Model))
+                .load_asset::<Model>(&AssetHandle::from_raw(raw, AssetType::Model))
                 .unwrap();
 
             events2.dispatch_all();
@@ -1046,7 +1049,7 @@ mod registry {
 
             let raw = format!("{sub}/crate_mesh.dirkasset");
             let h1 = r2
-                .load_asset::<Model>(AssetHandle::from_raw(raw, AssetType::Model))
+                .load_asset::<Model>(&AssetHandle::from_raw(raw, AssetType::Model))
                 .unwrap();
             let h2 = h1.clone();
             let h3 = h1.clone();
@@ -1086,7 +1089,7 @@ mod registry {
 
             let raw = format!("{sub}/sphere.dirkasset");
             let handle = r2
-                .load_asset::<Model>(AssetHandle::from_raw(raw, AssetType::Model))
+                .load_asset::<Model>(&AssetHandle::from_raw(raw, AssetType::Model))
                 .unwrap();
 
             let model = handle.take().expect("take must succeed on first call");
@@ -1111,10 +1114,10 @@ mod registry {
 
             let raw = format!("{sub}/rock.dirkasset");
             let h1 = r2
-                .load_asset::<Model>(AssetHandle::from_raw(raw.clone(), AssetType::Model))
+                .load_asset::<Model>(&AssetHandle::from_raw(raw.clone(), AssetType::Model))
                 .unwrap();
             let h2 = r2
-                .load_asset::<Model>(AssetHandle::from_raw(raw, AssetType::Model))
+                .load_asset::<Model>(&AssetHandle::from_raw(raw, AssetType::Model))
                 .unwrap();
 
             // Both handles are independent; taking from one must not affect the other.

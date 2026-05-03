@@ -6,6 +6,7 @@ use world::WorldId;
 
 use crate::{
     Error, MAX_FRAMES_IN_FLIGHT, MAX_RENDERABLES, Result,
+    models::ModelRegistry,
     pipeline::GraphicsPipeline,
     render_pass::RenderPass,
     resources::{
@@ -13,7 +14,6 @@ use crate::{
         command_pool::CommandBuffer,
         device::{Garbage, RenderDevice},
         image::{Image, ImageCreateInfo},
-        model,
     },
 };
 
@@ -166,7 +166,7 @@ impl Scene {
     }
     pub fn render(
         &self,
-        models: &HashMap<String, model::Model>,
+        models: &ModelRegistry,
         cmd: &CommandBuffer,
         size: vk::Extent2D,
         view: vk::ImageView,
@@ -224,55 +224,18 @@ impl Scene {
             .extent(size);
         unsafe { self.device.device.cmd_set_scissor(cmd.raw(), 0, &[scissor]) };
 
-        let mut descriptor_sets = [
-            self.descriptor_sets[frame],
-            vk::DescriptorSet::null(),
-            vk::DescriptorSet::null(),
-        ];
-
         for proxy in self.proxies.values() {
             let Some(ref model) = proxy.model else {
                 continue;
             };
-            let Some(model) = models.get(model) else {
-                continue;
-            };
 
-            for prim in &model.primitives {
-                let mat_set = prim
-                    .material
-                    .and_then(|idx| model.material_sets.get(idx).copied())
-                    .unwrap_or(vk::DescriptorSet::null());
-
-                descriptor_sets[1] = proxy.sets[frame];
-                descriptor_sets[2] = mat_set;
-
-                unsafe {
-                    self.device.device.cmd_bind_descriptor_sets(
-                        cmd.raw(),
-                        vk::PipelineBindPoint::GRAPHICS,
-                        self.graphics_pipeline.layout(),
-                        0,
-                        &descriptor_sets,
-                        &[],
-                    );
-                    self.device.device.cmd_bind_vertex_buffers(
-                        cmd.raw(),
-                        0,
-                        &[prim.vertex_buffer.buffer()],
-                        &[0],
-                    );
-                    self.device.device.cmd_bind_index_buffer(
-                        cmd.raw(),
-                        prim.index_buffer.buffer(),
-                        0,
-                        vk::IndexType::UINT32,
-                    );
-                    self.device
-                        .device
-                        .cmd_draw_indexed(cmd.raw(), prim.index_count, 1, 0, 0, 0);
-                }
-            }
+            models.render_model(
+                model,
+                cmd,
+                self.descriptor_sets[frame],
+                proxy.sets[frame],
+                self.graphics_pipeline.layout(),
+            )?;
         }
 
         RenderPass::end(&self.device.device, cmd);
@@ -306,7 +269,7 @@ pub struct SceneProxy {
     model_matrix: Option<glam::Mat4>,
     /// The name of the model. Used to request a [`crate::model::Model`] from the
     /// renderer at render time.
-    model: Option<String>,
+    model: Option<assets::AssetHandle>,
     /// An optional camera that could be attached to the mesh.
     camera: Option<CameraProxy>,
 
@@ -373,8 +336,8 @@ impl SceneProxy {
             sets,
         })
     }
-    pub fn set_model(&mut self, model: &str) {
-        self.model = Some(model.to_string());
+    pub fn set_model(&mut self, model: assets::AssetHandle) {
+        self.model = Some(model);
     }
     pub fn set_model_matrix(&mut self, mat: glam::Mat4) {
         self.model_matrix = Some(mat);

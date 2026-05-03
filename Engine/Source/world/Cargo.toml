@@ -14,6 +14,7 @@ macros.workspace = true
 events.workspace = true
 utils.workspace = true
 platform.workspace = true
+assets.workspace = true
 
 [lints]
 workspace = true

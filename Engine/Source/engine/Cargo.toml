@@ -9,7 +9,6 @@ version.workspace = true
 [dependencies]
 anyhow.workspace = true
 thiserror.workspace = true
-derive-getters.workspace = true
 tracing.workspace = true
 
 logging.workspace = true
@@ -18,7 +17,6 @@ events.workspace = true
 platform.workspace = true
 renderer.workspace = true
 world.workspace = true
-resource_manager.workspace = true
 assets.workspace = true
 
 glam.workspace = true

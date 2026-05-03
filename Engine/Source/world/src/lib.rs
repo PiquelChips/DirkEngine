@@ -8,6 +8,7 @@
 //!
 //! ```
 //! use world::{World, components::{Transform, Renderable}};
+//! use assets::{AssetHandle, AssetType};
 //! use glam::Vec3;
 //!
 //! let mut event_manager = events::EventManager::new();
@@ -21,7 +22,9 @@
 //!     rotation: Vec3::ZERO,
 //!     scale:    Vec3::ONE,
 //! });
-//! world.insert(player, Renderable { model: "meshes/player.glb".into() });
+//! world.insert( player, Renderable {
+//!     model: AssetHandle::from_raw("meshes/player.glb", AssetType::Model)
+//! });
 //!
 //! // Query all entities that have both a Transform and a Renderable.
 //! let renderables = world.query_double::<Transform, Renderable>();

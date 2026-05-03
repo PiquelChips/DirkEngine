@@ -15,16 +15,18 @@ pastey.workspace = true
 
 utils.workspace = true
 platform.workspace = true
-resource_manager.workspace = true
 world.workspace = true
 shaders.workspace = true
 events.workspace = true
+assets.workspace = true
 
 ash.workspace = true
 ash-window.workspace = true
 raw-window-handle.workspace = true
 glam.workspace = true
 gpu-allocator.workspace = true
+gltf.workspace = true
+slotmap.workspace = true
 
 [build-dependencies]
 build.workspace = true

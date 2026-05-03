@@ -130,7 +130,7 @@ impl Asset for Model {
     /// - The resolved path does not exist.
     /// - The file is not valid glTF/GLB.
     /// - A referenced external buffer or image cannot be read.
-    fn load(config: &Self::Config, handle: AssetHandle) -> Result<Self> {
+    fn load(config: &Self::Config, handle: &AssetHandle) -> Result<Self> {
         let path = handle.dir().join(&config.gltf);
         let (gltf, buffers, images) = gltf::import(path)
             .context("loading glTF model")

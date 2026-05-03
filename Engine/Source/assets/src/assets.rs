@@ -43,7 +43,7 @@
 //! impl Asset for Audio {
 //!     type Config = AudioConfig;
 //!
-//!     fn load(config: &AudioConfig, handle: AssetHandle) -> Result<Self> {
+//!     fn load(config: &AudioConfig, handle: &AssetHandle) -> Result<Self> {
 //!         let path = handle.dir().join(&config.wav);
 //!         // … decode WAV from `path` …
 //!         todo!()
@@ -117,7 +117,7 @@ pub trait Asset: Clone + Sized + Send + 'static {
     /// ```
     ///
     /// [`Error::AssetLoadError`]: crate::Error::AssetLoadError
-    fn load(config: &Self::Config, handle: AssetHandle) -> Result<Self>;
+    fn load(config: &Self::Config, handle: &AssetHandle) -> Result<Self>;
 
     /// Returns the [`AssetType`] discriminant for this asset type.
     ///
