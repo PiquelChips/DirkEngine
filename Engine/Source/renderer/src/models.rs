@@ -67,7 +67,7 @@ pub struct Material {
 
 pub struct Model {
     // TODO: store transform with each mesh handle
-    pub mesh_instances: Vec<Handle<Mesh>>,
+    pub meshes: Vec<Handle<Mesh>>,
 }
 
 /// TODO: better storage type for assets
@@ -169,11 +169,13 @@ impl ModelRegistry {
             .models
             .get(handle)
             .ok_or(assets::Error::NotFound(handle.to_string()))?;
-        // TODO: render all the meshes
-        let mesh_handle = &model.mesh_instances[0];
-        let mesh = self.meshes.get(*mesh_handle);
 
-        for prim in &mesh.primitives {
+        let primitives = model
+            .meshes
+            .iter()
+            .flat_map(|mesh| self.meshes.get(*mesh).primitives.iter());
+
+        for prim in primitives {
             let mat_set = prim
                 .material_handle
                 .map_or(vk::DescriptorSet::null(), |mat| {
@@ -229,7 +231,7 @@ impl ModelRegistry {
         let material_handles =
             self.create_materials(gltf.materials().collect(), &texture_handles)?;
 
-        let mesh_instances = gltf
+        let meshes = gltf
             .meshes()
             .map(|mesh| {
                 let primitives = mesh
@@ -240,8 +242,7 @@ impl ModelRegistry {
             })
             .collect::<Result<Vec<_>>>()?;
 
-        self.models
-            .insert(handle.handle(), Model { mesh_instances });
+        self.models.insert(handle.handle(), Model { meshes });
         Ok(())
     }
 
