@@ -534,6 +534,9 @@ impl AssetRegistry {
             .asset_config::<T>(&handle)
             .ok_or_else(|| Error::NotFound(handle.raw().to_owned()))?;
 
+        // TODO: store this internally for caching purposes (maybe through
+        // a weak reference)
+
         // Give this AssetRef its own dispatcher clone so it can fire
         // InternalAssetUnloaded from inside its Drop impl, independent of the
         // registry's own lifetime.

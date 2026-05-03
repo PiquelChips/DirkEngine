@@ -102,8 +102,6 @@ pub struct AssetManager {
 /// TODO: also find a way to do this dynamically
 const MAX_MATERIAL_DESCRIPTOR_SET: u32 = 256;
 
-const MODELS_PATH: &str = env!("MODELS_PATH");
-
 impl AssetManager {
     pub fn new(device: RenderDevice) -> Result<Self> {
         let material_pool = {
@@ -265,11 +263,5 @@ impl AssetManager {
 
     pub fn get_material(&self, handle: Handle<Material>) -> &Material {
         self.materials.get(handle)
-    }
-
-    /// Gives the path to a model from its name.
-    /// Just a simple utility to get `MODELS_PATH/{name}/{name}.gltf`.
-    fn model_path(name: &str) -> String {
-        format!("{MODELS_PATH}/{name}/{name}.gltf")
     }
 }

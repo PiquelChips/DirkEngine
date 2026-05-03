@@ -63,19 +63,3 @@ pub fn setup_paths() {
         );
     }
 }
-
-/// Adds the paths for assets & models.
-///
-/// # Panics
-///
-/// Will panic if the `CARGO_MANIFEST_DIR` env var is not set
-pub fn setup_assets() {
-    let assets_path = format!(
-        "{}/../../Assets",
-        std::env::var("CARGO_MANIFEST_DIR").expect("couldn't find cargo manifest dir")
-    );
-    println!("cargo:rustc-env=ASSETS_PATH={assets_path}");
-
-    let models_path = format!("{assets_path}/models");
-    println!("cargo:rustc-env=MODELS_PATH={models_path}");
-}

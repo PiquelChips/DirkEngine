@@ -2,7 +2,6 @@
 
 fn main() {
     build::configure_platform();
-    build::setup_assets();
 
     println!("cargo:rustc-check-cfg=cfg(validation)");
 
