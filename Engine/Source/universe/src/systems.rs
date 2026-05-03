@@ -33,6 +33,8 @@ pub trait UniverseSystem: System {
 }
 
 /// A system that is run for the entire world.
+///
+/// Each of the methods are optional.
 pub trait WorldSystem: System {
     /// Called right after the world is created.
     fn world_created(&self, world: &World) {}
@@ -68,6 +70,8 @@ pub trait TickingSystem: System {
 
 /// System run for every component of the specified type.
 /// Can be registered on both the [`World`] & [`Universe`]
+///
+/// Each of the methods are optional.
 pub trait ComponentSystem: System {
     /// The concrete component type this system handles.
     type C: Component;
@@ -75,7 +79,10 @@ pub trait ComponentSystem: System {
     /// When a component is added.
     /// `entity`: the entity with this component.
     fn added(&self, entity: Entity, component: &mut Self::C) {}
-    /// When a component is added.
+    /// When a component is updated.
+    /// `entity`: the entity with this component.
+    fn updated(&self, entity: Entity, component: &mut Self::C) {}
+    /// When a component is removed.
     /// `entity`: the entity with this component.
     fn removed(&self, entity: Entity, component: &mut Self::C) {}
 }
