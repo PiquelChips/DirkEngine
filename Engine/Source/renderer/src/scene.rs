@@ -189,7 +189,7 @@ impl Scene {
 
                     if let Some(renderable) = world.get::<components::Renderable>(entity) {
                         proxy.set_model(renderable.model.clone());
-                    };
+                    }
                     if let Some(camera) = world.get::<components::Camera>(entity) {
                         proxy.set_camera(transform.view(), camera.projection());
                     }

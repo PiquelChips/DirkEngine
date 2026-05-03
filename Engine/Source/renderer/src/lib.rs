@@ -91,7 +91,7 @@ pub struct Renderer {
     /// The management for all the models.
     models: models::ModelRegistry,
     /// All the players currently being managed by the engine.
-    /// The proxies are synchronised using [world::events::PlayerUpdateEvent].
+    /// The proxies are synchronised using [`world::events::PlayerUpdateEvent`].
     players: HashMap<PlayerId, PlayerProxy>,
 
     frames: [Frame; MAX_FRAMES_IN_FLIGHT],
