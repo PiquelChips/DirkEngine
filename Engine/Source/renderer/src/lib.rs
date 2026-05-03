@@ -21,14 +21,13 @@ use ash::{
     khr::{surface, swapchain},
     vk,
 };
-use events::EventManager;
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use tracing::{debug, info};
 #[cfg(validation)]
 use tracing::{error, trace, warn};
 
 use platform::{PlatformEvent, WindowEvent, WindowId};
-use world::{events::WorldEvent, player::PlayerId};
+use world::{World, WorldId, components, events::WorldEvent};
 
 mod utils;
 use ::utils::Version;
@@ -46,12 +45,9 @@ use window::Window;
 mod resources;
 use resources::{command_pool::CommandPool, device::RenderDevice, image::SwapchainImage};
 
-mod assets;
-use assets::AssetManager;
+use crate::scene::SceneProxy;
 
-mod proxy;
-use proxy::PlayerProxy;
-
+mod models;
 mod physical_device;
 mod pipeline;
 mod render_pass;
@@ -90,21 +86,16 @@ pub struct Renderer {
     windows: HashMap<WindowId, Window>,
     /// All of the internal [world::World] representations.
     scenes: HashMap<world::WorldId, Scene>,
-    /// All the players currently being managed by the engine.
-    /// The proxies are synchronised using [world::events::PlayerUpdateEvent].
-    players: HashMap<PlayerId, PlayerProxy>,
-    /// Manages all renderer assets like meshes & stuff.
-    asset_manager: AssetManager,
+    /// The management for all the models.
+    models: models::Models,
 
     frames: [Frame; MAX_FRAMES_IN_FLIGHT],
     current_frame: Arc<AtomicUsize>,
 
     // Events
-    event_manager: EventManager,
     window_consumer: events::Consumer<platform::WindowEvent>,
     platform_consumer: events::Consumer<platform::PlatformEvent>,
     world_consumer: events::Consumer<world::events::WorldEvent>,
-    player_consumer: events::Consumer<world::events::PlayerUpdateEvent>,
 
     /// The size of the output
     /// TODO: should be removed once we get the frame graph to
@@ -402,10 +393,7 @@ impl Renderer {
             current_frame.clone(),
             #[cfg(validation)]
             debug_messenger,
-            event_manager.clone(),
         )?;
-
-        let asset_manager = AssetManager::new(render_device.clone())?;
 
         // IN FLIGHT FRAMES
         let build_frame = || -> Result<Frame> {
@@ -440,14 +428,15 @@ impl Renderer {
             }
         };
 
+        let models = models::Models::new(&render_device, &event_manager)?;
+
         Ok(Self {
             entry,
             render_device,
 
             windows: HashMap::new(),
             scenes: HashMap::new(),
-            players: HashMap::new(),
-            asset_manager,
+            models,
 
             frames,
             current_frame,
@@ -457,8 +446,6 @@ impl Renderer {
             window_consumer: event_manager.subscribe(),
             platform_consumer: event_manager.subscribe(),
             world_consumer: event_manager.subscribe(),
-            player_consumer: event_manager.subscribe(),
-            event_manager,
         })
     }
 
@@ -475,7 +462,7 @@ impl Renderer {
     pub fn tick(
         &mut self,
         _delta_time: f32,
-        worlds: &HashMap<world::WorldId, world::World>,
+        worlds: &HashMap<WorldId, World>,
         windows: &HashMap<WindowId, platform::Window>,
     ) -> Result<()> {
         let world_events: Vec<_> = self.world_consumer.consume_all().collect();
@@ -488,9 +475,46 @@ impl Renderer {
                 WorldEvent::Destroyed(id) => {
                     self.scenes.remove(&id);
                 }
-                WorldEvent::EntitySpawn { .. }
-                | WorldEvent::EntityUpdate { .. }
-                | WorldEvent::EntityDespawn { .. } => {}
+                WorldEvent::EntitySpawn { world, entity } => {
+                    let Some(scene) = self.scenes.get(&world) else {
+                        continue;
+                    };
+                    let proxy = SceneProxy::build(&self.render_device, scene)?;
+                    // this creates a completely empty proxy, no mesh or matrix
+                    let Some(scene) = self.scenes.get_mut(&world) else {
+                        continue;
+                    };
+                    scene.add_proxy(entity, proxy);
+                }
+                WorldEvent::EntityUpdate { world, entity } => {
+                    let Some(world) = worlds.get(&world) else {
+                        continue;
+                    };
+                    let Some(scene) = self.scenes.get_mut(&world.id()) else {
+                        continue;
+                    };
+                    let Some(proxy) = scene.get_proxy(entity) else {
+                        continue;
+                    };
+
+                    let Some(transform) = world.get::<components::Transform>(entity) else {
+                        continue;
+                    };
+                    proxy.set_model_matrix(transform.matrix());
+
+                    if let Some(renderable) = world.get::<components::Renderable>(entity) {
+                        proxy.set_model(renderable.model.clone());
+                    }
+                    if let Some(camera) = world.get::<components::Camera>(entity) {
+                        proxy.set_camera(transform.view(), camera.projection());
+                    }
+                }
+                WorldEvent::EntityDespawn { world, entity } => {
+                    let Some(scene) = self.scenes.get_mut(&world) else {
+                        continue;
+                    };
+                    scene.remove_proxy(entity);
+                }
             }
         }
 
@@ -562,12 +586,7 @@ impl Renderer {
             }
         }
 
-        self.scenes.values_mut().try_for_each(|scene| {
-            let Some(world) = worlds.get(&scene.world()) else {
-                return Ok(());
-            };
-            scene.tick(world, &mut self.asset_manager)
-        })?;
+        self.models.tick()?;
 
         Ok(())
     }
@@ -621,13 +640,7 @@ impl Renderer {
             vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
         )?;
 
-        scene.render(
-            &self.asset_manager,
-            &cmd,
-            size,
-            render_image.image.view(),
-            camera,
-        )?;
+        scene.render(&self.models, &cmd, size, render_image.image.view(), camera)?;
 
         render_image.image.transition_image_layout(
             &cmd,

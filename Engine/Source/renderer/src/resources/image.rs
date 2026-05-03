@@ -11,7 +11,7 @@ use gpu_allocator::{
 
 use crate::{
     Renderer, Result,
-    assets::Texture,
+    models::Texture,
     resources::{
         buffer::CustomBuffer,
         command_pool::CommandBuffer,

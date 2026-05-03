@@ -141,6 +141,12 @@ impl<T: Asset> Handle<T> {
         let mut inner = self.0.lock();
         inner.data.take().ok_or(Error::AlreadyTaken)
     }
+
+    /// Returns the [`AssetHandle`] of the asset.
+    pub fn handle(&self) -> AssetHandle {
+        let inner = self.0.lock();
+        inner.asset_handle.clone()
+    }
 }
 
 impl<T: Asset> std::fmt::Debug for Handle<T> {

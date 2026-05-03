@@ -18,7 +18,7 @@ use tracing::warn;
 #[derive(Debug, Clone, Component)]
 pub struct Renderable {
     /// Asset-registry key for the mesh to render (e.g. `"meshes/cube.glb"`).
-    pub model: String,
+    pub model: assets::AssetHandle,
 }
 
 /// Spatial transform for an entity: position, orientation, and scale.

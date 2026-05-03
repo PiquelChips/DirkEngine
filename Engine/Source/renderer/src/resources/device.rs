@@ -52,8 +52,6 @@ pub struct RenderDeviceInner {
     pub layouts: DescriptorLayouts,
     pub properties: RendererProperties,
 
-    pub event_manager: events::EventManager,
-
     #[cfg(validation)]
     debug_utils_loader: debug_utils::Instance,
     #[cfg(validation)]
@@ -73,7 +71,6 @@ impl RenderDevice {
         properties: RendererProperties,
         current_frame: Arc<AtomicUsize>,
         #[cfg(validation)] debug_messenger: vk::DebugUtilsMessengerEXT,
-        event_manager: events::EventManager,
     ) -> Result<Self> {
         // ALLOCATOR
         let allocator = Allocator::new(&AllocatorCreateDesc {
@@ -169,7 +166,6 @@ impl RenderDevice {
                 MAX_FRAMES_IN_FLIGHT,
             )),
             current_frame,
-            event_manager,
 
             #[cfg(validation)]
             debug_utils_loader: debug_utils::Instance::new(entry, &instance),

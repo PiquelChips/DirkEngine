@@ -241,7 +241,10 @@ impl Engine {
         world.insert(
             shrek,
             Renderable {
-                model: "Shrek".to_string(),
+                model: assets::AssetHandle::from_raw(
+                    "models/Shrek/Shrek.dirkasset",
+                    assets::AssetType::Model,
+                ),
             },
         );
 
@@ -257,7 +260,10 @@ impl Engine {
         world.insert(
             duck,
             Renderable {
-                model: "Duck".to_string(),
+                model: assets::AssetHandle::from_raw(
+                    "models/Duck/Duck.dirkasset",
+                    assets::AssetType::Model,
+                ),
             },
         );
         world_id

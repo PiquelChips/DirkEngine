@@ -1,11 +1,20 @@
+//! This module contains all the logic necessary to rendering models.
+//! As models are complex & have funny inter-dependencies, this is a
+//! centralised system that has all textures, meshes, materials, ...
+//!
+//! When someone needs to render a model to the screen, all they have to do
+//! is call [`Models::render`] with their asset handle & a command buffer.
+//! We handle the rest.
+
+use std::{collections::HashMap, marker::PhantomData};
+
 use ash::vk;
-use std::collections::HashMap;
-use std::marker::PhantomData;
 
 use crate::{
     Result,
     resources::{
         buffer::{IndexBuffer, VertexBuffer},
+        command_pool::CommandBuffer,
         device::{Garbage, RenderDevice},
         image::Image,
     },
@@ -63,6 +72,7 @@ pub struct Model {
 }
 
 /// TODO: better storage type for assets
+/// look into generation arena or slotmap
 struct AssetStorage<T> {
     assets: Vec<Option<T>>,
 }
@@ -86,24 +96,25 @@ impl<T> AssetStorage<T> {
     }
 }
 
-pub struct AssetManager {
+pub struct Models {
     device: RenderDevice,
 
     textures: AssetStorage<Texture>,
     meshes: AssetStorage<Mesh>,
     materials: AssetStorage<Material>,
-    models: AssetStorage<Model>,
-
-    path_to_model: HashMap<String, Handle<Model>>,
+    models: HashMap<assets::AssetHandle, Model>,
 
     material_pool: vk::DescriptorPool,
+
+    asset_load_consumer: events::Consumer<::assets::AssetLoaded<::assets::Model>>,
+    asset_unload_consumer: events::Consumer<::assets::AssetUnloaded>,
 }
 
-/// TODO: also find a way to do this dynamically
+/// TODO: descriptor pool
 const MAX_MATERIAL_DESCRIPTOR_SET: u32 = 256;
 
-impl AssetManager {
-    pub fn new(device: RenderDevice) -> Result<Self> {
+impl Models {
+    pub fn new(device: &RenderDevice, events: &events::EventManager) -> Result<Self> {
         let material_pool = {
             let pool_size = vk::DescriptorPoolSize {
                 ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
@@ -117,22 +128,86 @@ impl AssetManager {
         };
 
         Ok(Self {
-            device,
+            device: device.clone(),
             textures: AssetStorage::new(),
             meshes: AssetStorage::new(),
             materials: AssetStorage::new(),
-            models: AssetStorage::new(),
-            path_to_model: HashMap::new(),
+            models: HashMap::new(),
             material_pool,
+
+            asset_load_consumer: events.subscribe(),
+            asset_unload_consumer: events.subscribe(),
         })
     }
-
-    pub fn load_model(&mut self, name: &str) -> Result<Handle<Model>> {
-        if let Some(handle) = self.path_to_model.get(name) {
-            return Ok(*handle);
+    pub fn tick(&mut self) -> Result<()> {
+        let events = self.asset_load_consumer.consume_all().collect::<Vec<_>>();
+        for event in events {
+            self.load_model(event.handle)?;
         }
 
-        let (gltf, buffers, images) = gltf::import(Self::model_path(name))?;
+        let events = self.asset_unload_consumer.consume_all().collect::<Vec<_>>();
+        for event in events {
+            self.models.remove(&event.handle);
+        }
+        Ok(())
+    }
+    pub fn render_model(
+        &self,
+        handle: &assets::AssetHandle,
+        cmd: &CommandBuffer,
+        scene_set: vk::DescriptorSet,
+        proxy_set: vk::DescriptorSet,
+        pipeline_layout: vk::PipelineLayout,
+    ) {
+        let mut descriptor_sets = [scene_set, proxy_set, vk::DescriptorSet::null()];
+
+        // TODO: this is weird
+        let model = self.models.get(handle).unwrap();
+        let model = &model.mesh_instances[0];
+        let model = self.meshes.get(*model);
+
+        for prim in &model.primitives {
+            let mat_set = prim
+                .material_handle
+                .and_then(|mat| Some(self.materials.get(mat).descriptor_set))
+                .unwrap_or(vk::DescriptorSet::null());
+
+            descriptor_sets[2] = mat_set;
+
+            unsafe {
+                self.device.device.cmd_bind_descriptor_sets(
+                    cmd.raw(),
+                    vk::PipelineBindPoint::GRAPHICS,
+                    pipeline_layout,
+                    0,
+                    &descriptor_sets,
+                    &[],
+                );
+                self.device.device.cmd_bind_vertex_buffers(
+                    cmd.raw(),
+                    0,
+                    &[prim.vertex_buffer.buffer()],
+                    &[0],
+                );
+                self.device.device.cmd_bind_index_buffer(
+                    cmd.raw(),
+                    prim.index_buffer.buffer(),
+                    0,
+                    vk::IndexType::UINT32,
+                );
+                self.device
+                    .device
+                    .cmd_draw_indexed(cmd.raw(), prim.index_count, 1, 0, 0, 0);
+            }
+        }
+    }
+
+    fn load_model(&mut self, handle: assets::Handle<assets::Model>) -> Result<()> {
+        let assets::Model {
+            gltf,
+            buffers,
+            images,
+        } = handle.get()?;
 
         let texture_handles = images
             .iter()
@@ -156,9 +231,9 @@ impl AssetManager {
             })
             .collect::<Result<Vec<_>>>()?;
 
-        let model_handle = self.models.insert(Model { mesh_instances });
-        self.path_to_model.insert(name.to_string(), model_handle);
-        Ok(model_handle)
+        self.models
+            .insert(handle.handle(), Model { mesh_instances });
+        Ok(())
     }
 
     fn create_materials(
@@ -255,13 +330,5 @@ impl AssetManager {
             index_count: indices.len() as u32,
             material_handle: primitive.material().index().map(|idx| mat_refs[idx]),
         })
-    }
-
-    pub fn get_mesh(&self, handle: Handle<Mesh>) -> &Mesh {
-        self.meshes.get(handle)
-    }
-
-    pub fn get_material(&self, handle: Handle<Material>) -> &Material {
-        self.materials.get(handle)
     }
 }
