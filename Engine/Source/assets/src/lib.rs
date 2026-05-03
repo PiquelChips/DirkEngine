@@ -51,7 +51,7 @@
 //!     registry.tick();
 //!
 //!     for event in loaded_consumer.consume_all() {
-//!         let data = event.handle.consume()?;
+//!         let data = event.handle.take()?;
 //!         // ... upload data to GPU
 //!     }
 //!     for AssetUnloaded { handle } in unloaded_consumer.consume_all() {

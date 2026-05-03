@@ -48,8 +48,8 @@ pub enum Error {
     /// # let asset_handle = AssetHandle::from_raw("", AssetType::Model);
     /// // release build only
     /// let handle = registry.load_asset::<Model>(asset_handle)?;
-    /// let _data = handle.consume()?;          // OK — data moved out
-    /// let err = handle.consume().unwrap_err(); // AlreadyConsumed
+    /// let _data = handle.take()?;              // OK — data moved out
+    /// let err = handle.get().unwrap_err(); // AlreadyConsumed
     /// # Ok(()) }
     /// ```
     ///
