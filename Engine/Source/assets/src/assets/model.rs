@@ -7,7 +7,7 @@
 //!
 //! The renderer is responsible for uploading this data to the GPU. It should
 //! subscribe to the [`AssetLoaded<Model>`] event, call
-//! [`Handle::consume`] to take ownership of the [`Model`], create GPU
+//! [`Handle::take`] to take ownership of the [`Model`], create GPU
 //! resources, and then let the handle drop. When the last handle drops, the
 //! [`AssetUnloaded`] event fires and the renderer can clean up GPU-side
 //! resources.
@@ -29,7 +29,7 @@
 //!
 //! [`AssetLoaded<Model>`]: crate::events::AssetLoaded
 //! [`AssetUnloaded`]: crate::AssetUnloaded
-//! [`Handle::consume`]: crate::Handle::consume
+//! [`Handle::take`]: crate::Handle::take
 
 use crate::{Asset, AssetHandle, AssetType, Error, Metadata, Result, assets::AssetConfig};
 
@@ -86,41 +86,14 @@ impl AssetConfig for ModelConfig {
 
 /// Raw glTF data for a model asset, ready for GPU upload.
 ///
-/// `Model` is a thin wrapper around the three components that the
+/// [`Model`] is a thin wrapper around the three components that the
 /// [`gltf`] crate returns from [`gltf::import`]:
-///
-/// | Field | Contents |
-/// |-------|----------|
-/// [`gltf`] | The parsed glTF document (scene graph, meshes, materials, …) |
-/// [`buffers`] | Binary geometry/animation blobs referenced by the document |
-/// [`images`] | Decoded pixel data for all textures |
-///
-/// # Ownership & lifecycle
-///
-/// `Model` is designed to be short-lived on the CPU. The intended
-/// workflow is:
-///
-/// ```text
-/// AssetLoaded<Model> event fires
-///     └─► renderer calls Handle::consume()
-///             └─► renderer uploads data to GPU
-///                     └─► Model is dropped, freeing CPU memory
-/// ```
-///
-/// In **editor** builds [`Handle::consume`] clones the data so it remains
-/// available for inspection tools. In **release** builds the data is moved
-/// out and freed after the first call.
 ///
 /// # Cloning
 ///
 /// [`Clone`] is derived to satisfy the [`Asset`] bound, but cloning a
-/// `Model` duplicates potentially large buffer and image vecs. Prefer
+/// [`Model`] duplicates potentially large buffer and image vecs. Prefer
 /// consuming and uploading over repeated clones.
-///
-/// [`gltf`]: Model::gltf
-/// [`buffers`]: Model::buffers
-/// [`images`]: Model::images
-/// [`Handle::consume`]: crate::Handle::consume
 #[derive(Debug, Clone)]
 pub struct Model {
     /// The parsed glTF document describing the scene hierarchy, meshes,
@@ -157,8 +130,6 @@ impl Asset for Model {
     /// - The resolved path does not exist.
     /// - The file is not valid glTF/GLB.
     /// - A referenced external buffer or image cannot be read.
-    ///
-    /// [`Error::AssetLoadError`]: crate::Error::AssetLoadError
     fn load(config: &Self::Config, handle: AssetHandle) -> Result<Self> {
         let path = handle.dir().join(&config.gltf);
         let (gltf, buffers, images) = gltf::import(path)

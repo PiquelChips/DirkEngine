@@ -1,31 +1,4 @@
 //! Public and internal events emitted by the asset subsystem.
-//!
-//! The asset system communicates with the rest of the engine (primarily the
-//! renderer) through three events:
-//!
-//! | Event | Visibility | When fired |
-//! |-------|-----------|------------|
-//! | [`InternalAssetUnloaded`] | `pub(crate)` | A [`Handle`] ref-count hits zero |
-//! | [`AssetLoaded<T>`] | `pub` | An asset has been fully loaded into a [`Handle`] |
-//! | [`AssetUnloaded`] | `pub` | An asset's data has been fully freed |
-//!
-//! # Typical renderer workflow
-//!
-//! ```text
-//! AssetLoaded<ModelData> fires
-//!     └─► renderer calls handle.consume()
-//!             └─► uploads buffers / images to GPU
-//!                     └─► Handle is dropped (ref-count → 0)
-//!                             └─► InternalAssetUnloaded fires (crate-internal)
-//!                                     └─► AssetRegistry::tick() re-emits it as
-//!                                             └─► AssetUnloaded fires
-//!                                                     └─► renderer frees GPU resources
-//! ```
-//!
-//! Subscribe to [`AssetLoaded<T>`] to *acquire* GPU resources, and to
-//! [`AssetUnloaded`] to *release* them.
-//!
-//! [`Handle`]: crate::Handle
 
 use crate::{Asset, AssetHandle, Handle};
 use events::Event;
@@ -50,13 +23,13 @@ pub(crate) struct InternalAssetUnloaded(pub AssetHandle);
 ///
 /// Subscribe to this event to know when a specific asset type is ready for
 /// GPU upload or other subsystem initialisation. The enclosed [`Handle`]
-/// grants access to the asset data via [`Handle::consume`].
+/// grants access to the asset data via [`Handle::take`].
 ///
 /// # Type parameter
 ///
-/// `T` is the concrete [`Asset`] implementation (e.g. [`ModelData`]).
+/// `T` is the concrete [`Asset`] implementation (e.g. [`Model`]).
 /// Subscriptions are type-specific — a consumer of
-/// `AssetLoaded<ModelData>` will not receive audio or texture load events.
+/// `AssetLoaded<Model>` will not receive audio or texture load events.
 ///
 /// # Example
 ///
@@ -64,30 +37,30 @@ pub(crate) struct InternalAssetUnloaded(pub AssetHandle);
 /// use assets::{AssetLoaded, Handle, Model};
 /// use events::{Consumer, EventManager};
 ///
-/// # let event_manager = EventManager::new();
-/// let consumer: Consumer<AssetLoaded<Model>> = event_manager.subscribe();
+/// # let events = EventManager::new();
+/// let consumer: Consumer<AssetLoaded<Model>> = events.subscribe();
 ///
 /// // Once per frame:
 /// for event in consumer.consume_all() {
-///     let model_data = event.handle.consume().expect("should not be consumed yet");
+///     let model_data = event.handle.take().expect("should not be consumed yet");
 ///     // ... gpu.upload_model(model_data);
 /// }
 /// ```
 ///
 /// [`AssetRegistry`]: crate::AssetRegistry
-/// [`Handle::consume`]: crate::Handle::consume
-/// [`ModelData`]: crate::assets::model::ModelData
+/// [`Handle::take`]: crate::Handle::take
+/// [`Model`]: crate::Model
 #[derive(Event, Clone, Debug)]
 #[event("asset {handle:?} unloaded")]
 pub struct AssetLoaded<T: Asset> {
     /// A cloneable handle to the loaded asset.
     ///
-    /// Call [`Handle::consume`] to take ownership of the underlying data.
-    /// In release builds the data can only be consumed once; subsequent
-    /// calls on any clone of this handle return [`Error::AlreadyConsumed`].
+    /// Call [`Handle::take`] to take ownership of the underlying data.
+    /// In release builds the data can only be taken once; subsequent
+    /// calls on any clone of this handle return [`Error::AlreadyTaken`].
     ///
-    /// [`Handle::consume`]: crate::Handle::consume
-    /// [`Error::AlreadyConsumed`]: crate::Error::AlreadyConsumed
+    /// [`Handle::take`]: crate::Handle::take
+    /// [`Error::AlreadyTaken`]: crate::Error::AlreadyTaken
     pub handle: Handle<T>,
 }
 
@@ -114,8 +87,8 @@ pub struct AssetLoaded<T: Asset> {
 /// use assets::AssetUnloaded;
 /// use events::Consumer;
 ///
-/// # let event_manager = ::events::EventManager::new();
-/// let consumer: Consumer<AssetUnloaded> = event_manager.subscribe();
+/// # let events = ::events::EventManager::new();
+/// let consumer: Consumer<AssetUnloaded> = events.subscribe();
 ///
 /// // Once per frame:
 /// for AssetUnloaded { handle } in consumer.consume_all() {
@@ -123,6 +96,7 @@ pub struct AssetLoaded<T: Asset> {
 /// }
 /// ```
 ///
+/// [`AssetRegistry`]: crate::AssetRegistry
 /// [`AssetRegistry::tick`]: crate::AssetRegistry::tick
 /// [`Handle`]: crate::Handle
 #[derive(Event, Clone, Debug)]

@@ -6,7 +6,7 @@
 //! - **[`AssetHandle`]** — a lightweight identifier (path + type tag) that
 //!   locates an asset inside the asset tree.
 //! - **[`Handle<T>`]** — a ref-counted, typed wrapper around loaded asset
-//!   data; the last drop triggers an [`AssetUnloaded`] event.
+//!   data; the last [drop] triggers an [`AssetUnloaded`] event.
 //! - **[`AssetRegistry`]** — scans the asset directory at startup, validates
 //!   every `.dirkasset` descriptor, and vends [`Handle<T>`]s on demand.
 //!
@@ -60,22 +60,6 @@
 //! }
 //! # Ok(()) }
 //! ```
-//!
-//! # Environment variables
-//!
-//! | Variable | Set by | Purpose |
-//! |----------|--------|---------|
-//! | `ASSETS_PATH` | `build.rs` via the `build` crate | Absolute path to the root assets directory; baked into the binary at compile time. |
-//!
-//! # Feature flags / build profiles
-//!
-//! The crate is aware of a single build-profile flag:
-//!
-//! | Flag | Effect |
-//! |------|--------|
-//! | `--cfg editor` | [`Handle::consume`] clones data instead of moving it out, enabling repeated inspection by editor tools. |
-//!
-//! [`Handle::consume`]: Handle::consume
 
 mod errors;
 pub use errors::{Error, Result};
@@ -90,8 +74,6 @@ mod handle;
 use handle::AssetRef;
 pub use handle::Handle;
 
-mod validation;
-
 use ::events::{Consumer, Dispatcher, EventManager};
 use std::{
     any::{Any, TypeId},
@@ -99,9 +81,9 @@ use std::{
     fmt::Display,
     path::{Path, PathBuf},
 };
+use tracing::warn;
 
 use serde::{Deserialize, Serialize};
-use tracing::debug;
 
 use crate::events::InternalAssetUnloaded;
 
@@ -124,35 +106,6 @@ pub(crate) const ASSETS_PATH: &str = std::env!("ASSETS_PATH");
 /// Handles are created internally by [`AssetRegistry`] during directory
 /// scanning and are not normally constructed by hand. They are serialisable
 /// so they can be stored in scene files or editor state.
-///
-/// # Cloning cost
-///
-/// Cloning an `AssetHandle` allocates a new `String`. For hot paths, prefer
-/// passing `&AssetHandle` or working with the [`Handle<T>`] directly.
-///
-/// # Display
-///
-/// The `Display` impl prints the raw handle path:
-///
-/// ```rust
-/// # use assets::{AssetHandle, AssetType};
-/// // Construct a minimal handle for illustration:
-/// let handle = AssetHandle::from_raw("models/hero.dirkasset", AssetType::Model);
-/// assert_eq!(handle.to_string(), "models/hero.dirkasset");
-/// ```
-///
-/// # Serialisation
-///
-/// `AssetHandle` round-trips through JSON:
-///
-/// ```rust
-/// # use assets::{AssetHandle, AssetType};
-/// let handle = AssetHandle::from_raw("textures/dirt.dirkasset", AssetType::Unknown);
-/// let json   = serde_json::to_string(&handle).unwrap();
-/// let back: AssetHandle = serde_json::from_str(&json).unwrap();
-/// assert_eq!(handle.raw(), back.raw());
-/// assert_eq!(handle.asset_type(), back.asset_type());
-/// ```
 #[derive(Default, PartialEq, Eq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct AssetHandle {
     /// Path relative to `ASSETS_PATH`, including the `.dirkasset` extension.
@@ -188,15 +141,6 @@ impl AssetHandle {
     }
 
     /// Returns the **absolute** path to the `.dirkasset` file on disk.
-    ///
-    /// Constructed as `ASSETS_PATH + "/" + self.handle`.
-    ///
-    /// ```rust
-    /// # use assets::{AssetHandle, AssetType};
-    /// # // ASSETS_PATH is baked in at compile time; we can only check the suffix.
-    /// let handle = AssetHandle::from_raw("models/hero.dirkasset", AssetType::Model);
-    /// assert!(handle.path().ends_with("models/hero.dirkasset"));
-    /// ```
     pub fn path(&self) -> PathBuf {
         PathBuf::from(format!("{ASSETS_PATH}/{}", self.handle))
     }
@@ -209,12 +153,6 @@ impl AssetHandle {
     ///
     /// Returns `ASSETS_PATH` if [`path`] has no parent component (which
     /// should not occur in practice for well-formed handles).
-    ///
-    /// ```rust
-    /// # use assets::{AssetHandle, AssetType};
-    /// let handle = AssetHandle::from_raw("models/hero.dirkasset", AssetType::Model);
-    /// assert!(handle.dir().ends_with("models"));
-    /// ```
     ///
     /// [`path`]: AssetHandle::path
     pub fn dir(&self) -> PathBuf {
@@ -270,10 +208,6 @@ impl AssetHandle {
 /// ```json
 /// { "meta": { "asset_type": "Model" } }
 /// ```
-///
-/// The `handle` field is populated at load time (after the file is read and
-/// its path is known) and is intentionally skipped by serde — it is not
-/// stored on disk.
 #[derive(Serialize, Deserialize)]
 pub struct Metadata {
     /// The kind of asset this descriptor represents.
@@ -309,26 +243,72 @@ struct DirkAsset {
     pub model: Option<ModelConfig>,
 }
 
+impl DirkAsset {
+    /// Validates the deserialised asset descriptor.
+    ///
+    /// After the registry scans and deserialises all `.dirkasset` files, it calls
+    /// [`DirkAsset::validate`] on each entry. Assets that fail validation are
+    /// silently pruned from the registry and a [`tracing::warn`] message is
+    /// emitted. They will not appear in any subsequent [`AssetRegistry::load_asset`]
+    /// call.
+    ///
+    /// Validation is intentionally kept cheap — it checks structural consistency
+    /// (right config section present, referenced files exist on disk) rather than
+    /// parsing full asset content. Full content errors surface later at
+    /// [`Asset::load`] time.
+    ///
+    /// Returns `true` if the asset is structurally sound and should be kept
+    /// in the registry; `false` if it should be pruned. A warning is logged
+    /// for every failure condition.
+    ///
+    /// # Failure conditions
+    ///
+    /// - `asset_type` is [`AssetType::Unknown`] — the `.dirkasset` file is
+    ///   missing or has an unrecognised `asset_type` field.
+    /// - `asset_type` is [`AssetType::Model`] but the `"model"` JSON section
+    ///   is absent.
+    /// - The [`AssetConfig::validate`] failes on all configurations.
+    fn validate(&self) -> bool {
+        match self.meta.asset_type {
+            AssetType::Unknown => {
+                warn!(
+                    "asset {} cannot be of type Unknown, please specify an asset_type",
+                    self.meta.handle.raw()
+                );
+                false
+            }
+            AssetType::Model => {
+                if let Some(model_config) = &self.model {
+                    model_config.validate(&self.meta)
+                } else {
+                    warn!(
+                        "asset {} must specify a [model] section when asset_type = Model",
+                        self.meta.handle.raw()
+                    );
+                    false
+                }
+            }
+        }
+    }
+}
+
 /// Central asset management system.
 ///
-/// `AssetRegistry` is responsible for the full lifecycle of asset descriptors:
+/// [`AssetRegistry`] is responsible for the full lifecycle of assets.
+/// At initialisation, it scans `ASSETS_PATH` for all `.dirkasset` files.
+/// It validates all the `.dirkasset` configurations & stores them in
+/// memory (pruning invalid ones with a [`tracing::warn`].
 ///
-/// 1. **Scan** — walks `ASSETS_PATH` recursively at startup, discovering all
-///    `.dirkasset` files.
-/// 2. **Deserialise** — parses each file's JSON into a [`DirkAsset`].
-/// 3. **Validate** — prunes structurally invalid assets (missing config
-///    sections, missing source files) and logs warnings.
-/// 4. **Vend** — on [`load_asset`] calls, locates the descriptor, resolves the
-///    typed config, invokes the [`Asset::load`] implementation, wraps the data
-///    in a [`Handle<T>`], and fires an [`AssetLoaded<T>`] event.
-/// 5. **Clean up** — in [`tick`], converts internal drop notifications into
-///    the public [`AssetUnloaded`] event.
+/// Systems can then call [`load_asset`] to have asset data be loaded from
+/// disk. This returns a [`Handle<T>`] and fires an [`AssetLoaded<T>`] event.
+///
+/// Finally, [`AssetRegistry`] handles unloading assets when [`Handle<T>`] is
+/// no longer referenced.
 ///
 /// # Thread safety
 ///
-/// `AssetRegistry` is not `Sync`. It is intended to be owned and driven from
-/// the main game loop thread. Event dispatchers and consumers can be cloned and
-/// sent to other threads.
+/// [`AssetRegistry`] is not [`Sync`]. It is intended to be owned and driven from
+/// the main game loop thread.
 ///
 /// # Initialisation
 ///
@@ -397,10 +377,6 @@ impl AssetRegistry {
     /// Returns [`Error::SerialisationError`] if a `.dirkasset` file contains
     /// malformed JSON.
     ///
-    /// # Panics
-    ///
-    /// Does not panic. All error conditions are returned as `Result`.
-    ///
     /// [`Error::IoError`]: crate::Error::IoError
     /// [`Error::SerialisationError`]: crate::Error::SerialisationError
     pub fn init(event_manager: &EventManager) -> Result<Self> {
@@ -425,19 +401,8 @@ impl AssetRegistry {
     ///
     /// Must be called **exactly once per frame**, after
     /// [`EventManager::dispatch_all`]. Skipping this call means
-    /// [`AssetUnloaded`] events are never delivered and downstream systems
-    /// (e.g. the renderer) cannot free GPU resources.
-    ///
-    /// # Delivery sequence within a frame
-    ///
-    /// ```text
-    /// 1. EventManager::dispatch_all()     ← forward InternalAssetUnloaded to this registry
-    /// 2. AssetRegistry::tick()            ← convert them to public AssetUnloaded events
-    /// 3. EventManager::dispatch_all()     ← (next frame) forward AssetUnloaded to renderer
-    /// ```
-    ///
-    /// Note the one-frame lag between a handle being dropped and the renderer
-    /// receiving [`AssetUnloaded`].
+    /// [`AssetUnloaded`] events are never delivered, causing potential
+    /// memory leaks (e.g. the renderer cannot free GPU resources).
     pub fn tick(&self) {
         for InternalAssetUnloaded(handle) in self.internal_unload_consumer.consume_all() {
             self.unload_dispatcher.dispatch(AssetUnloaded { handle });
@@ -449,8 +414,6 @@ impl AssetRegistry {
     /// `base` is the `ASSETS_PATH` root, used to compute relative paths for
     /// handle strings. All handles are stored as paths relative to `base` so
     /// that the registry is portable across machines.
-    ///
-    /// Logs each discovered asset at the `debug` level.
     fn load(&mut self, base: &Path, dir: &Path) -> Result<()> {
         for entry in std::fs::read_dir(dir)? {
             let entry = entry?;
@@ -475,12 +438,6 @@ impl AssetRegistry {
                                 ),
                             )
                         })?;
-
-                debug!(
-                    "load asset:\n\tpath: {}\n\trelative: {}",
-                    path.display(),
-                    relative_path.display()
-                );
 
                 let data = std::fs::read(path)?;
                 let mut config: DirkAsset = serde_json::from_slice(&data)?;
@@ -525,8 +482,8 @@ impl AssetRegistry {
     /// happens once per [`load_asset`] call (not per frame), so the overhead
     /// is negligible.
     ///
-    /// A future refactor could replace this with a type-erased config map to
-    /// avoid the round-trip entirely.
+    /// **TODO**: A future refactor could replace this with a type-erased config
+    /// map to avoid the round-trip entirely.
     ///
     /// [`load_asset`]: AssetRegistry::load_asset
     /// [`AssetConfig`]: assets::AssetConfig
@@ -542,15 +499,6 @@ impl AssetRegistry {
     }
 
     /// Loads an asset of type `T` and returns a reference-counted [`Handle<T>`].
-    ///
-    /// # Steps
-    ///
-    /// 1. Validates that `handle.asset_type() == T::asset_type()`.
-    /// 2. Resolves the typed config via [`asset_config`].
-    /// 3. Calls [`T::load`] to read the asset data from disk.
-    /// 4. Wraps the data in a [`Handle<T>`] backed by an `Arc<Mutex<AssetRef<T>>>`.
-    /// 5. Dispatches an [`AssetLoaded<T>`] event so the renderer (or other
-    ///    systems) can react immediately.
     ///
     /// # Errors
     ///
@@ -573,20 +521,6 @@ impl AssetRegistry {
     /// let typed_handle = registry.load_asset::<Model>(handle)?;
     /// # Ok(()) }
     /// ```
-    ///
-    /// # Dispatcher lazy-initialisation
-    ///
-    /// `load_dispatchers` is a `HashMap<TypeId, Box<dyn Any>>` that is
-    /// populated on the first `load_asset::<T>` call for each distinct `T`.
-    /// This avoids requiring callers to pre-register every asset type at
-    /// startup, at the cost of a `HashMap` lookup per load.
-    ///
-    /// [`asset_config`]: AssetRegistry::asset_config
-    /// [`T::load`]: Asset::load
-    /// [`AssetLoaded<T>`]: events::AssetLoaded
-    /// [`Error::TypeMismatch`]: crate::Error::TypeMismatch
-    /// [`Error::NotFound`]: crate::Error::NotFound
-    /// [`Error::AssetLoadError`]: crate::Error::AssetLoadError
     pub fn load_asset<T: Asset>(&mut self, handle: AssetHandle) -> Result<Handle<T>> {
         let type_id = TypeId::of::<T>();
         if handle.asset_type() != T::asset_type() {

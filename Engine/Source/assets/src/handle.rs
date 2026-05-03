@@ -5,32 +5,7 @@
 //! ref-counted — the underlying asset data is freed only when **all** clones
 //! of the handle have been dropped.
 //!
-//! # Ownership model
-//!
-//! ```text
-//!  AssetRegistry::load_asset()
-//!       │
-//!       └─► Handle<T>  (Arc ref-count = 1)
-//!               │
-//!               ├── clone() ──► Handle<T>  (ref-count = 2)
-//!               │
-//!               └── drop()                  (ref-count = 1)
-//!                       └── clone() drops   (ref-count = 0)
-//!                               └─► AssetRef::drop fires InternalAssetUnloaded
-//!                                       └─► AssetRegistry::tick() emits AssetUnloaded
-//! ```
-//!
-//! # Editor vs. release behaviour
-//!
-//! [`Handle::consume`] behaves differently depending on the build profile:
-//!
-//! | Build | Behaviour |
-//! |-------|-----------|
-//! | `editor` | Data is **cloned** and kept alive; consume can be called any number of times. |
-//! | release | Data is **moved out** on first call; subsequent calls return [`Error::AlreadyConsumed`]. |
-//!
 //! [`AssetRegistry::load_asset`]: crate::AssetRegistry::load_asset
-//! [`Error::AlreadyConsumed`]: crate::Error::AlreadyConsumed
 
 use std::sync::Arc;
 
@@ -44,14 +19,8 @@ use crate::{Asset, AssetHandle, Error, Result, events::InternalAssetUnloaded};
 /// Wrapped in `Arc<Mutex<>>` so that:
 /// - All [`Handle<T>`] clones share the same data without copying.
 /// - The [`Drop`] impl fires [`InternalAssetUnloaded`] exactly once — when
-///   the last `Arc` reference is released (i.e. when the last `Handle` clone
+///   the last [`Arc`] reference is released (i.e. when the last `Handle` clone
 ///   is dropped).
-///
-/// # Why `Mutex` and not `RwLock`?
-///
-/// In release builds, [`Handle::consume`] calls `Option::take` which requires
-/// exclusive (`&mut`) access. A `Mutex` is the natural fit; the lock is held
-/// only for the duration of the take, which is negligible.
 pub(crate) struct AssetRef<T: Asset> {
     /// The identifier of this asset; carried along so the drop event can
     /// include the handle for registry bookkeeping.
@@ -60,9 +29,8 @@ pub(crate) struct AssetRef<T: Asset> {
     /// The loaded asset data.
     ///
     /// - Starts as `Some(data)` after loading.
-    /// - Becomes `None` in release builds after the first [`Handle::consume`]
-    ///   call (data is moved out).
-    /// - Remains `Some` in editor builds (data is cloned on consume).
+    /// - Becomes `None` in after the first [`Handle::take`] call (data is moved out).
+    /// - Remains `Some` in after [`Handle::get`] call (data is cloned on consume).
     data: Option<T>,
 
     /// Dedicated dispatcher used in [`Drop::drop`] to fire the unload event.
@@ -97,6 +65,7 @@ impl<T: Asset> Drop for AssetRef<T> {
     /// event so that downstream systems (renderer, audio, …) can free their
     /// own resources.
     ///
+    /// [`AssetRegistry`]: crate::AssetRegistry
     /// [`AssetRegistry::tick`]: crate::AssetRegistry::tick
     /// [`AssetUnloaded`]: crate::AssetUnloaded
     fn drop(&mut self) {
@@ -108,35 +77,34 @@ impl<T: Asset> Drop for AssetRef<T> {
 /// A reference-counted, cheaply-cloneable public handle to a loaded asset.
 ///
 /// Obtain one via [`AssetRegistry::load_asset`]. Cloning a handle does not
-/// copy the underlying data — all clones share the same [`AssetRef`] inside
-/// an `Arc`. The asset's CPU memory is freed only when **all** clones are
-/// dropped.
+/// copy the underlying data — all clones share the same data inside an [`Arc`].
+/// The asset's CPU memory is freed only when **all** clones are dropped.
 ///
-/// # Consuming the data
+/// # Using the data
 ///
-/// Call [`consume`] to access the inner `T`. The semantics depend on the
-/// build profile — see the [module-level docs](self) for the comparison
-/// table.
+/// Call [`take`] to take ownership of the handle's data. This
+/// should be used when an asset's data is only needed by one system (for
+/// example, the renderer would take the data & upload it to the GPU, no
+/// other system needs it).
+/// Subsequent calls to [`take`] or [`get`] will return a [`Error::AlreadyTaken`].
+///
+/// Call [`get`] to just clone the data.
+///
+/// Prefer [`take`] as it saves memory & has less performance cost.
 ///
 /// # Sending across threads
 ///
-/// `Handle<T>` is [`Send`] whenever `T: Send`, which is required by the
-/// [`Asset`] bound. You can hand a handle to a worker thread for background
-/// GPU upload and drop it there safely.
+/// [`Handle<T>`] is [`Send`]. You can send a handle to a worker thread
+/// for background GPU upload and drop it there safely.
 ///
 /// # Debug formatting
 ///
 /// The `Debug` impl prints the raw asset path without locking the inner
 /// `Mutex` for data access:
 ///
-/// ```rust
-/// # let handle = 0;
-/// // Output: Handle { asset: "models/hero.dirkasset", .. }
-/// println!("{:?}", handle);
-/// ```
-///
 /// [`AssetRegistry::load_asset`]: crate::AssetRegistry::load_asset
-/// [`consume`]: Handle::consume
+/// [`take`]: Handle::take
+/// [`get`]: Handle::get
 #[derive(Clone)]
 pub struct Handle<T: Asset>(Arc<Mutex<AssetRef<T>>>);
 
@@ -158,14 +126,17 @@ impl<T: Asset> Handle<T> {
         inner.data.clone().ok_or(Error::AlreadyTaken)
     }
 
-    /// Returns the loaded asset data & frees the copy stored by the handle.
-    /// This function performs a full copy of the asset data.
-    /// Beware of the performance cost.
+    /// Returns the loaded asset data.
+    /// This function moves the data, performance cost is low.
+    ///
+    /// Prefer this over [`get`] as it helps save memory.
     ///
     /// # Errors
     ///
     /// Returns [`Error::AlreadyTaken`] in release builds if the data has
     /// already been taken by a prior call.
+    ///
+    /// [`get`]: Handle::get
     pub fn take(&self) -> Result<T> {
         let mut inner = self.0.lock();
         inner.data.take().ok_or(Error::AlreadyTaken)

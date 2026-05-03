@@ -2,18 +2,6 @@
 //!
 //! All fallible operations in this crate return [`Result<T>`], which is an
 //! alias for `std::result::Result<T, `[`Error`]`>`.
-//!
-//! # Error hierarchy
-//!
-//! ```text
-//! Error
-//! ├── IoError            — filesystem access failed
-//! ├── SerialisationError — malformed .dirkasset JSON
-//! ├── AlreadyConsumed    — Handle::consume() called twice in release mode
-//! ├── NotFound           — asset handle not in registry
-//! ├── TypeMismatch       — handle refers to a different asset type
-//! └── AssetLoadError     — type-specific load failure (e.g. bad glTF)
-//! ```
 
 use thiserror::Error;
 
@@ -21,10 +9,6 @@ use thiserror::Error;
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// All errors that can occur within the asset subsystem.
-///
-/// Variants are coarse-grained by *phase*: file I/O, JSON deserialisation,
-/// asset lifetime, registry lookup, and type-level contract failures each get
-/// their own variant so callers can match precisely on what went wrong.
 #[derive(Debug, Error)]
 pub enum Error {
     /// A filesystem operation failed while scanning or reading asset files.
@@ -41,8 +25,7 @@ pub enum Error {
     IoError(#[from] std::io::Error),
 
     /// A `.dirkasset` file contained malformed JSON, or a config struct could
-    /// not be serialised for the internal serde round-trip in
-    /// [`AssetRegistry::asset_config`].
+    /// not be serialised.
     ///
     /// This is the `From<serde_json::Error>` conversion target.
     ///
@@ -53,15 +36,7 @@ pub enum Error {
     #[error("error during .dirkasset JSON serialisation: {0}")]
     SerialisationError(#[from] serde_json::Error),
 
-    /// [`Handle::consume`] was called on an asset that has already been
-    /// consumed in a **release** build.
-    ///
-    /// In release builds, [`Handle::consume`] moves the asset data out of the
-    /// handle on first call, freeing the memory immediately. Any subsequent
-    /// call on the same (or a clone of the same) handle returns this error.
-    ///
-    /// In **editor** builds this error is never returned — the data is cloned
-    /// and kept alive for repeated inspection.
+    /// [`Handle::take`] was called on an asset that has already been taken.
     ///
     /// # Example
     ///
@@ -73,10 +48,12 @@ pub enum Error {
     /// # let asset_handle = AssetHandle::from_raw("", AssetType::Model);
     /// // release build only
     /// let handle = registry.load_asset::<Model>(asset_handle)?;
-    /// let _data  = handle.consume()?;          // OK — data moved out
-    /// let err    = handle.consume().unwrap_err(); // AlreadyConsumed
+    /// let _data = handle.consume()?;          // OK — data moved out
+    /// let err = handle.consume().unwrap_err(); // AlreadyConsumed
     /// # Ok(()) }
     /// ```
+    ///
+    /// [`Handle::take`]: crate::Handle::take
     #[error("asset data has already been consumed")]
     AlreadyTaken,
 
@@ -92,6 +69,8 @@ pub enum Error {
     ///   from the registry at startup.
     /// - The asset file was added after the registry was initialised (hot
     ///   reload is not yet supported).
+    ///
+    /// [`AssetHandle`]: crate::AssetHandle
     #[error("asset not found in registry: {0}")]
     NotFound(String),
 
@@ -103,6 +82,10 @@ pub enum Error {
     /// produce this error.
     ///
     /// The inner `String` is the raw handle path.
+    ///
+    /// [`Handle`]: crate::Handle
+    /// [`AssetRegistry::load_asset`]: crate::AssetRegistry::load_asset
+    /// [`AssetType::Model`]: crate::AssetType::Model
     #[error("asset {0} has wrong type for the requested load")]
     TypeMismatch(String),
 

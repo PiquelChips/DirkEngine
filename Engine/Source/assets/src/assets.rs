@@ -13,8 +13,7 @@
 //!    representation.
 //! 3. Implement [`Asset`] for the data struct.
 //! 4. Add a variant to [`AssetType`].
-//! 5. Add an `Option<YourConfig>` field to `DirkAsset` in `lib.rs` and wire
-//!    it into `AssetRegistry::asset_config`.
+//! 5. Follow compile errors untile everything is ready.
 //!
 //! ```rust
 //! use assets::{Asset, AssetConfig, AssetHandle, AssetType, Result};
@@ -28,18 +27,20 @@
 //!
 //! # use assets::Metadata;
 //! impl AssetConfig for AudioConfig {
-//!     // ...
-//!     # fn validate(&self, _: &Metadata) -> bool { false }
+//!     fn validate(&self, _: &Metadata) -> bool {
+//!         // ...
+//!         # false
+//!     }
 //! }
 //!
 //! /// In-memory audio data handed to the audio subsystem.
 //! #[derive(Clone)]
-//! pub struct AudioData {
+//! pub struct Audio {
 //!     pub samples: Vec<f32>,
 //!     pub sample_rate: u32,
 //! }
 //!
-//! impl Asset for AudioData {
+//! impl Asset for Audio {
 //!     type Config = AudioConfig;
 //!
 //!     fn load(config: &AudioConfig, handle: AssetHandle) -> Result<Self> {
@@ -50,7 +51,7 @@
 //!
 //!     fn asset_type() -> AssetType {
 //!     # /*
-//!         AssetType::Audio // (hypothetical variant)
+//!         AssetType::Audio
 //!     # */
 //!     # AssetType::Unknown
 //!     }
@@ -66,20 +67,21 @@ use crate::{AssetHandle, Metadata, Result};
 
 /// Implemented by every concrete asset data type.
 ///
-/// An `Asset` is a value that:
+/// An [`Asset`] is a value that:
 /// - can be **loaded from disk** given its configuration and an
 ///   [`AssetHandle`] (which carries the directory context),
 /// - carries a static [`AssetType`] discriminant so the registry can validate
 ///   handle/type compatibility at runtime,
-/// - is [`Clone`] + [`Send`] + `'static` so it can be cheaply duplicated in
-///   editor builds and freely moved across threads.
+/// - is [`Clone`] + [`Send`] + `'static` so it can be easily duplicated and
+///   freely moved across threads.
 ///
 /// Implementations should be pure data containers. GPU uploads, sound
 /// submissions, and other subsystem-side work happen *after* the asset is
-/// consumed via [`Handle::consume`], typically in response to an
+/// consumed via [`Handle::take`], typically in response to an
 /// [`AssetLoaded`] event.
 ///
 /// [`AssetLoaded`]: crate::events::AssetLoaded
+/// [`Handle::take`]: crate::Handle::take
 pub trait Asset: Clone + Sized + Send + 'static {
     /// The configuration type that describes this asset inside a `.dirkasset`
     /// file.
@@ -131,7 +133,7 @@ pub trait Asset: Clone + Sized + Send + 'static {
 ///
 /// # Serialisation
 ///
-/// `AssetType` serialises as a JSON string:
+/// [`AssetType`] serialises as a JSON string:
 ///
 /// ```rust
 /// # use assets::AssetType;
@@ -169,13 +171,8 @@ pub enum AssetType {
 
 /// Marker trait for all asset configuration structs.
 ///
-/// A type that implements `AssetConfig` can be embedded inside a
+/// A type that implements [`AssetConfig`] can be embedded inside a
 /// `.dirkasset` JSON file and deserialised by the registry at startup.
-///
-/// # Deriving
-///
-/// Use the `#[derive(AssetConfig)]` macro (re-exported from the `macros`
-/// crate) rather than implementing this trait by hand:
 ///
 /// ```rust
 /// use assets::{AssetConfig, Metadata};
@@ -188,18 +185,11 @@ pub enum AssetType {
 ///
 /// impl AssetConfig for MyConfig {
 ///     fn validate(&self, meta: &Metadata) -> bool {
-///         // ... validate
+///         // ...
 ///         # false
 ///     }
 /// }
 /// ```
-///
-/// The derive macro simply implements the (otherwise empty) trait, ensuring
-/// the type also satisfies the [`Serialize`] + [`DeserializeOwned`] bounds
-/// required by the registry's serde round-trip in
-/// [`AssetRegistry::asset_config`].
-///
-/// [`AssetRegistry::asset_config`]: crate::AssetRegistry::asset_config
 pub trait AssetConfig: Serialize + DeserializeOwned {
     /// Validates the configuration for the asset.
     fn validate(&self, meta: &Metadata) -> bool;
