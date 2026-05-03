@@ -13,6 +13,7 @@ members = [
     "Engine/Source/utils",
     "Engine/Source/renderer",
     "Engine/Source/world",
+    "Engine/Source/universe",
     "Engine/Shaders"
 ]
 
@@ -48,6 +49,7 @@ platform = { path = "Engine/Source/platform" }
 renderer = { path = "Engine/Source/renderer" }
 assets = { path = "Engine/Source/assets" }
 world = { path = "Engine/Source/world" }
+universe = { path = "Engine/Source/universe" }
 shaders = { path = "Engine/Shaders" }
 
 # Main Engine Dependencies
