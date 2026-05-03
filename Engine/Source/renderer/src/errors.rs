@@ -21,9 +21,6 @@ pub enum Error {
     /// A wrapper for platform errors
     #[error("platform error: {0}")]
     Platform(#[from] platform::Error),
-    /// Wrapper for resource manager errors
-    #[error("resource manager error: {0}")]
-    ResourceManager(#[from] resource_manager::Error),
     #[error("gltf error: {0}")]
     GltfError(#[from] gltf::Error),
 

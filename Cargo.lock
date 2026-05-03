@@ -479,7 +479,6 @@ dependencies = [
  "logging",
  "platform",
  "renderer",
- "resource_manager",
  "thiserror 2.0.18",
  "tracing",
  "utils",
@@ -1350,22 +1349,11 @@ dependencies = [
  "pastey",
  "platform",
  "raw-window-handle",
- "resource_manager",
  "shaders",
  "thiserror 2.0.18",
  "tracing",
  "utils",
  "world",
-]
-
-[[package]]
-name = "resource_manager"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "derive-getters",
- "gltf",
- "thiserror 2.0.18",
 ]
 
 [[package]]
