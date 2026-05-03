@@ -61,6 +61,9 @@
 //! # Ok(()) }
 //! ```
 
+#[cfg(test)]
+mod tests;
+
 mod errors;
 pub use errors::{Error, Result};
 
