@@ -118,7 +118,17 @@ impl Engine {
     ///
     /// Errors can occure if the various ticking systems have errors.
     /// For now, only rendering can return an error.
-    pub fn tick(&mut self) -> anyhow::Result<bool> {
+    pub fn tick(&mut self) -> bool {
+        match self.tick_inner() {
+            Ok(exit) => exit,
+            Err(err) => {
+                self.exit_error = Some(err.context("engine tick"));
+                false
+            }
+        }
+    }
+
+    fn tick_inner(&mut self) -> anyhow::Result<bool> {
         let delta_time = self.capture_delta_time();
         self.event_manager.dispatch_all();
 
