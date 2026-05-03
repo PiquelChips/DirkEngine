@@ -146,21 +146,8 @@ impl Engine {
             .tick(delta_time, &self.worlds, self.platform.windows_mut())
             .context("renderer")?;
 
-        self.render().context("rendering")?;
+        self.renderer.render().context("rendering")?;
         Ok(!self.is_requesting_exit())
-    }
-
-    /// Will render the surfaces for every player owned by the engine
-    ///
-    /// # Errors
-    ///
-    /// Any error that is returned during rendering.
-    fn render(&mut self) -> anyhow::Result<()> {
-        for player in self.players.values() {
-            self.renderer
-                .render(player.window(), player.world(), player.entity())?;
-        }
-        Ok(())
     }
 
     fn process_events(&mut self) {
