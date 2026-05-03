@@ -38,8 +38,6 @@ pub struct Texture {
     pub device: RenderDevice,
     pub image: Image,
     pub sampler: vk::Sampler,
-    #[allow(unused)]
-    pub mip_levels: u32,
 }
 
 impl Drop for Texture {
