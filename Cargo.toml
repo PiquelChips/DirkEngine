@@ -31,6 +31,7 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["r
 tracing-log = "0.2"
 parking_lot = "0.12"
 tempfile = "3"
+slotmap = "1"
 
 thiserror = "2"
 anyhow = "1"

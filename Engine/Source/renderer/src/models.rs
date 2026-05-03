@@ -6,7 +6,7 @@
 //! is call [`ModelRegistry::render`] with their asset handle & a command buffer.
 //! We handle the rest.
 
-use std::{collections::HashMap, marker::PhantomData};
+use std::{collections::HashMap, marker::PhantomData, ops::Deref};
 
 use ash::vk;
 
@@ -22,15 +22,31 @@ use crate::{
 };
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-pub struct Handle<T> {
-    id: u32,
+struct Handle<T> {
+    key: slotmap::DefaultKey,
     _marker: PhantomData<T>,
+}
+
+impl<T> Handle<T> {
+    fn new(key: slotmap::DefaultKey) -> Self {
+        Self {
+            key,
+            _marker: PhantomData,
+        }
+    }
 }
 
 impl<T> Copy for Handle<T> {}
 impl<T> Clone for Handle<T> {
     fn clone(&self) -> Self {
         *self
+    }
+}
+
+impl<T> Deref for Handle<T> {
+    type Target = slotmap::DefaultKey;
+    fn deref(&self) -> &Self::Target {
+        &self.key
     }
 }
 
@@ -46,60 +62,34 @@ impl Drop for Texture {
     }
 }
 
-pub struct Primitive {
+struct Primitive {
     pub vertex_buffer: VertexBuffer,
     pub index_buffer: IndexBuffer,
     pub index_count: u32,
     pub material_handle: Option<Handle<Material>>,
 }
 
-pub struct Mesh {
+struct Mesh {
     pub primitives: Vec<Primitive>,
 }
 
-pub struct Material {
+struct Material {
     #[allow(unused)]
     pub base_color: Handle<Texture>,
     pub descriptor_set: vk::DescriptorSet,
 }
 
-pub struct Model {
+struct Model {
     // TODO: store transform with each mesh handle
     pub meshes: Vec<Handle<Mesh>>,
-}
-
-/// TODO: better storage type for assets
-/// look into generation arena or slotmap
-struct AssetStorage<T> {
-    assets: Vec<Option<T>>,
-}
-
-impl<T> AssetStorage<T> {
-    fn new() -> Self {
-        Self { assets: Vec::new() }
-    }
-    fn insert(&mut self, asset: T) -> Handle<T> {
-        #[allow(clippy::cast_possible_truncation)]
-        let id = self.assets.len() as u32;
-        self.assets.push(Some(asset));
-        Handle {
-            id,
-            _marker: PhantomData,
-        }
-    }
-    fn get(&self, handle: Handle<T>) -> &T {
-        self.assets[handle.id as usize]
-            .as_ref()
-            .expect("Invalid Handle")
-    }
 }
 
 pub struct ModelRegistry {
     device: RenderDevice,
 
-    textures: AssetStorage<Texture>,
-    meshes: AssetStorage<Mesh>,
-    materials: AssetStorage<Material>,
+    textures: slotmap::SlotMap<slotmap::DefaultKey, Texture>,
+    meshes: slotmap::SlotMap<slotmap::DefaultKey, Mesh>,
+    materials: slotmap::SlotMap<slotmap::DefaultKey, Material>,
     models: HashMap<assets::AssetHandle, Model>,
 
     material_pool: vk::DescriptorPool,
@@ -127,9 +117,9 @@ impl ModelRegistry {
 
         Ok(Self {
             device: device.clone(),
-            textures: AssetStorage::new(),
-            meshes: AssetStorage::new(),
-            materials: AssetStorage::new(),
+            textures: slotmap::SlotMap::new(),
+            meshes: slotmap::SlotMap::new(),
+            materials: slotmap::SlotMap::new(),
             models: HashMap::new(),
             material_pool,
 
@@ -171,13 +161,13 @@ impl ModelRegistry {
         let primitives = model
             .meshes
             .iter()
-            .flat_map(|mesh| self.meshes.get(*mesh).primitives.iter());
+            .flat_map(|&mesh| self.meshes[*mesh].primitives.iter());
 
         for prim in primitives {
             let mat_set = prim
                 .material_handle
                 .map_or(vk::DescriptorSet::null(), |mat| {
-                    self.materials.get(mat).descriptor_set
+                    self.materials[*mat].descriptor_set
                 });
 
             descriptor_sets[2] = mat_set;
@@ -222,7 +212,7 @@ impl ModelRegistry {
             .iter()
             .map(|image| {
                 let tex = Image::upload_texture(&self.device, image)?;
-                Ok(self.textures.insert(tex))
+                Ok(Handle::new(self.textures.insert(tex)))
             })
             .collect::<Result<Vec<_>>>()?;
 
@@ -236,7 +226,7 @@ impl ModelRegistry {
                     .primitives()
                     .map(|prim| self.upload_primitive(&prim, &buffers, &material_handles))
                     .collect::<Result<Vec<_>>>()?;
-                Ok(self.meshes.insert(Mesh { primitives }))
+                Ok(Handle::new(self.meshes.insert(Mesh { primitives })))
             })
             .collect::<Result<Vec<_>>>()?;
 
@@ -274,7 +264,7 @@ impl ModelRegistry {
                 let tex = pbr.base_color_texture().unwrap().texture().source().index();
 
                 let tex_handle = texture_refs[tex];
-                let tex = self.textures.get(tex_handle);
+                let tex = &self.textures[*tex_handle];
                 let image_info = vk::DescriptorImageInfo::default()
                     .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
                     .image_view(tex.image.view())
@@ -287,10 +277,10 @@ impl ModelRegistry {
                     .image_info(std::slice::from_ref(&image_info));
 
                 unsafe { self.device.device.update_descriptor_sets(&[write], &[]) };
-                self.materials.insert(Material {
+                Handle::new(self.materials.insert(Material {
                     base_color: tex_handle,
                     descriptor_set: material_sets[i],
-                })
+                }))
             })
             .collect())
     }

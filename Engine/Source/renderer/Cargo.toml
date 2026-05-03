@@ -26,6 +26,7 @@ raw-window-handle.workspace = true
 glam.workspace = true
 gpu-allocator.workspace = true
 gltf.workspace = true
+slotmap.workspace = true
 
 [build-dependencies]
 build.workspace = true
