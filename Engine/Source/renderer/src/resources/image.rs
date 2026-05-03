@@ -128,7 +128,7 @@ impl Image {
                 .expect("the buffer should be host visible")
                 .as_ptr()
                 .cast::<u8>();
-            ptr.copy_from_nonoverlapping(tex.pixels.as_ptr(), tex.pixels.len());
+            ptr.copy_from_nonoverlapping(pixels.as_ptr(), pixels.len());
         }
 
         let create_info = ImageCreateInfo {
