@@ -174,14 +174,9 @@ impl Scene {
                         .insert(entity, SceneProxy::build(&self.device, self)?);
                 }
                 WorldEvent::EntityUpdate { world: _, entity } => {
-                    // TODO: asset manager
-                    // if let Some(renderable) = world.get::<components::Renderable>(entity) {
-                    //     self.get_or_upload_model(&renderable.model)?;
-                    // }
                     let Some(proxy) = self.proxies.get_mut(&entity) else {
                         continue;
                     };
-
                     let Some(transform) = world.get::<components::Transform>(entity) else {
                         continue;
                     };
