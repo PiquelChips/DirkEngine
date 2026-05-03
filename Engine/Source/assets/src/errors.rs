@@ -78,7 +78,7 @@ pub enum Error {
     /// # Ok(()) }
     /// ```
     #[error("asset data has already been consumed")]
-    AlreadyConsumed,
+    AlreadyTaken,
 
     /// The requested [`AssetHandle`] was not found in the registry.
     ///

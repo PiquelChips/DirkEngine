@@ -146,60 +146,29 @@ impl<T: Asset> Handle<T> {
     }
 
     /// Returns the loaded asset data.
-    ///
-    /// # Build-profile behaviour
-    ///
-    /// - **`editor` builds** — clones and returns the data; the original
-    ///   remains inside the handle. Can be called any number of times on any
-    ///   number of clones.
-    /// - **Release builds** — moves the data out of the handle on the first
-    ///   call, then sets the inner `Option` to `None`. Any subsequent call on
-    ///   *any* clone of the same handle returns [`Error::AlreadyConsumed`].
-    ///
-    /// The release behaviour lets the engine free CPU memory as soon as the
-    /// renderer has uploaded the data to the GPU, without waiting for all
-    /// handles to be dropped.
+    /// This function performs a full copy of the asset data.
+    /// Beware of the performance cost.
     ///
     /// # Errors
     ///
-    /// Returns [`Error::AlreadyConsumed`] in release builds if the data has
+    /// Returns [`Error::AlreadyTaken`] in release builds if the data has
     /// already been taken by a prior call.
+    pub fn get(&self) -> Result<T> {
+        let inner = self.0.lock();
+        inner.data.clone().ok_or(Error::AlreadyTaken)
+    }
+
+    /// Returns the loaded asset data & frees the copy stored by the handle.
+    /// This function performs a full copy of the asset data.
+    /// Beware of the performance cost.
     ///
-    /// # Example
+    /// # Errors
     ///
-    /// ```rust
-    /// # use ::events::{EventManager, Consumer};
-    /// # use assets::{AssetLoaded, Model};
-    /// # let events = EventManager::new();
-    /// # let model_loaded_consumer: Consumer<AssetLoaded<Model>> = events.subscribe();
-    /// // Typical renderer usage:
-    /// for event in model_loaded_consumer.consume_all() {
-    ///     match event.handle.consume() {
-    ///         Ok(model_data) => // ... gpu.upload(model_data),
-    ///         # {},
-    ///         Err(e) => tracing::error!("double-consume: {e}"),
-    ///     }
-    /// }
-    /// ```
-    ///
-    /// # ⚠️ Release-build note
-    ///
-    /// In release mode this method calls `Option::take` through a
-    /// `parking_lot::MutexGuard`. The guard provides interior mutability, so
-    /// `&self` is sufficient even though the operation is logically mutating.
-    /// Do **not** add `&mut self` — callers hold `&Handle<T>` (the `Arc`
-    /// does not expose `&mut`).
-    pub fn consume(&self) -> Result<T> {
-        // the mut is used in `editor` builds
-        #[allow(unused_mut)]
+    /// Returns [`Error::AlreadyTaken`] in release builds if the data has
+    /// already been taken by a prior call.
+    pub fn take(&self) -> Result<T> {
         let mut inner = self.0.lock();
-
-        #[cfg(editor)]
-        let result = inner.data.clone().ok_or(Error::AlreadyConsumed);
-        #[cfg(not(editor))]
-        let result = inner.data.take().ok_or(Error::AlreadyConsumed);
-
-        result
+        inner.data.take().ok_or(Error::AlreadyTaken)
     }
 }
 
