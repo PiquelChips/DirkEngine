@@ -43,7 +43,7 @@
 //! impl Asset for Audio {
 //!     type Config = AudioConfig;
 //!
-//!     fn load(config: &AudioConfig, handle: AssetHandle) -> Result<Self> {
+//!     fn load(config: &AudioConfig, handle: &AssetHandle) -> Result<Self> {
 //!         let path = handle.dir().join(&config.wav);
 //!         // … decode WAV from `path` …
 //!         todo!()
