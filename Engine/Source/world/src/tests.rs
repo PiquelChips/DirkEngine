@@ -245,9 +245,9 @@ mod components {
     #[test]
     fn renderable_stores_model_name() {
         let r = Renderable {
-            model: "meshes/sphere.glb".into(),
+            model: assets::AssetHandle::from_raw("meshes/sphere.glb", assets::AssetType::Model),
         };
-        assert_eq!(r.model, "meshes/sphere.glb");
+        assert_eq!(r.model.to_string(), "meshes/sphere.glb");
     }
 }
 
@@ -271,7 +271,7 @@ mod queries {
 
     fn default_renderable() -> Renderable {
         Renderable {
-            model: "test".into(),
+            model: assets::AssetHandle::from_raw("test", assets::AssetType::Model),
         }
     }
 
