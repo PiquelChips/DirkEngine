@@ -47,11 +47,11 @@ struct SceneUbo {
     proj: glam::Mat4,
 }
 
-pub struct CameraProxy {
+struct CameraProxy {
     /// View matrix calculated from camera position.
-    pub view: glam::Mat4,
+    view: glam::Mat4,
     /// Projection matrix calculated from camera settings.
-    pub proj: glam::Mat4,
+    proj: glam::Mat4,
 }
 
 impl Scene {

@@ -344,3 +344,13 @@ impl ModelRegistry {
         })
     }
 }
+
+impl Drop for ModelRegistry {
+    fn drop(&mut self) {
+        unsafe {
+            self.device
+                .device
+                .destroy_descriptor_pool(self.material_pool, None)
+        };
+    }
+}
