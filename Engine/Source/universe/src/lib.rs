@@ -2,9 +2,9 @@
 //!
 //! The **Universe** is `DirkEngine`'s ECS system.
 
-use std::collections::HashMap;
+use std::{any::TypeId, collections::HashMap};
 
-use crate::components::EntityComponents;
+use crate::components::{AnyComponent, EntityComponents};
 
 pub mod components;
 pub mod query;
@@ -27,4 +27,5 @@ pub struct World {
     next_id: Entity,
     alive: Vec<Entity>,
     entity_components: EntityComponents,
+    components: HashMap<TypeId, Box<dyn AnyComponent>>,
 }
