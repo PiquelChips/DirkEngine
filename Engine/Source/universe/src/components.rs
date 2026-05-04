@@ -85,17 +85,17 @@ impl<C: EntityComponent> Index<Entity> for ComponentStorage<C> {
 /// [`TypeId`].  No central registration is required — storage for a type is
 /// created on the first `insert` and lives until the `World` is dropped.
 #[derive(Default)]
-pub(crate) struct Components {
+pub(crate) struct EntityComponents {
     storages: HashMap<TypeId, Box<dyn AnyStorage>>,
 }
 
-impl std::fmt::Debug for Components {
+impl std::fmt::Debug for EntityComponents {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Components {{ {} type(s) }}", self.storages.len())
+        write!(f, "EntityComponents {{ {} type(s) }}", self.storages.len())
     }
 }
 
-impl Components {
+impl EntityComponents {
     /// Returns a shared reference to the typed storage bucket for `C`,
     /// or `None` if no component of that type has ever been inserted.
     fn typed<C: EntityComponent>(&self) -> Option<&ComponentStorage<C>> {

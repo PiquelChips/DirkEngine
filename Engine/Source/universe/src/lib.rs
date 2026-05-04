@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 
-use crate::components::Components;
+use crate::components::EntityComponents;
 
 pub mod components;
 pub mod query;
@@ -26,5 +26,5 @@ pub struct World {
     id: WorldId,
     next_id: Entity,
     alive: Vec<Entity>,
-    components: Components,
+    entity_components: EntityComponents,
 }
