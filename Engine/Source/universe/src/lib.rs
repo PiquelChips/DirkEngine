@@ -27,5 +27,8 @@ pub struct World {
     next_id: Entity,
     alive: Vec<Entity>,
     entity_components: EntityComponents,
+    /// These should only be [`components::WorldComponent`]. This is
+    /// guaranteed by the [`World`] API. Please make sure to add these
+    /// properly internally.
     components: HashMap<TypeId, Box<dyn AnyComponent>>,
 }
