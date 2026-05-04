@@ -1,10 +1,6 @@
 use std::any::TypeId;
 
-use crate::{
-    Entity, Universe, World,
-    components::{AnyComponent, Component},
-    query::Query,
-};
+use crate::{Entity, Universe, World, components::AnyComponent, query::Query};
 
 /// All systems must implement this trait.
 pub trait System: Clone {
@@ -23,24 +19,26 @@ pub trait UniverseSystem: System {
 /// Each of the methods are optional.
 pub trait WorldSystem: System {
     /// Called right after the world is created.
-    fn world_created(&self, world: &World) {}
+    fn created(&self, world: &World);
     /// Called as the world is being destroyed.
     /// In this state, the world is still valid
     /// and no entities have been removed.
-    fn world_destroyed(&self, world: &World) {}
+    fn destroyed(&self, world: &World);
 
     /// Called on world tick
-    fn tick(&self, world: &World, delta_time: f32) {}
+    fn tick(&self, world: &World, delta_time: f32);
 
     /// Called when an entity is spawned, with all
     /// the components it spawns with.
-    fn entity_spawned(
+    fn entity_spawned(&self, world: &World, entity: Entity, components: Vec<Box<dyn AnyComponent>>);
+    /// Called when an entity is despawned, with all
+    /// the components it had with it.
+    fn entity_despawned(
         &self,
         world: &World,
         entity: Entity,
         components: Vec<Box<dyn AnyComponent>>,
-    ) {
-    }
+    );
 }
 
 /// Run on a specific World for components that match the query
@@ -54,48 +52,60 @@ pub trait TickingSystem: System {
     fn query() -> Query;
 }
 
-/// System run for every component of the specified type.
-/// Can be registered on both the [`World`] & [`Universe`]
-///
-/// Each of the methods are optional.
-pub trait ComponentSystem: System {
-    /// The concrete component type this system handles.
-    type C: Component;
+macro_rules! component_system {
+    ($kind:ident) => {
+        pastey::paste! {
+            use crate::components::[<$kind Component>];
 
-    /// When a component is added.
-    /// `entity`: the entity with this component.
-    fn added(&self, entity: Entity, component: &mut Self::C) {}
-    /// When a component is updated.
-    /// `entity`: the entity with this component.
-    fn updated(&self, entity: Entity, component: &mut Self::C) {}
-    /// When a component is removed.
-    /// `entity`: the entity with this component.
-    fn removed(&self, entity: Entity, component: &mut Self::C) {}
-}
+            /// System run for every component of the specified type.
+            /// Can be registered on both the [`World`] & [`Universe`]
+            ///
+            /// Each of the methods are optional.
+            pub trait [<$kind ComponentSystem>]: System {
+                /// The concrete component type this system handles.
+                type Component: [<$kind Component>];
 
-/// Private type-erasure trait for storage in [`World`] & [`Universe`]
-pub(crate) trait AnyComponentSystem {
-    fn type_id(&self) -> TypeId;
-    // Uses Box<dyn AnyComponent> — dyn-compatible and downcasting-capable
-    fn added(&self, entity: Entity, component: Box<dyn AnyComponent>);
-    fn removed(&self, entity: Entity, component: Box<dyn AnyComponent>);
-}
+                /// When a component is added.
+                /// `entity`: the entity with this component.
+                fn added(&self, [<$kind:snake>]: $kind, component: &mut Self::Component);
 
-impl<T: ComponentSystem> AnyComponentSystem for T {
-    fn type_id(&self) -> TypeId {
-        TypeId::of::<T::C>()
-    }
+                /// When a component is updated.
+                /// `entity`: the entity with this component.
+                fn updated(&self, [<$kind:snake>]: $kind, component: &mut Self::Component);
 
-    fn added(&self, entity: Entity, component: Box<dyn AnyComponent>) {
-        // as_any_box() → Box<dyn Any> → downcast to the concrete type
-        if let Ok(mut component) = component.as_any_box().downcast::<T::C>() {
-            ComponentSystem::added(self, entity, &mut component);
+                /// When a component is removed.
+                /// `entity`: the entity with this component.
+                fn removed(&self, [<$kind:snake>]: $kind, component: &mut Self::Component);
+            }
+
+            /// Private type-erasure trait for storage in [`World`] & [`Universe`]
+            pub(crate) trait [<Any $kind ComponentSystem>] {
+                fn type_id(&self) -> TypeId;
+                // Uses Box<dyn AnyComponent> — dyn-compatible and downcasting-capable
+                fn added(&self, [<$kind:snake>]: $kind, component: Box<dyn AnyComponent>);
+                fn removed(&self, [<$kind:snake>]: $kind, component: Box<dyn AnyComponent>);
+            }
+
+            impl<T: [<$kind ComponentSystem>]> [<Any $kind ComponentSystem>] for T {
+                fn type_id(&self) -> TypeId {
+                    TypeId::of::<T::Component>()
+                }
+
+                fn added(&self, obj: $kind, component: Box<dyn AnyComponent>) {
+                    if let Ok(mut component) = component.as_any_box().downcast::<T::Component>() {
+                        [<$kind ComponentSystem>]::added(self, obj, &mut component);
+                    }
+                }
+
+                fn removed(&self, obj: $kind, component: Box<dyn AnyComponent>) {
+                    if let Ok(mut component) = component.as_any_box().downcast::<T::Component>() {
+                        [<$kind ComponentSystem>]::removed(self, obj, &mut component);
+                    }
+                }
+            }
         }
-    }
-
-    fn removed(&self, entity: Entity, component: Box<dyn AnyComponent>) {
-        if let Ok(mut component) = component.as_any_box().downcast::<T::C>() {
-            ComponentSystem::removed(self, entity, &mut component);
-        }
-    }
+    };
 }
+
+component_system!(Entity);
+component_system!(World);
