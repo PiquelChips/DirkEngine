@@ -118,7 +118,13 @@ impl EntityComponents {
 
     /// Returns a mutable reference to the typed storage bucket for `C`,
     /// creating an empty one if it does not yet exist.
-    fn typed_mut<C: EntityComponent>(&mut self) -> &mut ComponentStorage<C> {
+    fn typed_mut<C: EntityComponent>(&mut self) -> Option<&mut ComponentStorage<C>> {
+        self.storages
+            .get_mut(&TypeId::of::<C>())
+            .and_then(|b| b.as_any_mut().downcast_mut::<ComponentStorage<C>>())
+    }
+
+    pub fn insert<C: EntityComponent>(&mut self, entity: Entity, component: C) {
         self.storages
             .entry(TypeId::of::<C>())
             .or_insert_with(|| {
@@ -129,34 +135,31 @@ impl EntityComponents {
             .as_any_mut()
             .downcast_mut::<ComponentStorage<C>>()
             .expect("we just inserted exactly this type")
+            .insert(entity, component);
     }
 
-    fn insert<C: EntityComponent>(&mut self, entity: Entity, component: C) {
-        self.typed_mut::<C>().map.insert(entity, component);
+    pub fn get<C: EntityComponent>(&self, entity: Entity) -> Option<&C> {
+        self.typed::<C>()?.get(&entity)
     }
 
-    fn get<C: EntityComponent>(&self, entity: Entity) -> Option<&C> {
-        self.typed::<C>()?.map.get(&entity)
+    pub fn get_mut<C: EntityComponent>(&mut self, entity: Entity) -> Option<&mut C> {
+        self.typed_mut::<C>()?.get_mut(&entity)
     }
 
-    fn get_mut<C: EntityComponent>(&mut self, entity: Entity) -> Option<&mut C> {
-        self.typed_mut::<C>().map.get_mut(&entity)
-    }
-
-    fn remove<C: EntityComponent>(&mut self, entity: Entity) {
+    pub fn remove<C: EntityComponent>(&mut self, entity: Entity) {
         if let Some(storage) = self.storages.get_mut(&TypeId::of::<C>()) {
             storage.remove(entity);
         }
     }
 
     /// Removes **every** component attached to `entity` across all types.
-    fn remove_all(&mut self, entity: Entity) {
+    pub fn remove_all(&mut self, entity: Entity) {
         for storage in self.storages.values_mut() {
             storage.remove(entity);
         }
     }
 
-    fn contains<C: EntityComponent>(&self, entity: Entity) -> bool {
+    pub fn contains<C: EntityComponent>(&self, entity: Entity) -> bool {
         self.typed::<C>()
             .is_some_and(|s| s.map.contains_key(&entity))
     }
