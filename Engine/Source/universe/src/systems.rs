@@ -1,3 +1,4 @@
+//! This crate has all the traits for the ECS [`System`]s.
 use std::any::TypeId;
 
 use crate::{Entity, Universe, World, components::AnyComponent, query::Query};
