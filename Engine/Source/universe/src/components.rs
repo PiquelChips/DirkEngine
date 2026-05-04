@@ -48,8 +48,20 @@ trait AnyStorage {
     fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
-struct ComponentStorage<C: EntityComponent> {
+pub(crate) struct ComponentStorage<C: Component> {
     map: HashMap<Entity, C>,
+}
+
+impl<C: EntityComponent> ComponentStorage<C> {
+    pub fn get(&self, entity: &Entity) -> Option<&C> {
+        self.map.get(entity)
+    }
+    pub fn get_mut(&mut self, entity: &Entity) -> Option<&mut C> {
+        self.map.get_mut(entity)
+    }
+    pub fn insert(&mut self, entity: Entity, component: C) -> Option<C> {
+        self.map.insert(entity, component)
+    }
 }
 
 impl<C: EntityComponent> AnyStorage for ComponentStorage<C> {
