@@ -40,7 +40,7 @@ impl<T: Component> AnyComponent for T {
 /// Type-erased storage for a single component type.
 ///
 /// The `as_any` / `as_any_mut` pattern lets us downcast back to the concrete
-/// `TypedStorage<C>` without exposing `C` through the trait object.
+/// `ComponentStorage<C>` without exposing `C` through the trait object.
 trait AnyStorage {
     /// Remove the component for `entity` if present.
     fn remove(&mut self, entity: Entity);
@@ -48,11 +48,11 @@ trait AnyStorage {
     fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
-struct TypedStorage<C: EntityComponent> {
+struct ComponentStorage<C: EntityComponent> {
     map: HashMap<Entity, C>,
 }
 
-impl<C: EntityComponent> AnyStorage for TypedStorage<C> {
+impl<C: EntityComponent> AnyStorage for ComponentStorage<C> {
     fn remove(&mut self, entity: Entity) {
         self.map.remove(&entity);
     }
@@ -64,7 +64,7 @@ impl<C: EntityComponent> AnyStorage for TypedStorage<C> {
     }
 }
 
-impl<C: EntityComponent> IndexMut<Entity> for TypedStorage<C> {
+impl<C: EntityComponent> IndexMut<Entity> for ComponentStorage<C> {
     fn index_mut(&mut self, index: Entity) -> &mut Self::Output {
         self.map
             .get_mut(&index)
@@ -72,7 +72,7 @@ impl<C: EntityComponent> IndexMut<Entity> for TypedStorage<C> {
     }
 }
 
-impl<C: EntityComponent> Index<Entity> for TypedStorage<C> {
+impl<C: EntityComponent> Index<Entity> for ComponentStorage<C> {
     type Output = C;
     fn index(&self, index: Entity) -> &Self::Output {
         &self.map[&index]
@@ -98,24 +98,24 @@ impl std::fmt::Debug for Components {
 impl Components {
     /// Returns a shared reference to the typed storage bucket for `C`,
     /// or `None` if no component of that type has ever been inserted.
-    fn typed<C: EntityComponent>(&self) -> Option<&TypedStorage<C>> {
+    fn typed<C: EntityComponent>(&self) -> Option<&ComponentStorage<C>> {
         self.storages
             .get(&TypeId::of::<C>())
-            .and_then(|b| b.as_any().downcast_ref::<TypedStorage<C>>())
+            .and_then(|b| b.as_any().downcast_ref::<ComponentStorage<C>>())
     }
 
     /// Returns a mutable reference to the typed storage bucket for `C`,
     /// creating an empty one if it does not yet exist.
-    fn typed_mut<C: EntityComponent>(&mut self) -> &mut TypedStorage<C> {
+    fn typed_mut<C: EntityComponent>(&mut self) -> &mut ComponentStorage<C> {
         self.storages
             .entry(TypeId::of::<C>())
             .or_insert_with(|| {
-                Box::new(TypedStorage::<C> {
+                Box::new(ComponentStorage::<C> {
                     map: HashMap::new(),
                 })
             })
             .as_any_mut()
-            .downcast_mut::<TypedStorage<C>>()
+            .downcast_mut::<ComponentStorage<C>>()
             .expect("we just inserted exactly this type")
     }
 
