@@ -67,8 +67,9 @@ pub fn generate_system_code(trait_def: ItemTrait) -> syn::Result<TokenStream> {
             // TODO: looping over all the traits
         }
 
+        #[derive(Clone, Copy)]
         #[doc = concat!("Handle type for [`", stringify!(#trait_name), "`]")]
-        pub type #handle = u32;
+        pub struct #handle(u32);
     })
 }
 
