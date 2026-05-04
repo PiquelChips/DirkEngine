@@ -21,11 +21,20 @@ impl<T: Component> AnyComponent for T {
     }
 }
 
-/// Marker trait for component types.
+/// Base marker trait for component types.
 pub trait Component: 'static + Sized + Debug + Serialize + DeserializeOwned {}
-
 #[doc(hidden)]
 pub use macros::Component;
+
+/// Extends [`Component`] trait for world specific behavior
+pub trait WorldComponent: Component {}
+#[doc(hidden)]
+pub use macros::WorldComponent;
+
+/// Extends [`Component`] trait for entity specific behavior
+pub trait EntityComponent: Component {}
+#[doc(hidden)]
+pub use macros::EntityComponent;
 
 /// Type-erased storage for a single component type.
 ///
