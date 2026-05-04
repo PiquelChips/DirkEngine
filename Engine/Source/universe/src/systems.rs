@@ -51,6 +51,15 @@ pub trait TickingSystem: System {
     fn tick(&self, deta_time: f32, world: &World, entities: Vec<Entity>);
     /// Returns the query used to construct the `entities` of the tick function.
     fn query() -> Query;
+
+    #[doc(hidden)]
+    fn tick_outer(&self, delta_time: f32, world: &World) {
+        /*
+        let entities = world.query(self.query);
+        self.tick(deta_time, world, entities);
+        */
+        todo!("implement TickingSystem::tick_outer")
+    }
 }
 
 macro_rules! component_system {
