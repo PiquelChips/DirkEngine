@@ -40,7 +40,7 @@ impl<T: Component> AnyComponent for T {
 /// Type-erased storage for a single component type.
 ///
 /// The `as_any` / `as_any_mut` pattern lets us downcast back to the concrete
-/// `ComponentStorage<C>` without exposing `C` through the trait object.
+/// `EntityComponentStorage<C>` without exposing `C` through the trait object.
 trait AnyStorage {
     /// Remove the component for `entity` if present.
     fn remove(&mut self, entity: Entity);
@@ -48,23 +48,23 @@ trait AnyStorage {
     fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
-pub(crate) struct ComponentStorage<C: Component> {
+struct EntityComponentStorage<C: EntityComponent> {
     map: HashMap<Entity, C>,
 }
 
-impl<C: EntityComponent> ComponentStorage<C> {
-    pub fn get(&self, entity: &Entity) -> Option<&C> {
+impl<C: EntityComponent> EntityComponentStorage<C> {
+    fn get(&self, entity: &Entity) -> Option<&C> {
         self.map.get(entity)
     }
-    pub fn get_mut(&mut self, entity: &Entity) -> Option<&mut C> {
+    fn get_mut(&mut self, entity: &Entity) -> Option<&mut C> {
         self.map.get_mut(entity)
     }
-    pub fn insert(&mut self, entity: Entity, component: C) -> Option<C> {
+    fn insert(&mut self, entity: Entity, component: C) -> Option<C> {
         self.map.insert(entity, component)
     }
 }
 
-impl<C: EntityComponent> AnyStorage for ComponentStorage<C> {
+impl<C: EntityComponent> AnyStorage for EntityComponentStorage<C> {
     fn remove(&mut self, entity: Entity) {
         self.map.remove(&entity);
     }
@@ -76,7 +76,7 @@ impl<C: EntityComponent> AnyStorage for ComponentStorage<C> {
     }
 }
 
-impl<C: EntityComponent> IndexMut<Entity> for ComponentStorage<C> {
+impl<C: EntityComponent> IndexMut<Entity> for EntityComponentStorage<C> {
     fn index_mut(&mut self, index: Entity) -> &mut Self::Output {
         self.map
             .get_mut(&index)
@@ -84,7 +84,7 @@ impl<C: EntityComponent> IndexMut<Entity> for ComponentStorage<C> {
     }
 }
 
-impl<C: EntityComponent> Index<Entity> for ComponentStorage<C> {
+impl<C: EntityComponent> Index<Entity> for EntityComponentStorage<C> {
     type Output = C;
     fn index(&self, index: Entity) -> &Self::Output {
         &self.map[&index]
@@ -110,30 +110,30 @@ impl std::fmt::Debug for EntityComponents {
 impl EntityComponents {
     /// Returns a shared reference to the typed storage bucket for `C`,
     /// or `None` if no component of that type has ever been inserted.
-    fn typed<C: EntityComponent>(&self) -> Option<&ComponentStorage<C>> {
+    fn typed<C: EntityComponent>(&self) -> Option<&EntityComponentStorage<C>> {
         self.storages
             .get(&TypeId::of::<C>())
-            .and_then(|b| b.as_any().downcast_ref::<ComponentStorage<C>>())
+            .and_then(|b| b.as_any().downcast_ref::<EntityComponentStorage<C>>())
     }
 
     /// Returns a mutable reference to the typed storage bucket for `C`,
     /// creating an empty one if it does not yet exist.
-    fn typed_mut<C: EntityComponent>(&mut self) -> Option<&mut ComponentStorage<C>> {
+    fn typed_mut<C: EntityComponent>(&mut self) -> Option<&mut EntityComponentStorage<C>> {
         self.storages
             .get_mut(&TypeId::of::<C>())
-            .and_then(|b| b.as_any_mut().downcast_mut::<ComponentStorage<C>>())
+            .and_then(|b| b.as_any_mut().downcast_mut::<EntityComponentStorage<C>>())
     }
 
     pub fn insert<C: EntityComponent>(&mut self, entity: Entity, component: C) {
         self.storages
             .entry(TypeId::of::<C>())
             .or_insert_with(|| {
-                Box::new(ComponentStorage::<C> {
+                Box::new(EntityComponentStorage::<C> {
                     map: HashMap::new(),
                 })
             })
             .as_any_mut()
-            .downcast_mut::<ComponentStorage<C>>()
+            .downcast_mut::<EntityComponentStorage<C>>()
             .expect("we just inserted exactly this type")
             .insert(entity, component);
     }
