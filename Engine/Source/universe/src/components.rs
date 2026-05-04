@@ -6,21 +6,6 @@ use std::{
     fmt::Debug,
 };
 
-/// A dyn-compatible wrapper around Component, used wherever
-/// type-erased component values must be passed around at runtime.
-#[doc(hidden)]
-pub trait AnyComponent: Any + Debug + 'static {
-    /// Converts the box into `Box<dyn Any>` so it can be downcast.
-    fn as_any_box(self: Box<Self>) -> Box<dyn Any>;
-}
-
-// Blanket impl: every concrete Component automatically becomes an AnyComponent.
-impl<T: Component> AnyComponent for T {
-    fn as_any_box(self: Box<Self>) -> Box<dyn Any> {
-        self
-    }
-}
-
 /// Base marker trait for component types.
 pub trait Component: 'static + Sized + Debug + Serialize + DeserializeOwned {}
 #[doc(hidden)]
@@ -35,6 +20,21 @@ pub use macros::WorldComponent;
 pub trait EntityComponent: Component {}
 #[doc(hidden)]
 pub use macros::EntityComponent;
+
+/// A dyn-compatible wrapper around Component, used wherever
+/// type-erased component values must be passed around at runtime.
+#[doc(hidden)]
+pub trait AnyComponent: Any + Debug + 'static {
+    /// Converts the box into `Box<dyn Any>` so it can be downcast.
+    fn as_any_box(self: Box<Self>) -> Box<dyn Any>;
+}
+
+// Blanket impl: every concrete Component automatically becomes an AnyComponent.
+impl<T: Component> AnyComponent for T {
+    fn as_any_box(self: Box<Self>) -> Box<dyn Any> {
+        self
+    }
+}
 
 /// Type-erased storage for a single component type.
 ///
