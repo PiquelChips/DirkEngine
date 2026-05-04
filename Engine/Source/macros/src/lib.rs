@@ -2,9 +2,10 @@
 
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use syn::{Data, DeriveInput, Ident, parse_macro_input};
+use syn::{Data, DeriveInput, Ident, ItemTrait, parse_macro_input};
 
 mod event;
+mod universe;
 
 /// Derive the `Event` trait for a `struct` or `enum`.
 ///
@@ -128,4 +129,12 @@ pub(crate) fn empty_derive(input: TokenStream, trait_ident: &Ident) -> TokenStre
         impl #impl_generics #trait_ident for #name #ty_generics #where_clause {}
     }
     .into()
+}
+
+#[proc_macro_attribute]
+pub fn system(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as ItemTrait);
+    universe::generate_system_code(input)
+        .unwrap_or_else(|e| e.to_compile_error())
+        .into()
 }
