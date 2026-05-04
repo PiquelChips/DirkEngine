@@ -9,23 +9,20 @@ pub trait System: Clone {
     fn name() -> String;
 }
 
-/// A system that is run for the entire universe on every tick.
+/// A system that is run by the [`Universe`].
 pub trait UniverseSystem: System {
+    /// Called right after the world is created.
+    fn world_created(&self, world: &World);
+    /// Called as the world is being destroyed.
+    /// In this state, the world is still valid
+    /// and no entities have been removed.
+    fn world_destroyed(&self, world: &World);
     /// This function will be called by the universe on every tick.
     fn tick(&self, delta_time: f32, universe: &Universe);
 }
 
-/// A system that is run for the entire world.
-///
-/// Each of the methods are optional.
+/// A system that is run for the entire [`World`].
 pub trait WorldSystem: System {
-    /// Called right after the world is created.
-    fn created(&self, world: &World);
-    /// Called as the world is being destroyed.
-    /// In this state, the world is still valid
-    /// and no entities have been removed.
-    fn destroyed(&self, world: &World);
-
     /// Called on world tick
     fn tick(&self, world: &World, delta_time: f32);
 
