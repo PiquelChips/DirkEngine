@@ -89,13 +89,13 @@ macro_rules! component_system {
 
                 fn added(&self, obj: $kind, component: Box<dyn AnyComponent>) {
                     if let Ok(mut component) = component.as_any_box().downcast::<T::Component>() {
-                        [<$kind ComponentSystem>]::added(self, obj, &mut component);
+                        T::added(self, obj, &mut component);
                     }
                 }
 
                 fn removed(&self, obj: $kind, component: Box<dyn AnyComponent>) {
                     if let Ok(mut component) = component.as_any_box().downcast::<T::Component>() {
-                        [<$kind ComponentSystem>]::removed(self, obj, &mut component);
+                        T::removed(self, obj, &mut component);
                     }
                 }
             }
