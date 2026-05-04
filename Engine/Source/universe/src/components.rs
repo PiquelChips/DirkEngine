@@ -4,6 +4,7 @@ use std::{
     any::{Any, TypeId},
     collections::HashMap,
     fmt::Debug,
+    ops::{Index, IndexMut},
 };
 
 /// Base marker trait for component types.
@@ -60,6 +61,21 @@ impl<C: EntityComponent> AnyStorage for TypedStorage<C> {
     }
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
+    }
+}
+
+impl<C: EntityComponent> IndexMut<Entity> for TypedStorage<C> {
+    fn index_mut(&mut self, index: Entity) -> &mut Self::Output {
+        self.map
+            .get_mut(&index)
+            .expect("entity should have component if indexing")
+    }
+}
+
+impl<C: EntityComponent> Index<Entity> for TypedStorage<C> {
+    type Output = C;
+    fn index(&self, index: Entity) -> &Self::Output {
+        &self.map[&index]
     }
 }
 
