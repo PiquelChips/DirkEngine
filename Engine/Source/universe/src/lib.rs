@@ -4,7 +4,10 @@
 
 use std::{any::TypeId, collections::HashMap};
 
-use crate::components::{AnyComponent, EntityComponents};
+use crate::{
+    components::{AnyComponent, EntityComponents},
+    systems::{UniverseSystem, UniverseSystemHandle, UniverseSystemStorage},
+};
 
 pub mod components;
 pub mod query;
@@ -20,6 +23,8 @@ pub type WorldId = u32;
 pub struct Universe {
     worlds: HashMap<WorldId, World>,
     next_id: WorldId,
+
+    universe_systems: UniverseSystemStorage,
 }
 
 impl Universe {
@@ -45,6 +50,20 @@ impl Universe {
     pub fn destroy_world(&mut self, world: WorldId) {
         let _world = self.worlds.remove(&world);
         todo!("call all the world destruction systems")
+    }
+
+    /// This adds a [`UniverseSystem`] that will be executed by the [`Universe`].
+    pub fn register_universe_system<S: UniverseSystem>(
+        &mut self,
+        system: S,
+    ) -> UniverseSystemHandle {
+        self.universe_systems.insert::<S>(system)
+    }
+
+    /// Removes the [`UniverseSystem`] from global store from its
+    /// [`UniverseSystemHandle`].
+    pub fn unregister_universe_system(&mut self, handle: UniverseSystemHandle) {
+        self.universe_systems.remove(handle);
     }
 }
 
