@@ -69,10 +69,6 @@ macro_rules! component_system {
                 /// `entity`: the entity with this component.
                 fn added(&self, [<$kind:snake>]: $kind, component: &mut Self::Component);
 
-                /// When a component is updated.
-                /// `entity`: the entity with this component.
-                fn updated(&self, [<$kind:snake>]: $kind, component: &mut Self::Component);
-
                 /// When a component is removed.
                 /// `entity`: the entity with this component.
                 fn removed(&self, [<$kind:snake>]: $kind, component: &mut Self::Component);
@@ -81,7 +77,6 @@ macro_rules! component_system {
             /// Private type-erasure trait for storage in [`World`] & [`Universe`]
             pub(crate) trait [<Any $kind ComponentSystem>] {
                 fn type_id(&self) -> TypeId;
-                // Uses Box<dyn AnyComponent> — dyn-compatible and downcasting-capable
                 fn added(&self, [<$kind:snake>]: $kind, component: Box<dyn AnyComponent>);
                 fn removed(&self, [<$kind:snake>]: $kind, component: Box<dyn AnyComponent>);
             }
