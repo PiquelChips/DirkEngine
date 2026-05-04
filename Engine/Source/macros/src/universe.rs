@@ -22,6 +22,7 @@ pub fn generate_system_code(trait_def: ItemTrait) -> syn::Result<TokenStream> {
         .collect();
 
     let any_sigs = fns.iter().map(|m| {
+        // TODO: if function has `#[system_ignore]` attirbute, skip
         let s = &m.sig;
         quote!(#s;)
     });

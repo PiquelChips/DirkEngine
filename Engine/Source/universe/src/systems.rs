@@ -2,6 +2,7 @@
 use std::any::TypeId;
 
 use crate::{Entity, Universe, World, components::AnyComponent, query::Query};
+use macros::system;
 
 /// All systems must implement this trait.
 pub trait System: Clone {
@@ -10,6 +11,7 @@ pub trait System: Clone {
 }
 
 /// A system that is run by the [`Universe`].
+#[system]
 pub trait UniverseSystem: System {
     /// Called right after the world is created.
     fn world_created(&self, world: &World);
@@ -22,6 +24,7 @@ pub trait UniverseSystem: System {
 }
 
 /// A system that is run for the entire [`World`].
+#[system]
 pub trait WorldSystem: System {
     /// Called on world tick
     fn tick(&self, world: &World, delta_time: f32);
@@ -40,6 +43,7 @@ pub trait WorldSystem: System {
 }
 
 /// Run on a specific World for components that match the query
+#[system]
 pub trait TickingSystem: System {
     /// `world`: the current world we are ticking. This system would tick multiple
     /// time per frame, just on multiple different worlds.
@@ -47,9 +51,11 @@ pub trait TickingSystem: System {
     /// by [`TickingSystem::query`].
     fn tick(&self, deta_time: f32, world: &World, entities: Vec<Entity>);
     /// Returns the query used to construct the `entities` of the tick function.
+    #[system_ignore]
     fn query() -> Query;
 
     #[doc(hidden)]
+    #[system_ignore]
     fn tick_outer(&self, delta_time: f32, world: &World) {
         /*
         let entities = world.query(self.query);
