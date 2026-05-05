@@ -43,7 +43,7 @@ impl World {
     pub fn despawn(&mut self, entity: Entity) {
         self.alive.retain(|&e| e != entity);
         // TODO: call all related systems
-        self.entity_components.remove_all(entity);
+        self.components.remove_all(entity);
         todo!("call all related systems")
     }
 
