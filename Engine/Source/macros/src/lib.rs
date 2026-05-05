@@ -88,38 +88,6 @@ pub fn derive_component(input: TokenStream) -> TokenStream {
     empty_derive(input, &format_ident!("Component"))
 }
 
-/// Derive the `EntityComponent` marker trait for any type.
-///
-/// This is a zero-boilerplate derive that simply emits an empty `impl EntityComponent
-/// for …` block, respecting any generics on the type:
-///
-/// ```rust
-/// # trait EntityComponent {}
-/// # use macros::EntityComponent;
-/// #[derive(EntityComponent, Clone)]
-/// struct Transform { position: (i32, i32) }
-/// ```
-#[proc_macro_derive(EntityComponent)]
-pub fn derive_entity_component(input: TokenStream) -> TokenStream {
-    empty_derive(input, &format_ident!("EntityComponent"))
-}
-
-/// Derive the `WorldComponent` marker trait for any type.
-///
-/// This is a zero-boilerplate derive that simply emits an empty `impl Component
-/// for …` block, respecting any generics on the type:
-///
-/// ```rust
-/// # trait WorldComponent {}
-/// # use macros::WorldComponent;
-/// #[derive(WorldComponent, Clone)]
-/// struct Transform { position: (i32, i32) }
-/// ```
-#[proc_macro_derive(WorldComponent)]
-pub fn derive_world_component(input: TokenStream) -> TokenStream {
-    empty_derive(input, &format_ident!("WorldComponent"))
-}
-
 pub(crate) fn empty_derive(input: TokenStream, trait_ident: &Ident) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = input.ident;
