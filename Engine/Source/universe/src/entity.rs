@@ -4,7 +4,7 @@
 
 use std::ops::{Add, AddAssign};
 
-use crate::components::EntityComponent;
+use crate::components::Component;
 
 /// A unique, opaque identifier for a spawned entity.
 #[derive(Clone, Copy, Debug, Default, Hash, Eq, PartialEq)]
@@ -42,7 +42,7 @@ impl EntityBuilder {
     }
 
     #[must_use]
-    pub fn with_component<C: EntityComponent>(self, component: C) -> Self {
+    pub fn with_component<C: Component>(self, component: C) -> Self {
         todo!("EntityBuilder::with_component")
     }
 }

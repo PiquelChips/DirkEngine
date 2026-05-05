@@ -2,7 +2,7 @@ use std::{any::TypeId, collections::HashMap};
 
 use crate::{
     Entity, EntityBuilder,
-    components::{AnyComponent, EntityComponent, EntityComponents, WorldComponent},
+    components::{AnyComponent, Component, Components},
     query::Query,
 };
 
@@ -15,11 +15,7 @@ pub struct World {
     id: WorldId,
     next_id: Entity,
     alive: Vec<Entity>,
-    entity_components: EntityComponents,
-    /// These should only be [`components::WorldComponent`]. This is
-    /// guaranteed by the [`World`] API. Please make sure to add these
-    /// properly internally.
-    components: HashMap<TypeId, Box<dyn AnyComponent>>,
+    components: Components,
 }
 
 impl World {
@@ -33,7 +29,7 @@ impl World {
         todo!("call all the world systems for destruction")
     }
 
-    // entity management
+    // ENTITY MANAGEMENT
 
     /// Will spawn a new [`Entity`] using the provided [`EntityBuilder`].
     /// Returns the handle of the new [`Entity`].
@@ -74,35 +70,35 @@ impl World {
         self.alive.contains(&entity)
     }
 
-    // components
+    // COMPONENTS
 
     /// Attaches an [`EntityComponent`]` to [`Entity`], replacing any existing component of
     /// the same type.
-    pub fn insert<C: EntityComponent>(&mut self, entity: Entity, component: C) {
+    pub fn insert<C: Component>(&mut self, entity: Entity, component: C) {
         // TODO: check if entity is alive, if not ignore
-        self.entity_components.insert(entity, component);
+        self.components.insert(entity, component);
         todo!("call all related systems")
     }
 
     /// Returns a shared reference to a component, or `None` if the entity
     /// does not have one.
     #[must_use]
-    pub fn get<C: EntityComponent>(&self, entity: Entity) -> Option<&C> {
-        self.entity_components.get(entity)
+    pub fn get<C: Component>(&self, entity: Entity) -> Option<&C> {
+        self.components.get(entity)
     }
 
     /// Returns a mutable reference to a component, or `None` if the entity
     /// does not have one.
-    pub fn get_mut<C: EntityComponent>(&mut self, entity: Entity) -> Option<&mut C> {
-        self.entity_components.get_mut(entity)
+    pub fn get_mut<C: Component>(&mut self, entity: Entity) -> Option<&mut C> {
+        self.components.get_mut(entity)
     }
 
     /// Removes a single component from an entity.
     ///
     /// The entity itself is **not** despawned. If the component is not
     /// present this is a no-op.
-    pub fn remove<C: EntityComponent>(&mut self, entity: Entity) {
-        self.entity_components.remove::<C>(entity);
+    pub fn remove<C: Component>(&mut self, entity: Entity) {
+        self.components.remove::<C>(entity);
         todo!("call all related systems");
     }
 }
@@ -115,11 +111,6 @@ impl WorldBuilder {
     #[must_use]
     fn new() -> Self {
         Self::default()
-    }
-
-    #[must_use]
-    pub fn with_component<C: WorldComponent>(self, component: C) -> Self {
-        todo!("WorldBuilder::with_component")
     }
 
     #[must_use]
