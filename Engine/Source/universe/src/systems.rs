@@ -80,13 +80,13 @@ pub trait ComponentSystem: System {
 
 /// Private type-erasure trait for storage in [`Entity`] & [`Universe`]
 pub(crate) trait AnyComponentSystem {
-    fn type_id() -> TypeId;
+    fn type_id(&self) -> TypeId;
     fn added(&self, entity: Entity, component: Box<dyn AnyComponent>);
     fn removed(&self, entity: Entity, component: Box<dyn AnyComponent>);
 }
 
 impl<T: ComponentSystem> AnyComponentSystem for T {
-    fn type_id() -> TypeId {
+    fn type_id(&self) -> TypeId {
         TypeId::of::<T::Component>()
     }
 
@@ -103,4 +103,23 @@ impl<T: ComponentSystem> AnyComponentSystem for T {
     }
 }
 
-// TODO: EntityComponentSystemStorage
+#[derive(Default)]
+pub(crate) struct ComponentSystemStorage {
+    systems: HashMap<TypeId, Vec<Box<dyn AnyComponentSystem>>>,
+}
+
+impl ComponentSystemStorage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn add<S: ComponentSystem>(&mut self, system: S) {
+        let systems = self
+            .systems
+            .entry(system.type_id())
+            .or_insert_with(Vec::new);
+
+        systems.push(Box::new(system));
+    }
+}
