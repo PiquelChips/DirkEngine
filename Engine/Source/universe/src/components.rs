@@ -3,7 +3,7 @@
 //!
 //! Implement the [`WorldComponent`] or [`EntityComponent`] traits to get
 //! started (you can do this via a derive macro).
-use crate::Entity;
+use crate::{Entity, systems::AnyComponentSystem};
 use serde::{Serialize, de::DeserializeOwned};
 use std::{
     any::{Any, TypeId},
@@ -45,6 +45,14 @@ trait AnyStorage {
 
 struct ComponentStorage<C: Component> {
     map: HashMap<Entity, C>,
+}
+
+impl<C: Component> Default for ComponentStorage<C> {
+    fn default() -> Self {
+        Self {
+            map: HashMap::new(),
+        }
+    }
 }
 
 impl<C: Component> ComponentStorage<C> {
@@ -122,11 +130,7 @@ impl Components {
     pub fn insert<C: Component>(&mut self, entity: Entity, component: C) {
         self.storages
             .entry(TypeId::of::<C>())
-            .or_insert_with(|| {
-                Box::new(ComponentStorage::<C> {
-                    map: HashMap::new(),
-                })
-            })
+            .or_insert_with(|| Box::new(ComponentStorage::<C>::default()))
             .as_any_mut()
             .downcast_mut::<ComponentStorage<C>>()
             .expect("we just inserted exactly this type")
