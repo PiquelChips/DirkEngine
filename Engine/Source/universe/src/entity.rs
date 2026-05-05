@@ -2,9 +2,13 @@
 //! Entities are just simple handles.
 //! You can spawn them by creating an entity builder
 
-use std::ops::{Add, AddAssign};
+use std::{
+    any::TypeId,
+    collections::HashMap,
+    ops::{Add, AddAssign},
+};
 
-use crate::components::Component;
+use crate::components::{AnyComponent, Component};
 
 /// A unique, opaque identifier for a spawned entity.
 #[derive(Clone, Copy, Debug, Default, Hash, Eq, PartialEq)]
@@ -33,7 +37,9 @@ impl AddAssign<u32> for Entity {
 
 /// A builder struct to create a new entity. Allows adding of components.
 #[derive(Default)]
-pub struct EntityBuilder {}
+pub struct EntityBuilder {
+    components: HashMap<TypeId, Box<dyn AnyComponent>>,
+}
 
 impl EntityBuilder {
     #[must_use]
@@ -41,8 +47,11 @@ impl EntityBuilder {
         Self::default()
     }
 
+    /// Adds a [`Component`] to this entity.
     #[must_use]
-    pub fn with_component<C: Component>(self, component: C) -> Self {
-        todo!("EntityBuilder::with_component")
+    pub fn with_component<C: Component>(mut self, component: C) -> Self {
+        self.components
+            .insert(TypeId::of::<C>(), Box::new(component));
+        self
     }
 }
