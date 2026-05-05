@@ -9,11 +9,12 @@ use crate::systems::{UniverseSystem, UniverseSystemHandle, UniverseSystemStorage
 pub mod components;
 pub mod query;
 pub mod systems;
+
 mod world;
 pub use world::{World, WorldId};
 
-/// A unique, opaque identifier for a spawned entity.
-pub type Entity = u32;
+mod entity;
+pub use entity::Entity;
 
 /// This struct is the manager for all the worlds.
 #[derive(Default)]
