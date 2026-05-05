@@ -6,6 +6,7 @@ use std::{any::TypeId, collections::HashMap};
 
 use crate::{
     components::{AnyComponent, EntityComponents},
+    query::Query,
     systems::{UniverseSystem, UniverseSystemHandle, UniverseSystemStorage},
 };
 
@@ -91,5 +92,9 @@ impl World {
     /// Calls all the destruction [`System`]s on the world
     fn destroy(&mut self) {
         todo!("call all the world systems for destruction")
+    }
+
+    fn query(&self, query: &Query) -> Vec<Entity> {
+        todo!("Query for entities")
     }
 }
