@@ -41,9 +41,12 @@ impl World {
         todo!("Query for entities")
     }
 
+    /// Will spawn a new [`Entity`] using the provided [`EntityBuilder`].
+    /// Returns the handle of the new [`Entity`].
     pub fn spawn(&mut self, builder: &EntityBuilder) -> Entity {
         todo!("spawn new entity")
     }
+    /// Will despawn the provided [`Entity`].
     pub fn despawn(&mut self, entity: Entity) {
         todo!("despawn entity")
     }
