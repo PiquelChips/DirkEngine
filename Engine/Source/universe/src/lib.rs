@@ -31,6 +31,7 @@ pub struct Universe {
 }
 
 impl Universe {
+    /// Returns a [`UniverseBuilder`] to easily construct a [`Universe`].
     #[must_use]
     pub fn builder() -> UniverseBuilder {
         UniverseBuilder::new()

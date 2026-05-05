@@ -23,6 +23,7 @@ pub struct World {
 }
 
 impl World {
+    /// Returns a [`WorldBuilder`] to easily construct a [`World`].
     #[must_use]
     pub fn builder() -> WorldBuilder {
         WorldBuilder::new()
@@ -106,6 +107,7 @@ impl World {
     }
 }
 
+/// Builder struct for [`World`].
 #[derive(Default)]
 pub struct WorldBuilder {}
 
