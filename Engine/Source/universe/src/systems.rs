@@ -9,7 +9,7 @@ use crate::{
 use macros::system;
 
 /// All systems must implement this trait.
-pub trait System: Clone {
+pub trait System: Clone + 'static {
     /// Get a name for the system. For debug purposes only.
     fn name() -> String;
 }
