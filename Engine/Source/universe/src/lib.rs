@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 
-use crate::systems::{UniverseSystem, UniverseSystemHandle, UniverseSystemStorage};
+use crate::systems::{TickingSystemStorage, UniverseSystemStorage, WorldSystemStorage};
 
 pub mod components;
 pub mod query;
@@ -25,6 +25,10 @@ pub struct Universe {
     // this field starts with `universe`
     #[allow(clippy::struct_field_names)]
     universe_systems: UniverseSystemStorage,
+    ticking_systems: TickingSystemStorage,
+    world_systems: WorldSystemStorage,
+    // TODO: component system storage
+    // component_systems: ComponentSystemStorage,
 }
 
 impl Universe {
@@ -53,19 +57,5 @@ impl Universe {
     pub fn destroy_world(&mut self, world: WorldId) {
         let _world = self.worlds.remove(&world);
         todo!("call all the world destruction systems")
-    }
-
-    /// This adds a [`UniverseSystem`] that will be executed by the [`Universe`].
-    pub fn register_universe_system<S: UniverseSystem>(
-        &mut self,
-        system: S,
-    ) -> UniverseSystemHandle {
-        self.universe_systems.insert::<S>(system)
-    }
-
-    /// Removes the [`UniverseSystem`] from global store from its
-    /// [`UniverseSystemHandle`].
-    pub fn unregister_universe_system(&mut self, handle: UniverseSystemHandle) {
-        self.universe_systems.remove(handle);
     }
 }
