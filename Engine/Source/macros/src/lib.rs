@@ -137,7 +137,7 @@ pub(crate) fn empty_derive(input: TokenStream, trait_ident: &Ident) -> TokenStre
 /// creating a storage struct for the Trait.
 pub fn system(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as ItemTrait);
-    universe::generate_system_code(input)
+    universe::generate_system_code(&input)
         .unwrap_or_else(|e| e.to_compile_error())
         .into()
 }

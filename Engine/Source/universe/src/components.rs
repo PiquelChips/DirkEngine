@@ -58,11 +58,11 @@ struct EntityComponentStorage<C: EntityComponent> {
 }
 
 impl<C: EntityComponent> EntityComponentStorage<C> {
-    fn get(&self, entity: &Entity) -> Option<&C> {
-        self.map.get(entity)
+    fn get(&self, entity: Entity) -> Option<&C> {
+        self.map.get(&entity)
     }
-    fn get_mut(&mut self, entity: &Entity) -> Option<&mut C> {
-        self.map.get_mut(entity)
+    fn get_mut(&mut self, entity: Entity) -> Option<&mut C> {
+        self.map.get_mut(&entity)
     }
     fn insert(&mut self, entity: Entity, component: C) -> Option<C> {
         self.map.insert(entity, component)
@@ -144,11 +144,11 @@ impl EntityComponents {
     }
 
     pub fn get<C: EntityComponent>(&self, entity: Entity) -> Option<&C> {
-        self.typed::<C>()?.get(&entity)
+        self.typed::<C>()?.get(entity)
     }
 
     pub fn get_mut<C: EntityComponent>(&mut self, entity: Entity) -> Option<&mut C> {
-        self.typed_mut::<C>()?.get_mut(&entity)
+        self.typed_mut::<C>()?.get_mut(entity)
     }
 
     pub fn remove<C: EntityComponent>(&mut self, entity: Entity) {

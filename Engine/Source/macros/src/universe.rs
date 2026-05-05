@@ -2,7 +2,7 @@ use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use syn::{FnArg, ItemTrait, Pat, TraitItem, TypeParamBound};
 
-pub fn generate_system_code(trait_def: ItemTrait) -> syn::Result<TokenStream> {
+pub fn generate_system_code(trait_def: &ItemTrait) -> syn::Result<TokenStream> {
     if !trait_def.supertraits.iter().any(|s| match s {
         TypeParamBound::Trait(t) => t.path.is_ident("System"),
         _ => false,

@@ -25,20 +25,25 @@ pub struct Universe {
     worlds: HashMap<WorldId, World>,
     next_id: WorldId,
 
+    // this field starts with `universe`
+    #[allow(clippy::struct_field_names)]
     universe_systems: UniverseSystemStorage,
 }
 
 impl Universe {
     /// Creates a new empty [`Universe`].
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Returns an optional reference to the requested [`World`].
+    #[must_use]
     pub fn get_world(&self, world: WorldId) -> Option<&World> {
         self.worlds.get(&world)
     }
     /// Returns an optional mutable reference to the requested [`World`].
+    #[must_use]
     pub fn get_world_mut(&mut self, world: WorldId) -> Option<&mut World> {
         self.worlds.get_mut(&world)
     }
@@ -83,6 +88,7 @@ pub struct World {
 
 impl World {
     /// Creates a new empty world with the specified ID.
+    #[must_use]
     fn new(id: WorldId) -> Self {
         Self {
             id,
@@ -94,6 +100,7 @@ impl World {
         todo!("call all the world systems for destruction")
     }
 
+    #[must_use]
     fn query(&self, query: &Query) -> Vec<Entity> {
         todo!("Query for entities")
     }

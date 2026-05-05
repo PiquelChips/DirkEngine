@@ -12,18 +12,22 @@ pub struct Query {
 
 impl Query {
     /// Add an AND condition for the component type
+    #[must_use]
     pub fn with_component<C: Component>(self) -> Self {
         todo!("add component to query")
     }
     /// Add an AND NOT condition for the specified component type
+    #[must_use]
     pub fn without_component<C: Component>(self) -> Self {
         todo!("remove component from query")
     }
     /// Will actually run the [`Query`] against a world.
+    #[must_use]
     pub(crate) fn query(&self, world: &World) -> Vec<Entity> {
         todo!("actually query the entities")
     }
     /// Returns if the [`Entity`] from the [`World`] matches the [`Query`].
+    #[must_use]
     pub(crate) fn matches(&self, world: &World, entity: Entity) -> bool {
         todo!("see if the entity matches the query")
     }
