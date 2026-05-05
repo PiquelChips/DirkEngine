@@ -49,19 +49,16 @@ pub trait TickingSystem: System {
     /// time per frame, just on multiple different worlds.
     /// `entities`: the list of entities that were returned by the query returned
     /// by [`TickingSystem::query`].
-    fn tick(&self, deta_time: f32, world: &World, entities: Vec<Entity>);
+    fn tick(&self, delta_time: f32, world: &World, entities: Vec<Entity>);
     /// Returns the query used to construct the `entities` of the tick function.
-    #[system_ignore]
-    fn query() -> Query;
+    fn query(&self) -> Query;
 
-    #[doc(hidden)]
-    #[system_ignore]
-    fn tick_outer(&self, delta_time: f32, world: &World) {
-        /*
-        let entities = world.query(self.query);
-        self.tick(deta_time, world, entities);
-        */
-        todo!("implement TickingSystem::tick_outer")
+    /// This is an outer tick function that should actually be called.
+    /// [`TickingSystem::tick`] should only be implemented, never called.
+    ///
+    /// This function should not be implemented by users.
+    fn outer_tick(&self, delta_time: f32, world: &World) {
+        self.tick(delta_time, world, world.query(&self.query()));
     }
 }
 

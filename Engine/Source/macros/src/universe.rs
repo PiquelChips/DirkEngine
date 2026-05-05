@@ -8,7 +8,6 @@ pub fn generate_system_code(trait_def: ItemTrait) -> syn::Result<TokenStream> {
     let storage = format_ident!("{trait_name}Storage");
     let handle = format_ident!("{trait_name}Handle");
 
-    // Split methods by whether they have a `&self` receiver.
     let fns: Vec<_> = trait_def
         .items
         .iter()
@@ -22,7 +21,6 @@ pub fn generate_system_code(trait_def: ItemTrait) -> syn::Result<TokenStream> {
         .collect();
 
     let any_sigs = fns.iter().map(|m| {
-        // TODO: if function has `#[system_ignore]` attirbute, skip
         let s = &m.sig;
         quote!(#s;)
     });
