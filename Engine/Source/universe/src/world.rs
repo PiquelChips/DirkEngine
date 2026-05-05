@@ -25,19 +25,19 @@ pub struct World {
 impl World {
     /// Creates a new empty world with the specified ID.
     #[must_use]
-    fn new(id: WorldId) -> Self {
+    pub(crate) fn new(id: WorldId) -> Self {
         Self {
             id,
             ..Self::default()
         }
     }
     /// Calls all the destruction [`System`]s on the world
-    fn destroy(&mut self) {
+    pub(crate) fn destroy(&mut self) {
         todo!("call all the world systems for destruction")
     }
 
     #[must_use]
-    fn query(&self, query: &Query) -> Vec<Entity> {
+    pub(crate) fn query(&self, query: &Query) -> Vec<Entity> {
         todo!("Query for entities")
     }
 }
