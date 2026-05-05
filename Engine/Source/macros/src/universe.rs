@@ -1,8 +1,18 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
-use syn::{FnArg, ItemTrait, Pat, TraitItem};
+use syn::{FnArg, ItemTrait, Pat, TraitItem, TypeParamBound};
 
 pub fn generate_system_code(trait_def: ItemTrait) -> syn::Result<TokenStream> {
+    if !trait_def.supertraits.iter().any(|s| match s {
+        TypeParamBound::Trait(t) => t.path.is_ident("System"),
+        _ => false,
+    }) {
+        return Err(syn::Error::new(
+            trait_def.ident.span(),
+            "this trait must have the `System` trait in its param bounds",
+        ));
+    }
+
     let trait_name = &trait_def.ident;
     let any_name = format_ident!("Any{trait_name}");
     let storage = format_ident!("{trait_name}Storage");
