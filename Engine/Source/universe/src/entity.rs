@@ -8,6 +8,7 @@ pub struct Entity(pub(crate) u32);
 
 impl Entity {
     /// Returns an empty [`EntityBuilder`].
+    #[must_use]
     pub fn builder() -> EntityBuilder {
         EntityBuilder::new()
     }
@@ -15,7 +16,7 @@ impl Entity {
 
 /// A builder struct to create a new entity. Allows adding of components.
 #[derive(Default)]
-pub struct EntityBuilder;
+pub struct EntityBuilder {}
 
 impl EntityBuilder {
     fn new() -> Self {
