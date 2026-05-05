@@ -11,13 +11,12 @@ pub mod query;
 pub mod systems;
 
 mod world;
-pub use world::{World, WorldId};
+pub use world::{World, WorldBuilder, WorldId};
 
 mod entity;
 pub use entity::{Entity, EntityBuilder};
 
 /// This struct is the manager for all the worlds.
-#[derive(Default)]
 pub struct Universe {
     worlds: HashMap<WorldId, World>,
     next_id: WorldId,
@@ -32,12 +31,10 @@ pub struct Universe {
 }
 
 impl Universe {
-    /// Creates a new empty [`Universe`].
     #[must_use]
-    pub fn new() -> Self {
-        Self::default()
+    pub fn builder() -> UniverseBuilder {
+        UniverseBuilder::new()
     }
-
     /// Returns an optional reference to the requested [`World`].
     #[must_use]
     pub fn get_world(&self, world: WorldId) -> Option<&World> {
@@ -57,5 +54,19 @@ impl Universe {
     pub fn destroy_world(&mut self, world: WorldId) {
         let _world = self.worlds.remove(&world);
         todo!("call all the world destruction systems")
+    }
+}
+
+#[derive(Default)]
+pub struct UniverseBuilder {}
+
+impl UniverseBuilder {
+    #[must_use]
+    fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_world(self, builder: WorldBuilder) -> Self {
+        todo!("UniverseBuilder::with_world")
     }
 }

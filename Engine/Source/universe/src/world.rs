@@ -2,7 +2,7 @@ use std::{any::TypeId, collections::HashMap};
 
 use crate::{
     Entity, EntityBuilder,
-    components::{AnyComponent, EntityComponent, EntityComponents},
+    components::{AnyComponent, EntityComponent, EntityComponents, WorldComponent},
     query::Query,
 };
 
@@ -23,13 +23,9 @@ pub struct World {
 }
 
 impl World {
-    /// Creates a new empty world with the specified ID.
     #[must_use]
-    pub(crate) fn new(id: WorldId) -> Self {
-        Self {
-            id,
-            ..Self::default()
-        }
+    pub fn builder() -> WorldBuilder {
+        WorldBuilder::new()
     }
     /// Calls all the destruction [`System`]s on the world
     pub(crate) fn destroy(&mut self) {
@@ -107,5 +103,25 @@ impl World {
     pub fn remove<C: EntityComponent>(&mut self, entity: Entity) {
         self.entity_components.remove::<C>(entity);
         todo!("call all related systems");
+    }
+}
+
+#[derive(Default)]
+pub struct WorldBuilder {}
+
+impl WorldBuilder {
+    #[must_use]
+    fn new() -> Self {
+        Self::default()
+    }
+
+    #[must_use]
+    pub fn with_component<C: WorldComponent>(self, component: C) -> Self {
+        todo!("WorldBuilder::with_component")
+    }
+
+    #[must_use]
+    pub fn with_entity(self, entity: EntityBuilder) -> Self {
+        todo!("WorldBuilder::with_entity")
     }
 }
