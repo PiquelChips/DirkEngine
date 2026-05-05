@@ -2,7 +2,7 @@ use std::{any::TypeId, collections::HashMap};
 
 use crate::{
     Entity, EntityBuilder,
-    components::{AnyComponent, Component, Components},
+    components::{Component, Components},
     query::Query,
 };
 

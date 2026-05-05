@@ -1,5 +1,5 @@
 //! This crate has all the traits for the ECS [`System`]s.
-use std::any::TypeId;
+use std::{any::TypeId, collections::HashMap};
 
 use crate::{
     Entity, Universe, World,
@@ -33,17 +33,12 @@ pub trait WorldSystem: System {
     /// Called on world tick
     fn tick(&self, world: &World, delta_time: f32);
 
-    /// Called when an entity is spawned, with all
-    /// the components it spawns with.
-    fn entity_spawned(&self, world: &World, entity: Entity, components: Vec<Box<dyn AnyComponent>>);
-    /// Called when an entity is despawned, with all
-    /// the components it had with it.
-    fn entity_despawned(
-        &self,
-        world: &World,
-        entity: Entity,
-        components: Vec<Box<dyn AnyComponent>>,
-    );
+    /// Called when an entity is spawned. At this point, components have
+    /// already been added. They can thus be queried for.
+    fn entity_spawned(&self, world: &World, entity: Entity);
+    /// Called when an entity is despawned. At this point, components have
+    /// not yet been removed. They can thus be queried for.
+    fn entity_despawned(&self, world: &World, entity: Entity);
 }
 
 /// Run on a specific World for components that match the query

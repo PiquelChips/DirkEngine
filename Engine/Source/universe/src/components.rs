@@ -20,7 +20,7 @@ pub use macros::Component;
 /// A dyn-compatible wrapper around Component, used wherever
 /// type-erased component values must be passed around at runtime.
 #[doc(hidden)]
-pub trait AnyComponent: Any + Debug + 'static {
+pub(crate) trait AnyComponent: Any + Debug + 'static {
     /// Converts the box into `Box<dyn Any>` so it can be downcast.
     fn as_any_box(self: Box<Self>) -> Box<dyn Any>;
 }
