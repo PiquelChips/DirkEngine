@@ -1,7 +1,7 @@
 use std::{any::TypeId, collections::HashMap};
 
 use crate::{
-    Entity,
+    Entity, EntityBuilder,
     components::{AnyComponent, EntityComponents},
     query::Query,
 };
@@ -39,5 +39,12 @@ impl World {
     #[must_use]
     pub(crate) fn query(&self, query: &Query) -> Vec<Entity> {
         todo!("Query for entities")
+    }
+
+    pub fn spawn(&mut self, builder: &EntityBuilder) -> Entity {
+        todo!("spawn new entity")
+    }
+    pub fn despawn(&mut self, entity: Entity) {
+        todo!("despawn entity")
     }
 }
