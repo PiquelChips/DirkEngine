@@ -63,7 +63,7 @@ pub fn generate_system_code(trait_def: &ItemTrait) -> syn::Result<TokenStream> {
                 self.systems.push(Box::new(system));
             }
 
-            // TODO: looping over all the traits
+            // TODO: looping over all the systems
         }
     })
 }

@@ -37,19 +37,26 @@ impl World {
         let id = self.next_id;
         self.next_id += 1;
         self.alive.push(id);
-        todo!("add entity components & call related systems")
+
+        // TODO: find way to add the components to [`Components`].
+        // TODO: run all corresponding ComponentSystem::added
+
+        // TODO: Run WorldSystem::entity spawned
+
+        todo!("World::spawn")
     }
     /// Will despawn the provided [`Entity`].
     pub fn despawn(&mut self, entity: Entity) {
         self.alive.retain(|&e| e != entity);
-        // TODO: call all related systems
+        // TODO: call WorldComponent::entity_despawned
+        // TODO: for each component call ComponentSystem::removed
         self.components.remove_all(entity);
-        todo!("call all related systems")
+        todo!("World::spawn")
     }
 
     #[must_use]
     pub(crate) fn query(&self, query: &Query) -> Vec<Entity> {
-        todo!("Query for entities")
+        query.query(self)
     }
 
     /// Returns a slice of all currently alive entity IDs in spawn order.
@@ -105,7 +112,9 @@ impl World {
 
 /// Builder struct for [`World`].
 #[derive(Default)]
-pub struct WorldBuilder {}
+pub struct WorldBuilder {
+    entities: Vec<EntityBuilder>,
+}
 
 impl WorldBuilder {
     #[must_use]
@@ -113,8 +122,12 @@ impl WorldBuilder {
         Self::default()
     }
 
+    /// Adds an [`Entity`] that will be spawned on [`World`] creation.
     #[must_use]
-    pub fn with_entity(self, entity: EntityBuilder) -> Self {
-        todo!("WorldBuilder::with_entity")
+    pub fn with_entity(mut self, entity: EntityBuilder) -> Self {
+        self.entities.push(entity);
+        self
     }
+
+    // TODO: handle systems
 }

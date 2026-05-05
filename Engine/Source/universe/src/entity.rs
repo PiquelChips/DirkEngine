@@ -54,4 +54,9 @@ impl EntityBuilder {
             .insert(TypeId::of::<C>(), Box::new(component));
         self
     }
+
+    #[must_use]
+    pub(crate) fn components(&self) -> &HashMap<TypeId, Box<dyn AnyComponent>> {
+        &self.components
+    }
 }
