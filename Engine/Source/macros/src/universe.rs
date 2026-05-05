@@ -67,6 +67,8 @@ pub fn generate_system_code(trait_def: ItemTrait) -> syn::Result<TokenStream> {
 
         #[derive(Clone, Copy)]
         #[doc = concat!("Handle type for [`", stringify!(#trait_name), "`]")]
+        #[doc = "This allows subsystems to have a reference to their systems
+        in case they need to remove them."]
         pub struct #handle(u32);
     })
 }
