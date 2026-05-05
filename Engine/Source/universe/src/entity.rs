@@ -2,6 +2,8 @@
 //! Entities are just simple handles.
 //! You can spawn them by creating an entity builder
 
+use std::ops::{Add, AddAssign};
+
 /// A unique, opaque identifier for a spawned entity.
 #[derive(Clone, Copy, Debug, Default, Hash, Eq, PartialEq)]
 pub struct Entity(pub(crate) u32);
@@ -11,6 +13,19 @@ impl Entity {
     #[must_use]
     pub fn builder() -> EntityBuilder {
         EntityBuilder::new()
+    }
+}
+
+impl Add<u32> for Entity {
+    type Output = Self;
+    fn add(self, rhs: u32) -> Self::Output {
+        Self(self.0 + rhs)
+    }
+}
+
+impl AddAssign<u32> for Entity {
+    fn add_assign(&mut self, rhs: u32) {
+        self.0 += rhs;
     }
 }
 
