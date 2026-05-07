@@ -56,6 +56,8 @@ pub(crate) trait AnyStorage {
     /// The concrete type inside `component` must match the type this storage
     /// was created for; mismatches are silently ignored.
     fn insert(&mut self, entity: Entity, component: Box<dyn AnyComponent>);
+    /// Returns `true` if this storage holds a component for `entity`.
+    fn contains(&self, entity: Entity) -> bool;
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
 }
@@ -102,6 +104,10 @@ impl<C: Component> AnyStorage for ComponentStorage<C> {
                 debug_assert!(false, "insert_any called with wrong component type");
             }
         }
+    }
+
+    fn contains(&self, entity: Entity) -> bool {
+        self.map.contains_key(&entity)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -212,8 +218,15 @@ impl Components {
             .collect()
     }
 
-    pub fn contains<C: Component>(&self, entity: Entity) -> bool {
-        self.typed::<C>()
-            .is_some_and(|s| s.map.contains_key(&entity))
+    /// Check whether `entity` has a component of the given `TypeId`.
+    ///
+    /// Used by [`Query`] so it can work with a plain `Vec<TypeId>` rather
+    /// than monomorphised generics.
+    ///
+    /// [`Query`]: crate::query::Query
+    pub(crate) fn contains(&self, entity: Entity, type_id: TypeId) -> bool {
+        self.storages
+            .get(&type_id)
+            .is_some_and(|s| s.contains(entity))
     }
 }

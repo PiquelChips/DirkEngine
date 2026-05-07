@@ -97,9 +97,14 @@ impl World {
         }
     }
 
+    /// Run `query` against all currently alive entities and return the
+    /// matching subset.
+    ///
+    /// Passing the `alive` slice ensures that entities despawned mid-frame
+    /// (whose component data may linger briefly) are never returned.
     #[must_use]
     pub(crate) fn query(&self, query: &Query) -> Vec<Entity> {
-        query.query(&self.components)
+        query.query(&self.components, &self.alive)
     }
 
     /// Returns a slice of all currently alive entity IDs in spawn order.
