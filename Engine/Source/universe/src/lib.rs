@@ -31,6 +31,7 @@ pub struct Universe {
     ticking_systems: TickingSystemStorage,
     world_systems: WorldSystemStorage,
     // TODO: figure out how to apply these to every [`World`].
+    #[allow(unused)]
     component_systems: ComponentSystemStorage,
 }
 

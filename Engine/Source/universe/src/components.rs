@@ -21,7 +21,6 @@ pub use macros::Component;
 /// type-erased component values must be passed around at runtime.
 #[doc(hidden)]
 pub(crate) trait AnyComponent: Any + Debug + 'static {
-    fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
     /// Consume this boxed value and return it as a plain `Box<dyn Any>`,
     /// enabling `Box::downcast::<C>()` at call sites.
@@ -32,9 +31,6 @@ pub(crate) trait AnyComponent: Any + Debug + 'static {
 
 // Blanket impl: every concrete Component automatically becomes an AnyComponent.
 impl<T: Component> AnyComponent for T {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
@@ -52,16 +48,14 @@ impl<T: Component> AnyComponent for T {
 /// The `as_any` / `as_any_mut` pattern lets us downcast back to the concrete
 /// `EntityComponentStorage<C>` without exposing `C` through the trait object.
 pub(crate) trait AnyStorage {
-    /// Remove the component for `entity` if present.
-    fn remove(&mut self, entity: Entity);
     /// Remove the component for `entity` and return it as a type-erased box,
     /// or `None` if the entity had no component in this storage.
-    fn remove_any(&mut self, entity: Entity) -> Option<Box<dyn AnyComponent>>;
+    fn remove(&mut self, entity: Entity) -> Option<Box<dyn AnyComponent>>;
     /// Insert a type-erased component for `entity`.
     ///
     /// The concrete type inside `component` must match the type this storage
     /// was created for; mismatches are silently ignored.
-    fn insert_any(&mut self, entity: Entity, component: Box<dyn AnyComponent>);
+    fn insert(&mut self, entity: Entity, component: Box<dyn AnyComponent>);
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
 }
@@ -91,15 +85,12 @@ impl<C: Component> ComponentStorage<C> {
 }
 
 impl<C: Component> AnyStorage for ComponentStorage<C> {
-    fn remove(&mut self, entity: Entity) {
-        self.map.remove(&entity);
-    }
-    fn remove_any(&mut self, entity: Entity) -> Option<Box<dyn AnyComponent>> {
+    fn remove(&mut self, entity: Entity) -> Option<Box<dyn AnyComponent>> {
         self.map
             .remove(&entity)
             .map(|c| Box::new(c) as Box<dyn AnyComponent>)
     }
-    fn insert_any(&mut self, entity: Entity, component: Box<dyn AnyComponent>) {
+    fn insert(&mut self, entity: Entity, component: Box<dyn AnyComponent>) {
         // Downcast through Box<dyn Any> so we can move the value out of the box.
         match component.into_any().downcast::<C>() {
             Ok(c) => {
@@ -169,6 +160,7 @@ impl Components {
             .and_then(|b| b.as_any_mut().downcast_mut::<ComponentStorage<C>>())
     }
 
+    #[allow(unused)]
     pub fn insert<C: Component>(&mut self, entity: Entity, component: C) {
         self.storages
             .entry(TypeId::of::<C>())
@@ -192,7 +184,7 @@ impl Components {
         self.storages
             .entry(type_id)
             .or_insert_with(|| component.new_storage())
-            .insert_any(entity, component);
+            .insert(entity, component);
     }
 
     pub fn get<C: Component>(&self, entity: Entity) -> Option<&C> {
@@ -216,7 +208,7 @@ impl Components {
     pub fn remove_all(&mut self, entity: Entity) -> Vec<(TypeId, Box<dyn AnyComponent>)> {
         self.storages
             .iter_mut()
-            .filter_map(|(type_id, storage)| storage.remove_any(entity).map(|c| (*type_id, c)))
+            .filter_map(|(type_id, storage)| storage.remove(entity).map(|c| (*type_id, c)))
             .collect()
     }
 
