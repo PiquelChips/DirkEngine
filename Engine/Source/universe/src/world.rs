@@ -70,7 +70,7 @@ impl World {
                 .iter(component.type_id())
                 .for_each(|system| system.added(id, &mut component));
 
-            self.components.insert_box(id, component);
+            self.components.insert_any(id, component);
         }
 
         self.world_systems
@@ -78,15 +78,23 @@ impl World {
             .for_each(|system| system.entity_spawned(self, id));
         id
     }
+
     /// Will despawn the provided [`Entity`].
+    ///
+    /// Calls [`ComponentSystem::removed`] for every component still attached
+    /// to the entity before the components are actually dropped.
     pub fn despawn(&mut self, entity: Entity) {
         self.alive.retain(|&e| e != entity);
+
         self.world_systems
             .iter()
             .for_each(|system| system.entity_despawned(self, entity));
-        // TODO: for each component call ComponentSystem::removed
-        self.components.remove_all(entity);
-        todo!("World::spawn call ComponentSystem::removed")
+
+        for (type_id, mut component) in self.components.remove_all(entity) {
+            self.component_systems
+                .iter(type_id)
+                .for_each(|system| system.removed(entity, &mut component));
+        }
     }
 
     #[must_use]
@@ -129,7 +137,7 @@ impl World {
             .iter(TypeId::of::<C>())
             .for_each(|system| system.added(entity, &mut component));
 
-        self.components.insert_box(entity, component);
+        self.components.insert_any(entity, component);
     }
 
     /// Returns a shared reference to a component, or `None` if the entity
@@ -145,16 +153,18 @@ impl World {
         self.components.get_mut(entity)
     }
 
-    /// Removes a single component from an entity.
+    /// Removes a single component from an entity, calling [`ComponentSystem::removed`]
+    /// if the component was present.
     ///
     /// The entity itself is **not** despawned. If the component is not
     /// present this is a no-op.
     pub fn remove<C: Component>(&mut self, entity: Entity) {
-        let component = self.components.remove::<C>(entity);
-
-        self.component_systems
-            .iter(TypeId::of::<C>())
-            .for_each(|system| system.added(entity, &mut component));
+        if let Some(component) = self.components.remove::<C>(entity) {
+            let mut component: Box<dyn AnyComponent> = Box::new(component);
+            self.component_systems
+                .iter(TypeId::of::<C>())
+                .for_each(|system| system.removed(entity, &mut component));
+        }
     }
 }
 
