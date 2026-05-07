@@ -32,13 +32,19 @@ impl World {
     }
     /// Calls all the destruction [`System`]s on the world
     pub(crate) fn destroy(&mut self) {
-        todo!("call all the world systems for destruction")
+        for entity in self.alive().to_vec() {
+            self.despawn(entity);
+        }
     }
 
     pub(crate) fn tick(&self, delta_time: f32) {
+        self.world_systems
+            .iter()
+            .for_each(|system| system.tick(self, delta_time));
+
         self.ticking_systems
             .iter()
-            .for_each(|system| system.outer_tick(delta_time, self));
+            .for_each(|system| system.outer_tick(self, delta_time));
     }
 
     // ENTITY MANAGEMENT

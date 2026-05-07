@@ -4,7 +4,9 @@
 
 use std::collections::HashMap;
 
-use crate::systems::{TickingSystemStorage, UniverseSystemStorage, WorldSystemStorage};
+use crate::systems::{
+    ComponentSystemStorage, TickingSystemStorage, UniverseSystemStorage, WorldSystemStorage,
+};
 
 pub mod components;
 pub mod query;
@@ -26,8 +28,7 @@ pub struct Universe {
     universe_systems: UniverseSystemStorage,
     ticking_systems: TickingSystemStorage,
     world_systems: WorldSystemStorage,
-    // TODO: component system storage
-    // component_systems: ComponentSystemStorage,
+    component_systems: ComponentSystemStorage,
 }
 
 impl Universe {
@@ -36,6 +37,26 @@ impl Universe {
     pub fn builder() -> UniverseBuilder {
         UniverseBuilder::new()
     }
+
+    /// Ticks every the entire [`Universe`].
+    pub fn tick(&mut self, delta_time: f32) {
+        self.universe_systems
+            .iter()
+            .for_each(|system| system.tick(self, delta_time));
+
+        self.worlds.values().for_each(|world| {
+            self.world_systems
+                .iter()
+                .for_each(|system| system.tick(world, delta_time));
+
+            self.ticking_systems
+                .iter()
+                .for_each(|system| system.outer_tick(world, delta_time));
+
+            world.tick(delta_time);
+        });
+    }
+
     /// Returns an optional reference to the requested [`World`].
     #[must_use]
     pub fn get_world(&self, world: WorldId) -> Option<&World> {
@@ -53,8 +74,13 @@ impl Universe {
     }
     /// Will destroy the world & call all its destruction systems.
     pub fn destroy_world(&mut self, world: WorldId) {
-        let _world = self.worlds.remove(&world);
-        todo!("call all the world destruction systems")
+        let Some(mut world) = self.worlds.remove(&world) else {
+            return;
+        };
+        self.universe_systems
+            .iter()
+            .for_each(|system| system.world_destroyed(&world));
+        world.destroy();
     }
 }
 

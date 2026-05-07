@@ -1,8 +1,5 @@
 //! This crate has all the traits for the ECS [`System`]s.
-use std::{
-    any::{Any, TypeId},
-    collections::HashMap,
-};
+use std::{any::TypeId, collections::HashMap};
 
 use crate::{
     Entity, Universe, World,
@@ -27,7 +24,7 @@ pub trait UniverseSystem: System {
     /// and no entities have been removed.
     fn world_destroyed(&self, world: &World);
     /// This function will be called by the universe on every tick.
-    fn tick(&self, delta_time: f32, universe: &Universe);
+    fn tick(&self, universe: &Universe, delta_time: f32);
 }
 
 /// A system that is run for the entire [`World`].
@@ -51,7 +48,7 @@ pub trait TickingSystem: System {
     /// time per frame, just on multiple different worlds.
     /// `entities`: the list of entities that were returned by the query returned
     /// by [`TickingSystem::query`].
-    fn tick(&self, delta_time: f32, world: &World, entities: Vec<Entity>);
+    fn tick(&self, world: &World, delta_time: f32, entities: Vec<Entity>);
     /// Returns the query used to construct the `entities` of the tick function.
     fn query(&self) -> Query;
 
@@ -59,8 +56,8 @@ pub trait TickingSystem: System {
     /// [`TickingSystem::tick`] should only be implemented, never called.
     ///
     /// This function should not be implemented by users.
-    fn outer_tick(&self, delta_time: f32, world: &World) {
-        self.tick(delta_time, world, world.query(&self.query()));
+    fn outer_tick(&self, world: &World, delta_time: f32) {
+        self.tick(world, delta_time, world.query(&self.query()));
     }
 }
 
