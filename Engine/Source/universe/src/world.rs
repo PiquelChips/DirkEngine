@@ -60,24 +60,23 @@ impl World {
 
     /// Will spawn a new [`Entity`] using the provided [`EntityBuilder`].
     /// Returns the handle of the new [`Entity`].
-    pub fn spawn(&mut self, mut builder: EntityBuilder) -> Entity {
+    pub fn spawn(&mut self, builder: EntityBuilder) -> Entity {
         let id = self.next_id;
         self.next_id += 1;
         self.alive.push(id);
 
-        // TODO: find way to add the components to [`Components`].
-
-        builder.components.values_mut().for_each(|component| {
+        for (_, mut component) in builder.components {
             self.component_systems
                 .iter(component.type_id())
-                .for_each(|system| system.added(id, component));
-        });
+                .for_each(|system| system.added(id, &mut component));
+
+            self.components.insert_box(id, component);
+        }
 
         self.world_systems
             .iter()
             .for_each(|system| system.entity_spawned(self, id));
-
-        todo!("World::spawn add components on entity spawn")
+        id
     }
     /// Will despawn the provided [`Entity`].
     pub fn despawn(&mut self, entity: Entity) {
