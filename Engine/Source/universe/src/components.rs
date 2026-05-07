@@ -21,15 +21,11 @@ pub use macros::Component;
 /// type-erased component values must be passed around at runtime.
 #[doc(hidden)]
 pub(crate) trait AnyComponent: Any + Debug + 'static {
-    fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
 // Blanket impl: every concrete Component automatically becomes an AnyComponent.
 impl<T: Component> AnyComponent for T {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }

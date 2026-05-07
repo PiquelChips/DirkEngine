@@ -19,6 +19,7 @@ pub struct World {
     alive: Vec<Entity>,
     components: Components,
 
+    #[allow(clippy::struct_field_names)]
     world_systems: WorldSystemStorage,
     ticking_systems: TickingSystemStorage,
     component_systems: ComponentSystemStorage,
@@ -48,6 +49,7 @@ impl World {
     }
 
     /// Returns the [`World`]'s [`WorldId`].
+    #[must_use]
     pub fn id(&self) -> WorldId {
         self.id
     }
@@ -111,7 +113,7 @@ impl World {
 
     // COMPONENTS
 
-    /// Attaches a [`Component`]` to [`Entity`], replacing any existing component of
+    /// Attaches a [`Component`] to [`Entity`], replacing any existing component of
     /// the same type.
     ///
     /// [`Entity`]: crate::Entity

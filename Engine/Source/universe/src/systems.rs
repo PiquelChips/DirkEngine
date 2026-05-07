@@ -91,14 +91,14 @@ impl<T: ComponentSystem> AnyComponentSystem for T {
     }
 
     fn added(&self, entity: Entity, component: &mut Box<dyn AnyComponent>) {
-        if let Some(mut component) = component.as_any_mut().downcast_mut::<T::Component>() {
-            T::added(self, entity, &mut component);
+        if let Some(component) = component.as_any_mut().downcast_mut::<T::Component>() {
+            T::added(self, entity, component);
         }
     }
 
     fn removed(&self, entity: Entity, component: &mut Box<dyn AnyComponent>) {
-        if let Some(mut component) = component.as_any_mut().downcast_mut::<T::Component>() {
-            T::removed(self, entity, &mut component);
+        if let Some(component) = component.as_any_mut().downcast_mut::<T::Component>() {
+            T::removed(self, entity, component);
         }
     }
 }
@@ -113,7 +113,7 @@ impl ComponentSystemStorage {
         let systems = self
             .systems
             .entry(AnyComponentSystem::type_id(&system))
-            .or_insert_with(Vec::new);
+            .or_default();
 
         systems.push(Box::new(system));
     }
