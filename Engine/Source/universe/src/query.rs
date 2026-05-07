@@ -19,11 +19,12 @@ use crate::{
 /// # Example
 /// ```rust
 /// # use universe::components::Component;
-/// # #[derive(Component)]
+/// # use universe::query::Query;
+/// # #[derive(Component, Debug, serde::Deserialize, serde::Serialize)]
 /// # struct Position;
-/// # #[derive(Component)]
+/// # #[derive(Component, Debug, serde::Deserialize, serde::Serialize)]
 /// # struct Velocity;
-/// # #[derive(Component)]
+/// # #[derive(Component, Debug, serde::Deserialize, serde::Serialize)]
 /// # struct Frozen;
 /// let query = Query::new()
 ///     .with_component::<Position>()
