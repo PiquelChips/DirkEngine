@@ -83,7 +83,6 @@ pub(crate) trait AnyComponentSystem {
     fn type_id(&self) -> TypeId;
     fn added(&self, entity: Entity, component: &mut Box<dyn AnyComponent>);
     fn removed(&self, entity: Entity, component: &mut Box<dyn AnyComponent>);
-    fn donged(&self, entity: Entity, component: &mut Box<dyn AnyComponent>);
 }
 
 impl<T: ComponentSystem> AnyComponentSystem for T {
@@ -102,12 +101,6 @@ impl<T: ComponentSystem> AnyComponentSystem for T {
             T::removed(self, entity, &mut component);
         }
     }
-
-    fn donged(&self, entity: Entity, component: &mut Box<dyn AnyComponent>) {
-        if let Some(mut component) = component.as_any_mut().downcast_mut::<T::Component>() {
-            T::removed(self, entity, &mut component);
-        }
-    }
 }
 
 #[derive(Default)]
@@ -116,11 +109,6 @@ pub(crate) struct ComponentSystemStorage {
 }
 
 impl ComponentSystemStorage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     pub fn insert<S: ComponentSystem>(&mut self, system: S) {
         let systems = self
             .systems

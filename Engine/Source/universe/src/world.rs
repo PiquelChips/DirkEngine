@@ -47,6 +47,11 @@ impl World {
             .for_each(|system| system.outer_tick(self, delta_time));
     }
 
+    /// Returns the [`World`]'s [`WorldId`].
+    pub fn id(&self) -> WorldId {
+        self.id
+    }
+
     // ENTITY MANAGEMENT
 
     /// Will spawn a new [`Entity`] using the provided [`EntityBuilder`].

@@ -5,7 +5,8 @@
 use std::collections::HashMap;
 
 use crate::systems::{
-    ComponentSystemStorage, TickingSystemStorage, UniverseSystemStorage, WorldSystemStorage,
+    ComponentSystem, ComponentSystemStorage, TickingSystem, TickingSystemStorage, UniverseSystem,
+    UniverseSystemStorage, WorldSystem, WorldSystemStorage,
 };
 
 pub mod components;
@@ -19,6 +20,7 @@ mod entity;
 pub use entity::{Entity, EntityBuilder};
 
 /// This struct is the manager for all the worlds.
+#[derive(Default)]
 pub struct Universe {
     worlds: HashMap<WorldId, World>,
     next_id: WorldId,
@@ -68,9 +70,18 @@ impl Universe {
         self.worlds.get_mut(&world)
     }
     /// Will create a new empty world & return its ID.
-    pub fn create_world(&mut self) -> WorldId {
-        // maybe some kind of world builder?
-        todo!("create a new world")
+    pub fn create_world(&mut self, builder: WorldBuilder) -> WorldId {
+        let id = self.next_id;
+        self.next_id += 1;
+
+        let world = builder.build(id);
+
+        self.universe_systems
+            .iter()
+            .for_each(|system| system.world_created(&world));
+
+        self.worlds.insert(id, world);
+        id
     }
     /// Will destroy the world & call all its destruction systems.
     pub fn destroy_world(&mut self, world: WorldId) {
@@ -84,8 +95,15 @@ impl Universe {
     }
 }
 
+/// Builder struct used to construct a [`Universe`].
 #[derive(Default)]
-pub struct UniverseBuilder {}
+pub struct UniverseBuilder {
+    worlds: Vec<WorldBuilder>,
+    universe_systems: UniverseSystemStorage,
+    ticking_systems: TickingSystemStorage,
+    world_systems: WorldSystemStorage,
+    component_systems: ComponentSystemStorage,
+}
 
 impl UniverseBuilder {
     #[must_use]
@@ -93,7 +111,56 @@ impl UniverseBuilder {
         Self::default()
     }
 
-    pub fn with_world(self, builder: WorldBuilder) -> Self {
-        todo!("UniverseBuilder::with_world")
+    /// Actually builds the [`Universe`].
+    #[must_use]
+    pub fn build(self) -> Universe {
+        let mut universe = Universe {
+            universe_systems: self.universe_systems,
+            ticking_systems: self.ticking_systems,
+            world_systems: self.world_systems,
+            component_systems: self.component_systems,
+            ..Universe::default()
+        };
+
+        for builder in self.worlds {
+            universe.create_world(builder);
+        }
+
+        universe
+    }
+
+    /// Adds a [`World`] that will be created at the same time as the [`Universe`].
+    #[must_use]
+    pub fn with_world(mut self, builder: WorldBuilder) -> Self {
+        self.worlds.push(builder);
+        self
+    }
+
+    /// Adds a [`UniverseSystem`] that will be added to the [`Universe`].
+    #[must_use]
+    pub fn with_universe_system(mut self, system: impl UniverseSystem) -> Self {
+        self.universe_systems.insert(system);
+        self
+    }
+
+    /// Adds a [`WorldSystem`] that will be added to the [`Universe`].
+    #[must_use]
+    pub fn with_world_system(mut self, system: impl WorldSystem) -> Self {
+        self.world_systems.insert(system);
+        self
+    }
+
+    /// Adds a [`TickingSystem`] that will be added to the [`Universe`].
+    #[must_use]
+    pub fn with_ticking_system(mut self, system: impl TickingSystem) -> Self {
+        self.ticking_systems.insert(system);
+        self
+    }
+
+    /// Adds a [`ComponentSystem`] that will be added to the [`Universe`].
+    #[must_use]
+    pub fn with_component_system(mut self, system: impl ComponentSystem) -> Self {
+        self.component_systems.insert(system);
+        self
     }
 }
