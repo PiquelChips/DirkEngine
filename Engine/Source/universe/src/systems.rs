@@ -124,12 +124,16 @@ impl ComponentSystemStorage {
         Self::default()
     }
 
-    pub fn add<S: ComponentSystem>(&mut self, system: S) {
+    pub fn insert<S: ComponentSystem>(&mut self, system: S) {
         let systems = self
             .systems
-            .entry(system.type_id())
+            .entry(AnyComponentSystem::type_id(&system))
             .or_insert_with(Vec::new);
 
         systems.push(Box::new(system));
+    }
+
+    pub fn iter(&mut self, type_id: TypeId) -> std::slice::Iter<'_, Box<dyn AnyComponentSystem>> {
+        self.systems.entry(type_id).or_default().iter()
     }
 }
