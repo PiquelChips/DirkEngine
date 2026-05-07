@@ -1,5 +1,8 @@
 //! This crate has all the traits for the ECS [`System`]s.
-use std::{any::TypeId, collections::HashMap};
+use std::{
+    any::{Any, TypeId},
+    collections::HashMap,
+};
 
 use crate::{
     Entity, Universe, World,
@@ -9,7 +12,7 @@ use crate::{
 use macros::system;
 
 /// All systems must implement this trait.
-pub trait System: Clone + 'static {
+pub trait System: 'static {
     /// Get a name for the system. For debug purposes only.
     fn name() -> String;
 }
@@ -81,8 +84,9 @@ pub trait ComponentSystem: System {
 /// Private type-erasure trait for storage in [`Entity`] & [`Universe`]
 pub(crate) trait AnyComponentSystem {
     fn type_id(&self) -> TypeId;
-    fn added(&self, entity: Entity, component: Box<dyn AnyComponent>);
-    fn removed(&self, entity: Entity, component: Box<dyn AnyComponent>);
+    fn added(&self, entity: Entity, component: &mut Box<dyn AnyComponent>);
+    fn removed(&self, entity: Entity, component: &mut Box<dyn AnyComponent>);
+    fn donged(&self, entity: Entity, component: &mut Box<dyn AnyComponent>);
 }
 
 impl<T: ComponentSystem> AnyComponentSystem for T {
@@ -90,14 +94,20 @@ impl<T: ComponentSystem> AnyComponentSystem for T {
         TypeId::of::<T::Component>()
     }
 
-    fn added(&self, entity: Entity, component: Box<dyn AnyComponent>) {
-        if let Ok(mut component) = component.as_any_box().downcast::<T::Component>() {
+    fn added(&self, entity: Entity, component: &mut Box<dyn AnyComponent>) {
+        if let Some(mut component) = component.as_any_mut().downcast_mut::<T::Component>() {
             T::added(self, entity, &mut component);
         }
     }
 
-    fn removed(&self, entity: Entity, component: Box<dyn AnyComponent>) {
-        if let Ok(mut component) = component.as_any_box().downcast::<T::Component>() {
+    fn removed(&self, entity: Entity, component: &mut Box<dyn AnyComponent>) {
+        if let Some(mut component) = component.as_any_mut().downcast_mut::<T::Component>() {
+            T::removed(self, entity, &mut component);
+        }
+    }
+
+    fn donged(&self, entity: Entity, component: &mut Box<dyn AnyComponent>) {
+        if let Some(mut component) = component.as_any_mut().downcast_mut::<T::Component>() {
             T::removed(self, entity, &mut component);
         }
     }
