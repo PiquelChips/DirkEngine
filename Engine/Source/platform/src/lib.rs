@@ -30,7 +30,7 @@ pub struct Platform {
     handler: PlatformHandler,
     event_loop: EventLoop,
 
-    exit_dispatcher: events::Dispatcher<event::AppExit>,
+    exit_dispatcher: events::Dispatcher<events::AppExit>,
     window_consumer: events::Consumer<WindowEvent>,
 }
 
@@ -74,16 +74,19 @@ impl Platform {
             .pump_app_events(Some(Duration::ZERO), &mut self.handler)
         {
             PumpStatus::Exit(code) => {
-                info!("Event loop exited with code {code}");
                 // Treat a forced OS exit like a window close.
-                self.exit_dispatcher.dispatch(event::AppExit(code));
+                self.exit_dispatcher.dispatch(events::AppExit(format!(
+                    "Event loop exited with code {code}"
+                )));
                 return;
             }
             PumpStatus::Continue => {}
         }
 
         if self.handler.windows.is_empty() {
-            self.exit_dispatcher.dispatch(event::AppExit(0));
+            self.exit_dispatcher.dispatch(events::AppExit(
+                "all platform windows have been closed".into(),
+            ));
         }
 
         self.window_consumer.consume_all().for_each(|event| {
