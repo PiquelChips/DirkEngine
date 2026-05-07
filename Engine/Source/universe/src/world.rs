@@ -90,7 +90,7 @@ impl World {
 
     #[must_use]
     pub(crate) fn query(&self, query: &Query) -> Vec<Entity> {
-        query.query(self)
+        query.query(&self.components)
     }
 
     /// Returns a slice of all currently alive entity IDs in spawn order.

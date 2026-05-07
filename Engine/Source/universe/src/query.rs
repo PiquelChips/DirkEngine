@@ -1,7 +1,10 @@
 //! This module handles querying entities from a [`World`] based on what
 //! components they have (or don't have).
 
-use crate::{Entity, World, components::Component};
+use crate::{
+    Entity,
+    components::{Component, Components},
+};
 
 /// A struct to query entities from a [`World`].
 ///
@@ -21,14 +24,14 @@ impl Query {
     pub fn without_component<C: Component>(self) -> Self {
         todo!("remove component from query")
     }
-    /// Will actually run the [`Query`] against a world.
+    /// Will actually run the [`Query`] against [`Components`].
     #[must_use]
-    pub(crate) fn query(&self, world: &World) -> Vec<Entity> {
+    pub(crate) fn query(&self, components: &Components) -> Vec<Entity> {
         todo!("actually query the entities")
     }
-    /// Returns if the [`Entity`] from the [`World`] matches the [`Query`].
+    /// Returns if the [`Entity`] from the [`Components`] matches the [`Query`].
     #[must_use]
-    pub(crate) fn matches(&self, world: &World, entity: Entity) -> bool {
+    pub(crate) fn matches(&self, components: &Components, entity: Entity) -> bool {
         todo!("see if the entity matches the query")
     }
 }
