@@ -47,7 +47,7 @@ pub fn generate_system_code(trait_def: &ItemTrait) -> syn::Result<TokenStream> {
         // Re-emit the original trait unchanged.
         #trait_def
 
-        trait #any_name { #(#any_sigs)* }
+        pub(crate) trait #any_name { #(#any_sigs)* }
 
         impl<T: #trait_name> #any_name for T { #(#blanket_methods)* }
 
