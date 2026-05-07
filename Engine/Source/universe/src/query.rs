@@ -48,7 +48,7 @@ impl Query {
     /// Require that matching entities have component `C`.
     ///
     /// Calling this multiple times with different types adds AND conditions;
-    /// calling it with the same type twice is a no-op (duplicate TypeIds are
+    /// calling it with the same type twice is a no-op (duplicate [`TypeId`]s are
     /// ignored at match time).
     #[must_use]
     pub fn with_component<C: Component>(mut self) -> Self {
