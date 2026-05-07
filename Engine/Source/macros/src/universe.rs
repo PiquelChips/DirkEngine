@@ -59,11 +59,13 @@ pub fn generate_system_code(trait_def: &ItemTrait) -> syn::Result<TokenStream> {
         impl #storage {
             pub fn new() -> Self { Self::default() }
 
-            pub fn add<S: #trait_name>(&mut self, system: S) {
+            pub fn insert<S: #trait_name>(&mut self, system: S) {
                 self.systems.push(Box::new(system));
             }
 
-            // TODO: looping over all the systems
+            pub fn iter(&self) -> std::slice::Iter<'_, Box<dyn #any_name>> {
+                self.systems.iter()
+            }
         }
     })
 }

@@ -1,5 +1,3 @@
-use std::{any::TypeId, collections::HashMap};
-
 use crate::{
     Entity, EntityBuilder,
     components::{Component, Components},
@@ -67,7 +65,7 @@ impl World {
 
     /// Returns the total number of alive entities.
     #[must_use]
-    pub fn entity_count(&self) -> usize {
+    pub fn alive_count(&self) -> usize {
         self.alive.len()
     }
 
