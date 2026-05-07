@@ -1,6 +1,8 @@
+use std::any::TypeId;
+
 use crate::{
     Entity, EntityBuilder,
-    components::{Component, Components},
+    components::{AnyComponent, Component, Components},
     query::Query,
     systems::{
         ComponentSystem, ComponentSystemStorage, TickingSystem, TickingSystemStorage, WorldSystem,
@@ -118,9 +120,17 @@ impl World {
     ///
     /// [`Entity`]: crate::Entity
     pub fn insert<C: Component>(&mut self, entity: Entity, component: C) {
-        // TODO: check if entity is alive, if not ignore
-        self.components.insert(entity, component);
-        todo!("call all related systems")
+        if !self.is_alive(entity) {
+            return;
+        }
+
+        let mut component: Box<dyn AnyComponent> = Box::new(component);
+
+        self.component_systems
+            .iter(TypeId::of::<C>())
+            .for_each(|system| system.added(entity, &mut component));
+
+        self.components.insert_box(entity, component);
     }
 
     /// Returns a shared reference to a component, or `None` if the entity
@@ -141,8 +151,11 @@ impl World {
     /// The entity itself is **not** despawned. If the component is not
     /// present this is a no-op.
     pub fn remove<C: Component>(&mut self, entity: Entity) {
-        self.components.remove::<C>(entity);
-        todo!("call all related systems");
+        let component = self.components.remove::<C>(entity);
+
+        self.component_systems
+            .iter(TypeId::of::<C>())
+            .for_each(|system| system.added(entity, &mut component));
     }
 }
 

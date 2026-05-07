@@ -21,13 +21,23 @@ pub use macros::Component;
 /// type-erased component values must be passed around at runtime.
 #[doc(hidden)]
 pub(crate) trait AnyComponent: Any + Debug + 'static {
+    fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
+
+    fn new_storage(&self) -> Box<dyn AnyStorage>;
 }
 
 // Blanket impl: every concrete Component automatically becomes an AnyComponent.
 impl<T: Component> AnyComponent for T {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
+    }
+
+    fn new_storage(&self) -> Box<dyn AnyStorage> {
+        Box::new(ComponentStorage::<T>::default())
     }
 }
 
@@ -130,6 +140,16 @@ impl Components {
         self.storages
             .entry(TypeId::of::<C>())
             .or_insert_with(|| Box::new(ComponentStorage::<C>::default()))
+            .as_any_mut()
+            .downcast_mut::<ComponentStorage<C>>()
+            .expect("we just inserted exactly this type")
+            .insert(entity, component);
+    }
+
+    pub fn insert_box(&mut self, entity: Entity, component: Box<dyn AnyComponent>) {
+        self.storages
+            .entry(component.type_id())
+            .or_insert_with(|| component.new_storage())
             .as_any_mut()
             .downcast_mut::<ComponentStorage<C>>()
             .expect("we just inserted exactly this type")
