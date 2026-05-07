@@ -7,7 +7,7 @@
 //! via [`Player::spawn`] automatically:
 //!
 //! * allocates a new [`Entity`] in the target [`World`],
-//! * attaches default [`components::Transform`] and [`components::Camera`]
+//! * attaches default [`Transform`] and [`Camera`] components.
 //!   components to that entity,
 //! * registers a [`Dispatcher`] so that any interested system can subscribe to
 //!   [`PlayerUpdateEvent`]s for this player.
@@ -38,6 +38,9 @@
 //! set_region     ──► PlayerUpdateEvent { update_type: Updated  }
 //! Player::despawn──► PlayerUpdateEvent { update_type: Despawned}
 //! ```
+//!
+//! [`Transform`]: crate::components::Transform
+//! [`Camera`]: crate::components::Camera
 
 use std::f32::consts::PI;
 

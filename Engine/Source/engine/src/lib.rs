@@ -1,4 +1,4 @@
-//! The [Engine] crate. The engine holds all the state & manages
+//! The [`Engine`] crate. The engine holds all the state & manages
 //! all the systems for the engine to run properly.
 
 use std::{collections::HashMap, ffi::CString, str::FromStr, time::Instant};
@@ -167,7 +167,7 @@ impl Engine {
     pub fn is_requesting_exit(&self) -> bool {
         self.is_requesting_exit || self.exit_error.is_some()
     }
-    /// Specify [err] to exit with an error.
+    /// Specify `err` to exit with an error.
     pub fn exit(&mut self, err: Option<anyhow::Error>) {
         self.is_requesting_exit = true;
         self.exit_error = err;

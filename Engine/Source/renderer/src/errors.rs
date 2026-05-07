@@ -2,7 +2,7 @@ use ash::vk;
 use raw_window_handle::HandleError;
 use thiserror::Error;
 
-/// An engine Result type to wrap the engine [Error].
+/// An engine Result type to wrap the engine [enum@Error].
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// All engine related errors

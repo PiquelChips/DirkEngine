@@ -38,7 +38,7 @@ type Filter = Box<dyn Fn(&LogEntry) -> bool + Send + Sync>;
 ///
 /// # Combining with a [`StoreFilter`]
 ///
-/// In editor builds the filter can be applied to the live [`LogStore`] via
+/// In editor builds the filter can be applied to the live store via
 /// [`Logger::query`](crate::Logger::query), which returns a [`StoreFilter`]
 /// with terminal methods ([`execute`](StoreFilter::execute),
 /// [`last`](StoreFilter::last), [`count`](StoreFilter::count)).
@@ -277,7 +277,7 @@ impl LogFilter {
     }
 }
 
-/// A [`LogFilter`] bound to a [`LogStore`], ready to execute a query.
+/// A [`LogFilter`] bound to a `LogStore`, ready to execute a query.
 ///
 /// Obtain one via [`Logger::query`](crate::Logger::query) or
 /// [`LogFilter::with_store`].
