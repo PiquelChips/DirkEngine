@@ -2,6 +2,7 @@ use crate::{
     Entity, EntityBuilder,
     components::{Component, Components},
     query::Query,
+    systems::{WorldSystem, WorldSystemStorage},
 };
 
 /// An identifier that distinguishes multiple [`World`] instances from each other.
@@ -14,6 +15,8 @@ pub struct World {
     next_id: Entity,
     alive: Vec<Entity>,
     components: Components,
+
+    world_systems: WorldSystemStorage,
 }
 
 impl World {
@@ -39,17 +42,21 @@ impl World {
         // TODO: find way to add the components to [`Components`].
         // TODO: run all corresponding ComponentSystem::added
 
-        // TODO: Run WorldSystem::entity spawned
+        self.world_systems
+            .iter()
+            .for_each(|system| system.entity_spawned(self, id));
 
-        todo!("World::spawn")
+        todo!("World::spawn add components on entity spawn")
     }
     /// Will despawn the provided [`Entity`].
     pub fn despawn(&mut self, entity: Entity) {
         self.alive.retain(|&e| e != entity);
-        // TODO: call WorldComponent::entity_despawned
+        self.world_systems
+            .iter()
+            .for_each(|system| system.entity_despawned(self, entity));
         // TODO: for each component call ComponentSystem::removed
         self.components.remove_all(entity);
-        todo!("World::spawn")
+        todo!("World::spawn call ComponentSystem::removed")
     }
 
     #[must_use]
@@ -77,8 +84,10 @@ impl World {
 
     // COMPONENTS
 
-    /// Attaches an [`EntityComponent`]` to [`Entity`], replacing any existing component of
+    /// Attaches a [`Component`]` to [`Entity`], replacing any existing component of
     /// the same type.
+    ///
+    /// [`Entity`]: crate::Entity
     pub fn insert<C: Component>(&mut self, entity: Entity, component: C) {
         // TODO: check if entity is alive, if not ignore
         self.components.insert(entity, component);
@@ -112,12 +121,29 @@ impl World {
 #[derive(Default)]
 pub struct WorldBuilder {
     entities: Vec<EntityBuilder>,
+    world_systems: WorldSystemStorage,
 }
 
 impl WorldBuilder {
     #[must_use]
     fn new() -> Self {
         Self::default()
+    }
+
+    /// Will actually build a world struct with the provided `id`.
+    #[must_use]
+    pub fn build(self, id: WorldId) -> World {
+        let mut world = World {
+            id,
+            world_systems: self.world_systems,
+            ..World::default()
+        };
+
+        for builder in self.entities {
+            world.spawn(&builder);
+        }
+
+        world
     }
 
     /// Adds an [`Entity`] that will be spawned on [`World`] creation.
@@ -127,5 +153,13 @@ impl WorldBuilder {
         self
     }
 
-    // TODO: handle systems
+    /// Adds a world system that will be added to the [`World`].
+    #[must_use]
+    pub fn with_world_system(mut self, system: impl WorldSystem) -> Self {
+        self.world_systems.insert(system);
+        self
+    }
+
+    // TODO: ticking systems
+    // TODO: component systems
 }
