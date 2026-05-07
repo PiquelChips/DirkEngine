@@ -2,7 +2,10 @@ use crate::{
     Entity, EntityBuilder,
     components::{Component, Components},
     query::Query,
-    systems::{WorldSystem, WorldSystemStorage},
+    systems::{
+        ComponentSystem, ComponentSystemStorage, TickingSystem, TickingSystemStorage, WorldSystem,
+        WorldSystemStorage,
+    },
 };
 
 /// An identifier that distinguishes multiple [`World`] instances from each other.
@@ -17,6 +20,7 @@ pub struct World {
     components: Components,
 
     world_systems: WorldSystemStorage,
+    ticking_systems: TickingSystemStorage,
 }
 
 impl World {
@@ -28,6 +32,12 @@ impl World {
     /// Calls all the destruction [`System`]s on the world
     pub(crate) fn destroy(&mut self) {
         todo!("call all the world systems for destruction")
+    }
+
+    pub(crate) fn tick(&self, delta_time: f32) {
+        self.ticking_systems
+            .iter()
+            .for_each(|system| system.outer_tick(delta_time, self));
     }
 
     // ENTITY MANAGEMENT
@@ -122,6 +132,7 @@ impl World {
 pub struct WorldBuilder {
     entities: Vec<EntityBuilder>,
     world_systems: WorldSystemStorage,
+    ticking_systems: TickingSystemStorage,
 }
 
 impl WorldBuilder {
@@ -136,6 +147,7 @@ impl WorldBuilder {
         let mut world = World {
             id,
             world_systems: self.world_systems,
+            ticking_systems: self.ticking_systems,
             ..World::default()
         };
 
@@ -153,13 +165,19 @@ impl WorldBuilder {
         self
     }
 
-    /// Adds a world system that will be added to the [`World`].
+    /// Adds a [`WorldSystem`] that will be added to the [`World`].
     #[must_use]
     pub fn with_world_system(mut self, system: impl WorldSystem) -> Self {
         self.world_systems.insert(system);
         self
     }
 
-    // TODO: ticking systems
+    /// Adds a [`TickingSystem`] that will be added to the [`World`].
+    #[must_use]
+    pub fn with_ticking_system(mut self, system: impl TickingSystem) -> Self {
+        self.ticking_systems.insert(system);
+        self
+    }
+
     // TODO: component systems
 }
