@@ -59,7 +59,7 @@ pub fn generate_system_code(trait_def: &ItemTrait) -> syn::Result<TokenStream> {
         impl #storage {
             pub fn new() -> Self { Self::default() }
 
-            pub fn insert<S: #trait_name>(&mut self, system: S) {
+            pub fn insert(&mut self, system: impl #trait_name) {
                 self.systems.push(Box::new(system));
             }
 
