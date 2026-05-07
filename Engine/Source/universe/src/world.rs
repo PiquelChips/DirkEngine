@@ -21,6 +21,7 @@ pub struct World {
 
     world_systems: WorldSystemStorage,
     ticking_systems: TickingSystemStorage,
+    component_systems: ComponentSystemStorage,
 }
 
 impl World {
@@ -44,13 +45,18 @@ impl World {
 
     /// Will spawn a new [`Entity`] using the provided [`EntityBuilder`].
     /// Returns the handle of the new [`Entity`].
-    pub fn spawn(&mut self, builder: &EntityBuilder) -> Entity {
+    pub fn spawn(&mut self, mut builder: EntityBuilder) -> Entity {
         let id = self.next_id;
         self.next_id += 1;
         self.alive.push(id);
 
         // TODO: find way to add the components to [`Components`].
-        // TODO: run all corresponding ComponentSystem::added
+
+        builder.components.values_mut().for_each(|component| {
+            self.component_systems
+                .iter(component.type_id())
+                .for_each(|system| system.added(id, component));
+        });
 
         self.world_systems
             .iter()
@@ -133,6 +139,7 @@ pub struct WorldBuilder {
     entities: Vec<EntityBuilder>,
     world_systems: WorldSystemStorage,
     ticking_systems: TickingSystemStorage,
+    component_systems: ComponentSystemStorage,
 }
 
 impl WorldBuilder {
@@ -148,11 +155,12 @@ impl WorldBuilder {
             id,
             world_systems: self.world_systems,
             ticking_systems: self.ticking_systems,
+            component_systems: self.component_systems,
             ..World::default()
         };
 
         for builder in self.entities {
-            world.spawn(&builder);
+            world.spawn(builder);
         }
 
         world
@@ -179,5 +187,10 @@ impl WorldBuilder {
         self
     }
 
-    // TODO: component systems
+    /// Adds a [`ComponentSystem`] that will be added to the [`World`].
+    #[must_use]
+    pub fn with_component_system(mut self, system: impl ComponentSystem) -> Self {
+        self.component_systems.insert(system);
+        self
+    }
 }

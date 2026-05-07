@@ -38,7 +38,7 @@ impl AddAssign<u32> for Entity {
 /// A builder struct to create a new entity. Allows adding of components.
 #[derive(Default)]
 pub struct EntityBuilder {
-    components: HashMap<TypeId, Box<dyn AnyComponent>>,
+    pub(crate) components: HashMap<TypeId, Box<dyn AnyComponent>>,
 }
 
 impl EntityBuilder {
@@ -53,10 +53,5 @@ impl EntityBuilder {
         self.components
             .insert(TypeId::of::<C>(), Box::new(component));
         self
-    }
-
-    #[must_use]
-    pub(crate) fn components(&self) -> &HashMap<TypeId, Box<dyn AnyComponent>> {
-        &self.components
     }
 }
