@@ -14,7 +14,7 @@ use logging::Logger;
 
 /// This is the main struct that holds global engine state.
 pub struct Engine {
-    exit_consumer: events::Consumer<platform::AppExit>,
+    exit_consumer: events::Consumer<events::AppExit>,
     event_manager: events::EventManager,
 
     #[allow(unused)]
@@ -158,7 +158,8 @@ impl Engine {
     }
 
     fn process_events(&mut self) {
-        if let Some(platform::AppExit(_)) = self.exit_consumer.try_consume() {
+        if let Some(events::AppExit(msg)) = self.exit_consumer.try_consume() {
+            info!("App exit requested: {msg}");
             self.exit(None);
         }
     }
