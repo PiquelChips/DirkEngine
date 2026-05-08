@@ -1,8 +1,8 @@
 //! Entity-Component-System world for the game engine.
 //!
 //! All mutable world state lives in [`World`]. Entities are lightweight
-//! numeric handles ([`Entity`]) and components are plain Rust structs stored in
-//! per-type [`HashMap`]s inside [`Components`].
+//! numeric handles ([`Entity`]) and components are plain Rust structs stored
+//! by the [`World`].
 //!
 //! # Quick-start
 //!
@@ -34,8 +34,7 @@
 //! # Adding a new component
 //!
 //! 1. Define a struct in the [`components`] module.
-//! 2. Add its name to the [`define_components!`] invocation at the bottom of
-//!    `lib.rs`.
+//! 2. Derive the [`Component`] trait from it.
 //!
 //! The macro generates all the boilerplate storage and [`Component`] trait
 //! implementations automatically.

@@ -30,7 +30,7 @@
 //!
 //! ## Querying the log store (editor builds only)
 //!
-//! In editor builds the [`Logger`] holds a shared [`store::LogStore`] that
+//! In editor builds the [`Logger`] holds a shared `LogStore` that
 //! captures every event. Use [`Logger::query`] with a [`Filter`] to search it:
 //!
 //! ```rust
@@ -157,7 +157,7 @@ impl fmt::Display for LogLevel {
 
 /// A single captured log event.
 ///
-/// [`LogEntry`] values are stored in the [`store::LogStore`] (editor builds
+/// [`LogEntry`] values are stored in a store (editor builds
 /// only) and returned by [`StoreFilter`] query terminals.
 ///
 /// All timestamps are in **UTC**.
