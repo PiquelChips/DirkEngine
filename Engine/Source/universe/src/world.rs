@@ -1,4 +1,4 @@
-use std::any::TypeId;
+use std::{any::TypeId, collections::HashSet};
 
 use crate::{
     Entity, EntityBuilder,
@@ -18,7 +18,7 @@ pub type WorldId = u32;
 pub struct World {
     id: WorldId,
     next_id: Entity,
-    alive: Vec<Entity>,
+    alive: HashSet<Entity>,
     components: Components,
 
     #[allow(clippy::struct_field_names)]
@@ -35,7 +35,10 @@ impl World {
     }
     /// Calls all the destruction [`System`]s on the world
     pub(crate) fn destroy(&mut self) {
-        for entity in self.alive().to_vec() {
+        // `clone` is expensive but its the only way I found for the
+        // borrow checker. As this is called very rarely (on world destruction),
+        // it should not have too big of an effect on runtime performance.
+        for entity in self.alive.clone() {
             self.despawn(entity);
         }
     }
@@ -63,7 +66,7 @@ impl World {
     pub fn spawn(&mut self, builder: EntityBuilder) -> Entity {
         let id = self.next_id;
         self.next_id += 1;
-        self.alive.push(id);
+        self.alive.insert(id);
 
         for (_, mut component) in builder.components {
             self.component_systems
@@ -105,12 +108,6 @@ impl World {
     #[must_use]
     pub(crate) fn query(&self, query: &Query) -> Vec<Entity> {
         query.query(&self.components, &self.alive)
-    }
-
-    /// Returns a slice of all currently alive entity IDs in spawn order.
-    #[must_use]
-    fn alive(&self) -> &[Entity] {
-        &self.alive
     }
 
     /// Returns the total number of alive entities.

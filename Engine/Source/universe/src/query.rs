@@ -1,7 +1,7 @@
 //! This module handles querying entities from a [`World`] based on what
 //! components they have (or don't have).
 
-use std::any::TypeId;
+use std::{any::TypeId, collections::HashSet};
 
 use crate::{
     Entity,
@@ -94,7 +94,7 @@ impl Query {
     ///
     /// [`World`]: crate::World
     #[must_use]
-    pub(crate) fn query(&self, components: &Components, alive: &[Entity]) -> Vec<Entity> {
+    pub(crate) fn query(&self, components: &Components, alive: &HashSet<Entity>) -> Vec<Entity> {
         alive
             .iter()
             .copied()
