@@ -105,8 +105,8 @@ pub fn derive_system(input: &DeriveInput) -> TokenStream {
 
     quote! {
         impl System for #ident {
-            fn name() -> String {
-                String::from(#name)
+            fn name() -> &'static str {
+                #name
             }
         }
     }

@@ -11,7 +11,7 @@ use macros::system_trait;
 /// All systems must implement this trait.
 pub trait System: 'static {
     /// Get a name for the system. For debug purposes only.
-    fn name() -> String;
+    fn name() -> &'static str;
 }
 #[doc(hidden)]
 pub use macros::System;
