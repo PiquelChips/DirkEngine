@@ -238,3 +238,5 @@ thread::spawn(move || {
 mgr.dispatch_all();
 assert_eq!(consumer.consume_all().count(), 2);
 ```
+
+[`dispatch_all`]: EventManager::dispatch_all

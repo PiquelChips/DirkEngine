@@ -5,11 +5,6 @@ use winit::{
     window::WindowId,
 };
 
-/// An event to signal that the application has exited
-#[derive(Debug, Clone, Event)]
-#[event("App Exit with code {0}")]
-pub struct AppExit(pub i32);
-
 /// All platform events.
 /// These are specific to global platform stuff. No input or window
 /// specific events are listed here.

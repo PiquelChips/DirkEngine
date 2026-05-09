@@ -1,4 +1,4 @@
-//! The [Engine] crate. The engine holds all the state & manages
+//! The [`Engine`] crate. The engine holds all the state & manages
 //! all the systems for the engine to run properly.
 
 use std::{collections::HashMap, ffi::CString, str::FromStr, time::Instant};
@@ -14,7 +14,7 @@ use logging::Logger;
 
 /// This is the main struct that holds global engine state.
 pub struct Engine {
-    exit_consumer: events::Consumer<platform::AppExit>,
+    exit_consumer: events::Consumer<events::AppExit>,
     event_manager: events::EventManager,
 
     #[allow(unused)]
@@ -146,12 +146,20 @@ impl Engine {
             .tick(delta_time, &self.worlds, self.platform.windows_mut())
             .context("renderer")?;
 
+        self.players.values_mut().for_each(|player| {
+            let Some(world) = self.worlds.get_mut(&player.world()) else {
+                return;
+            };
+            player.tick(world);
+        });
+
         self.renderer.render().context("rendering")?;
         Ok(!self.is_requesting_exit())
     }
 
     fn process_events(&mut self) {
-        if let Some(platform::AppExit(_)) = self.exit_consumer.try_consume() {
+        if let Some(events::AppExit(msg)) = self.exit_consumer.try_consume() {
+            info!("App exit requested: {msg}");
             self.exit(None);
         }
     }
@@ -160,7 +168,7 @@ impl Engine {
     pub fn is_requesting_exit(&self) -> bool {
         self.is_requesting_exit || self.exit_error.is_some()
     }
-    /// Specify [err] to exit with an error.
+    /// Specify `err` to exit with an error.
     pub fn exit(&mut self, err: Option<anyhow::Error>) {
         self.is_requesting_exit = true;
         self.exit_error = err;
