@@ -130,6 +130,10 @@ impl World {
     /// Attaches a [`Component`] to [`Entity`], replacing any existing component of
     /// the same type.
     ///
+    /// [`ComponentSystem::added`] is called every time.
+    ///
+    /// When replacing, [`ComponentSystem::removed`] is called.
+    ///
     /// [`Entity`]: crate::Entity
     pub fn insert<C: Component>(&mut self, entity: Entity, component: C) {
         if !self.is_alive(entity) {
@@ -141,6 +145,12 @@ impl World {
         self.component_systems
             .iter(TypeId::of::<C>())
             .for_each(|system| system.added(entity, &mut component));
+
+        if self.components.contains(entity, component.type_id()) {
+            self.component_systems
+                .iter(TypeId::of::<C>())
+                .for_each(|system| system.removed(entity, &mut component));
+        }
 
         self.components.insert_any(entity, component);
     }
