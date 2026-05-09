@@ -22,11 +22,11 @@ impl Version {
     ///
     /// # Panics
     ///
-    /// Will panic if the specified [major], [minor] & [patch]
+    /// Will panic if the specified `major`, `minor` & `patch`
     /// do not fit the storage.
-    /// [major] version must fit in 10 bits (0–1023).
-    /// [minor] version must fit in 10 bits (0–1023).
-    /// [patch] version must fit in 12 bits (0–4095).
+    /// `major`: version must fit in 10 bits (0–1023).
+    /// `minor`: version must fit in 10 bits (0–1023).
+    /// `patch`: version must fit in 12 bits (0–4095).
     #[must_use]
     pub fn new(major: u32, minor: u32, patch: u32) -> Self {
         assert!(
@@ -43,17 +43,17 @@ impl Version {
         );
         Self(((major) << 22) | ((minor) << 12) | (patch))
     }
-    /// Returns the major number of the [Version]
+    /// Returns the major number of the [`Version`]
     #[must_use]
     pub fn major(&self) -> u32 {
         self.0 >> 22
     }
-    /// Returns the minor number of the [Version]
+    /// Returns the minor number of the [`Version`]
     #[must_use]
     pub fn minor(&self) -> u32 {
         (self.0 >> 12) & 0x3ff
     }
-    /// Returns the patch number of the [Version]
+    /// Returns the patch number of the [`Version`]
     #[must_use]
     pub fn patch(&self) -> u32 {
         self.0 & 0xfff

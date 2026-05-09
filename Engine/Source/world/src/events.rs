@@ -19,6 +19,9 @@
 //! prefer [`PlayerUpdateEvent`], which carries a richer snapshot (window,
 //! region, update kind) and is emitted by [`Player`] itself rather than by the
 //! world.
+//!
+//! [`EventManager`]: events::EventManager
+//! [`Dispatcher`]: events::Dispatcher
 
 use events::Event;
 use platform::WindowId;
@@ -52,6 +55,8 @@ use crate::{
 /// let world_id = evt.world();
 /// # }
 /// ```
+///
+/// [`World`]: crate::World
 #[derive(Debug, Clone, Event)]
 pub enum WorldEvent {
     /// A new world was created.
