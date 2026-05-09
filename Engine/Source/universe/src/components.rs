@@ -4,7 +4,6 @@
 //! Implement the [`WorldComponent`] or [`EntityComponent`] traits to get
 //! started (you can do this via a derive macro).
 use crate::Entity;
-use serde::{Serialize, de::DeserializeOwned};
 use std::{
     any::{Any, TypeId},
     collections::HashMap,
@@ -13,7 +12,7 @@ use std::{
 };
 
 /// Base marker trait for component types.
-pub trait Component: 'static + Sized + Debug + Serialize + DeserializeOwned {}
+pub trait Component: 'static + Sized + Debug {}
 #[doc(hidden)]
 pub use macros::Component;
 
