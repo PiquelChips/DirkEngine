@@ -25,6 +25,8 @@ pub(crate) trait AnyComponent: Any + Debug + 'static {
     /// enabling `Box::downcast::<C>()` at call sites.
     fn into_any(self: Box<Self>) -> Box<dyn Any>;
 
+    /// Takes `self` so it can be called on a [`AnyComponent`] directly
+    /// without needing to know the type.
     fn new_storage(&self) -> Box<dyn AnyStorage>;
 }
 

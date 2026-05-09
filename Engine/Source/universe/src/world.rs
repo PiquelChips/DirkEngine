@@ -90,7 +90,7 @@ impl World {
         if !self.alive.remove(&entity) {
             // if the entity was not present, systems shouldn't be called
             return;
-        };
+        }
 
         self.world_systems
             .iter()

@@ -110,6 +110,8 @@ pub fn system_trait(_attr: TokenStream, item: TokenStream) -> TokenStream {
         .into()
 }
 
+/// This macro derives the System trait by getting its name or reading
+/// the `#[system(name = "...")]`.
 #[proc_macro_derive(System, attributes(system))]
 pub fn derive_system(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);

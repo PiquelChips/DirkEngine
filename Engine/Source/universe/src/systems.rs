@@ -59,6 +59,8 @@ pub trait TickingSystem: System {
     ///
     /// This function should not be implemented by users.
     fn outer_tick(&self, world: &World, delta_time: f32) {
+        // This allocates a new [`Vec`] per [`TickingSystem`] per tick.
+        // TODO: optimise this. IDK how tho
         self.tick(world, delta_time, world.query(&self.query()));
     }
 }
