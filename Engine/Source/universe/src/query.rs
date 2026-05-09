@@ -1,5 +1,7 @@
 //! This module handles querying entities from a [`World`] based on what
 //! components they have (or don't have).
+//!
+//! [`World`]: crate::World
 
 use std::{any::TypeId, collections::HashSet};
 
@@ -31,6 +33,8 @@ use crate::{
 ///     .with_component::<Velocity>()
 ///     .without_component::<Frozen>();
 /// ```
+///
+/// [`World`]: crate::World
 #[derive(Default)]
 pub struct Query {
     /// Component types that must ALL be present on a matching entity.

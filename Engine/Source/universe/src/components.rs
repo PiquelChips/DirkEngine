@@ -1,7 +1,7 @@
 //! This module has all the traits & structs required for component storage
 //! and creation.
 //!
-//! Implement the [`WorldComponent`] or [`EntityComponent`] traits to get
+//! Implement the [`Component`] traits to get
 //! started (you can do this via a derive macro).
 use crate::Entity;
 use std::{
