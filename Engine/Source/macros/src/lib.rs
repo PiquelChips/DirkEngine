@@ -103,9 +103,17 @@ pub(crate) fn empty_derive(input: TokenStream, trait_ident: &Ident) -> TokenStre
 /// This macro should be used on a `trait`. This trait should have the
 /// `System` trait as a super. It will generate all the required code for
 /// creating a storage struct for the Trait.
-pub fn system(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn system_trait(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as ItemTrait);
     universe::generate_system_code(&input)
+        .unwrap_or_else(|e| e.to_compile_error())
+        .into()
+}
+
+#[proc_macro_derive(System, attributes(system))]
+pub fn derive_system(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    universe::derive_system(&input)
         .unwrap_or_else(|e| e.to_compile_error())
         .into()
 }

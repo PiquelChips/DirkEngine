@@ -6,16 +6,18 @@ use crate::{
     components::{AnyComponent, Component},
     query::Query,
 };
-use macros::system;
+use macros::system_trait;
 
 /// All systems must implement this trait.
 pub trait System: 'static {
     /// Get a name for the system. For debug purposes only.
     fn name() -> String;
 }
+#[doc(hidden)]
+pub use macros::System;
 
 /// A system that is run by the [`Universe`].
-#[system]
+#[system_trait]
 pub trait UniverseSystem: System {
     /// Called right after the world is created.
     fn world_created(&self, world: &World);
@@ -28,7 +30,7 @@ pub trait UniverseSystem: System {
 }
 
 /// A system that is run for the entire [`World`].
-#[system]
+#[system_trait]
 pub trait WorldSystem: System {
     /// Called on world tick
     fn tick(&self, world: &World, delta_time: f32);
@@ -42,7 +44,7 @@ pub trait WorldSystem: System {
 }
 
 /// Run on a specific World for components that match the query
-#[system]
+#[system_trait]
 pub trait TickingSystem: System {
     /// `world`: the current world we are ticking. This system would tick multiple
     /// time per frame, just on multiple different worlds.

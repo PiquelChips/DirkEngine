@@ -1,6 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
-use syn::{FnArg, ItemTrait, Pat, TraitItem, TypeParamBound};
+use syn::{DeriveInput, FnArg, ItemTrait, LitStr, Pat, TraitItem, TypeParamBound};
 
 pub fn generate_system_code(trait_def: &ItemTrait) -> syn::Result<TokenStream> {
     if !trait_def.supertraits.iter().any(|s| match s {
@@ -81,4 +81,33 @@ fn get_arg_names_from_sig(sig: &syn::Signature) -> Vec<TokenStream> {
             FnArg::Receiver(_) => quote! {self},
         })
         .collect()
+}
+
+pub fn derive_system(input: &DeriveInput) -> syn::Result<TokenStream> {
+    let ident = &input.ident;
+
+    let mut attr_name = None;
+    for attr in &input.attrs {
+        if attr.path().is_ident("system") {
+            attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("name") {
+                    let value = meta.value()?;
+                    let s: LitStr = value.parse()?;
+                    attr_name = Some(s.value());
+                }
+                Ok(())
+            })
+            .ok();
+        }
+    }
+
+    let name = attr_name.unwrap_or_else(|| ident.to_string());
+
+    Ok(quote! {
+        impl System for #ident {
+            fn name() -> String {
+                String::from(#name)
+            }
+        }
+    })
 }
