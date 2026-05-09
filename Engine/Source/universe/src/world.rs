@@ -87,7 +87,10 @@ impl World {
     /// Calls [`ComponentSystem::removed`] for every component still attached
     /// to the entity before the components are actually dropped.
     pub fn despawn(&mut self, entity: Entity) {
-        self.alive.retain(|&e| e != entity);
+        if !self.alive.remove(&entity) {
+            // if the entity was not present, systems shouldn't be called
+            return;
+        };
 
         self.world_systems
             .iter()
