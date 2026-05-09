@@ -83,7 +83,7 @@ fn get_arg_names_from_sig(sig: &syn::Signature) -> Vec<TokenStream> {
         .collect()
 }
 
-pub fn derive_system(input: &DeriveInput) -> syn::Result<TokenStream> {
+pub fn derive_system(input: &DeriveInput) -> TokenStream {
     let ident = &input.ident;
 
     let mut attr_name = None;
@@ -103,11 +103,11 @@ pub fn derive_system(input: &DeriveInput) -> syn::Result<TokenStream> {
 
     let name = attr_name.unwrap_or_else(|| ident.to_string());
 
-    Ok(quote! {
+    quote! {
         impl System for #ident {
             fn name() -> String {
                 String::from(#name)
             }
         }
-    })
+    }
 }

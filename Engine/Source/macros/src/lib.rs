@@ -113,7 +113,5 @@ pub fn system_trait(_attr: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_derive(System, attributes(system))]
 pub fn derive_system(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    universe::derive_system(&input)
-        .unwrap_or_else(|e| e.to_compile_error())
-        .into()
+    universe::derive_system(&input).into()
 }
