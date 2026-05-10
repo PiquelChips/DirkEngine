@@ -44,14 +44,11 @@
 
 use std::f32::consts::PI;
 
-use events::{Consumer, Dispatcher, EventManager};
+use events::{Consumer, EventManager};
 use platform::{WindowEvent, WindowId};
 
-use crate::{
-    Entity, World, WorldId,
-    components::Camera,
-    events::{PlayerUpdateEvent, PlayerUpdateType},
-};
+use crate::Camera;
+use universe::{Entity, World, WorldId};
 
 /// Opaque identifier for a player, unique within a session.
 pub type PlayerId = u32;
@@ -188,7 +185,6 @@ pub struct Player {
     entity: Entity,
     window: WindowId,
     region: PlayerRegion,
-    dispatcher: Dispatcher<PlayerUpdateEvent>,
     platform_consumer: Consumer<WindowEvent>,
 }
 
@@ -227,41 +223,28 @@ impl Player {
         window: WindowId,
         event_manager: &EventManager,
     ) -> Self {
-        use crate::components;
-        let entity = world.spawn();
-        world.insert(
-            entity,
-            components::Transform {
+        let builder = Entity::builder()
+            .with_component(crate::Transform {
                 location: glam::vec3(0.0, 500.0, 500.0),
                 rotation: glam::vec3(-PI / 4.0, 0.0, 0.0),
                 scale: glam::Vec3::ONE,
-            },
-        );
-        world.insert(
-            entity,
-            components::Camera {
+            })
+            .with_component(crate::Camera {
                 fov: 45_f32.to_radians(),
                 near_clip: 0.1,
                 far_clip: 100_000.0,
                 width: 100.0,
                 height: 100.0,
-            },
-        );
+            });
 
-        let player = Self {
+        Self {
             id,
             world: world.id(),
-            entity,
+            entity: world.spawn(builder),
             window,
             region: PlayerRegion::default(),
-            dispatcher: event_manager.register(),
             platform_consumer: event_manager.subscribe(),
-        };
-        player.dispatcher.dispatch(PlayerUpdateEvent::from_player(
-            &player,
-            PlayerUpdateType::Spawned,
-        ));
-        player
+        }
     }
 
     /// Removes the player entity from the world and fires a `Despawned` event.
@@ -274,10 +257,6 @@ impl Player {
     /// [`PlayerUpdateType::Despawned`].
     pub fn despawn(self, world: &mut World) {
         world.despawn(self.entity);
-        self.dispatcher.dispatch(PlayerUpdateEvent::from_player(
-            &self,
-            PlayerUpdateType::Despawned,
-        ));
     }
 
     /// Returns the player's unique [`PlayerId`].
@@ -331,7 +310,6 @@ impl Player {
     /// ```
     pub fn set_region(&mut self, region: PlayerRegion) {
         self.region = region;
-        self.dispatch_update();
     }
 
     /// Updates the player's information. This mainly listens for
@@ -358,12 +336,5 @@ impl Player {
             camera.width = width as f32;
             camera.height = height as f32;
         }
-    }
-
-    fn dispatch_update(&self) {
-        self.dispatcher.dispatch(PlayerUpdateEvent::from_player(
-            self,
-            PlayerUpdateType::Updated,
-        ));
     }
 }
