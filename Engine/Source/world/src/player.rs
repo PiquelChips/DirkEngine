@@ -47,7 +47,7 @@ use std::f32::consts::PI;
 use events::{Consumer, EventManager};
 use platform::{WindowEvent, WindowId};
 
-use crate::Camera;
+use crate::components::{Camera, Transform};
 use universe::{Entity, World, WorldId};
 
 /// Opaque identifier for a player, unique within a session.
@@ -224,12 +224,12 @@ impl Player {
         event_manager: &EventManager,
     ) -> Self {
         let builder = Entity::builder()
-            .with_component(crate::Transform {
+            .with_component(Transform {
                 location: glam::vec3(0.0, 500.0, 500.0),
                 rotation: glam::vec3(-PI / 4.0, 0.0, 0.0),
                 scale: glam::Vec3::ONE,
             })
-            .with_component(crate::Camera {
+            .with_component(Camera {
                 fov: 45_f32.to_radians(),
                 near_clip: 0.1,
                 far_clip: 100_000.0,
