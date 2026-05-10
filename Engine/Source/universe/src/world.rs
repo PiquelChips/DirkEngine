@@ -48,9 +48,11 @@ impl World {
             .iter()
             .for_each(|system| system.tick(self, delta_time));
 
-        self.ticking_systems
-            .iter()
-            .for_each(|system| system.outer_tick(self, delta_time));
+        self.ticking_systems.iter().for_each(|system| {
+            // This allocates a new [`Vec`] per [`TickingSystem`] per tick.
+            // TODO: optimise this. IDK how tho
+            system.tick(self, delta_time, self.query(&system.query()));
+        });
     }
 
     /// Returns the [`World`]'s [`WorldId`].

@@ -53,16 +53,6 @@ pub trait TickingSystem: System {
     fn tick(&self, world: &World, delta_time: f32, entities: Vec<Entity>);
     /// Returns the query used to construct the `entities` of the tick function.
     fn query(&self) -> Query;
-
-    /// This is an outer tick function that should actually be called.
-    /// [`TickingSystem::tick`] should only be implemented, never called.
-    ///
-    /// This function should not be implemented by users.
-    fn outer_tick(&self, world: &World, delta_time: f32) {
-        // This allocates a new [`Vec`] per [`TickingSystem`] per tick.
-        // TODO: optimise this. IDK how tho
-        self.tick(world, delta_time, world.query(&self.query()));
-    }
 }
 
 /// System run for every component of the specified type.

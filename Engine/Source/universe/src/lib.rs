@@ -53,9 +53,11 @@ impl Universe {
                 .iter()
                 .for_each(|system| system.tick(world, delta_time));
 
-            self.ticking_systems
-                .iter()
-                .for_each(|system| system.outer_tick(world, delta_time));
+            self.ticking_systems.iter().for_each(|system| {
+                // This allocates a new [`Vec`] per [`TickingSystem`] per tick.
+                // TODO: optimise this. IDK how tho
+                system.tick(world, delta_time, world.query(&system.query()));
+            });
 
             world.tick(delta_time);
         });
