@@ -410,14 +410,29 @@ impl AssetRegistry {
     /// [`EventManager::dispatch_all`]. Skipping this call means
     /// [`AssetUnloaded`] events are never delivered, causing potential
     /// memory leaks (e.g. the renderer cannot free GPU resources).
-    pub fn tick(&self) {
+    pub fn tick(&mut self) {
         for InternalAssetUnloaded(handle) in self.internal_unload_consumer.consume_all() {
             self.unload_dispatcher.dispatch(AssetUnloaded { handle });
         }
 
-        for LoadAsset(asset) in self.load_consumer.consume_all() {
-            // TODO: load_any, load that doesn't need a concrete asset type
-            self.load_asset(&asset);
+        let pending: Vec<AssetHandle> = self
+            .load_consumer
+            .consume_all()
+            .map(|LoadAsset(h)| h)
+            .collect();
+
+        for asset in pending {
+            match asset.asset_type() {
+                AssetType::Model => {
+                    let _ = self.load_asset::<Model>(&asset);
+                }
+                AssetType::Unknown => {
+                    warn!(
+                        "LoadAsset event received for asset {} with Unknown type, ignoring",
+                        asset.raw()
+                    );
+                }
+            }
         }
     }
 
