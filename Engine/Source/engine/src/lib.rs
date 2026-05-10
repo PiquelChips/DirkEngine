@@ -5,10 +5,8 @@ use std::{collections::HashMap, ffi::CString, str::FromStr, time::Instant};
 
 use anyhow::Context;
 use tracing::{info, warn};
-use world::{
-    World, WorldId,
-    player::{Player, PlayerId},
-};
+use universe::{Entity, Universe, World, WorldId};
+use world::player::{Player, PlayerId};
 
 use logging::Logger;
 
@@ -22,9 +20,8 @@ pub struct Engine {
 
     renderer: renderer::Renderer,
     platform: platform::Platform,
+    universe: universe::Universe,
 
-    next_world_id: WorldId,
-    worlds: HashMap<WorldId, World>,
     next_player_id: PlayerId,
     players: HashMap<PlayerId, Player>,
 
@@ -74,6 +71,9 @@ impl Engine {
         )
         .context("renderer init")?;
 
+        // TODO: register systems of other engine systems
+        let universe = Universe::builder().build();
+
         info!("engine initialised");
         Ok(Self {
             exit_consumer: event_manager.subscribe(),
@@ -83,9 +83,8 @@ impl Engine {
 
             platform,
             renderer,
+            universe,
 
-            next_world_id: 0,
-            worlds: HashMap::new(),
             next_player_id: 0,
             players: HashMap::new(),
 
@@ -143,11 +142,11 @@ impl Engine {
 
         self.platform.tick(delta_time);
         self.renderer
-            .tick(delta_time, &self.worlds, self.platform.windows_mut())
+            .tick(delta_time, self.platform.windows_mut())
             .context("renderer")?;
 
         self.players.values_mut().for_each(|player| {
-            let Some(world) = self.worlds.get_mut(&player.world()) else {
+            let Some(world) = self.universe.worlds_mut().get_mut(&player.world()) else {
                 return;
             };
             player.tick(world);
@@ -185,24 +184,11 @@ impl Engine {
         delta
     }
 
-    fn create_world(&mut self) -> WorldId {
-        let id = self.next_world_id;
-        self.next_world_id += 1;
-
-        let world = World::new(id, &self.event_manager);
-        self.worlds.insert(id, world);
-        id
-    }
-    #[allow(unused)]
-    fn destroy_world(&mut self, id: WorldId) {
-        self.worlds.remove(&id);
-    }
-
     fn spawn_player(&mut self, world: WorldId) -> Option<PlayerId> {
         let id = self.next_player_id;
         self.next_player_id += 1;
 
-        let world = self.worlds.get_mut(&world)?;
+        let world = self.universe.worlds_mut().get_mut(&world)?;
 
         let player = Player::spawn(
             id,
@@ -219,7 +205,7 @@ impl Engine {
         let Some(player) = self.players.remove(&id) else {
             return;
         };
-        let Some(world) = self.worlds.get_mut(&player.world()) else {
+        let Some(world) = self.universe.worlds_mut().get_mut(&player.world()) else {
             return;
         };
         player.despawn(world);
@@ -242,33 +228,26 @@ impl Engine {
         self.asset_registry
             .load_asset::<assets::Model>(&shrek_model)?;
 
-        let world_id = self.create_world();
-        let world = self
-            .worlds
-            .get_mut(&world_id)
-            .expect("world was just created, ID should be valid");
-
-        let shrek = world.spawn();
-        world.insert(
-            shrek,
-            Transform {
+        let shrek_builder = Entity::builder()
+            .with_component(Transform {
                 location: glam::Vec3::ZERO,
                 rotation: glam::Vec3::ZERO,
                 scale: glam::Vec3::splat(1.),
-            },
-        );
-        world.insert(shrek, Renderable { model: shrek_model });
+            })
+            .with_component(Renderable { model: shrek_model });
 
-        let duck = world.spawn();
-        world.insert(
-            duck,
-            Transform {
+        let duck_builder = Entity::builder()
+            .with_component(Transform {
                 location: glam::vec3(100., 0., 0.),
                 rotation: glam::Vec3::ZERO,
                 scale: glam::Vec3::splat(1.),
-            },
-        );
-        world.insert(duck, Renderable { model: duck_model });
-        Ok(world_id)
+            })
+            .with_component(Renderable { model: duck_model });
+
+        let world_builder = World::builder()
+            .with_entity(shrek_builder)
+            .with_entity(duck_builder);
+
+        Ok(self.universe.create_world(world_builder))
     }
 }

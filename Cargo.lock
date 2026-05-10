@@ -469,6 +469,7 @@ dependencies = [
  "renderer",
  "thiserror 2.0.18",
  "tracing",
+ "universe",
  "utils",
  "world",
 ]
