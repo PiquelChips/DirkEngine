@@ -185,6 +185,7 @@ pub struct Player {
     entity: Entity,
     window: WindowId,
     region: PlayerRegion,
+    dispatcher: Dispatcher<PlayerUpdateEvent>,
     platform_consumer: Consumer<WindowEvent>,
 }
 
@@ -237,14 +238,20 @@ impl Player {
                 height: 100.0,
             });
 
-        Self {
+        let player = Self {
             id,
             world: world.id(),
             entity: world.spawn(builder),
             window,
             region: PlayerRegion::default(),
+            dispatcher: event_manager.register(),
             platform_consumer: event_manager.subscribe(),
-        }
+        };
+        player.dispatcher.dispatch(PlayerUpdateEvent::from_player(
+            &player,
+            PlayerUpdateType::Spawned,
+        ));
+        player
     }
 
     /// Removes the player entity from the world and fires a `Despawned` event.
@@ -257,6 +264,10 @@ impl Player {
     /// [`PlayerUpdateType::Despawned`].
     pub fn despawn(self, world: &mut World) {
         world.despawn(self.entity);
+        self.dispatcher.dispatch(PlayerUpdateEvent::from_player(
+            &self,
+            PlayerUpdateType::Despawned,
+        ));
     }
 
     /// Returns the player's unique [`PlayerId`].
@@ -310,6 +321,7 @@ impl Player {
     /// ```
     pub fn set_region(&mut self, region: PlayerRegion) {
         self.region = region;
+        self.dispatch_update();
     }
 
     /// Updates the player's information. This mainly listens for
@@ -336,6 +348,13 @@ impl Player {
             camera.width = width as f32;
             camera.height = height as f32;
         }
+    }
+
+    fn dispatch_update(&self) {
+        self.dispatcher.dispatch(PlayerUpdateEvent::from_player(
+            self,
+            PlayerUpdateType::Updated,
+        ));
     }
 }
 
