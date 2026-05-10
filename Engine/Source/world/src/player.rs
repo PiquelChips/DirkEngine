@@ -44,7 +44,7 @@
 
 use std::f32::consts::PI;
 
-use events::{Consumer, Event, EventManager};
+use events::{Consumer, Dispatcher, Event, EventManager};
 use platform::{WindowEvent, WindowId};
 
 use crate::components::{Camera, Transform};
