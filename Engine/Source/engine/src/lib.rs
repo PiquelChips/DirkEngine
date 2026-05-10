@@ -214,17 +214,17 @@ impl Engine {
     fn create_test_world(&mut self) -> anyhow::Result<WorldId> {
         use world::components::{Renderable, Transform};
 
+        let duck_model =
+            assets::AssetHandle::from_raw("models/Duck/Duck.dirkasset", assets::AssetType::Model);
+        let shrek_model =
+            assets::AssetHandle::from_raw("models/Shrek/Shrek.dirkasset", assets::AssetType::Model);
+
         // TODO: with universe system, will be able to listen to events when
         // specific components are added. This means some subsystem will
         // be able to listen for when a renderable is added, and load the
         // asset appropriately
-        let duck_model =
-            assets::AssetHandle::from_raw("models/Duck/Duck.dirkasset", assets::AssetType::Model);
         self.asset_registry
             .load_asset::<assets::Model>(&duck_model)?;
-
-        let shrek_model =
-            assets::AssetHandle::from_raw("models/Shrek/Shrek.dirkasset", assets::AssetType::Model);
         self.asset_registry
             .load_asset::<assets::Model>(&shrek_model)?;
 
