@@ -1,8 +1,9 @@
-use std::{any::TypeId, collections::HashSet};
+//! This module houses the [`World`]. This is what players actually play in.
+use std::collections::HashSet;
 
 use crate::{
     Entity, EntityBuilder,
-    components::{AnyComponent, Component, Components},
+    components::Components,
     query::Query,
     systems::{
         ComponentSystem, ComponentSystemStorage, TickingSystem, TickingSystemStorage, WorldSystem,
@@ -16,15 +17,15 @@ pub type WorldId = u32;
 /// This is a world. It has entities and components.
 #[derive(Default)]
 pub struct World {
-    id: WorldId,
-    next_id: Entity,
-    alive: HashSet<Entity>,
-    components: Components,
+    pub(crate) id: WorldId,
+    pub(crate) next_id: Entity,
+    pub(crate) alive: HashSet<Entity>,
+    pub(crate) components: Components,
 
     #[allow(clippy::struct_field_names)]
-    world_systems: WorldSystemStorage,
-    ticking_systems: TickingSystemStorage,
-    component_systems: ComponentSystemStorage,
+    pub(crate) world_systems: WorldSystemStorage,
+    pub(crate) ticking_systems: TickingSystemStorage,
+    pub(crate) component_systems: ComponentSystemStorage,
 }
 
 impl World {
@@ -32,15 +33,6 @@ impl World {
     #[must_use]
     pub fn builder() -> WorldBuilder {
         WorldBuilder::new()
-    }
-    /// Calls all the destruction [`System`]s on the world
-    pub(crate) fn destroy(&mut self) {
-        // `clone` is expensive but its the only way I found for the
-        // borrow checker. As this is called very rarely (on world destruction),
-        // it should not have too big of an effect on runtime performance.
-        for entity in self.alive.clone() {
-            self.despawn(entity);
-        }
     }
 
     pub(crate) fn tick(&self, delta_time: f32) {
@@ -63,60 +55,6 @@ impl World {
 
     // ENTITY MANAGEMENT
 
-    /// Will spawn a new [`Entity`] using the provided [`EntityBuilder`].
-    /// Returns the handle of the new [`Entity`].
-    pub fn spawn(&mut self, builder: EntityBuilder) -> Entity {
-        let id = self.next_id;
-        self.next_id += 1;
-        self.alive.insert(id);
-
-        for (_, mut component) in builder.components {
-            self.component_systems
-                .iter(component.type_id())
-                .for_each(|system| system.added(id, &mut component));
-
-            self.components.insert_any(id, component);
-        }
-
-        self.world_systems.iter().for_each(|system| {
-            if let Some(query) = system.query()
-                && !query.matches(&self.components, id)
-            {
-                return;
-            }
-
-            system.entity_spawned(self, id);
-        });
-        id
-    }
-
-    /// Will despawn the provided [`Entity`].
-    ///
-    /// Calls [`ComponentSystem::removed`] for every component still attached
-    /// to the entity before the components are actually dropped.
-    pub fn despawn(&mut self, entity: Entity) {
-        if !self.alive.remove(&entity) {
-            // if the entity was not present, systems shouldn't be called
-            return;
-        }
-
-        self.world_systems.iter().for_each(|system| {
-            if let Some(query) = system.query()
-                && !query.matches(&self.components, entity)
-            {
-                return;
-            }
-
-            system.entity_despawned(self, entity);
-        });
-
-        for (type_id, mut component) in self.components.remove_all(entity) {
-            self.component_systems
-                .iter(type_id)
-                .for_each(|system| system.removed(entity, &mut component));
-        }
-    }
-
     /// Run `query` against all currently alive entities and return the
     /// matching subset.
     ///
@@ -138,96 +76,21 @@ impl World {
     pub fn is_alive(&self, entity: Entity) -> bool {
         self.alive.contains(&entity)
     }
-
-    // COMPONENTS
-
-    /// Attaches a [`Component`] to [`Entity`], replacing any existing component of
-    /// the same type.
-    ///
-    /// [`ComponentSystem::added`] is called every time.
-    ///
-    /// When replacing, [`ComponentSystem::removed`] is called.
-    ///
-    /// [`Entity`]: crate::Entity
-    pub fn insert<C: Component>(&mut self, entity: Entity, component: C) {
-        if !self.is_alive(entity) {
-            return;
-        }
-
-        let mut component: Box<dyn AnyComponent> = Box::new(component);
-
-        self.component_systems
-            .iter(TypeId::of::<C>())
-            .for_each(|system| system.added(entity, &mut component));
-
-        if self.components.contains(entity, component.type_id()) {
-            self.component_systems
-                .iter(TypeId::of::<C>())
-                .for_each(|system| system.removed(entity, &mut component));
-        }
-
-        self.components.insert_any(entity, component);
-    }
-
-    /// Returns a shared reference to a component, or `None` if the entity
-    /// does not have one.
-    #[must_use]
-    pub fn get<C: Component>(&self, entity: Entity) -> Option<&C> {
-        self.components.get(entity)
-    }
-
-    /// Returns a mutable reference to a component, or `None` if the entity
-    /// does not have one.
-    pub fn get_mut<C: Component>(&mut self, entity: Entity) -> Option<&mut C> {
-        self.components.get_mut(entity)
-    }
-
-    /// Removes a single component from an entity, calling [`ComponentSystem::removed`]
-    /// if the component was present.
-    ///
-    /// The entity itself is **not** despawned. If the component is not
-    /// present this is a no-op.
-    pub fn remove<C: Component>(&mut self, entity: Entity) {
-        if let Some(component) = self.components.remove::<C>(entity) {
-            let mut component: Box<dyn AnyComponent> = Box::new(component);
-            self.component_systems
-                .iter(TypeId::of::<C>())
-                .for_each(|system| system.removed(entity, &mut component));
-        }
-    }
 }
 
 /// Builder struct for [`World`].
 #[derive(Default)]
 pub struct WorldBuilder {
-    entities: Vec<EntityBuilder>,
-    world_systems: WorldSystemStorage,
-    ticking_systems: TickingSystemStorage,
-    component_systems: ComponentSystemStorage,
+    pub(crate) entities: Vec<EntityBuilder>,
+    pub(crate) world_systems: WorldSystemStorage,
+    pub(crate) ticking_systems: TickingSystemStorage,
+    pub(crate) component_systems: ComponentSystemStorage,
 }
 
 impl WorldBuilder {
     #[must_use]
     fn new() -> Self {
         Self::default()
-    }
-
-    /// Will actually build a world struct with the provided `id`.
-    #[must_use]
-    pub fn build(self, id: WorldId) -> World {
-        let mut world = World {
-            id,
-            world_systems: self.world_systems,
-            ticking_systems: self.ticking_systems,
-            component_systems: self.component_systems,
-            ..World::default()
-        };
-
-        for builder in self.entities {
-            world.spawn(builder);
-        }
-
-        world
     }
 
     /// Adds an [`Entity`] that will be spawned on [`World`] creation.
