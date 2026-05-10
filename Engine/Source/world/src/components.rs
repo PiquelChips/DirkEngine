@@ -2,9 +2,14 @@
 //!
 //! [`Component`]: universe::components::Component
 
+use assets::LoadAsset;
+use events::Dispatcher;
 use glam::{Mat4, Vec3};
 use tracing::warn;
-use universe::components::Component;
+use universe::{
+    components::Component,
+    systems::{ComponentSystem, System},
+};
 
 /// Marks an entity as having a renderable mesh.
 ///
@@ -22,6 +27,31 @@ use universe::components::Component;
 pub struct Renderable {
     /// Asset-registry key for the mesh to render (e.g. `"meshes/cube.glb"`).
     pub model: assets::AssetHandle,
+}
+
+/// A [`universe`] system that will automatically load a model
+/// when a [`Renderable`] is added to an [`universe::Entity`].
+#[derive(System)]
+pub struct ModelUploadSystem {
+    dispatcher: Dispatcher<LoadAsset>,
+}
+
+impl ModelUploadSystem {
+    pub fn new(event_manager: &events::EventManager) -> Self {
+        Self {
+            dispatcher: event_manager.register(),
+        }
+    }
+}
+
+impl ComponentSystem for ModelUploadSystem {
+    type Component = Renderable;
+    fn added(&self, _: universe::Entity, component: &mut Self::Component) {
+        self.dispatcher.dispatch(LoadAsset(component.model.clone()));
+    }
+    /// Nothing happens when this component is removed. The asset will be unloaded
+    /// automatically when it is no longer used.
+    fn removed(&self, _: universe::Entity, _: &mut Self::Component) {}
 }
 
 /// Spatial transform for an entity: position, orientation, and scale.

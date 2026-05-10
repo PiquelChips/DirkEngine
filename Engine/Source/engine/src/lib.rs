@@ -6,7 +6,10 @@ use std::{collections::HashMap, ffi::CString, str::FromStr, time::Instant};
 use anyhow::Context;
 use tracing::{info, warn};
 use universe::{Entity, Universe, World, WorldId};
-use world::player::{Player, PlayerId};
+use world::{
+    components::ModelUploadSystem,
+    player::{Player, PlayerId},
+};
 
 use logging::Logger;
 
@@ -71,8 +74,9 @@ impl Engine {
         )
         .context("renderer init")?;
 
-        // TODO: register systems of other engine systems
-        let universe = Universe::builder().build();
+        let universe = Universe::builder()
+            .with_component_system(ModelUploadSystem::new(&event_manager))
+            .build();
 
         info!("engine initialised");
         Ok(Self {
@@ -218,15 +222,6 @@ impl Engine {
             assets::AssetHandle::from_raw("models/Duck/Duck.dirkasset", assets::AssetType::Model);
         let shrek_model =
             assets::AssetHandle::from_raw("models/Shrek/Shrek.dirkasset", assets::AssetType::Model);
-
-        // TODO: with universe system, will be able to listen to events when
-        // specific components are added. This means some subsystem will
-        // be able to listen for when a renderable is added, and load the
-        // asset appropriately
-        self.asset_registry
-            .load_asset::<assets::Model>(&duck_model)?;
-        self.asset_registry
-            .load_asset::<assets::Model>(&shrek_model)?;
 
         let shrek_builder = Entity::builder()
             .with_component(Transform {

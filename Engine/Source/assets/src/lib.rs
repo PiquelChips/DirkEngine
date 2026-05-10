@@ -68,7 +68,7 @@ mod errors;
 pub use errors::{Error, Result};
 
 mod events;
-pub use events::{AssetLoaded, AssetUnloaded};
+pub use events::{AssetLoaded, AssetUnloaded, LoadAsset};
 
 mod assets;
 pub use assets::*;
@@ -350,6 +350,9 @@ pub struct AssetRegistry {
     /// ref-count reaches zero.
     internal_unload_consumer: Consumer<InternalAssetUnloaded>,
 
+    /// Receives [`LoadAsset`] events.
+    load_consumer: Consumer<LoadAsset>,
+
     /// Emits the public [`AssetUnloaded`] event consumed by e.g. the renderer.
     unload_dispatcher: Dispatcher<AssetUnloaded>,
 
@@ -386,6 +389,7 @@ impl AssetRegistry {
         let mut registry = Self {
             assets: HashMap::new(),
 
+            load_consumer: event_manager.subscribe(),
             unload_dispatcher: event_manager.register(),
             internal_unload_consumer: event_manager.subscribe(),
             event_manager: event_manager.clone(),
@@ -409,6 +413,11 @@ impl AssetRegistry {
     pub fn tick(&self) {
         for InternalAssetUnloaded(handle) in self.internal_unload_consumer.consume_all() {
             self.unload_dispatcher.dispatch(AssetUnloaded { handle });
+        }
+
+        for LoadAsset(asset) in self.load_consumer.consume_all() {
+            // TODO: load_any, load that doesn't need a concrete asset type
+            self.load_asset(&asset);
         }
     }
 
