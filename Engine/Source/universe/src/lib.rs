@@ -143,6 +143,9 @@ impl Universe {
         world.alive.insert(id);
 
         for (_, mut component) in builder.components {
+            self.component_systems
+                .iter(component.type_id())
+                .for_each(|system| system.added(id, &mut component));
             world
                 .component_systems
                 .iter(component.type_id())
@@ -188,6 +191,9 @@ impl Universe {
         });
 
         for (type_id, mut component) in world.components.remove_all(entity) {
+            self.component_systems
+                .iter(type_id)
+                .for_each(|system| system.removed(entity, &mut component));
             world
                 .component_systems
                 .iter(type_id)
@@ -216,12 +222,18 @@ impl Universe {
 
         let mut component: Box<dyn AnyComponent> = Box::new(component);
 
+        self.component_systems
+            .iter(TypeId::of::<C>())
+            .for_each(|system| system.added(entity, &mut component));
         world
             .component_systems
             .iter(TypeId::of::<C>())
             .for_each(|system| system.added(entity, &mut component));
 
         if world.components.contains(entity, component.type_id()) {
+            self.component_systems
+                .iter(TypeId::of::<C>())
+                .for_each(|system| system.removed(entity, &mut component));
             world
                 .component_systems
                 .iter(TypeId::of::<C>())
@@ -260,6 +272,9 @@ impl Universe {
 
         if let Some(component) = world.components.remove::<C>(entity) {
             let mut component: Box<dyn AnyComponent> = Box::new(component);
+            self.component_systems
+                .iter(TypeId::of::<C>())
+                .for_each(|system| system.removed(entity, &mut component));
             world
                 .component_systems
                 .iter(TypeId::of::<C>())
