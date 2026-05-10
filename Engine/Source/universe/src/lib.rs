@@ -97,6 +97,16 @@ impl Universe {
             .for_each(|system| system.world_destroyed(&world));
         world.destroy();
     }
+
+    /// Returns all the [`World`]s of the [`Universe`].
+    pub fn worlds(&self) -> &HashMap<WorldId, World> {
+        &self.worlds
+    }
+
+    /// Returns all the [`World`]s of the [`Universe`].
+    pub fn worlds_mut(&mut self) -> &mut HashMap<WorldId, World> {
+        &mut self.worlds
+    }
 }
 
 /// Builder struct used to construct a [`Universe`].
