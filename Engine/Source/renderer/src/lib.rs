@@ -27,11 +27,8 @@ use tracing::{debug, info};
 use tracing::{error, trace, warn};
 
 use platform::{PlatformEvent, WindowEvent, WindowId};
-use world::{
-    World, WorldId,
-    events::{PlayerUpdateType, WorldEvent},
-    player::PlayerId,
-};
+use universe::{World, WorldId};
+use world::player::PlayerId;
 
 mod utils;
 use ::utils::Version;
@@ -90,7 +87,7 @@ pub struct Renderer {
     /// All of the [`window::Window`]s constructed from [`platform::Window`]s.
     windows: HashMap<WindowId, Window>,
     /// All of the internal [`world::World`] representations.
-    scenes: HashMap<world::WorldId, Scene>,
+    scenes: HashMap<universe::WorldId, Scene>,
     /// The management for all the models.
     models: models::ModelRegistry,
     /// All the players currently being managed by the engine.
@@ -103,8 +100,6 @@ pub struct Renderer {
     // Events
     window_consumer: events::Consumer<platform::WindowEvent>,
     platform_consumer: events::Consumer<platform::PlatformEvent>,
-    world_consumer: events::Consumer<world::events::WorldEvent>,
-    player_consumer: events::Consumer<world::events::PlayerUpdateEvent>,
 
     /// The size of the output
     /// TODO: should be removed once we get the frame graph to
@@ -455,8 +450,6 @@ impl Renderer {
 
             window_consumer: event_manager.subscribe(),
             platform_consumer: event_manager.subscribe(),
-            world_consumer: event_manager.subscribe(),
-            player_consumer: event_manager.subscribe(),
         })
     }
 
@@ -476,9 +469,10 @@ impl Renderer {
     pub fn tick(
         &mut self,
         _delta_time: f32,
-        worlds: &HashMap<WorldId, World>,
         windows: &HashMap<WindowId, platform::Window>,
     ) -> Result<()> {
+        // TODO: system to create new scene when worlds are created or destroyed
+        /*
         let world_events: Vec<_> = self.world_consumer.consume_all().collect();
         for event in world_events {
             match event {
@@ -500,6 +494,7 @@ impl Renderer {
                 }
             }
         }
+        */
 
         let platform_events: Vec<_> = self.platform_consumer.consume_all().collect();
         for event in platform_events {
@@ -569,6 +564,8 @@ impl Renderer {
             }
         }
 
+        // TODO: readd player events when players are updated
+        /*
         for event in self.player_consumer.consume_all() {
             if let PlayerUpdateType::Despawned = event.update_type {
                 self.players.remove(&event.id);
@@ -577,6 +574,7 @@ impl Renderer {
 
             self.players.insert(event.id, event.into());
         }
+        */
 
         self.models.tick()?;
 

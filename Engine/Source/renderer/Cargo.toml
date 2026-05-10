@@ -15,6 +15,7 @@ pastey.workspace = true
 
 utils.workspace = true
 platform.workspace = true
+universe.workspace = true
 world.workspace = true
 shaders.workspace = true
 events.workspace = true

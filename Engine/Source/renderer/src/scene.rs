@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use ash::vk;
 use gpu_allocator::MemoryLocation;
-use world::{World, WorldId, components, events::WorldEvent};
+use universe::{Entity, WorldId};
 
 use crate::{
     Error, MAX_FRAMES_IN_FLIGHT, MAX_RENDERABLES, Result,
@@ -27,7 +27,7 @@ pub struct Scene {
     world: WorldId,
     device: RenderDevice,
     /// The entities to render.
-    proxies: HashMap<world::Entity, SceneProxy>,
+    proxies: HashMap<Entity, SceneProxy>,
 
     descriptor_pool: vk::DescriptorPool,
     ubo: [UniformBuffer; MAX_FRAMES_IN_FLIGHT],
@@ -158,6 +158,8 @@ impl Scene {
             graphics_pipeline,
         })
     }
+    // TODO: use a system to sync world with renderer
+    /*
     pub fn process_event(&mut self, world: &World, event: &WorldEvent) -> Result<()> {
         match *event {
             WorldEvent::Created(..) | WorldEvent::Destroyed(..) => {}
@@ -187,13 +189,14 @@ impl Scene {
         }
         Ok(())
     }
+    */
     pub fn render(
         &self,
         models: &ModelRegistry,
         cmd: &CommandBuffer,
         size: vk::Extent2D,
         view: vk::ImageView,
-        camera: world::Entity,
+        camera: Entity,
     ) -> Result<()> {
         let frame = self.device.current_frame();
         // CAMERA

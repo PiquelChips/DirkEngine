@@ -1,7 +1,8 @@
 //! This module holds proxies for various engine objects
 
 use platform::WindowId;
-use world::{Entity, WorldId, player::PlayerId};
+use universe::{Entity, WorldId};
+use world::player::PlayerId;
 
 pub struct CameraProxy {
     /// View matrix calculated from camera position.
@@ -20,6 +21,8 @@ pub struct PlayerProxy {
     // pub region: PlayerRegion,
 }
 
+// TODO: player update event
+/*
 impl From<world::events::PlayerUpdateEvent> for PlayerProxy {
     fn from(event: world::events::PlayerUpdateEvent) -> Self {
         Self {
@@ -30,3 +33,4 @@ impl From<world::events::PlayerUpdateEvent> for PlayerProxy {
         }
     }
 }
+*/
