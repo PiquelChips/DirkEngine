@@ -41,6 +41,11 @@ pub trait WorldSystem: System {
     /// Called when an entity is despawned. At this point, components have
     /// not yet been removed. They can thus be queried for.
     fn entity_despawned(&self, world: &World, entity: Entity);
+
+    /// This query will decide if `entity_spawned` & `entity_despawned` should
+    /// be run for given entities. If there is not query, the system will run
+    /// on every entity.
+    fn query(&self) -> Option<Query>;
 }
 
 /// Run on a specific World for components that match the query

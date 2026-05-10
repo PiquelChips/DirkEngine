@@ -78,9 +78,15 @@ impl World {
             self.components.insert_any(id, component);
         }
 
-        self.world_systems
-            .iter()
-            .for_each(|system| system.entity_spawned(self, id));
+        self.world_systems.iter().for_each(|system| {
+            if let Some(query) = system.query()
+                && !query.matches(&self.components, id)
+            {
+                return;
+            }
+
+            system.entity_spawned(self, id);
+        });
         id
     }
 
@@ -94,9 +100,15 @@ impl World {
             return;
         }
 
-        self.world_systems
-            .iter()
-            .for_each(|system| system.entity_despawned(self, entity));
+        self.world_systems.iter().for_each(|system| {
+            if let Some(query) = system.query()
+                && !query.matches(&self.components, entity)
+            {
+                return;
+            }
+
+            system.entity_despawned(self, entity);
+        });
 
         for (type_id, mut component) in self.components.remove_all(entity) {
             self.component_systems
