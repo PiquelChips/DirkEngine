@@ -1,8 +1,10 @@
-//! This crate has a bunch of frequently used and central [`crate::Component`]s
+//! This module has a bunch of frequently used and central [`Component`]s
+//!
+//! [`Component`]: universe::components::Component
 
-use crate::Component;
 use glam::{Mat4, Vec3};
 use tracing::warn;
+use universe::components::Component;
 
 /// Marks an entity as having a renderable mesh.
 ///

@@ -2449,9 +2449,9 @@ dependencies = [
  "assets",
  "events",
  "glam",
- "macros",
  "platform",
  "tracing",
+ "universe",
  "utils",
 ]
 
