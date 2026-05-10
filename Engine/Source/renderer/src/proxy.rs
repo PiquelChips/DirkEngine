@@ -21,10 +21,8 @@ pub struct PlayerProxy {
     // pub region: PlayerRegion,
 }
 
-// TODO: player update event
-/*
-impl From<world::events::PlayerUpdateEvent> for PlayerProxy {
-    fn from(event: world::events::PlayerUpdateEvent) -> Self {
+impl From<world::player::PlayerUpdateEvent> for PlayerProxy {
+    fn from(event: world::player::PlayerUpdateEvent) -> Self {
         Self {
             id: event.id,
             world: event.world,
@@ -33,4 +31,3 @@ impl From<world::events::PlayerUpdateEvent> for PlayerProxy {
         }
     }
 }
-*/

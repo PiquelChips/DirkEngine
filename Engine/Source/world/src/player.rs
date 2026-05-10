@@ -44,7 +44,7 @@
 
 use std::f32::consts::PI;
 
-use events::{Consumer, EventManager};
+use events::{Consumer, Event, EventManager};
 use platform::{WindowEvent, WindowId};
 
 use crate::components::{Camera, Transform};
@@ -335,6 +335,92 @@ impl Player {
 
             camera.width = width as f32;
             camera.height = height as f32;
+        }
+    }
+}
+
+/// A snapshot of a player's observable state at the moment a change occurred.
+///
+/// Emitted by [`Player`] on spawn, every call to
+/// [`Player::set_region`](crate::player::Player::set_region), and on despawn.
+/// Because the event is a *value snapshot* (not a reference), listeners can
+/// safely store it or send it across threads without holding a lock on the
+/// player.
+///
+/// # Fields
+///
+/// | Field | Description |
+/// |-------|-------------|
+/// | `id`          | The player's unique [`PlayerId`]. |
+/// | `world`       | The [`WorldId`] the player lives in. |
+/// | `entity`      | The ECS [`Entity`] for this player. |
+/// | `window`      | The [`WindowId`] the player renders into. |
+/// | `region`      | A clone of the player's [`PlayerRegion`] at the time of the event. |
+/// | `update_type` | Why the event was fired — see [`PlayerUpdateType`]. |
+///
+/// # Examples
+///
+/// ```rust
+/// # use world::events::{PlayerUpdateEvent, PlayerUpdateType};
+/// # fn example(evt: PlayerUpdateEvent) {
+/// match evt.update_type {
+///     PlayerUpdateType::Spawned   => { /* initialise per-player state */ }
+///     PlayerUpdateType::Updated   => { /* refresh cached region / camera */ }
+///     PlayerUpdateType::Despawned => { /* free per-player resources */ }
+/// }
+/// # }
+/// ```
+#[derive(Clone, Debug, Event)]
+pub struct PlayerUpdateEvent {
+    /// The player's ID
+    pub id: PlayerId,
+    /// The world the player currently is in
+    pub world: WorldId,
+    /// The entity that the player possesses in the world
+    pub entity: Entity,
+    /// The window the player's viewport is being drawn to
+    pub window: WindowId,
+    /// The region of the window that the player's viewport is being draw to
+    pub region: PlayerRegion,
+    /// The kind of update that triggered this event. See [`PlayerUpdateType`]
+    pub update_type: PlayerUpdateType,
+}
+
+/// The reason a [`PlayerUpdateEvent`] was fired.
+///
+/// Variants are ordered chronologically: a player is first `Spawned`, may be
+/// `Updated` zero or more times, and is finally `Despawned`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PlayerUpdateType {
+    /// The player was just created and its entity inserted into the world.
+    Spawned,
+    /// Some player state changed (currently: the viewport region).
+    Updated,
+    /// The player's entity was removed from the world.
+    Despawned,
+}
+
+impl PlayerUpdateEvent {
+    /// Constructs a [`PlayerUpdateEvent`] by snapshotting the relevant fields
+    /// from `player`.
+    ///
+    /// This is the canonical constructor; it is called internally by [`Player`]
+    /// and is exposed so that test harnesses or mock dispatchers can create
+    /// events without going through the full `Player` machinery.
+    ///
+    /// # Arguments
+    ///
+    /// * `player`      — the player whose state should be snapshotted.
+    /// * `update_type` — the reason for the event.
+    #[must_use]
+    pub fn from_player(player: &Player, update_type: PlayerUpdateType) -> Self {
+        Self {
+            id: player.id(),
+            world: player.world(),
+            entity: player.entity(),
+            window: player.window(),
+            region: player.region().clone(),
+            update_type,
         }
     }
 }

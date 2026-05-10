@@ -27,8 +27,7 @@ use tracing::{debug, info};
 use tracing::{error, trace, warn};
 
 use platform::{PlatformEvent, WindowEvent, WindowId};
-use universe::{World, WorldId};
-use world::player::PlayerId;
+use world::player::{PlayerId, PlayerUpdateType};
 
 mod utils;
 use ::utils::Version;
@@ -100,6 +99,7 @@ pub struct Renderer {
     // Events
     window_consumer: events::Consumer<platform::WindowEvent>,
     platform_consumer: events::Consumer<platform::PlatformEvent>,
+    player_consumer: events::Consumer<world::player::PlayerUpdateEvent>,
 
     /// The size of the output
     /// TODO: should be removed once we get the frame graph to
@@ -450,6 +450,7 @@ impl Renderer {
 
             window_consumer: event_manager.subscribe(),
             platform_consumer: event_manager.subscribe(),
+            player_consumer: event_manager.subscribe(),
         })
     }
 
@@ -564,8 +565,6 @@ impl Renderer {
             }
         }
 
-        // TODO: readd player events when players are updated
-        /*
         for event in self.player_consumer.consume_all() {
             if let PlayerUpdateType::Despawned = event.update_type {
                 self.players.remove(&event.id);
@@ -574,7 +573,6 @@ impl Renderer {
 
             self.players.insert(event.id, event.into());
         }
-        */
 
         self.models.tick()?;
 
