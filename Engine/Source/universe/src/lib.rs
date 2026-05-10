@@ -33,7 +33,6 @@ pub struct Universe {
     universe_systems: UniverseSystemStorage,
     ticking_systems: TickingSystemStorage,
     world_systems: WorldSystemStorage,
-    // TODO: run when adding any component
     component_systems: ComponentSystemStorage,
 }
 
