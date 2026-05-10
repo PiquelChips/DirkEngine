@@ -1,8 +1,9 @@
-use std::{any::TypeId, collections::HashSet};
+//! This module houses the [`World`]. This is what players actually play in.
+use std::collections::HashSet;
 
 use crate::{
-    Entity, EntityBuilder, Universe,
-    components::{AnyComponent, Component, Components},
+    Entity, EntityBuilder,
+    components::Components,
     query::Query,
     systems::{
         ComponentSystem, ComponentSystemStorage, TickingSystem, TickingSystemStorage, WorldSystem,

@@ -136,9 +136,7 @@ impl Universe {
     ///
     /// If None, then the [`World`] does not exist.
     pub fn spawn(&mut self, world: WorldId, builder: EntityBuilder) -> Option<Entity> {
-        let Some(world) = self.worlds.get_mut(&world) else {
-            return None;
-        };
+        let world = self.worlds.get_mut(&world)?;
 
         let id = world.next_id;
         world.next_id += 1;
@@ -237,9 +235,7 @@ impl Universe {
     /// does not have one.
     #[must_use]
     pub fn get<C: Component>(&self, world: WorldId, entity: Entity) -> Option<&C> {
-        let Some(world) = self.worlds.get(&world) else {
-            return None;
-        };
+        let world = self.worlds.get(&world)?;
 
         world.components.get(entity)
     }
@@ -247,9 +243,7 @@ impl Universe {
     /// Returns a mutable reference to a component, or `None` if the entity
     /// does not have one.
     pub fn get_mut<C: Component>(&mut self, world: WorldId, entity: Entity) -> Option<&mut C> {
-        let Some(world) = self.worlds.get_mut(&world) else {
-            return None;
-        };
+        let world = self.worlds.get_mut(&world)?;
 
         world.components.get_mut(entity)
     }
