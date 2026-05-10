@@ -99,11 +99,13 @@ impl Universe {
     }
 
     /// Returns all the [`World`]s of the [`Universe`].
+    #[must_use]
     pub fn worlds(&self) -> &HashMap<WorldId, World> {
         &self.worlds
     }
 
     /// Returns all the [`World`]s of the [`Universe`].
+    #[must_use]
     pub fn worlds_mut(&mut self) -> &mut HashMap<WorldId, World> {
         &mut self.worlds
     }
