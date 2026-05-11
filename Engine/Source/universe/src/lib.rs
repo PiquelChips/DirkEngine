@@ -182,7 +182,7 @@ impl Universe {
                 return;
             }
 
-            system.entity_spawned(self, entity);
+            system.spawned(self, entity);
         });
         Some(entity)
     }
@@ -216,7 +216,7 @@ impl Universe {
                 return;
             }
 
-            system.entity_despawned(self, entity);
+            system.despawned(self, entity);
         });
 
         for (type_id, mut component) in self.components.remove_all(entity) {
@@ -224,6 +224,42 @@ impl Universe {
                 .iter(type_id)
                 .for_each(|system| system.removed(entity, &mut component));
         }
+    }
+
+    /// Will send the [`Entity`] to the specified [`WorldId`].
+    ///
+    /// Returns if the operation was successful. Will fail if the [`Entity`]
+    /// or the [`World`] don't exist.
+    pub fn send(&mut self, entity: Entity, to: WorldId) -> bool {
+        let Some(world) = self.entities.get(&entity).copied() else {
+            return false;
+        };
+
+        if !self.worlds.contains_key(&to) || !self.is_in_world(world, entity) {
+            return false;
+        }
+
+        let Some(old) = self.worlds.get_mut(&world) else {
+            return false;
+        };
+        old.alive.remove(&entity);
+
+        let Some(new) = self.worlds.get_mut(&to) else {
+            return false;
+        };
+        new.alive.insert(entity);
+
+        self.entity_systems.iter().for_each(|system| {
+            if let Some(query) = system.query()
+                && !query.matches(&self.components, entity)
+            {
+                return;
+            }
+
+            system.sent(self, entity, world, to);
+        });
+
+        true
     }
 
     // COMPONENT MANAGEMENT
