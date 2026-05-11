@@ -115,7 +115,7 @@ impl Universe {
 
         let world = World {
             id,
-            name: "TBD".to_string(),
+            name: builder.name,
             alive: HashSet::new(),
         };
 
