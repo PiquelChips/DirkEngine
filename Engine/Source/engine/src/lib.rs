@@ -4,7 +4,7 @@
 use std::{collections::HashMap, ffi::CString, str::FromStr, time::Instant};
 
 use anyhow::Context;
-use tracing::{info, warn};
+use tracing::info;
 use universe::{Entity, Universe, World, WorldId};
 use world::{
     components::ModelUploadSystem,
@@ -105,12 +105,9 @@ impl Engine {
     /// None for now, will be one if an error occurs when creating the world.
     pub fn start(&mut self) -> anyhow::Result<()> {
         info!("starting engine");
-        let world_id = self.create_test_world().context("creating test world")?;
+        let world_id = self.create_test_world();
 
-        if self.spawn_player(world_id).is_none() {
-            // TODO: return a proper error (one received from the universe)
-            warn!("unable to spawn player in world {world_id}");
-        }
+        self.spawn_player(world_id);
 
         Ok(())
     }
@@ -185,7 +182,7 @@ impl Engine {
         delta
     }
 
-    fn spawn_player(&mut self, world: WorldId) -> Option<PlayerId> {
+    fn spawn_player(&mut self, world: WorldId) -> PlayerId {
         let id = self.next_player_id;
         self.next_player_id += 1;
 
@@ -198,7 +195,7 @@ impl Engine {
         );
 
         self.players.insert(id, player);
-        Some(id)
+        id
     }
     #[allow(unused)]
     fn kill_player(&mut self, id: PlayerId) {
@@ -208,7 +205,7 @@ impl Engine {
         player.despawn(&mut self.universe);
     }
 
-    fn create_test_world(&mut self) -> anyhow::Result<WorldId> {
+    fn create_test_world(&mut self) -> WorldId {
         use world::components::{Renderable, Transform};
 
         let duck_model =
@@ -236,6 +233,6 @@ impl Engine {
             .with_entity(shrek_builder)
             .with_entity(duck_builder);
 
-        Ok(self.universe.create_world(world_builder))
+        self.universe.create_world(world_builder)
     }
 }
