@@ -6,7 +6,7 @@
 use std::{any::TypeId, collections::HashSet};
 
 use crate::{
-    Entity,
+    Entity, WorldId,
     components::{Component, Components},
 };
 
@@ -71,6 +71,14 @@ impl Query {
     pub fn without_component<C: Component>(mut self) -> Self {
         self.excluded.push(TypeId::of::<C>());
         self
+    }
+
+    /// Will match only entities of specified worlds
+    #[must_use]
+    pub fn with_world(self, _world: WorldId) -> Self {
+        // TODO: this will require changing the query function to not take
+        // in a HashSet, or combine all the HashSets (tbd)
+        todo!("Query::with_world")
     }
 
     /// Returns `true` if `entity` satisfies every condition in this [`Query`].

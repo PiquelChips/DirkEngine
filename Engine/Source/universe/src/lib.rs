@@ -2,10 +2,13 @@
 //!
 //! The **Universe** is `DirkEngine`'s ECS system.
 
-use std::{any::TypeId, collections::HashMap};
+use std::{
+    any::TypeId,
+    collections::{HashMap, HashSet},
+};
 
 use crate::{
-    components::{AnyComponent, Component},
+    components::{AnyComponent, Component, Components},
     systems::{
         ComponentSystem, ComponentSystemStorage, TickingSystem, TickingSystemStorage,
         UniverseSystem, UniverseSystemStorage, WorldSystem, WorldSystemStorage,
@@ -16,17 +19,21 @@ pub mod components;
 pub mod query;
 pub mod systems;
 
-pub mod world;
-use world::{World, WorldBuilder, WorldId};
+mod entity;
+pub use entity::{Entity, EntityBuilder};
 
-pub mod entity;
-use entity::{Entity, EntityBuilder};
+mod world;
+use world::World;
+pub use world::{WorldBuilder, WorldId};
 
 /// This struct is the manager for all the worlds.
 #[derive(Default)]
 pub struct Universe {
     worlds: HashMap<WorldId, World>,
-    next_id: WorldId,
+    next_world_id: WorldId,
+
+    entities: HashMap<Entity, WorldId>,
+    next_entity_id: Entity,
 
     // this field starts with `universe`
     #[allow(clippy::struct_field_names)]
@@ -34,6 +41,8 @@ pub struct Universe {
     ticking_systems: TickingSystemStorage,
     world_systems: WorldSystemStorage,
     component_systems: ComponentSystemStorage,
+
+    components: Components,
 }
 
 impl Universe {
@@ -57,35 +66,26 @@ impl Universe {
             self.ticking_systems.iter().for_each(|system| {
                 // This allocates a new [`Vec`] per [`TickingSystem`] per tick.
                 // TODO: optimise this. IDK how tho
-                system.tick(world, delta_time, world.query(&system.query()));
+                system.tick(
+                    world,
+                    delta_time,
+                    system.query().query(&self.components, &world.alive),
+                );
             });
-
-            world.tick(delta_time);
         });
     }
 
-    /// Returns an optional reference to the requested [`World`].
-    #[must_use]
-    pub fn get_world(&self, world: WorldId) -> Option<&World> {
-        self.worlds.get(&world)
-    }
-    /// Returns an optional mutable reference to the requested [`World`].
-    #[must_use]
-    pub fn get_world_mut(&mut self, world: WorldId) -> Option<&mut World> {
-        self.worlds.get_mut(&world)
-    }
+    // WORLD MANAGEMENT
 
     /// Will create a new empty world & return its ID.
     pub fn create_world(&mut self, builder: WorldBuilder) -> WorldId {
-        let id = self.next_id;
-        self.next_id += 1;
+        let id = self.next_world_id;
+        self.next_world_id += 1;
 
         let world = World {
             id,
-            world_systems: builder.world_systems,
-            ticking_systems: builder.ticking_systems,
-            component_systems: builder.component_systems,
-            ..World::default()
+            name: "TBD".to_string(),
+            alive: HashSet::new(),
         };
 
         for builder in builder.entities {
@@ -99,6 +99,7 @@ impl Universe {
         self.worlds.insert(id, world);
         id
     }
+
     /// Will destroy the world & call all its destruction systems.
     pub fn destroy_world(&mut self, world: WorldId) {
         let Some(world) = self.worlds.remove(&world) else {
@@ -112,20 +113,40 @@ impl Universe {
         // borrow checker. As this is called very rarely (on world destruction),
         // it should not have too big of an effect on runtime performance.
         for entity in world.alive.clone() {
-            self.despawn(world.id(), entity);
+            self.despawn(entity);
         }
     }
 
-    /// Returns all the [`World`]s of the [`Universe`].
+    // UTILITIES
+
+    /// Returns an optional reference to the requested [`World`].
     #[must_use]
-    pub fn worlds(&self) -> &HashMap<WorldId, World> {
-        &self.worlds
+    pub fn world(&self, world: WorldId) -> Option<&World> {
+        self.worlds.get(&world)
     }
 
-    /// Returns all the [`World`]s of the [`Universe`].
+    /// Returns the [`WorldId`] of the [`Entity`]'s [`World`].
     #[must_use]
-    pub fn worlds_mut(&mut self) -> &mut HashMap<WorldId, World> {
-        &mut self.worlds
+    pub fn get_world(&self, entity: Entity) -> Option<WorldId> {
+        self.entities.get(&entity).copied()
+    }
+
+    /// Returns if the given [`Entity`] is in the given [`World`].
+    #[must_use]
+    pub fn is_in_world(&self, world: WorldId, entity: Entity) -> bool {
+        self.entities.get(&entity) == Some(&world)
+    }
+
+    /// Returns the total number of alive entities.
+    #[must_use]
+    pub fn alive_count(&self) -> usize {
+        self.entities.len()
+    }
+
+    /// Returns if the specified entity is alive
+    #[must_use]
+    pub fn is_alive(&self, entity: Entity) -> bool {
+        self.entities.contains_key(&entity)
     }
 
     // ENTITY MANAGEMENT
@@ -137,40 +158,40 @@ impl Universe {
     pub fn spawn(&mut self, world: WorldId, builder: EntityBuilder) -> Option<Entity> {
         let world = self.worlds.get_mut(&world)?;
 
-        let id = world.next_id;
-        world.next_id += 1;
-        world.alive.insert(id);
+        let entity = self.next_entity_id;
+        self.next_entity_id += 1;
+        self.entities.insert(entity, world.id);
+        world.alive.insert(entity);
 
         for (_, mut component) in builder.components {
             self.component_systems
                 .iter(component.type_id())
-                .for_each(|system| system.added(id, &mut component));
-            world
-                .component_systems
-                .iter(component.type_id())
-                .for_each(|system| system.added(id, &mut component));
+                .for_each(|system| system.added(entity, &mut component));
 
-            world.components.insert_any(id, component);
+            self.components.insert_any(entity, component);
         }
 
-        world.world_systems.iter().for_each(|system| {
+        self.world_systems.iter().for_each(|system| {
             if let Some(query) = system.query()
-                && !query.matches(&world.components, id)
+                && !query.matches(&self.components, entity)
             {
                 return;
             }
 
-            system.entity_spawned(world, id);
+            system.entity_spawned(world, entity);
         });
-        Some(id)
+        Some(entity)
     }
 
     /// Will despawn the provided [`Entity`].
     ///
     /// Calls [`ComponentSystem::removed`] for every component still attached
     /// to the entity before the components are actually dropped.
-    pub fn despawn(&mut self, world: WorldId, entity: Entity) {
-        let Some(world) = self.worlds.get_mut(&world) else {
+    pub fn despawn(&mut self, entity: Entity) {
+        let Some(world) = self.entities.get(&entity) else {
+            return;
+        };
+        let Some(world) = self.worlds.get_mut(world) else {
             return;
         };
 
@@ -179,9 +200,9 @@ impl Universe {
             return;
         }
 
-        world.world_systems.iter().for_each(|system| {
+        self.world_systems.iter().for_each(|system| {
             if let Some(query) = system.query()
-                && !query.matches(&world.components, entity)
+                && !query.matches(&self.components, entity)
             {
                 return;
             }
@@ -189,12 +210,8 @@ impl Universe {
             system.entity_despawned(world, entity);
         });
 
-        for (type_id, mut component) in world.components.remove_all(entity) {
+        for (type_id, mut component) in self.components.remove_all(entity) {
             self.component_systems
-                .iter(type_id)
-                .for_each(|system| system.removed(entity, &mut component));
-            world
-                .component_systems
                 .iter(type_id)
                 .for_each(|system| system.removed(entity, &mut component));
         }
@@ -210,12 +227,8 @@ impl Universe {
     /// When replacing, [`ComponentSystem::removed`] is called.
     ///
     /// [`Entity`]: crate::Entity
-    pub fn insert<C: Component>(&mut self, world: WorldId, entity: Entity, component: C) {
-        let Some(world) = self.worlds.get_mut(&world) else {
-            return;
-        };
-
-        if !world.is_alive(entity) {
+    pub fn insert<C: Component>(&mut self, entity: Entity, component: C) {
+        if !self.is_alive(entity) {
             return;
         }
 
@@ -224,39 +237,27 @@ impl Universe {
         self.component_systems
             .iter(TypeId::of::<C>())
             .for_each(|system| system.added(entity, &mut component));
-        world
-            .component_systems
-            .iter(TypeId::of::<C>())
-            .for_each(|system| system.added(entity, &mut component));
 
-        if world.components.contains(entity, component.type_id()) {
+        if self.components.contains(entity, component.type_id()) {
             self.component_systems
-                .iter(TypeId::of::<C>())
-                .for_each(|system| system.removed(entity, &mut component));
-            world
-                .component_systems
                 .iter(TypeId::of::<C>())
                 .for_each(|system| system.removed(entity, &mut component));
         }
 
-        world.components.insert_any(entity, component);
+        self.components.insert_any(entity, component);
     }
 
     /// Returns a shared reference to a component, or `None` if the entity
     /// does not have one.
     #[must_use]
-    pub fn get<C: Component>(&self, world: WorldId, entity: Entity) -> Option<&C> {
-        let world = self.worlds.get(&world)?;
-
-        world.components.get(entity)
+    pub fn get<C: Component>(&self, entity: Entity) -> Option<&C> {
+        self.components.get(entity)
     }
 
     /// Returns a mutable reference to a component, or `None` if the entity
     /// does not have one.
-    pub fn get_mut<C: Component>(&mut self, world: WorldId, entity: Entity) -> Option<&mut C> {
-        let world = self.worlds.get_mut(&world)?;
-
-        world.components.get_mut(entity)
+    pub fn get_mut<C: Component>(&mut self, entity: Entity) -> Option<&mut C> {
+        self.components.get_mut(entity)
     }
 
     /// Removes a single component from an entity, calling [`ComponentSystem::removed`]
@@ -264,18 +265,10 @@ impl Universe {
     ///
     /// The entity itself is **not** despawned. If the component is not
     /// present this is a no-op.
-    pub fn remove<C: Component>(&mut self, world: WorldId, entity: Entity) {
-        let Some(world) = self.worlds.get_mut(&world) else {
-            return;
-        };
-
-        if let Some(component) = world.components.remove::<C>(entity) {
+    pub fn remove<C: Component>(&mut self, entity: Entity) {
+        if let Some(component) = self.components.remove::<C>(entity) {
             let mut component: Box<dyn AnyComponent> = Box::new(component);
             self.component_systems
-                .iter(TypeId::of::<C>())
-                .for_each(|system| system.removed(entity, &mut component));
-            world
-                .component_systems
                 .iter(TypeId::of::<C>())
                 .for_each(|system| system.removed(entity, &mut component));
         }
