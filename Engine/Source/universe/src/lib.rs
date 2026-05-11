@@ -294,13 +294,13 @@ impl Universe {
     /// Returns a shared reference to a component, or `None` if the entity
     /// does not have one.
     #[must_use]
-    pub fn get<C: Component>(&self, entity: Entity) -> Option<&C> {
+    pub fn component<C: Component>(&self, entity: Entity) -> Option<&C> {
         self.components.get(entity)
     }
 
     /// Returns a mutable reference to a component, or `None` if the entity
     /// does not have one.
-    pub fn get_mut<C: Component>(&mut self, entity: Entity) -> Option<&mut C> {
+    pub fn component_mut<C: Component>(&mut self, entity: Entity) -> Option<&mut C> {
         self.components.get_mut(entity)
     }
 
