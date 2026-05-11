@@ -50,7 +50,7 @@ impl EntityBuilder {
     /// Adds a [`Component`] to this entity.
     ///
     /// If adding multiple components of the same type, only the last call
-    /// to with_component will be kept.
+    /// to `with_component` will be kept.
     #[must_use]
     pub fn with_component<C: Component>(mut self, component: C) -> Self {
         self.components
