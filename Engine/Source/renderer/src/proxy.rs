@@ -53,8 +53,10 @@ impl RendererEntitySynchronizationSystem {
 
 impl EntitySystem for RendererEntitySynchronizationSystem {
     fn spawned(&self, universe: &universe::Universe, entity: universe::Entity) {
-        self.sender
-            .enqueue_command(|renderer| todo!("add the proxy"));
+        self.sender.enqueue_command(|renderer| {
+            // TODO: create proxy
+            todo!("create proxy")
+        });
     }
     fn sent(
         &self,
@@ -63,12 +65,16 @@ impl EntitySystem for RendererEntitySynchronizationSystem {
         old: universe::WorldId,
         new: universe::WorldId,
     ) {
-        self.sender
-            .enqueue_command(|renderer| todo!("move the proxy"));
+        self.sender.enqueue_command(|renderer| {
+            // TODO: move the entity from a Scene to another
+            todo!("move the proxy")
+        });
     }
     fn despawned(&self, universe: &universe::Universe, entity: universe::Entity) {
-        self.sender
-            .enqueue_command(|renderer| todo!("remove the proxy"));
+        self.sender.enqueue_command(|renderer| {
+            // TODO: delete the proxy & entity references
+            todo!("remove the proxy")
+        });
     }
     fn query(&self) -> Option<Query> {
         Some(
@@ -96,12 +102,16 @@ impl UniverseSystem for RendererUniverseSynchronizationSystem {
     fn entity_spawned(&self, _: &universe::Universe, _: universe::Entity) {}
     fn entity_despawned(&self, _: &universe::Universe, _: universe::Entity) {}
 
-    fn world_created(&self, universe: &universe::Universe, world: universe::WorldId) {
-        self.sender
-            .enqueue_command(|renderer| todo!("create scene proxy"));
+    fn world_created(&self, universe: &universe::Universe, world: &universe::World) {
+        self.sender.enqueue_command(|renderer| {
+            // TODO: create new scene proxy
+            todo!("create scene proxy")
+        });
     }
-    fn world_destroyed(&self, universe: &universe::Universe, world: universe::WorldId) {
-        self.sender
-            .enqueue_command(|renderer| todo!("delete scene proxy"));
+    fn world_destroyed(&self, universe: &universe::Universe, world: &universe::World) {
+        self.sender.enqueue_command(|renderer| {
+            // TODO: delete the scene proxy
+            todo!("delete scene proxy")
+        });
     }
 }
