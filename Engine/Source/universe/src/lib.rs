@@ -234,7 +234,7 @@ impl Universe {
             return false;
         };
 
-        if !self.worlds.contains_key(&to) || !self.is_in_world(world, entity) {
+        if !self.worlds.contains_key(&to) {
             return false;
         }
 
