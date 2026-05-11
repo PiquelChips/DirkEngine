@@ -1,8 +1,9 @@
 //! This crate has all the traits for the ECS [`System`]s.
+
 use std::{any::TypeId, collections::HashMap};
 
 use crate::{
-    Entity, Universe, WorldId,
+    Entity, Universe, World, WorldId,
     components::{AnyComponent, Component},
     query::Query,
 };
@@ -20,11 +21,11 @@ pub use macros::System;
 #[system_trait]
 pub trait UniverseSystem: System {
     /// Called right after the world is created.
-    fn world_created(&self, universe: &Universe, world: WorldId);
+    fn world_created(&self, universe: &Universe, world: &World);
     /// Called as the world is being destroyed.
     /// In this state, the world is still valid
     /// and no entities have been removed.
-    fn world_destroyed(&self, universe: &Universe, world: WorldId);
+    fn world_destroyed(&self, universe: &Universe, world: &World);
 
     /// Called when an entity is spawned. At this point, components have
     /// already been added. They can thus be queried for.

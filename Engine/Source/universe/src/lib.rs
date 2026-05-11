@@ -125,7 +125,7 @@ impl Universe {
 
         self.universe_systems
             .iter()
-            .for_each(|system| system.world_created(self, id));
+            .for_each(|system| system.world_created(self, &world));
 
         self.worlds.insert(id, world);
         id
@@ -138,7 +138,7 @@ impl Universe {
         };
         self.universe_systems
             .iter()
-            .for_each(|system| system.world_destroyed(self, world.id()));
+            .for_each(|system| system.world_destroyed(self, &world));
 
         // `clone` is expensive but its the only way I found for the
         // borrow checker. As this is called very rarely (on world destruction),
