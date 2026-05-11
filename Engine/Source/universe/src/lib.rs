@@ -248,6 +248,8 @@ impl Universe {
         };
         new.alive.insert(entity);
 
+        self.entities.insert(entity, to);
+
         self.entity_systems.iter().for_each(|system| {
             if let Some(query) = system.query()
                 && !query.matches(&self.components, entity)
