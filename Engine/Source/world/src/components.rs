@@ -7,6 +7,7 @@ use events::Dispatcher;
 use glam::{Mat4, Vec3};
 use tracing::warn;
 use universe::{
+    Entity,
     components::Component,
     systems::{ComponentSystem, System},
 };
@@ -37,6 +38,10 @@ pub struct ModelUploadSystem {
 }
 
 impl ModelUploadSystem {
+    /// Creates a new [`ModelUploadSystem`] creating a [`Dispatcher`] with
+    /// the provided [`EventManager`].
+    ///
+    /// [`EventManager`]: events::EventManager
     pub fn new(event_manager: &events::EventManager) -> Self {
         Self {
             dispatcher: event_manager.register(),
@@ -46,12 +51,12 @@ impl ModelUploadSystem {
 
 impl ComponentSystem for ModelUploadSystem {
     type Component = Renderable;
-    fn added(&self, _: universe::Entity, component: &mut Self::Component) {
+    fn added(&self, _: Entity, component: &mut Self::Component) {
         self.dispatcher.dispatch(LoadAsset(component.model.clone()));
     }
     /// Nothing happens when this component is removed. The asset will be unloaded
     /// automatically when it is no longer used.
-    fn removed(&self, _: universe::Entity, _: &mut Self::Component) {}
+    fn removed(&self, _: Entity, _: &mut Self::Component) {}
 }
 
 /// Spatial transform for an entity: position, orientation, and scale.

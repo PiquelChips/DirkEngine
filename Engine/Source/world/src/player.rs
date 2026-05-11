@@ -48,7 +48,7 @@ use events::{Consumer, Dispatcher, Event, EventManager};
 use platform::{WindowEvent, WindowId};
 
 use crate::components::{Camera, Transform};
-use universe::{Entity, World, WorldId};
+use universe::{Entity, Universe, WorldId};
 
 /// Opaque identifier for a player, unique within a session.
 pub type PlayerId = u32;
@@ -220,7 +220,8 @@ impl Player {
     /// (implementation-defined).
     pub fn spawn(
         id: PlayerId,
-        world: &mut World,
+        universe: &mut Universe,
+        world: WorldId,
         window: WindowId,
         event_manager: &EventManager,
     ) -> Self {
@@ -240,8 +241,10 @@ impl Player {
 
         let player = Self {
             id,
-            world: world.id(),
-            entity: world.spawn(builder),
+            world,
+            entity: universe
+                .spawn(world, builder)
+                .expect("this world should exist"),
             window,
             region: PlayerRegion::default(),
             dispatcher: event_manager.register(),
@@ -262,8 +265,8 @@ impl Player {
     ///
     /// Fires one [`PlayerUpdateEvent`] with `update_type =`
     /// [`PlayerUpdateType::Despawned`].
-    pub fn despawn(self, world: &mut World) {
-        world.despawn(self.entity);
+    pub fn despawn(self, universe: &mut Universe) {
+        universe.despawn(self.entity);
         self.dispatcher.dispatch(PlayerUpdateEvent::from_player(
             &self,
             PlayerUpdateType::Despawned,
@@ -332,7 +335,7 @@ impl Player {
     /// Will panic if the player entity does not have a [`Camera`] component.
     // the window size will never get close to 2^23
     #[allow(clippy::cast_precision_loss)]
-    pub fn tick(&mut self, world: &mut World) {
+    pub fn tick(&mut self, universe: &mut Universe) {
         for event in self.platform_consumer.consume_all() {
             let WindowEvent::Resized { id, width, height } = event else {
                 continue;
@@ -341,8 +344,8 @@ impl Player {
                 continue;
             }
 
-            let camera = world
-                .get_mut::<Camera>(self.entity)
+            let camera = universe
+                .component_mut::<Camera>(self.entity)
                 .expect("player should have his own camera");
 
             camera.width = width as f32;
