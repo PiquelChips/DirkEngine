@@ -149,12 +149,9 @@ impl Engine {
             .tick(delta_time, self.platform.windows_mut())
             .context("renderer")?;
 
-        self.players.values_mut().for_each(|player| {
-            let Some(world) = self.universe.worlds_mut().get_mut(&player.world()) else {
-                return;
-            };
-            player.tick(world);
-        });
+        self.players
+            .values_mut()
+            .for_each(|player| player.tick(&mut self.universe));
 
         self.renderer.render().context("rendering")?;
         Ok(!self.is_requesting_exit())
@@ -192,10 +189,9 @@ impl Engine {
         let id = self.next_player_id;
         self.next_player_id += 1;
 
-        let world = self.universe.worlds_mut().get_mut(&world)?;
-
         let player = Player::spawn(
             id,
+            &mut self.universe,
             world,
             self.platform.main_window().id(),
             &self.event_manager,
@@ -209,10 +205,7 @@ impl Engine {
         let Some(player) = self.players.remove(&id) else {
             return;
         };
-        let Some(world) = self.universe.worlds_mut().get_mut(&player.world()) else {
-            return;
-        };
-        player.despawn(world);
+        player.despawn(&mut self.universe);
     }
 
     fn create_test_world(&mut self) -> anyhow::Result<WorldId> {

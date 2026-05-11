@@ -23,8 +23,7 @@ mod entity;
 pub use entity::{Entity, EntityBuilder};
 
 mod world;
-use world::World;
-pub use world::{WorldBuilder, WorldId};
+pub use world::{World, WorldBuilder, WorldId};
 
 /// This struct is the manager for all the worlds.
 #[derive(Default)]
@@ -295,13 +294,13 @@ impl Universe {
     /// Returns a shared reference to a component, or `None` if the entity
     /// does not have one.
     #[must_use]
-    pub fn get<C: Component>(&self, entity: Entity) -> Option<&C> {
+    pub fn component<C: Component>(&self, entity: Entity) -> Option<&C> {
         self.components.get(entity)
     }
 
     /// Returns a mutable reference to a component, or `None` if the entity
     /// does not have one.
-    pub fn get_mut<C: Component>(&mut self, entity: Entity) -> Option<&mut C> {
+    pub fn component_mut<C: Component>(&mut self, entity: Entity) -> Option<&mut C> {
         self.components.get_mut(entity)
     }
 
