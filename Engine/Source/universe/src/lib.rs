@@ -10,8 +10,8 @@ use std::{
 use crate::{
     components::{AnyComponent, Component, Components},
     systems::{
-        ComponentSystem, ComponentSystemStorage, TickingSystem, TickingSystemStorage,
-        UniverseSystem, UniverseSystemStorage, WorldSystem, WorldSystemStorage,
+        ComponentSystem, ComponentSystemStorage, EntitySystem, EntitySystemStorage, TickingSystem,
+        TickingSystemStorage, UniverseSystem, UniverseSystemStorage,
     },
 };
 
@@ -39,7 +39,7 @@ pub struct Universe {
     #[allow(clippy::struct_field_names)]
     universe_systems: UniverseSystemStorage,
     ticking_systems: TickingSystemStorage,
-    world_systems: WorldSystemStorage,
+    entity_systems: EntitySystemStorage,
     component_systems: ComponentSystemStorage,
 
     components: Components,
@@ -59,62 +59,20 @@ impl Universe {
             .for_each(|system| system.tick(self, delta_time));
 
         self.worlds.values().for_each(|world| {
-            self.world_systems
+            self.universe_systems
                 .iter()
-                .for_each(|system| system.tick(world, delta_time));
+                .for_each(|system| system.tick(self, delta_time));
 
             self.ticking_systems.iter().for_each(|system| {
                 // This allocates a new [`Vec`] per [`TickingSystem`] per tick.
                 // TODO: optimise this. IDK how tho
                 system.tick(
-                    world,
+                    self,
                     delta_time,
                     system.query().query(&self.components, &world.alive),
                 );
             });
         });
-    }
-
-    // WORLD MANAGEMENT
-
-    /// Will create a new empty world & return its ID.
-    pub fn create_world(&mut self, builder: WorldBuilder) -> WorldId {
-        let id = self.next_world_id;
-        self.next_world_id += 1;
-
-        let world = World {
-            id,
-            name: "TBD".to_string(),
-            alive: HashSet::new(),
-        };
-
-        for builder in builder.entities {
-            self.spawn(id, builder);
-        }
-
-        self.universe_systems
-            .iter()
-            .for_each(|system| system.world_created(&world));
-
-        self.worlds.insert(id, world);
-        id
-    }
-
-    /// Will destroy the world & call all its destruction systems.
-    pub fn destroy_world(&mut self, world: WorldId) {
-        let Some(world) = self.worlds.remove(&world) else {
-            return;
-        };
-        self.universe_systems
-            .iter()
-            .for_each(|system| system.world_destroyed(&world));
-
-        // `clone` is expensive but its the only way I found for the
-        // borrow checker. As this is called very rarely (on world destruction),
-        // it should not have too big of an effect on runtime performance.
-        for entity in world.alive.clone() {
-            self.despawn(entity);
-        }
     }
 
     // UTILITIES
@@ -149,6 +107,48 @@ impl Universe {
         self.entities.contains_key(&entity)
     }
 
+    // WORLD MANAGEMENT
+
+    /// Will create a new empty world & return its ID.
+    pub fn create_world(&mut self, builder: WorldBuilder) -> WorldId {
+        let id = self.next_world_id;
+        self.next_world_id += 1;
+
+        let world = World {
+            id,
+            name: "TBD".to_string(),
+            alive: HashSet::new(),
+        };
+
+        for builder in builder.entities {
+            self.spawn(id, builder);
+        }
+
+        self.universe_systems
+            .iter()
+            .for_each(|system| system.world_created(self, id));
+
+        self.worlds.insert(id, world);
+        id
+    }
+
+    /// Will destroy the world & call all its destruction systems.
+    pub fn destroy_world(&mut self, world: WorldId) {
+        let Some(world) = self.worlds.remove(&world) else {
+            return;
+        };
+        self.universe_systems
+            .iter()
+            .for_each(|system| system.world_destroyed(self, world.id()));
+
+        // `clone` is expensive but its the only way I found for the
+        // borrow checker. As this is called very rarely (on world destruction),
+        // it should not have too big of an effect on runtime performance.
+        for entity in world.alive.clone() {
+            self.despawn(entity);
+        }
+    }
+
     // ENTITY MANAGEMENT
 
     /// Will spawn a new [`Entity`] using the provided [`EntityBuilder`].
@@ -171,14 +171,18 @@ impl Universe {
             self.components.insert_any(entity, component);
         }
 
-        self.world_systems.iter().for_each(|system| {
+        self.universe_systems
+            .iter()
+            .for_each(|system| system.entity_spawned(self, entity));
+
+        self.entity_systems.iter().for_each(|system| {
             if let Some(query) = system.query()
                 && !query.matches(&self.components, entity)
             {
                 return;
             }
 
-            system.entity_spawned(world, entity);
+            system.entity_spawned(self, entity);
         });
         Some(entity)
     }
@@ -188,10 +192,11 @@ impl Universe {
     /// Calls [`ComponentSystem::removed`] for every component still attached
     /// to the entity before the components are actually dropped.
     pub fn despawn(&mut self, entity: Entity) {
-        let Some(world) = self.entities.get(&entity) else {
+        let Some(world) = self.entities.remove(&entity) else {
+            // if the entity was not present, systems shouldn't be called
             return;
         };
-        let Some(world) = self.worlds.get_mut(world) else {
+        let Some(world) = self.worlds.get_mut(&world) else {
             return;
         };
 
@@ -200,14 +205,18 @@ impl Universe {
             return;
         }
 
-        self.world_systems.iter().for_each(|system| {
+        self.universe_systems
+            .iter()
+            .for_each(|system| system.entity_despawned(self, entity));
+
+        self.entity_systems.iter().for_each(|system| {
             if let Some(query) = system.query()
                 && !query.matches(&self.components, entity)
             {
                 return;
             }
 
-            system.entity_despawned(world, entity);
+            system.entity_despawned(self, entity);
         });
 
         for (type_id, mut component) in self.components.remove_all(entity) {
@@ -281,7 +290,7 @@ pub struct UniverseBuilder {
     worlds: Vec<WorldBuilder>,
     universe_systems: UniverseSystemStorage,
     ticking_systems: TickingSystemStorage,
-    world_systems: WorldSystemStorage,
+    entity_systems: EntitySystemStorage,
     component_systems: ComponentSystemStorage,
 }
 
@@ -297,7 +306,7 @@ impl UniverseBuilder {
         let mut universe = Universe {
             universe_systems: self.universe_systems,
             ticking_systems: self.ticking_systems,
-            world_systems: self.world_systems,
+            entity_systems: self.entity_systems,
             component_systems: self.component_systems,
             ..Universe::default()
         };
@@ -323,10 +332,10 @@ impl UniverseBuilder {
         self
     }
 
-    /// Adds a [`WorldSystem`] that will be added to the [`Universe`].
+    /// Adds a [`EntitySystem`] that will be added to the [`Universe`].
     #[must_use]
-    pub fn with_world_system(mut self, system: impl WorldSystem) -> Self {
-        self.world_systems.insert(system);
+    pub fn with_entity_system(mut self, system: impl EntitySystem) -> Self {
+        self.entity_systems.insert(system);
         self
     }
 
