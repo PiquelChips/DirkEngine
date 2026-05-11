@@ -27,6 +27,7 @@ use tracing::{debug, info};
 use tracing::{error, trace, warn};
 
 use platform::{PlatformEvent, WindowEvent, WindowId};
+use universe::{Universe, UniverseBuilder};
 use world::player::{PlayerId, PlayerUpdateType};
 
 mod utils;
@@ -46,7 +47,12 @@ mod resources;
 use resources::{command_pool::CommandPool, device::RenderDevice, image::SwapchainImage};
 
 mod proxy;
-use proxy::PlayerProxy;
+use proxy::{
+    PlayerProxy, RendererEntitySynchronizationSystem, RendererUniverseSynchronizationSystem,
+};
+
+mod render_commands;
+use render_commands::RenderCommandReceiver;
 
 mod models;
 mod physical_device;
@@ -100,6 +106,9 @@ pub struct Renderer {
     window_consumer: events::Consumer<platform::WindowEvent>,
     platform_consumer: events::Consumer<platform::PlatformEvent>,
     player_consumer: events::Consumer<world::player::PlayerUpdateEvent>,
+
+    /// These receive all the commands from the game thread.
+    receivers: Vec<RenderCommandReceiver>,
 
     /// The size of the output
     /// TODO: should be removed once we get the frame graph to
@@ -451,7 +460,21 @@ impl Renderer {
             window_consumer: event_manager.subscribe(),
             platform_consumer: event_manager.subscribe(),
             player_consumer: event_manager.subscribe(),
+            receivers: Vec::new(),
         })
+    }
+
+    /// Returns a [`UniverseBuilder`] that is populated with [`Renderer`] systems.
+    pub fn universe_builder(&mut self) -> UniverseBuilder {
+        let (uni_sender, uni_receiver) = render_commands::channel();
+        let (ent_sender, ent_receiver) = render_commands::channel();
+
+        self.receivers.push(uni_receiver);
+        self.receivers.push(ent_receiver);
+
+        Universe::builder()
+            .with_universe_system(RendererUniverseSynchronizationSystem::new(uni_sender))
+            .with_entity_system(RendererEntitySynchronizationSystem::new(ent_sender))
     }
 
     /// Ticks the renderer. Used to improve the various internal representations
@@ -472,6 +495,8 @@ impl Renderer {
         _delta_time: f32,
         windows: &HashMap<WindowId, platform::Window>,
     ) -> Result<()> {
+        // TODO: use self.receivers
+
         // TODO: system to create new scene when worlds are created or destroyed
         /*
         let world_events: Vec<_> = self.world_consumer.consume_all().collect();

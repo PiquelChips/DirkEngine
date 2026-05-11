@@ -76,6 +76,7 @@ impl Engine {
 
         let universe = Universe::builder()
             .with_component_system(ModelUploadSystem::new(&event_manager))
+            .with_other(renderer.universe_builder())
             .build();
 
         info!("engine initialised");
