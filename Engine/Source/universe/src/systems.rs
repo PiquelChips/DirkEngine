@@ -2,7 +2,7 @@
 use std::{any::TypeId, collections::HashMap};
 
 use crate::{
-    Entity, Universe, World,
+    Entity, Universe, WorldId,
     components::{AnyComponent, Component},
     query::Query,
 };
@@ -20,27 +20,39 @@ pub use macros::System;
 #[system_trait]
 pub trait UniverseSystem: System {
     /// Called right after the world is created.
-    fn world_created(&self, world: &World);
+    fn world_created(&self, universe: &Universe, world: WorldId);
     /// Called as the world is being destroyed.
     /// In this state, the world is still valid
     /// and no entities have been removed.
-    fn world_destroyed(&self, world: &World);
-    /// This function will be called by the universe on every tick.
-    fn tick(&self, universe: &Universe, delta_time: f32);
-}
-
-/// A system that is run for the entire [`World`].
-#[system_trait]
-pub trait WorldSystem: System {
-    /// Called on world tick
-    fn tick(&self, world: &World, delta_time: f32);
+    fn world_destroyed(&self, universe: &Universe, world: WorldId);
 
     /// Called when an entity is spawned. At this point, components have
     /// already been added. They can thus be queried for.
-    fn entity_spawned(&self, world: &World, entity: Entity);
+    fn entity_spawned(&self, universe: &Universe, entity: Entity);
     /// Called when an entity is despawned. At this point, components have
     /// not yet been removed. They can thus be queried for.
-    fn entity_despawned(&self, world: &World, entity: Entity);
+    /// However, the entity has been removed from the [`World`], so
+    /// querying for it will not work.
+    fn entity_despawned(&self, universe: &Universe, entity: Entity);
+
+    /// This function will be called by the [`Universe`] on every tick.
+    fn tick(&self, universe: &Universe, delta_time: f32);
+}
+
+/// A [`System`] that is run on every entity that matches the query.
+#[system_trait]
+pub trait EntitySystem: System {
+    /// Called when an entity is spawned. At this point, components have
+    /// already been added. They can thus be queried for.
+    fn spawned(&self, universe: &Universe, entity: Entity);
+    /// Called when an entity is despawned. At this point, components have
+    /// not yet been removed. They can thus be queried for.
+    /// However, the entity has been removed from the [`World`], so
+    /// querying for it will not work.
+    fn despawned(&self, universe: &Universe, entity: Entity);
+
+    /// Called when the entity is moved to another [`World`].
+    fn sent(&self, universe: &Universe, entity: Entity, old: WorldId, new: WorldId);
 
     /// This query will decide if `entity_spawned` & `entity_despawned` should
     /// be run for given entities. If there is not query, the system will run
@@ -48,14 +60,14 @@ pub trait WorldSystem: System {
     fn query(&self) -> Option<Query>;
 }
 
-/// Run on a specific World for components that match the query
+/// Run for [`Entity`]s that match the query
 #[system_trait]
 pub trait TickingSystem: System {
     /// `world`: the current world we are ticking. This system would tick multiple
     /// time per frame, just on multiple different worlds.
     /// `entities`: the list of entities that were returned by the query returned
     /// by [`TickingSystem::query`].
-    fn tick(&self, world: &World, delta_time: f32, entities: Vec<Entity>);
+    fn tick(&self, universe: &Universe, delta_time: f32, entities: Vec<Entity>);
     /// Returns the query used to construct the `entities` of the tick function.
     fn query(&self) -> Query;
 }
