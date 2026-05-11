@@ -2,6 +2,8 @@ use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use syn::{DeriveInput, FnArg, ItemTrait, LitStr, Pat, TraitItem, TypeParamBound};
 
+// this function is long because of the quote & the documentation.
+#[allow(clippy::too_many_lines)]
 pub fn generate_system_code(trait_def: &ItemTrait) -> syn::Result<TokenStream> {
     if !trait_def.supertraits.iter().any(|s| match s {
         TypeParamBound::Trait(t) => t.path.is_ident("System"),
