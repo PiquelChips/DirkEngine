@@ -75,8 +75,6 @@ pub trait TickingSystem: System {
 
 /// System run for every component of the specified type.
 /// Can be registered on both the [`Entity`] & [`Universe`]
-///
-/// Each of the methods are optional.
 pub trait ComponentSystem: System {
     /// The concrete component type this system handles.
     type Component: Component;

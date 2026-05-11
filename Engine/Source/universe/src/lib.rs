@@ -58,10 +58,6 @@ impl Universe {
             .for_each(|system| system.tick(self, delta_time));
 
         self.worlds.values().for_each(|world| {
-            self.universe_systems
-                .iter()
-                .for_each(|system| system.tick(self, delta_time));
-
             self.ticking_systems.iter().for_each(|system| {
                 // This allocates a new [`Vec`] per [`TickingSystem`] per tick.
                 // TODO: optimise this. IDK how tho
@@ -115,7 +111,7 @@ impl Universe {
 
         let world = World {
             id,
-            name: "TBD".to_string(),
+            name: builder.name,
             alive: HashSet::new(),
         };
 
@@ -234,7 +230,7 @@ impl Universe {
             return false;
         };
 
-        if !self.worlds.contains_key(&to) || !self.is_in_world(world, entity) {
+        if !self.worlds.contains_key(&to) {
             return false;
         }
 
@@ -284,6 +280,11 @@ impl Universe {
             .iter(TypeId::of::<C>())
             .for_each(|system| system.added(entity, &mut component));
 
+        // We call the remove before actually updating the component to
+        // avoid weird type & borrow checker nonsense.
+        // This is not a problem as the system only has a reference to
+        // the old component, it thus doesn't interact with the
+        // Universe's internal state.
         if self.components.contains(entity, component.type_id()) {
             self.component_systems
                 .iter(TypeId::of::<C>())

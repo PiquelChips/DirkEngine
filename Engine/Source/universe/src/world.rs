@@ -33,6 +33,7 @@ impl World {
 /// Builder struct for [`World`].
 #[derive(Default)]
 pub struct WorldBuilder {
+    pub(crate) name: String,
     pub(crate) entities: Vec<EntityBuilder>,
 }
 
@@ -41,6 +42,14 @@ impl WorldBuilder {
     #[must_use]
     fn new() -> Self {
         Self::default()
+    }
+
+    /// Give the world a name. If called multiple times, only the last
+    /// call will have any effect.
+    #[must_use]
+    pub fn with_name(mut self, name: String) -> Self {
+        self.name = name;
+        self
     }
 
     /// Adds an [`Entity`] that will be spawned on [`World`] creation.
