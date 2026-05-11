@@ -121,15 +121,25 @@ pub(crate) struct ComponentSystemStorage {
 
 impl ComponentSystemStorage {
     pub fn insert<S: ComponentSystem>(&mut self, system: S) {
-        let systems = self
-            .systems
+        self.systems
             .entry(AnyComponentSystem::type_id(&system))
-            .or_default();
+            .or_default()
+            .push(Box::new(system));
+    }
 
-        systems.push(Box::new(system));
+    pub fn insert_any(&mut self, type_id: TypeId, system: Box<dyn AnyComponentSystem>) {
+        self.systems.entry(type_id).or_default().push(system);
     }
 
     pub fn iter(&mut self, type_id: TypeId) -> std::slice::Iter<'_, Box<dyn AnyComponentSystem>> {
         self.systems.entry(type_id).or_default().iter()
+    }
+}
+
+impl IntoIterator for ComponentSystemStorage {
+    type Item = (TypeId, Vec<Box<dyn AnyComponentSystem>>);
+    type IntoIter = std::collections::hash_map::IntoIter<TypeId, Vec<Box<dyn AnyComponentSystem>>>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.systems.into_iter()
     }
 }

@@ -387,4 +387,32 @@ impl UniverseBuilder {
         self.component_systems.insert(system);
         self
     }
+
+    /// Will combine the `other` [`UniverseBuilder`] with this one.
+    #[must_use]
+    pub fn with_other(mut self, other: Self) -> Self {
+        for world in other.worlds {
+            self.worlds.push(world);
+        }
+
+        for system in other.universe_systems {
+            self.universe_systems.insert_any(system);
+        }
+
+        for system in other.entity_systems {
+            self.entity_systems.insert_any(system);
+        }
+
+        for system in other.ticking_systems {
+            self.ticking_systems.insert_any(system);
+        }
+
+        for (type_id, systems) in other.component_systems {
+            for system in systems {
+                self.component_systems.insert_any(type_id, system);
+            }
+        }
+
+        self
+    }
 }

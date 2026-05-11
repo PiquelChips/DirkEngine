@@ -75,6 +75,7 @@ pub fn generate_system_code(trait_def: &ItemTrait) -> syn::Result<TokenStream> {
          The concrete type of `system` is erased after this call; it can only be \
          reached again through [`{storage_str}::iter`]."
     );
+    let insert_any_doc = format!("Appends a Boxed `system` to this [`{storage_str}`].\n\n");
     let iter_doc = format!(
         "Returns an iterator over every system stored in this [`{storage_str}`], \
          as `Box<dyn {any_name_str}>`."
@@ -114,9 +115,22 @@ pub fn generate_system_code(trait_def: &ItemTrait) -> syn::Result<TokenStream> {
                 self.systems.push(Box::new(system));
             }
 
+            #[doc = #insert_any_doc]
+            pub fn insert_any(&mut self, system: Box<dyn #any_name>) {
+                self.systems.push(system);
+            }
+
             #[doc = #iter_doc]
             pub fn iter(&self) -> std::slice::Iter<'_, Box<dyn #any_name>> {
                 self.systems.iter()
+            }
+        }
+
+        impl IntoIterator for #storage {
+            type IntoIter = std::vec::IntoIter<Box<dyn #any_name>>;
+            type Item = Box<dyn #any_name>;
+            fn into_iter(self) -> Self::IntoIter {
+                self.systems.into_iter()
             }
         }
     })
