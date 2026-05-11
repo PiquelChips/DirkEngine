@@ -23,8 +23,7 @@ mod entity;
 pub use entity::{Entity, EntityBuilder};
 
 mod world;
-use world::World;
-pub use world::{WorldBuilder, WorldId};
+pub use world::{World, WorldBuilder, WorldId};
 
 /// This struct is the manager for all the worlds.
 #[derive(Default)]
