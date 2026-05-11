@@ -62,7 +62,7 @@ impl Engine {
         let name = "DirkEngine";
 
         let platform = platform::Platform::init(&event_manager).context("platform init")?;
-        let renderer = renderer::Renderer::init(
+        let mut renderer = renderer::Renderer::init(
             &renderer::RendererCreateInfo {
                 engine_name: CString::from_str(name)?,
                 engine_version: version,

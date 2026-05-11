@@ -495,7 +495,12 @@ impl Renderer {
         _delta_time: f32,
         windows: &HashMap<WindowId, platform::Window>,
     ) -> Result<()> {
-        // TODO: use self.receivers
+        // Temporarily move receivers out for the borrow checker
+        let receivers = std::mem::take(&mut self.receivers);
+        for receiver in &receivers {
+            receiver.flush(self);
+        }
+        self.receivers = receivers;
 
         // TODO: system to create new scene when worlds are created or destroyed
         /*
