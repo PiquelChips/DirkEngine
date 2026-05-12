@@ -2,10 +2,7 @@
 //!
 //! The **Universe** is `DirkEngine`'s ECS system.
 
-use std::{
-    any::TypeId,
-    collections::{HashMap, HashSet},
-};
+use std::{any::TypeId, collections::HashMap};
 
 use crate::{
     components::{AnyComponent, Component, Components},
@@ -57,16 +54,10 @@ impl Universe {
             .iter()
             .for_each(|system| system.tick(self, delta_time));
 
-        self.worlds.values().for_each(|world| {
-            self.ticking_systems.iter().for_each(|system| {
-                // This allocates a new [`Vec`] per [`TickingSystem`] per tick.
-                // TODO: optimise this. IDK how tho
-                system.tick(
-                    self,
-                    delta_time,
-                    system.query().query(&self.components, &world.alive),
-                );
-            });
+        self.ticking_systems.iter().for_each(|system| {
+            // This allocates a new [`Vec`] per [`TickingSystem`] per tick.
+            // TODO: optimise this. IDK how tho
+            system.tick(self, delta_time, system.query().query(self));
         });
     }
 
@@ -109,11 +100,7 @@ impl Universe {
         let id = self.next_world_id;
         self.next_world_id += 1;
 
-        let world = World {
-            id,
-            name: builder.name,
-            alive: HashSet::new(),
-        };
+        let world = World::new(id, builder.name);
 
         for builder in builder.entities {
             self.spawn(id, builder);
@@ -155,7 +142,7 @@ impl Universe {
 
         let entity = self.next_entity_id;
         self.next_entity_id += 1;
-        self.entities.insert(entity, world.id);
+        self.entities.insert(entity, world.id());
         world.alive.insert(entity);
 
         for (_, mut component) in builder.components {
@@ -172,7 +159,7 @@ impl Universe {
 
         self.entity_systems.iter().for_each(|system| {
             if let Some(query) = system.query()
-                && !query.matches(&self.components, entity)
+                && !query.matches(self, entity)
             {
                 return;
             }
@@ -206,7 +193,7 @@ impl Universe {
 
         self.entity_systems.iter().for_each(|system| {
             if let Some(query) = system.query()
-                && !query.matches(&self.components, entity)
+                && !query.matches(self, entity)
             {
                 return;
             }
@@ -248,7 +235,7 @@ impl Universe {
 
         self.entity_systems.iter().for_each(|system| {
             if let Some(query) = system.query()
-                && !query.matches(&self.components, entity)
+                && !query.matches(self, entity)
             {
                 return;
             }
@@ -280,18 +267,11 @@ impl Universe {
             .iter(TypeId::of::<C>())
             .for_each(|system| system.added(entity, &mut component));
 
-        // We call the remove before actually updating the component to
-        // avoid weird type & borrow checker nonsense.
-        // This is not a problem as the system only has a reference to
-        // the old component, it thus doesn't interact with the
-        // Universe's internal state.
-        if self.components.contains(entity, component.type_id()) {
+        if let Some(mut old) = self.components.insert_any(entity, component) {
             self.component_systems
                 .iter(TypeId::of::<C>())
-                .for_each(|system| system.removed(entity, &mut component));
+                .for_each(|system| system.removed(entity, &mut old));
         }
-
-        self.components.insert_any(entity, component);
     }
 
     /// Returns a shared reference to a component, or `None` if the entity

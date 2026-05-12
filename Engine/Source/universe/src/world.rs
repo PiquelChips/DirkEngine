@@ -7,8 +7,8 @@ pub type WorldId = u32;
 
 /// This is a world. It has entities and components.
 pub struct World {
-    pub(crate) id: WorldId,
-    pub(crate) name: String,
+    id: WorldId,
+    name: String,
     pub(crate) alive: HashSet<Entity>,
 }
 
@@ -17,6 +17,15 @@ impl World {
     #[must_use]
     pub fn builder() -> WorldBuilder {
         WorldBuilder::new()
+    }
+    /// Creates an empty world with a name & id.
+    #[must_use]
+    pub(crate) fn new(id: WorldId, name: String) -> Self {
+        Self {
+            id,
+            name,
+            alive: HashSet::new(),
+        }
     }
     /// Returns the [`WorldId`] of the [`World`].
     #[must_use]
