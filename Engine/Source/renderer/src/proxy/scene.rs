@@ -88,6 +88,7 @@ impl SceneManager {
         Ok(Self {
             device: device.clone(),
             descriptor_pool,
+            entities: HashMap::new(),
             scenes: HashMap::new(),
             proxies: HashMap::new(),
             color,

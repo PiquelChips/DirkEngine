@@ -49,7 +49,7 @@ mod proxy;
 use proxy::{
     PlayerProxy,
     scene::SceneManager,
-    systems::{RendererEntitySynchronizationSystem, RendererUniverseSynchronizationSystem},
+    systems::{RendererEntitySystem, RendererUniverseSystem},
 };
 
 mod render_commands;
@@ -476,8 +476,8 @@ impl Renderer {
         self.receivers.push(ent_receiver);
 
         Universe::builder()
-            .with_universe_system(RendererUniverseSynchronizationSystem::new(uni_sender))
-            .with_entity_system(RendererEntitySynchronizationSystem::new(ent_sender))
+            .with_universe_system(RendererUniverseSystem::new(uni_sender))
+            .with_entity_system(RendererEntitySystem::new(ent_sender))
     }
 
     /// Ticks the renderer. Used to improve the various internal representations
@@ -504,31 +504,6 @@ impl Renderer {
             receiver.flush(self);
         }
         self.receivers = receivers;
-
-        // TODO: system to create new scene when worlds are created or destroyed
-        /*
-        let world_events: Vec<_> = self.world_consumer.consume_all().collect();
-        for event in world_events {
-            match event {
-                WorldEvent::Created(id) => {
-                    let scene = Scene::build(&self.render_device, self.extent, id)?;
-                    self.scenes.insert(id, scene);
-                }
-                WorldEvent::Destroyed(id) => {
-                    self.scenes.remove(&id);
-                }
-                // TODO: move this to a scene tick function when it uses a
-                // universe system
-                WorldEvent::EntitySpawn { world, .. }
-                | WorldEvent::EntityUpdate { world, .. }
-                | WorldEvent::EntityDespawn { world, .. } => {
-                    let scene = self.scenes.get_mut(&world).expect("scene should exist");
-                    let world = &worlds[&world];
-                    scene.process_event(world, &event)?;
-                }
-            }
-        }
-        */
 
         let platform_events: Vec<_> = self.platform_consumer.consume_all().collect();
         for event in platform_events {
