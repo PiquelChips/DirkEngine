@@ -52,12 +52,15 @@ impl ModelUploadSystem {
 
 impl ComponentSystem for ModelUploadSystem {
     type Component = Renderable;
-    fn added(&self, _: Entity, component: &mut Self::Component) {
+    fn added(&self, _: Entity, component: &Self::Component) {
+        self.dispatcher.dispatch(LoadAsset(component.model.clone()));
+    }
+    fn updated(&self, _: Entity, component: &Self::Component) {
         self.dispatcher.dispatch(LoadAsset(component.model.clone()));
     }
     /// Nothing happens when this component is removed. The asset will be unloaded
     /// automatically when it is no longer used.
-    fn removed(&self, _: Entity, _: &mut Self::Component) {}
+    fn removed(&self, _: Entity, _: &Self::Component) {}
 }
 
 /// Spatial transform for an entity: position, orientation, and scale.
