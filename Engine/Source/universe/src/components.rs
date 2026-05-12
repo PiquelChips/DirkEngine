@@ -56,7 +56,11 @@ pub(crate) trait AnyStorage {
     ///
     /// The concrete type inside `component` must match the type this storage
     /// was created for; mismatches are silently ignored.
-    fn insert(&mut self, entity: Entity, component: Box<dyn AnyComponent>);
+    fn insert(
+        &mut self,
+        entity: Entity,
+        component: Box<dyn AnyComponent>,
+    ) -> Option<Box<dyn AnyComponent>>;
     /// Returns `true` if this storage holds a component for `entity`.
     fn contains(&self, entity: Entity) -> bool;
     fn as_any(&self) -> &dyn Any;
@@ -93,16 +97,22 @@ impl<C: Component> AnyStorage for ComponentStorage<C> {
             .remove(&entity)
             .map(|c| Box::new(c) as Box<dyn AnyComponent>)
     }
-    fn insert(&mut self, entity: Entity, component: Box<dyn AnyComponent>) {
+    fn insert(
+        &mut self,
+        entity: Entity,
+        component: Box<dyn AnyComponent>,
+    ) -> Option<Box<dyn AnyComponent>> {
         // Downcast through Box<dyn Any> so we can move the value out of the box.
         match component.into_any().downcast::<C>() {
-            Ok(c) => {
-                self.map.insert(entity, *c);
-            }
+            Ok(c) => self
+                .map
+                .insert(entity, *c)
+                .map(|component| Box::new(component) as Box<dyn AnyComponent>),
             Err(_) => {
                 // Type mismatch — should never happen in practice because
                 // insert_box always routes to the storage that matches C.
                 debug_assert!(false, "insert_any called with wrong component type");
+                None
             }
         }
     }
@@ -183,7 +193,11 @@ impl Components {
     /// Storage for the component's concrete type is created on demand using
     /// [`AnyComponent::new_storage`].  The `TypeId` used as the key comes from
     /// `Any::type_id`, which dispatches to the concrete type at runtime.
-    pub fn insert_any(&mut self, entity: Entity, component: Box<dyn AnyComponent>) {
+    pub fn insert_any(
+        &mut self,
+        entity: Entity,
+        component: Box<dyn AnyComponent>,
+    ) -> Option<Box<dyn AnyComponent>> {
         // Obtain the concrete TypeId via dynamic dispatch before the box is
         // consumed, then ensure a matching storage bucket exists.
         let type_id = (*component).type_id();
@@ -191,7 +205,7 @@ impl Components {
         self.storages
             .entry(type_id)
             .or_insert_with(|| component.new_storage())
-            .insert(entity, component);
+            .insert(entity, component)
     }
 
     pub fn get<C: Component>(&self, entity: Entity) -> Option<&C> {

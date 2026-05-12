@@ -280,18 +280,11 @@ impl Universe {
             .iter(TypeId::of::<C>())
             .for_each(|system| system.added(entity, &mut component));
 
-        // We call the remove before actually updating the component to
-        // avoid weird type & borrow checker nonsense.
-        // This is not a problem as the system only has a reference to
-        // the old component, it thus doesn't interact with the
-        // Universe's internal state.
-        if self.components.contains(entity, component.type_id()) {
+        if let Some(mut old) = self.components.insert_any(entity, component) {
             self.component_systems
                 .iter(TypeId::of::<C>())
-                .for_each(|system| system.removed(entity, &mut component));
+                .for_each(|system| system.removed(entity, &mut old));
         }
-
-        self.components.insert_any(entity, component);
     }
 
     /// Returns a shared reference to a component, or `None` if the entity
