@@ -128,7 +128,7 @@ impl ComponentSystem for RendererMeshSystem {
     fn updated(&self, entity: universe::Entity, component: &Self::Component) {
         let model = component.model.clone();
         self.sender.enqueue_command(move |renderer| {
-            let proxy = &mut renderer
+            let proxy = renderer
                 .scene_manager
                 .get_proxy_mut(entity)
                 .ok_or(Error::EntityDoesNotExist(entity))?;
@@ -161,7 +161,7 @@ impl ComponentSystem for RendererTransformSystem {
         let model = component.matrix();
         let view = component.view();
         self.sender.enqueue_command(move |renderer| {
-            let proxy = &mut renderer
+            let proxy = renderer
                 .scene_manager
                 .get_proxy_mut(entity)
                 .ok_or(Error::EntityDoesNotExist(entity))?;
@@ -194,7 +194,7 @@ impl ComponentSystem for RendererCameraSystem {
     fn updated(&self, entity: universe::Entity, component: &Self::Component) {
         let proj = component.projection();
         self.sender.enqueue_command(move |renderer| {
-            let proxy = &mut renderer
+            let proxy = renderer
                 .scene_manager
                 .get_proxy_mut(entity)
                 .ok_or(Error::EntityDoesNotExist(entity))?;

@@ -27,7 +27,7 @@ use tracing::{debug, info};
 use tracing::{error, trace, warn};
 
 use platform::{PlatformEvent, WindowEvent, WindowId};
-use universe::{Universe, UniverseBuilder, systems::System};
+use universe::{Universe, UniverseBuilder};
 use world::player::{PlayerId, PlayerUpdateType};
 
 mod utils;

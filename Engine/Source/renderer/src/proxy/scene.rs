@@ -183,7 +183,7 @@ impl SceneManager {
         Ok(())
     }
     pub fn create_scene(&mut self, world: WorldId) -> Result<()> {
-        let scene = Scene::build(self, world)?;
+        let scene = Scene::build(self)?;
         self.scenes.insert(world, scene);
         Ok(())
     }
@@ -239,7 +239,7 @@ impl SceneManager {
             .ok_or(Error::EntityDoesNotExist(entity))?;
 
         self.scenes
-            .get_mut(&world)
+            .get_mut(world)
             .ok_or(Error::WorldDoesNotExist(*world))?
             .entities
             .remove(&entity);
@@ -253,13 +253,6 @@ impl Drop for SceneManager {
         self.device
             .destroy(Garbage::DescriptorPool(self.descriptor_pool));
     }
-}
-
-struct CameraProxy {
-    /// View matrix calculated from camera position.
-    pub view: glam::Mat4,
-    /// Projection matrix calculated from camera settings.
-    pub proj: glam::Mat4,
 }
 
 #[derive(Clone, Copy)]
@@ -279,7 +272,6 @@ struct ProxyUbo {
 
 /// Renderer representation of a [`World`].
 struct Scene {
-    world: WorldId,
     entities: HashSet<Entity>,
 
     ubo: [UniformBuffer; MAX_FRAMES_IN_FLIGHT],
@@ -290,7 +282,7 @@ impl Scene {
     /// Builds a [Scene].
     /// Constructs the renderer stuff like command pools, descriptor sets, ... from
     /// the [Renderer].
-    pub fn build(manager: &SceneManager, world: WorldId) -> Result<Self> {
+    pub fn build(manager: &SceneManager) -> Result<Self> {
         // Allocate scene-level sets (one per frame)
         let layouts = [manager.device.layouts.scene; MAX_FRAMES_IN_FLIGHT];
         let alloc_info = vk::DescriptorSetAllocateInfo::default()
@@ -336,7 +328,6 @@ impl Scene {
         };
 
         Ok(Self {
-            world,
             entities: HashSet::new(),
             ubo,
             descriptor_sets: scene_desc_sets,
