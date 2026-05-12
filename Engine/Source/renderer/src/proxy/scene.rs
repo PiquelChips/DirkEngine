@@ -22,6 +22,7 @@ pub struct SceneManager {
     descriptor_pool: vk::DescriptorPool,
 
     scenes: HashMap<WorldId, Scene>,
+    entities: HashMap<Entity, WorldId>,
     proxies: HashMap<Entity, SceneProxy>,
 
     // TODO: these need to be removed
@@ -191,16 +192,34 @@ impl SceneManager {
     pub fn destroy_scene(&mut self, world: WorldId) {
         self.scenes.remove(&world);
     }
-    pub fn create_proxy(&mut self, entity: Entity) -> Result<()> {
+    pub fn create_proxy(&mut self, entity: Entity, world: WorldId) -> Result<()> {
         let proxy = SceneProxy::build(self)?;
         self.proxies.insert(entity, proxy);
+
+        self.entities.insert(entity, world);
+        self.scenes
+            .get_mut(&world)
+            .ok_or(Error::WorldDoesNotExist(world))?
+            .entities
+            .insert(entity);
         Ok(())
     }
     pub fn get_proxy_mut(&mut self, entity: Entity) -> Option<&SceneProxy> {
         self.proxies.get(&entity)
     }
-    pub fn destroy_proxy(&mut self, entity: Entity) {
+    pub fn destroy_proxy(&mut self, entity: Entity) -> Result<()> {
+        let world = self
+            .entities
+            .get(&entity)
+            .ok_or(Error::EntityDoesNotExist(entity))?;
+
+        self.scenes
+            .get_mut(&world)
+            .ok_or(Error::WorldDoesNotExist(*world))?
+            .entities
+            .remove(&entity);
         self.proxies.remove(&entity);
+        Ok(())
     }
 }
 

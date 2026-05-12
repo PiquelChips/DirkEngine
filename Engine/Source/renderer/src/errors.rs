@@ -60,6 +60,9 @@ pub enum Error {
     /// If the requested world does not exist
     #[error("world {0} is not registered on renderer")]
     WorldDoesNotExist(universe::WorldId),
+    /// If the requested entity does not exist
+    #[error("world {0} is not registered on renderer")]
+    EntityDoesNotExist(universe::Entity),
     /// The requested window does not exist
     #[error("window {0:?} is not registered on renderer")]
     WindowDoesNotExist(platform::WindowId),
