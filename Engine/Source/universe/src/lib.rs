@@ -284,6 +284,7 @@ impl Universe {
     /// Returns a mutable reference to a component, or `None` if the entity
     /// does not have one.
     pub fn component_mut<C: Component>(&mut self, entity: Entity) -> Option<&mut C> {
+        // TODO: call component_systems::updated
         self.components.get_mut(entity)
     }
 
