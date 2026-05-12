@@ -111,11 +111,6 @@ pub struct Renderer {
     /// These receive all the commands from the game thread.
     receivers: Vec<RenderCommandReceiver>,
 
-    /// The size of the output
-    /// TODO: should be removed once we get the frame graph to
-    /// handle transient resources
-    extent: vk::Extent2D,
-
     // last as should be dropped last
     render_device: RenderDevice,
 }
@@ -434,6 +429,7 @@ impl Renderer {
         // let frames: [Frame; MAX_FRAMES_IN_FLIGHT] = std::array::try_from_fn(|_| build_frame())?;
         // could be nice in the future
 
+        // TODO: should be removed once we get the frame graph to handle transient resources
         let extent = {
             let size = window.size();
             vk::Extent2D {
@@ -457,8 +453,6 @@ impl Renderer {
 
             frames,
             current_frame,
-
-            extent,
 
             window_consumer: event_manager.subscribe(),
             platform_consumer: event_manager.subscribe(),
@@ -501,7 +495,7 @@ impl Renderer {
         // Temporarily move receivers out for the borrow checker
         let receivers = std::mem::take(&mut self.receivers);
         for receiver in &receivers {
-            receiver.flush(self);
+            receiver.flush(self)?;
         }
         self.receivers = receivers;
 
