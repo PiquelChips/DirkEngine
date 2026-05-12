@@ -42,7 +42,7 @@ impl ModelUploadSystem {
     /// the provided [`EventManager`].
     ///
     /// [`EventManager`]: events::EventManager
-    #[must_use] 
+    #[must_use]
     pub fn new(event_manager: &events::EventManager) -> Self {
         Self {
             dispatcher: event_manager.register(),

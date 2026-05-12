@@ -6,10 +6,7 @@ use std::{collections::HashMap, ffi::CString, str::FromStr, time::Instant};
 use anyhow::Context;
 use tracing::info;
 use universe::{Entity, Universe, World, WorldId};
-use world::{
-    components::ModelUploadSystem,
-    player::{Player, PlayerId},
-};
+use world::player::{Player, PlayerId};
 
 use logging::Logger;
 
