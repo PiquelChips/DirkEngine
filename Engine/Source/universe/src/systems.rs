@@ -80,18 +80,27 @@ pub trait ComponentSystem: System {
 
     /// When a component is added.
     /// `entity`: the entity with this component.
-    fn added(&self, entity: Entity, component: &mut Self::Component);
+    fn added(&self, entity: Entity, component: &Self::Component);
+
+    /// When a component is updated.
+    /// `entity`: the entity with this component.
+    fn updated(&self, entity: Entity, component: &Self::Component);
 
     /// When a component is removed.
     /// `entity`: the entity with this component.
-    fn removed(&self, entity: Entity, component: &mut Self::Component);
+    fn removed(&self, entity: Entity, component: &Self::Component);
 }
 
 /// Private type-erasure trait for storage in [`Entity`] & [`Universe`]
+#[allow(clippy::borrowed_box)]
+// I tried removing the boxes, it created loads of errors. Not trying again.
 pub(crate) trait AnyComponentSystem {
     fn type_id(&self) -> TypeId;
-    fn added(&self, entity: Entity, component: &mut Box<dyn AnyComponent>);
-    fn removed(&self, entity: Entity, component: &mut Box<dyn AnyComponent>);
+    fn added(&self, entity: Entity, component: &Box<dyn AnyComponent>);
+    // TODO: this will be called when we have the command buffer system
+    #[allow(unused)]
+    fn updated(&self, entity: Entity, component: &Box<dyn AnyComponent>);
+    fn removed(&self, entity: Entity, component: &Box<dyn AnyComponent>);
 }
 
 impl<T: ComponentSystem> AnyComponentSystem for T {
@@ -99,14 +108,20 @@ impl<T: ComponentSystem> AnyComponentSystem for T {
         TypeId::of::<T::Component>()
     }
 
-    fn added(&self, entity: Entity, component: &mut Box<dyn AnyComponent>) {
-        if let Some(component) = component.as_any_mut().downcast_mut::<T::Component>() {
+    fn added(&self, entity: Entity, component: &Box<dyn AnyComponent>) {
+        if let Some(component) = component.as_any().downcast_ref::<T::Component>() {
             T::added(self, entity, component);
         }
     }
 
-    fn removed(&self, entity: Entity, component: &mut Box<dyn AnyComponent>) {
-        if let Some(component) = component.as_any_mut().downcast_mut::<T::Component>() {
+    fn updated(&self, entity: Entity, component: &Box<dyn AnyComponent>) {
+        if let Some(component) = component.as_any().downcast_ref::<T::Component>() {
+            T::added(self, entity, component);
+        }
+    }
+
+    fn removed(&self, entity: Entity, component: &Box<dyn AnyComponent>) {
+        if let Some(component) = component.as_any().downcast_ref::<T::Component>() {
             T::removed(self, entity, component);
         }
     }
