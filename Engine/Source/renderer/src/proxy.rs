@@ -38,6 +38,8 @@ impl From<world::player::PlayerUpdateEvent> for PlayerProxy {
     }
 }
 
+// ECS SYSTEMS FOR SYNCHRONIZATION
+
 #[derive(System)]
 pub struct RendererEntitySynchronizationSystem {
     sender: RenderCommandSender,
@@ -48,8 +50,6 @@ impl RendererEntitySynchronizationSystem {
         Self { sender }
     }
 }
-
-// ECS SYSTEMS FOR SYNCHRONIZATION
 
 impl EntitySystem for RendererEntitySynchronizationSystem {
     fn spawned(&self, universe: &universe::Universe, entity: universe::Entity) {

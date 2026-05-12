@@ -1,3 +1,9 @@
+//! This crate has the render commands system. It allows threads
+//! to submit functions that will be run on the renderer. This
+//! notable allows systems to interact with the renderer.
+//!
+//! These types are private as they are for internal renderer use
+//! only. They should not be used by other engine systems.
 use std::sync::mpsc::{self, Receiver, Sender};
 
 use crate::Renderer;
