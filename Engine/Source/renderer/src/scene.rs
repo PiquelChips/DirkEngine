@@ -5,7 +5,7 @@ use gpu_allocator::MemoryLocation;
 use universe::{Entity, WorldId};
 
 use crate::{
-    Error, MAX_FRAMES_IN_FLIGHT, MAX_RENDERABLES, Result,
+    Error, MAX_FRAMES_IN_FLIGHT, Result,
     models::ModelRegistry,
     pipeline::GraphicsPipeline,
     proxy::CameraProxy,
@@ -14,7 +14,7 @@ use crate::{
         buffer::UniformBuffer,
         command_pool::CommandBuffer,
         device::{Garbage, RenderDevice},
-        image::{Image, ImageCreateInfo},
+        image::Image,
     },
 };
 
@@ -49,115 +49,6 @@ struct SceneUbo {
 }
 
 impl Scene {
-    /// Builds a [Scene].
-    /// Constructs the renderer stuff like command pools, descriptor sets, ... from
-    /// the [Renderer].
-    pub fn build(device: &RenderDevice, size: vk::Extent2D, world: WorldId) -> Result<Self> {
-        // MAX_FRAMES_IN_FLIGHT never gets anywhere near u32::MAX
-        #[allow(clippy::cast_possible_truncation)]
-        let pool_sizes = [
-            vk::DescriptorPoolSize {
-                ty: vk::DescriptorType::UNIFORM_BUFFER,
-                // scene UBOs + object UBOs, all × frames in flight
-                descriptor_count: (1 + MAX_RENDERABLES) * MAX_FRAMES_IN_FLIGHT as u32,
-            },
-            vk::DescriptorPoolSize {
-                ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-                // rough upper bound on material textures
-                descriptor_count: MAX_RENDERABLES * MAX_FRAMES_IN_FLIGHT as u32,
-            },
-        ];
-
-        // MAX_FRAMES_IN_FLIGHT never gets anywhere near u32::MAX
-        #[allow(clippy::cast_possible_truncation)]
-        let pool_info = vk::DescriptorPoolCreateInfo::default()
-            .pool_sizes(&pool_sizes)
-            .max_sets((1 + MAX_RENDERABLES * 2) * MAX_FRAMES_IN_FLIGHT as u32);
-
-        let descriptor_pool = unsafe { device.device.create_descriptor_pool(&pool_info, None)? };
-
-        // Allocate scene-level sets (one per frame)
-        let layouts = [device.layouts.scene; MAX_FRAMES_IN_FLIGHT];
-        let alloc_info = vk::DescriptorSetAllocateInfo::default()
-            .descriptor_pool(descriptor_pool)
-            .set_layouts(&layouts);
-
-        let scene_desc_sets: [vk::DescriptorSet; MAX_FRAMES_IN_FLIGHT] = unsafe {
-            device
-                .device
-                .allocate_descriptor_sets(&alloc_info)?
-                .try_into()
-                .expect("should be able to convert desc_sets to array")
-        };
-
-        let ubo_size = size_of::<SceneUbo>() as u64;
-        let build_ubo = || UniformBuffer::create(device, ubo_size, MemoryLocation::CpuToGpu);
-        let ubo = [build_ubo()?, build_ubo()?];
-
-        let buffer_infos: [vk::DescriptorBufferInfo; MAX_FRAMES_IN_FLIGHT] =
-            std::array::from_fn(|i| {
-                vk::DescriptorBufferInfo::default()
-                    .buffer(ubo[i].buffer())
-                    .range(size_of::<SceneUbo>() as u64)
-                    .offset(0)
-            });
-
-        let descriptor_writes: [vk::WriteDescriptorSet; MAX_FRAMES_IN_FLIGHT] =
-            std::array::from_fn(|i| {
-                vk::WriteDescriptorSet::default()
-                    .dst_set(scene_desc_sets[i])
-                    .dst_binding(0)
-                    .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
-                    .buffer_info(std::slice::from_ref(&buffer_infos[i]))
-            });
-
-        unsafe {
-            device
-                .device
-                .update_descriptor_sets(&descriptor_writes, &[]);
-        };
-
-        // TEMP
-        let color_info = ImageCreateInfo {
-            size,
-            format: device.properties.surface_format.format,
-            tiling: vk::ImageTiling::OPTIMAL,
-            usage: vk::ImageUsageFlags::TRANSIENT_ATTACHMENT
-                | vk::ImageUsageFlags::COLOR_ATTACHMENT,
-            location: MemoryLocation::GpuOnly,
-            mip_levels: 1,
-            num_samples: device.properties.msaa_samples,
-            aspect_flags: vk::ImageAspectFlags::COLOR,
-        };
-        let color = Image::create_image(device, &color_info)?;
-
-        let depth_info = ImageCreateInfo {
-            size,
-            format: device.properties.depth_format,
-            tiling: vk::ImageTiling::OPTIMAL,
-            usage: vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
-            location: MemoryLocation::GpuOnly,
-            mip_levels: 1,
-            num_samples: device.properties.msaa_samples,
-            aspect_flags: vk::ImageAspectFlags::DEPTH,
-        };
-        let depth = Image::create_image(device, &depth_info)?;
-        let graphics_pipeline =
-            GraphicsPipeline::build(device, &device.layouts, &device.properties)?;
-
-        Ok(Self {
-            world,
-            device: device.clone(),
-            proxies: HashMap::new(),
-            descriptor_pool,
-            ubo,
-            descriptor_sets: scene_desc_sets,
-
-            color,
-            depth,
-            graphics_pipeline,
-        })
-    }
     // TODO: use a system to sync world with renderer
     /*
     pub fn process_event(&mut self, world: &World, event: &WorldEvent) -> Result<()> {
