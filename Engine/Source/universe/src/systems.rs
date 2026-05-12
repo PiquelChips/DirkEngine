@@ -5,6 +5,7 @@ use std::{any::TypeId, collections::HashMap};
 use crate::{
     Entity, Universe, World, WorldId,
     components::{AnyComponent, Component},
+    entity::EntityIterator,
     query::Query,
 };
 use macros::system_trait;
@@ -66,7 +67,7 @@ pub trait EntitySystem: System {
 pub trait TickingSystem: System {
     /// `entities`: the list of entities that were returned by the query returned
     /// by [`TickingSystem::query`].
-    fn tick(&self, universe: &Universe, delta_time: f32, entities: Vec<Entity>);
+    fn tick(&self, universe: &Universe, delta_time: f32, entities: EntityIterator);
     /// Returns the query used to construct the `entities` of the tick function.
     fn query(&self) -> Query;
 }

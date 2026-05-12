@@ -103,13 +103,13 @@ impl Query {
     /// been cleaned up.
     ///
     /// [`World`]: crate::World
-    #[must_use]
-    pub(crate) fn query(&self, universe: &Universe) -> Vec<Entity> {
-        universe
-            .entities
-            .iter()
-            .filter(|&(&e, _)| self.matches(universe, e))
-            .map(|(&e, _)| e)
-            .collect()
+    pub(crate) fn query<'u>(&'u self, universe: &'u Universe) -> EntityIterator<'u> {
+        EntityIterator::new(
+            universe
+                .entities
+                .iter()
+                .filter(|&(&e, _)| self.matches(universe, e))
+                .map(|(&e, _)| e),
+        )
     }
 }
