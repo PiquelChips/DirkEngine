@@ -383,7 +383,7 @@ impl Player {
 /// # Examples
 ///
 /// ```rust
-/// # use world::events::{PlayerUpdateEvent, PlayerUpdateType};
+/// # use world::player::{PlayerUpdateEvent, PlayerUpdateType};
 /// # fn example(evt: PlayerUpdateEvent) {
 /// match evt.update_type {
 ///     PlayerUpdateType::Spawned   => { /* initialise per-player state */ }
