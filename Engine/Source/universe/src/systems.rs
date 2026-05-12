@@ -64,8 +64,6 @@ pub trait EntitySystem: System {
 /// Run for [`Entity`]s that match the query
 #[system_trait]
 pub trait TickingSystem: System {
-    /// `world`: the current world we are ticking. This system would tick multiple
-    /// time per frame, just on multiple different worlds.
     /// `entities`: the list of entities that were returned by the query returned
     /// by [`TickingSystem::query`].
     fn tick(&self, universe: &Universe, delta_time: f32, entities: Vec<Entity>);

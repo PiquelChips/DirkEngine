@@ -54,16 +54,10 @@ impl Universe {
             .iter()
             .for_each(|system| system.tick(self, delta_time));
 
-        self.worlds.values().for_each(|world| {
-            self.ticking_systems.iter().for_each(|system| {
-                // This allocates a new [`Vec`] per [`TickingSystem`] per tick.
-                // TODO: optimise this. IDK how tho
-                system.tick(
-                    self,
-                    delta_time,
-                    system.query().query(&self.components, &world.alive),
-                );
-            });
+        self.ticking_systems.iter().for_each(|system| {
+            // This allocates a new [`Vec`] per [`TickingSystem`] per tick.
+            // TODO: optimise this. IDK how tho
+            system.tick(self, delta_time, system.query().query(self));
         });
     }
 
@@ -165,7 +159,7 @@ impl Universe {
 
         self.entity_systems.iter().for_each(|system| {
             if let Some(query) = system.query()
-                && !query.matches(&self.components, entity)
+                && !query.matches(self, entity)
             {
                 return;
             }
@@ -199,7 +193,7 @@ impl Universe {
 
         self.entity_systems.iter().for_each(|system| {
             if let Some(query) = system.query()
-                && !query.matches(&self.components, entity)
+                && !query.matches(self, entity)
             {
                 return;
             }
@@ -241,7 +235,7 @@ impl Universe {
 
         self.entity_systems.iter().for_each(|system| {
             if let Some(query) = system.query()
-                && !query.matches(&self.components, entity)
+                && !query.matches(self, entity)
             {
                 return;
             }

@@ -3,12 +3,9 @@
 //!
 //! [`World`]: crate::World
 
-use std::{any::TypeId, collections::HashSet};
+use std::any::TypeId;
 
-use crate::{
-    Entity, WorldId,
-    components::{Component, Components},
-};
+use crate::{Entity, Universe, WorldId, components::Component};
 
 /// A struct to query entities from a [`World`].
 ///
@@ -88,14 +85,15 @@ impl Query {
     ///
     /// [`query`]: Query::query
     #[must_use]
-    pub(crate) fn matches(&self, components: &Components, entity: Entity) -> bool {
+    pub(crate) fn matches(&self, universe: &Universe, entity: Entity) -> bool {
+        // TODO: check for world
         self.required
             .iter()
-            .all(|&t| components.contains(entity, t))
+            .all(|&t| universe.components.contains(entity, t))
             && self
                 .excluded
                 .iter()
-                .all(|&t| !components.contains(entity, t))
+                .all(|&t| !universe.components.contains(entity, t))
     }
 
     /// Filter `alive` down to only the entities that satisfy this [`Query`].
@@ -106,11 +104,12 @@ impl Query {
     ///
     /// [`World`]: crate::World
     #[must_use]
-    pub(crate) fn query(&self, components: &Components, alive: &HashSet<Entity>) -> Vec<Entity> {
-        alive
+    pub(crate) fn query(&self, universe: &Universe) -> Vec<Entity> {
+        universe
+            .entities
             .iter()
-            .copied()
-            .filter(|&e| self.matches(components, e))
+            .filter(|&(&e, _)| self.matches(universe, e))
+            .map(|(&e, _)| e)
             .collect()
     }
 }
