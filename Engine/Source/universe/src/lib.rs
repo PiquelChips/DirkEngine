@@ -2,10 +2,7 @@
 //!
 //! The **Universe** is `DirkEngine`'s ECS system.
 
-use std::{
-    any::TypeId,
-    collections::{HashMap, HashSet},
-};
+use std::{any::TypeId, collections::HashMap};
 
 use crate::{
     components::{AnyComponent, Component, Components},
@@ -109,11 +106,7 @@ impl Universe {
         let id = self.next_world_id;
         self.next_world_id += 1;
 
-        let world = World {
-            id,
-            name: builder.name,
-            alive: HashSet::new(),
-        };
+        let world = World::new(id, builder.name);
 
         for builder in builder.entities {
             self.spawn(id, builder);
@@ -155,7 +148,7 @@ impl Universe {
 
         let entity = self.next_entity_id;
         self.next_entity_id += 1;
-        self.entities.insert(entity, world.id);
+        self.entities.insert(entity, world.id());
         world.alive.insert(entity);
 
         for (_, mut component) in builder.components {
