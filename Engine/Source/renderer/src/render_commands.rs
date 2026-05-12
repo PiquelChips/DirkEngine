@@ -6,9 +6,9 @@
 //! only. They should not be used by other engine systems.
 use std::sync::mpsc::{self, Receiver, Sender};
 
-use crate::Renderer;
+use crate::{Renderer, Result};
 
-type RenderCommand = Box<dyn FnOnce(&mut Renderer) + Send + 'static>;
+type RenderCommand = Box<dyn FnOnce(&mut Renderer) -> Result<()> + Send + 'static>;
 
 pub struct RenderCommandSender {
     tx: Sender<RenderCommand>,
@@ -17,7 +17,7 @@ pub struct RenderCommandSender {
 impl RenderCommandSender {
     pub fn enqueue_command<F>(&self, command: F)
     where
-        F: FnOnce(&mut Renderer) + Send + 'static,
+        F: FnOnce(&mut Renderer) -> Result<()> + Send + 'static,
     {
         // The only real failure here is a disconnected channel (receiver was
         // dropped), which generally means the render thread has shut down.

@@ -26,7 +26,8 @@ impl EntitySystem for RendererEntitySystem {
             .expect("entity should be in world");
         self.sender.enqueue_command(move |renderer| {
             let manager = &mut renderer.scene_manager;
-            manager.create_proxy(entity, world);
+            manager.create_proxy(entity, world)?;
+            Ok(())
         });
     }
     fn sent(
@@ -44,7 +45,8 @@ impl EntitySystem for RendererEntitySystem {
     fn despawned(&self, _: &universe::Universe, entity: universe::Entity) {
         self.sender.enqueue_command(move |renderer| {
             let manager = &mut renderer.scene_manager;
-            manager.destroy_proxy(entity);
+            manager.destroy_proxy(entity)?;
+            Ok(())
         });
     }
     fn query(&self) -> Option<Query> {
@@ -77,7 +79,8 @@ impl UniverseSystem for RendererUniverseSystem {
         let world = world.id();
         self.sender.enqueue_command(move |renderer| {
             let manager = &mut renderer.scene_manager;
-            manager.create_scene(world);
+            manager.create_scene(world)?;
+            Ok(())
         });
     }
     fn world_destroyed(&self, _: &universe::Universe, world: &universe::World) {
@@ -85,6 +88,7 @@ impl UniverseSystem for RendererUniverseSystem {
         self.sender.enqueue_command(move |renderer| {
             let manager = &mut renderer.scene_manager;
             manager.destroy_scene(world);
+            Ok(())
         });
     }
 }
