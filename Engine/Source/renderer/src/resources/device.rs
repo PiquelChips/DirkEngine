@@ -206,6 +206,7 @@ impl RenderDevice {
 
 impl Drop for RenderDeviceInner {
     fn drop(&mut self) {
+        // TODO: find a way to flush all here
         self.layouts.destroy(&self.device);
         self.graphics_pool.destroy();
         self.transfer_pool.destroy();

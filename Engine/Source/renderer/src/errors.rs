@@ -55,8 +55,8 @@ pub enum Error {
     SuboptimalSurface,
 
     /// If there is no camera in the scene
-    #[error("camera {1:?} does not exist in world {0}")]
-    CameraDoesNotExist(universe::WorldId, universe::Entity),
+    #[error("camera {0:?} does not exist")]
+    CameraDoesNotExist(universe::Entity),
     /// If the requested world does not exist
     #[error("world {0} is not registered on renderer")]
     WorldDoesNotExist(universe::WorldId),

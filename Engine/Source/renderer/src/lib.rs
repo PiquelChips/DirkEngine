@@ -38,7 +38,6 @@ mod errors;
 pub use errors::{Error, Result};
 
 mod scene;
-use scene::Scene;
 
 mod window;
 use window::Window;
@@ -49,6 +48,7 @@ use resources::{command_pool::CommandPool, device::RenderDevice, image::Swapchai
 mod proxy;
 use proxy::{
     PlayerProxy,
+    scene::SceneManager,
     systems::{RendererEntitySynchronizationSystem, RendererUniverseSynchronizationSystem},
 };
 
@@ -93,7 +93,7 @@ pub struct Renderer {
     /// All of the [`window::Window`]s constructed from [`platform::Window`]s.
     windows: HashMap<WindowId, Window>,
     /// All of the internal [`world::World`] representations.
-    scenes: HashMap<universe::WorldId, Scene>,
+    scene_manager: SceneManager,
     /// The management for all the models.
     models: models::ModelRegistry,
     /// All the players currently being managed by the engine.
@@ -444,12 +444,14 @@ impl Renderer {
 
         let models = models::ModelRegistry::new(&render_device, event_manager)?;
 
+        let scene_manager = SceneManager::init(&render_device, extent)?;
+
         Ok(Self {
             entry,
             render_device,
 
             windows: HashMap::new(),
-            scenes: HashMap::new(),
+            scene_manager,
             players: HashMap::new(),
             models,
 
@@ -622,9 +624,6 @@ impl Renderer {
             let Some(window) = self.windows.get_mut(&player.window) else {
                 return Err(Error::WindowDoesNotExist(player.window));
             };
-            let Some(scene) = self.scenes.get(&player.world) else {
-                return Err(Error::WorldDoesNotExist(player.world));
-            };
 
             let size = window.extent();
             let render_image = window.next_image()?;
@@ -655,9 +654,10 @@ impl Renderer {
                 vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
             )?;
 
-            scene.render(
+            self.scene_manager.render(
                 &self.models,
                 &cmd,
+                player.world,
                 size,
                 render_image.image.view(),
                 player.entity,
@@ -863,7 +863,6 @@ impl Drop for Renderer {
         }
         info!("cleaning up renderer");
 
-        self.scenes.clear();
         self.windows.clear();
         self.frames.iter().for_each(utils::Frame::destroy);
         self.render_device.flush_all();
