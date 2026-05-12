@@ -92,6 +92,8 @@ pub trait ComponentSystem: System {
 }
 
 /// Private type-erasure trait for storage in [`Entity`] & [`Universe`]
+#[allow(clippy::borrowed_box)]
+// I tried removing the boxes, it created loads of errors. Not trying again.
 pub(crate) trait AnyComponentSystem {
     fn type_id(&self) -> TypeId;
     fn added(&self, entity: Entity, component: &Box<dyn AnyComponent>);
