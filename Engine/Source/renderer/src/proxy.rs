@@ -1,35 +1,11 @@
 //! This module holds proxies for various engine objects
 
-use platform::WindowId;
-use universe::{Entity, WorldId};
-use world::player::PlayerId;
-
 pub mod systems;
 
-pub struct CameraProxy {
-    /// View matrix calculated from camera position.
-    pub view: glam::Mat4,
-    /// Projection matrix calculated from camera settings.
-    pub proj: glam::Mat4,
-}
+mod types;
+// TODO: shouldn't be public
+pub use types::*;
 
-pub struct PlayerProxy {
-    #[allow(unused)]
-    pub id: PlayerId,
-    pub world: WorldId,
-    pub entity: Entity,
-    pub window: WindowId,
-    // TODO: render to a specific region of the window
-    // pub region: PlayerRegion,
-}
-
-impl From<world::player::PlayerUpdateEvent> for PlayerProxy {
-    fn from(event: world::player::PlayerUpdateEvent) -> Self {
-        Self {
-            id: event.id,
-            world: event.world,
-            entity: event.entity,
-            window: event.window,
-        }
-    }
-}
+/// This is the renderer proxy for the [`Universe`]. It also has
+/// most of the rendering state needed to render each scene.
+pub struct SceneManager {}
