@@ -75,7 +75,7 @@ impl Engine {
         .context("renderer init")?;
 
         let universe = Universe::builder()
-            .with_component_system(ModelUploadSystem::new(&event_manager))
+            .with_other(world::universe_builder(&event_manager))
             .with_other(renderer.universe_builder())
             .build();
 
