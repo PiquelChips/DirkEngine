@@ -12,7 +12,7 @@ use crate::components::{AnyComponent, Component};
 
 /// A unique, opaque identifier for a spawned entity.
 #[derive(Clone, Copy, Debug, Default, Hash, Eq, PartialEq)]
-pub struct Entity(pub(crate) u32);
+pub struct Entity(pub(crate) u64);
 
 impl Entity {
     /// Returns an empty [`EntityBuilder`].
@@ -22,15 +22,15 @@ impl Entity {
     }
 }
 
-impl Add<u32> for Entity {
+impl Add<u64> for Entity {
     type Output = Self;
-    fn add(self, rhs: u32) -> Self::Output {
+    fn add(self, rhs: u64) -> Self::Output {
         Self(self.0 + rhs)
     }
 }
 
-impl AddAssign<u32> for Entity {
-    fn add_assign(&mut self, rhs: u32) {
+impl AddAssign<u64> for Entity {
+    fn add_assign(&mut self, rhs: u64) {
         self.0 += rhs;
     }
 }
