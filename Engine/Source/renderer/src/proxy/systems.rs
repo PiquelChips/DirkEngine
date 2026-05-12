@@ -32,14 +32,15 @@ impl EntitySystem for RendererEntitySystem {
     }
     fn sent(
         &self,
-        universe: &universe::Universe,
+        _: &universe::Universe,
         entity: universe::Entity,
-        old: universe::WorldId,
+        _: universe::WorldId,
         new: universe::WorldId,
     ) {
-        self.sender.enqueue_command(|renderer| {
-            // TODO: move the entity from a Scene to another
-            todo!("move the proxy")
+        self.sender.enqueue_command(move |renderer| {
+            let manager = &mut renderer.scene_manager;
+            manager.send_proxy(entity, new)?;
+            Ok(())
         });
     }
     fn despawned(&self, _: &universe::Universe, entity: universe::Entity) {

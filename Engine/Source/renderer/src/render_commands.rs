@@ -40,13 +40,14 @@ pub struct RenderCommandReceiver {
 }
 
 impl RenderCommandReceiver {
-    pub fn flush(&self, renderer: &mut Renderer) {
+    pub fn flush(&self, renderer: &mut Renderer) -> Result<()> {
         // `try_recv` is non-blocking: we consume whatever is in the queue
         // right now and return immediately when it's empty, so the render
         // thread is never stalled waiting for the game thread.
         while let Ok(command) = self.rx.try_recv() {
-            command(renderer);
+            command(renderer)?;
         }
+        Ok(())
     }
 }
 

@@ -208,6 +208,33 @@ impl SceneManager {
     pub fn get_proxy_mut(&mut self, entity: Entity) -> Option<&SceneProxy> {
         self.proxies.get(&entity)
     }
+    pub fn send_proxy(&mut self, entity: Entity, to: WorldId) -> Result<()> {
+        let world = self
+            .entities
+            .get(&entity)
+            .copied()
+            .ok_or(Error::EntityDoesNotExist(entity))?;
+
+        if !self.scenes.contains_key(&to) {
+            return Err(Error::WorldDoesNotExist(to));
+        }
+
+        let old = self
+            .scenes
+            .get_mut(&world)
+            .ok_or(Error::WorldDoesNotExist(world))?;
+
+        old.entities.remove(&entity);
+
+        let new = self
+            .scenes
+            .get_mut(&to)
+            .ok_or(Error::WorldDoesNotExist(to))?;
+        new.entities.insert(entity);
+
+        self.entities.insert(entity, to);
+        Ok(())
+    }
     pub fn destroy_proxy(&mut self, entity: Entity) -> Result<()> {
         let world = self
             .entities
@@ -235,24 +262,24 @@ struct CameraProxy {
 // fields are read by Vulkan, not us
 #[allow(unused)]
 struct SceneUbo {
-    pub view: glam::Mat4,
-    pub proj: glam::Mat4,
+    view: glam::Mat4,
+    proj: glam::Mat4,
 }
 
 #[derive(Clone, Copy)]
 // fields are read by Vulkan, not us
 #[allow(unused)]
 struct ProxyUbo {
-    pub model: glam::Mat4,
+    model: glam::Mat4,
 }
 
 /// Renderer representation of a [`World`].
 struct Scene {
     world: WorldId,
-    pub entities: HashSet<Entity>,
+    entities: HashSet<Entity>,
 
-    pub ubo: [UniformBuffer; MAX_FRAMES_IN_FLIGHT],
-    pub descriptor_sets: [vk::DescriptorSet; MAX_FRAMES_IN_FLIGHT],
+    ubo: [UniformBuffer; MAX_FRAMES_IN_FLIGHT],
+    descriptor_sets: [vk::DescriptorSet; MAX_FRAMES_IN_FLIGHT],
 }
 
 impl Scene {
@@ -316,16 +343,16 @@ impl Scene {
 pub struct SceneProxy {
     /// The model matrix used for rendering. Constructed from the
     /// [`world::components::Transform`] of the entity.
-    pub model_matrix: Option<glam::Mat4>,
+    model_matrix: Option<glam::Mat4>,
     /// The name of the model. Used to request a [`crate::model::Model`] from the
     /// renderer at render time.
-    pub model: Option<assets::AssetHandle>,
+    model: Option<assets::AssetHandle>,
     /// An optional camera that could be attached to the mesh.
-    pub camera: Option<CameraProxy>,
+    camera: Option<CameraProxy>,
 
     // Per frame render stuff
-    pub ubo: [UniformBuffer; MAX_FRAMES_IN_FLIGHT],
-    pub sets: [vk::DescriptorSet; MAX_FRAMES_IN_FLIGHT],
+    ubo: [UniformBuffer; MAX_FRAMES_IN_FLIGHT],
+    sets: [vk::DescriptorSet; MAX_FRAMES_IN_FLIGHT],
 }
 
 impl SceneProxy {
