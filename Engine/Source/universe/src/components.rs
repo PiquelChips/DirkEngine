@@ -103,17 +103,15 @@ impl<C: Component> AnyStorage for ComponentStorage<C> {
         component: Box<dyn AnyComponent>,
     ) -> Option<Box<dyn AnyComponent>> {
         // Downcast through Box<dyn Any> so we can move the value out of the box.
-        match component.into_any().downcast::<C>() {
-            Ok(c) => self
-                .map
+        if let Ok(c) = component.into_any().downcast::<C>() {
+            self.map
                 .insert(entity, *c)
-                .map(|component| Box::new(component) as Box<dyn AnyComponent>),
-            Err(_) => {
-                // Type mismatch — should never happen in practice because
-                // insert_box always routes to the storage that matches C.
-                debug_assert!(false, "insert_any called with wrong component type");
-                None
-            }
+                .map(|component| Box::new(component) as Box<dyn AnyComponent>)
+        } else {
+            // Type mismatch — should never happen in practice because
+            // insert_box always routes to the storage that matches C.
+            debug_assert!(false, "insert_any called with wrong component type");
+            None
         }
     }
 
