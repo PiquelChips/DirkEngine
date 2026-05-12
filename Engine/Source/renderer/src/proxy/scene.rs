@@ -10,8 +10,10 @@ use crate::{
     pipeline::GraphicsPipeline,
     render_pass::RenderPass,
     resources::{
-        buffer::UniformBuffer, command_pool::CommandBuffer, device::RenderDevice, image::Image,
-        image::ImageCreateInfo,
+        buffer::UniformBuffer,
+        command_pool::CommandBuffer,
+        device::{Garbage, RenderDevice},
+        image::{Image, ImageCreateInfo},
     },
 };
 
@@ -248,6 +250,13 @@ impl SceneManager {
             .remove(&entity);
         self.proxies.remove(&entity);
         Ok(())
+    }
+}
+
+impl Drop for SceneManager {
+    fn drop(&mut self) {
+        self.device
+            .destroy(Garbage::DescriptorPool(self.descriptor_pool));
     }
 }
 
