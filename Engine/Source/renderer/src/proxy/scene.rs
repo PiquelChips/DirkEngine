@@ -126,15 +126,10 @@ impl SceneManager {
                 .get(&camera)
                 .ok_or(Error::CameraDoesNotExist(camera))?;
 
-            let camera = proxy
-                .camera
-                .as_ref()
-                .ok_or(Error::CameraDoesNotExist(camera))?;
+            let view = proxy.view.ok_or(Error::CameraDoesNotExist(camera))?;
+            let proj = proxy.proj.ok_or(Error::CameraDoesNotExist(camera))?;
 
-            let scene_ubo = SceneUbo {
-                view: camera.view,
-                proj: camera.proj,
-            };
+            let scene_ubo = SceneUbo { view, proj };
             unsafe { scene.ubo[frame].write(&scene_ubo) };
         };
 
@@ -207,8 +202,8 @@ impl SceneManager {
             .insert(entity);
         Ok(())
     }
-    pub fn get_proxy_mut(&mut self, entity: Entity) -> Option<&SceneProxy> {
-        self.proxies.get(&entity)
+    pub fn get_proxy_mut(&mut self, entity: Entity) -> Option<&mut SceneProxy> {
+        self.proxies.get_mut(&entity)
     }
     pub fn send_proxy(&mut self, entity: Entity, to: WorldId) -> Result<()> {
         let world = self
@@ -353,11 +348,13 @@ pub struct SceneProxy {
     /// The model matrix used for rendering. Constructed from the
     /// [`world::components::Transform`] of the entity.
     model_matrix: Option<glam::Mat4>,
+    /// The view matrix used for rendering as camera
+    view: Option<glam::Mat4>,
+    /// The projection matrix used for rendering as camera
+    proj: Option<glam::Mat4>,
     /// The name of the model. Used to request a [`crate::model::Model`] from the
     /// renderer at render time.
     model: Option<assets::AssetHandle>,
-    /// An optional camera that could be attached to the mesh.
-    camera: Option<CameraProxy>,
 
     // Per frame render stuff
     ubo: [UniformBuffer; MAX_FRAMES_IN_FLIGHT],
@@ -412,7 +409,8 @@ impl SceneProxy {
         Ok(Self {
             model: None,
             model_matrix: None,
-            camera: None,
+            view: None,
+            proj: None,
             ubo,
             sets,
         })
@@ -428,8 +426,11 @@ impl SceneProxy {
             unsafe { ubo.write(&proxy_ubo) };
         }
     }
-    pub fn set_camera(&mut self, view: glam::Mat4, proj: glam::Mat4) {
-        self.camera = Some(CameraProxy { view, proj });
+    pub fn set_view(&mut self, view: glam::Mat4) {
+        self.view = Some(view);
+    }
+    pub fn set_proj(&mut self, proj: glam::Mat4) {
+        self.proj = Some(proj);
     }
     pub fn write_ubo(&self, frame: usize) {
         let Some(model) = self.model_matrix else {

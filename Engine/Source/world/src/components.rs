@@ -175,7 +175,7 @@ impl From<Transform> for Mat4 {
 /// // The matrix must be finite.
 /// assert!(proj.to_cols_array().iter().all(|v| v.is_finite()));
 /// ```
-#[derive(Debug, Component)]
+#[derive(Debug, Clone, Component)]
 pub struct Camera {
     /// Vertical field of view **in radians**.
     pub fov: f32,
