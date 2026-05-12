@@ -48,7 +48,8 @@ use resources::{command_pool::CommandPool, device::RenderDevice, image::Swapchai
 
 mod proxy;
 use proxy::{
-    PlayerProxy, RendererEntitySynchronizationSystem, RendererUniverseSynchronizationSystem,
+    PlayerProxy,
+    systems::{RendererEntitySynchronizationSystem, RendererUniverseSynchronizationSystem},
 };
 
 mod render_commands;
