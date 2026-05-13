@@ -6,7 +6,7 @@ use syn::{DeriveInput, FnArg, ItemTrait, LitStr, Pat, TraitItem, TypeParamBound}
 #[allow(clippy::too_many_lines)]
 pub fn generate_system_code(trait_def: &ItemTrait) -> syn::Result<TokenStream> {
     if !trait_def.supertraits.iter().any(|s| match s {
-        TypeParamBound::Trait(t) => t.path.is_ident("System"),
+        TypeParamBound::Trait(t) => t.path.segments.last().is_some_and(|s| s.ident == "System"),
         _ => false,
     }) {
         return Err(syn::Error::new(
