@@ -146,8 +146,9 @@ impl Universe {
         world.alive.insert(entity);
 
         for (_, component) in builder.components {
+            let type_id = AnyComponent::type_id(component.as_ref());
             self.component_systems
-                .iter(AnyComponent::type_id(component.as_ref()))
+                .iter(type_id)
                 .for_each(|system| system.added(entity, component.as_ref()));
 
             self.components.insert_any(entity, component);

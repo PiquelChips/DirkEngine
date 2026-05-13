@@ -67,6 +67,8 @@ pub(crate) trait AnyStorage {
         entity: Entity,
         component: Box<dyn AnyComponent>,
     ) -> Option<Box<dyn AnyComponent>>;
+    /// Will return the component associated with the entity
+    fn get(&self, entity: Entity) -> Option<&dyn AnyComponent>;
     /// Returns `true` if this storage holds a component for `entity`.
     fn contains(&self, entity: Entity) -> bool;
     fn as_any(&self) -> &dyn Any;
@@ -130,6 +132,9 @@ impl<C: Component> AnyStorage for ComponentStorage<C> {
     }
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
+    }
+    fn get(&self, entity: Entity) -> Option<&dyn AnyComponent> {
+        self.map.get(&entity).map(|c| c as &dyn AnyComponent)
     }
 }
 
@@ -202,14 +207,14 @@ impl Components {
         entity: Entity,
         component: Box<dyn AnyComponent>,
     ) -> Option<Box<dyn AnyComponent>> {
-        // Obtain the concrete TypeId via dynamic dispatch before the box is
-        // consumed, then ensure a matching storage bucket exists.
-        let type_id = (*component).type_id();
-
         self.storages
-            .entry(type_id)
+            .entry(AnyComponent::type_id(component.as_ref()))
             .or_insert_with(|| component.new_storage())
             .insert(entity, component)
+    }
+
+    pub fn get_any(&self, entity: Entity, type_id: TypeId) -> Option<&dyn AnyComponent> {
+        self.storages.get(&type_id)?.get(entity)
     }
 
     pub fn get<C: Component>(&self, entity: Entity) -> Option<&C> {
