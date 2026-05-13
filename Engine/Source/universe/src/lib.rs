@@ -197,6 +197,12 @@ impl Universe {
             return;
         }
 
+        for (type_id, component) in self.components.get_all(entity) {
+            self.component_systems
+                .iter(type_id)
+                .for_each(|system| system.removed(entity, component));
+        }
+
         self.universe_systems
             .iter()
             .for_each(|system| system.entity_despawned(self, entity));
@@ -211,11 +217,7 @@ impl Universe {
             system.despawned(self, entity);
         });
 
-        for (type_id, component) in self.components.remove_all(entity) {
-            self.component_systems
-                .iter(type_id)
-                .for_each(|system| system.removed(entity, component.as_ref()));
-        }
+        self.components.remove_all(entity);
     }
 
     /// Will send the [`Entity`] to the specified [`WorldId`].
