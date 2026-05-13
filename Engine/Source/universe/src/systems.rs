@@ -140,8 +140,12 @@ impl ComponentSystemStorage {
         self.systems.entry(type_id).or_default().push(system);
     }
 
-    pub fn iter(&mut self, type_id: TypeId) -> std::slice::Iter<'_, Box<dyn AnyComponentSystem>> {
-        self.systems.entry(type_id).or_default().iter()
+    pub fn iter(&self, type_id: TypeId) -> std::slice::Iter<'_, Box<dyn AnyComponentSystem>> {
+        self.systems
+            .get(&type_id)
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
+            .iter()
     }
 }
 
