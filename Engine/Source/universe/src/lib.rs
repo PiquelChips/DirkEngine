@@ -147,7 +147,7 @@ impl Universe {
 
         for (_, component) in builder.components {
             self.component_systems
-                .iter(component.type_id())
+                .iter(AnyComponent::type_id(component.as_ref()))
                 .for_each(|system| system.added(entity, component.as_ref()));
 
             self.components.insert_any(entity, component);

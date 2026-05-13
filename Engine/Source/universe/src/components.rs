@@ -28,6 +28,9 @@ pub(crate) trait AnyComponent: Any + Debug + 'static {
     /// Takes `self` so it can be called on a [`AnyComponent`] directly
     /// without needing to know the type.
     fn new_storage(&self) -> Box<dyn AnyStorage>;
+
+    /// Returns the [`TypeId`] of the concrete component behind the any type.
+    fn type_id(&self) -> TypeId;
 }
 
 // Blanket impl: every concrete Component automatically becomes an AnyComponent.
@@ -41,6 +44,9 @@ impl<T: Component> AnyComponent for T {
 
     fn new_storage(&self) -> Box<dyn AnyStorage> {
         Box::new(ComponentStorage::<T>::default())
+    }
+    fn type_id(&self) -> TypeId {
+        TypeId::of::<T>()
     }
 }
 
