@@ -249,6 +249,10 @@ impl Universe {
 
         self.entities.insert(entity, to);
 
+        self.universe_systems
+            .iter()
+            .for_each(|system| system.entity_sent(self, entity, world, to));
+
         self.entity_systems.iter().for_each(|system| {
             if let Some(query) = system.query()
                 && !query.matches(self, entity)
