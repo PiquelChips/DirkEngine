@@ -145,17 +145,27 @@ impl Universe {
         self.entities.insert(entity, world.id());
         world.alive.insert(entity);
 
-        for (_, component) in builder.components {
-            self.component_systems
-                .iter(component.type_id())
-                .for_each(|system| system.added(entity, &component));
-
-            self.components.insert_any(entity, component);
-        }
+        let type_ids: Vec<TypeId> = builder
+            .components
+            .into_values()
+            .map(|component| {
+                let type_id = AnyComponent::type_id(component.as_ref());
+                self.components.insert_any(entity, component);
+                type_id
+            })
+            .collect();
 
         self.universe_systems
             .iter()
             .for_each(|system| system.entity_spawned(self, entity));
+
+        for type_id in type_ids {
+            if let Some(component) = self.components.get_any(entity, type_id) {
+                self.component_systems
+                    .iter(type_id)
+                    .for_each(|system| system.added(entity, component));
+            }
+        }
 
         self.entity_systems.iter().for_each(|system| {
             if let Some(query) = system.query()
@@ -163,9 +173,9 @@ impl Universe {
             {
                 return;
             }
-
             system.spawned(self, entity);
         });
+
         Some(entity)
     }
 
@@ -204,7 +214,7 @@ impl Universe {
         for (type_id, component) in self.components.remove_all(entity) {
             self.component_systems
                 .iter(type_id)
-                .for_each(|system| system.removed(entity, &component));
+                .for_each(|system| system.removed(entity, component.as_ref()));
         }
     }
 
@@ -212,10 +222,16 @@ impl Universe {
     ///
     /// Returns if the operation was successful. Will fail if the [`Entity`]
     /// or the [`World`] don't exist.
+    ///
+    /// If the `entity` is already in `to`, returns `true`
     pub fn send(&mut self, entity: Entity, to: WorldId) -> bool {
         let Some(world) = self.entities.get(&entity).copied() else {
             return false;
         };
+
+        if world == to {
+            return true;
+        }
 
         if !self.worlds.contains_key(&to) {
             return false;
@@ -265,12 +281,12 @@ impl Universe {
 
         self.component_systems
             .iter(TypeId::of::<C>())
-            .for_each(|system| system.added(entity, &component));
+            .for_each(|system| system.added(entity, component.as_ref()));
 
         if let Some(old) = self.components.insert_any(entity, component) {
             self.component_systems
                 .iter(TypeId::of::<C>())
-                .for_each(|system| system.removed(entity, &old));
+                .for_each(|system| system.removed(entity, old.as_ref()));
         }
     }
 
@@ -283,9 +299,17 @@ impl Universe {
 
     /// Returns a mutable reference to a component, or `None` if the entity
     /// does not have one.
+    ///
+    /// This is a temporary solution as [`ComponentSystem::update`] is being
+    /// called before anything is actually changed.
     pub fn component_mut<C: Component>(&mut self, entity: Entity) -> Option<&mut C> {
-        // TODO: call component_systems::updated
-        self.components.get_mut(entity)
+        let component: &mut C = self.components.get_mut(entity)?;
+
+        self.component_systems
+            .iter(TypeId::of::<C>())
+            .for_each(|system| system.updated(entity, component));
+
+        Some(component)
     }
 
     /// Removes a single component from an entity, calling [`ComponentSystem::removed`]
@@ -298,7 +322,7 @@ impl Universe {
             let component: Box<dyn AnyComponent> = Box::new(component);
             self.component_systems
                 .iter(TypeId::of::<C>())
-                .for_each(|system| system.removed(entity, &component));
+                .for_each(|system| system.removed(entity, component.as_ref()));
         }
     }
 }

@@ -15,8 +15,8 @@ pub struct World {
 impl World {
     /// Returns a [`WorldBuilder`].
     #[must_use]
-    pub fn builder() -> WorldBuilder {
-        WorldBuilder::new()
+    pub fn builder(name: String) -> WorldBuilder {
+        WorldBuilder::new(name)
     }
     /// Creates an empty world with a name & id.
     #[must_use]
@@ -49,16 +49,11 @@ pub struct WorldBuilder {
 impl WorldBuilder {
     /// Creates a new empty [`WorldBuilder`].
     #[must_use]
-    fn new() -> Self {
-        Self::default()
-    }
-
-    /// Give the world a name. If called multiple times, only the last
-    /// call will have any effect.
-    #[must_use]
-    pub fn with_name(mut self, name: String) -> Self {
-        self.name = name;
-        self
+    fn new(name: String) -> Self {
+        Self {
+            name,
+            ..Self::default()
+        }
     }
 
     /// Adds an [`Entity`] that will be spawned on [`World`] creation.
