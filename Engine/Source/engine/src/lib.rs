@@ -229,7 +229,7 @@ impl Engine {
             })
             .with_component(Renderable { model: duck_model });
 
-        let world_builder = World::builder()
+        let world_builder = World::builder("test world")
             .with_entity(shrek_builder)
             .with_entity(duck_builder);
 
