@@ -147,8 +147,8 @@ impl Universe {
 
         let type_ids: Vec<TypeId> = builder
             .components
-            .into_iter()
-            .map(|(_, component)| {
+            .into_values()
+            .map(|component| {
                 let type_id = AnyComponent::type_id(component.as_ref());
                 self.components.insert_any(entity, component);
                 type_id
