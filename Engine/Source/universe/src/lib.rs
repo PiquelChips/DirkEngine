@@ -145,18 +145,27 @@ impl Universe {
         self.entities.insert(entity, world.id());
         world.alive.insert(entity);
 
-        for (_, component) in builder.components {
-            let type_id = AnyComponent::type_id(component.as_ref());
-            self.component_systems
-                .iter(type_id)
-                .for_each(|system| system.added(entity, component.as_ref()));
-
-            self.components.insert_any(entity, component);
-        }
+        let type_ids: Vec<TypeId> = builder
+            .components
+            .into_iter()
+            .map(|(_, component)| {
+                let type_id = AnyComponent::type_id(component.as_ref());
+                self.components.insert_any(entity, component);
+                type_id
+            })
+            .collect();
 
         self.universe_systems
             .iter()
             .for_each(|system| system.entity_spawned(self, entity));
+
+        for type_id in type_ids {
+            if let Some(component) = self.components.get_any(entity, type_id) {
+                self.component_systems
+                    .iter(type_id)
+                    .for_each(|system| system.added(entity, component));
+            }
+        }
 
         self.entity_systems.iter().for_each(|system| {
             if let Some(query) = system.query()
@@ -164,9 +173,9 @@ impl Universe {
             {
                 return;
             }
-
             system.spawned(self, entity);
         });
+
         Some(entity)
     }
 
