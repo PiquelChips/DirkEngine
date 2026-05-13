@@ -92,15 +92,11 @@ pub trait ComponentSystem: System {
 }
 
 /// Private type-erasure trait for storage in [`Entity`] & [`Universe`]
-#[allow(clippy::borrowed_box)]
-// I tried removing the boxes, it created loads of errors. Not trying again.
 pub(crate) trait AnyComponentSystem {
     fn type_id(&self) -> TypeId;
-    fn added(&self, entity: Entity, component: &Box<dyn AnyComponent>);
-    // TODO: this will be called when we have the command buffer system
-    #[allow(unused)]
-    fn updated(&self, entity: Entity, component: &Box<dyn AnyComponent>);
-    fn removed(&self, entity: Entity, component: &Box<dyn AnyComponent>);
+    fn added(&self, entity: Entity, component: &dyn AnyComponent);
+    fn updated(&self, entity: Entity, component: &dyn AnyComponent);
+    fn removed(&self, entity: Entity, component: &dyn AnyComponent);
 }
 
 impl<T: ComponentSystem> AnyComponentSystem for T {
@@ -108,19 +104,19 @@ impl<T: ComponentSystem> AnyComponentSystem for T {
         TypeId::of::<T::Component>()
     }
 
-    fn added(&self, entity: Entity, component: &Box<dyn AnyComponent>) {
+    fn added(&self, entity: Entity, component: &dyn AnyComponent) {
         if let Some(component) = component.as_any().downcast_ref::<T::Component>() {
             T::added(self, entity, component);
         }
     }
 
-    fn updated(&self, entity: Entity, component: &Box<dyn AnyComponent>) {
+    fn updated(&self, entity: Entity, component: &dyn AnyComponent) {
         if let Some(component) = component.as_any().downcast_ref::<T::Component>() {
             T::added(self, entity, component);
         }
     }
 
-    fn removed(&self, entity: Entity, component: &Box<dyn AnyComponent>) {
+    fn removed(&self, entity: Entity, component: &dyn AnyComponent) {
         if let Some(component) = component.as_any().downcast_ref::<T::Component>() {
             T::removed(self, entity, component);
         }

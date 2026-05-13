@@ -148,7 +148,7 @@ impl Universe {
         for (_, component) in builder.components {
             self.component_systems
                 .iter(component.type_id())
-                .for_each(|system| system.added(entity, &component));
+                .for_each(|system| system.added(entity, component.as_ref()));
 
             self.components.insert_any(entity, component);
         }
@@ -204,7 +204,7 @@ impl Universe {
         for (type_id, component) in self.components.remove_all(entity) {
             self.component_systems
                 .iter(type_id)
-                .for_each(|system| system.removed(entity, &component));
+                .for_each(|system| system.removed(entity, component.as_ref()));
         }
     }
 
@@ -265,12 +265,12 @@ impl Universe {
 
         self.component_systems
             .iter(TypeId::of::<C>())
-            .for_each(|system| system.added(entity, &component));
+            .for_each(|system| system.added(entity, component.as_ref()));
 
         if let Some(old) = self.components.insert_any(entity, component) {
             self.component_systems
                 .iter(TypeId::of::<C>())
-                .for_each(|system| system.removed(entity, &old));
+                .for_each(|system| system.removed(entity, old.as_ref()));
         }
     }
 
@@ -298,7 +298,7 @@ impl Universe {
             let component: Box<dyn AnyComponent> = Box::new(component);
             self.component_systems
                 .iter(TypeId::of::<C>())
-                .for_each(|system| system.removed(entity, &component));
+                .for_each(|system| system.removed(entity, component.as_ref()));
         }
     }
 }
