@@ -96,21 +96,27 @@ impl Universe {
     // WORLD MANAGEMENT
 
     /// Will create a new empty world & return its ID.
+    ///
+    /// # Panics
+    ///
+    /// Will panic if cannot find the world just created
     pub fn create_world(&mut self, builder: WorldBuilder) -> WorldId {
         let id = self.next_world_id;
         self.next_world_id += 1;
 
         let world = World::new(id, builder.name);
+        self.worlds.insert(id, world);
 
         for builder in builder.entities {
-            self.spawn(id, builder);
+            self.spawn(id, builder)
+                .expect("should spawn entity in just created world");
         }
 
+        let world = self.worlds.get(&id).expect("we just added it");
         self.universe_systems
             .iter()
-            .for_each(|system| system.world_created(self, &world));
+            .for_each(|system| system.world_created(self, world));
 
-        self.worlds.insert(id, world);
         id
     }
 
@@ -308,6 +314,7 @@ impl Universe {
     ///
     /// This is a temporary solution as [`ComponentSystem::update`] is being
     /// called before anything is actually changed.
+    #[must_use]
     pub fn component_mut<C: Component>(&mut self, entity: Entity) -> Option<&mut C> {
         let component: &mut C = self.components.get_mut(entity)?;
 
