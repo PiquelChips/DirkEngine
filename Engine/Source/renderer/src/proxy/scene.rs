@@ -406,22 +406,24 @@ impl SceneProxy {
             sets,
         })
     }
-    pub fn set_model(&mut self, model: assets::AssetHandle) {
-        self.model = Some(model);
+    pub fn set_model(&mut self, model: Option<assets::AssetHandle>) {
+        self.model = model;
     }
-    pub fn set_model_matrix(&mut self, mat: glam::Mat4) {
-        self.model_matrix = Some(mat);
+    pub fn set_model_matrix(&mut self, mat: Option<glam::Mat4>) {
+        self.model_matrix = mat;
 
-        let proxy_ubo = ProxyUbo { model: mat };
-        for ubo in &self.ubo {
-            unsafe { ubo.write(&proxy_ubo) };
+        if let Some(mat) = mat {
+            let proxy_ubo = ProxyUbo { model: mat };
+            for ubo in &self.ubo {
+                unsafe { ubo.write(&proxy_ubo) };
+            }
         }
     }
-    pub fn set_view(&mut self, view: glam::Mat4) {
-        self.view = Some(view);
+    pub fn set_view(&mut self, view: Option<glam::Mat4>) {
+        self.view = view;
     }
-    pub fn set_proj(&mut self, proj: glam::Mat4) {
-        self.proj = Some(proj);
+    pub fn set_proj(&mut self, proj: Option<glam::Mat4>) {
+        self.proj = proj;
     }
     pub fn write_ubo(&self, frame: usize) {
         let Some(model) = self.model_matrix else {

@@ -25,31 +25,9 @@ impl EntitySystem for RendererEntitySystem {
             .get_world(entity)
             .expect("entity should be in world");
 
-        let renderable = universe
-            .component::<Renderable>(entity)
-            .cloned()
-            .expect("queried for entity with renderable");
-        let transform = universe
-            .component::<Transform>(entity)
-            .cloned()
-            .expect("queried for entity with transform");
-        let camera = universe.component::<Camera>(entity).cloned();
         self.sender.enqueue_command(move |renderer| {
             let manager = &mut renderer.scene_manager;
             manager.create_proxy(entity, world)?;
-
-            let proxy = manager
-                .get_proxy_mut(entity)
-                .ok_or(Error::EntityDoesNotExist(entity))?;
-
-            proxy.set_model(renderable.model);
-            proxy.set_model_matrix(transform.matrix());
-            proxy.set_view(transform.view());
-
-            if let Some(camera) = camera {
-                proxy.set_proj(camera.projection());
-            }
-
             Ok(())
         });
     }
@@ -132,7 +110,7 @@ impl ComponentSystem for RendererMeshSystem {
                 .scene_manager
                 .get_proxy_mut(entity)
                 .ok_or(Error::EntityDoesNotExist(entity))?;
-            proxy.set_model(model);
+            proxy.set_model(Some(model));
             Ok(())
         });
     }
@@ -165,8 +143,8 @@ impl ComponentSystem for RendererTransformSystem {
                 .scene_manager
                 .get_proxy_mut(entity)
                 .ok_or(Error::EntityDoesNotExist(entity))?;
-            proxy.set_model_matrix(model);
-            proxy.set_view(view);
+            proxy.set_model_matrix(Some(model));
+            proxy.set_view(Some(view));
             Ok(())
         });
     }
@@ -198,7 +176,7 @@ impl ComponentSystem for RendererCameraSystem {
                 .scene_manager
                 .get_proxy_mut(entity)
                 .ok_or(Error::EntityDoesNotExist(entity))?;
-            proxy.set_proj(proj);
+            proxy.set_proj(Some(proj));
             Ok(())
         });
     }
