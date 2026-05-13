@@ -212,10 +212,16 @@ impl Universe {
     ///
     /// Returns if the operation was successful. Will fail if the [`Entity`]
     /// or the [`World`] don't exist.
+    ///
+    /// If the `entity` is already in `to`, returns `true`
     pub fn send(&mut self, entity: Entity, to: WorldId) -> bool {
         let Some(world) = self.entities.get(&entity).copied() else {
             return false;
         };
+
+        if world == to {
+            return true;
+        }
 
         if !self.worlds.contains_key(&to) {
             return false;
