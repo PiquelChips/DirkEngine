@@ -1,64 +1,9 @@
 //! ECS systems for proxy creation and synchrnozation
 
-use universe::{
-    query::Query,
-    systems::{ComponentSystem, EntitySystem, System, UniverseSystem},
-};
-use world::components::{self, Camera, Renderable, Transform};
+use universe::systems::{ComponentSystem, System, UniverseSystem};
+use world::components::{Camera, Renderable, Transform};
 
 use crate::{Error, render_commands::RenderCommandSender};
-
-#[derive(System)]
-pub struct RendererEntitySystem {
-    sender: RenderCommandSender,
-}
-
-impl RendererEntitySystem {
-    pub fn new(sender: RenderCommandSender) -> Self {
-        Self { sender }
-    }
-}
-
-impl EntitySystem for RendererEntitySystem {
-    fn spawned(&self, universe: &universe::Universe, entity: universe::Entity) {
-        let world = universe
-            .get_world(entity)
-            .expect("entity should be in world");
-
-        self.sender.enqueue_command(move |renderer| {
-            let manager = &mut renderer.scene_manager;
-            manager.create_proxy(entity, world)?;
-            Ok(())
-        });
-    }
-    fn sent(
-        &self,
-        _: &universe::Universe,
-        entity: universe::Entity,
-        _: universe::WorldId,
-        new: universe::WorldId,
-    ) {
-        self.sender.enqueue_command(move |renderer| {
-            let manager = &mut renderer.scene_manager;
-            manager.send_proxy(entity, new)?;
-            Ok(())
-        });
-    }
-    fn despawned(&self, _: &universe::Universe, entity: universe::Entity) {
-        self.sender.enqueue_command(move |renderer| {
-            let manager = &mut renderer.scene_manager;
-            manager.destroy_proxy(entity)?;
-            Ok(())
-        });
-    }
-    fn query(&self) -> Option<Query> {
-        Some(
-            Query::new()
-                .with_component::<components::Renderable>()
-                .with_component::<components::Transform>(),
-        )
-    }
-}
 
 #[derive(System)]
 pub struct RendererUniverseSystem {
@@ -74,8 +19,39 @@ impl RendererUniverseSystem {
 impl UniverseSystem for RendererUniverseSystem {
     // these functions aren't needed
     fn tick(&self, _: &universe::Universe, _: f32) {}
-    fn entity_spawned(&self, _: &universe::Universe, _: universe::Entity) {}
-    fn entity_despawned(&self, _: &universe::Universe, _: universe::Entity) {}
+
+    fn entity_spawned(&self, universe: &universe::Universe, entity: universe::Entity) {
+        let world = universe
+            .get_world(entity)
+            .expect("entity should be in world");
+
+        self.sender.enqueue_command(move |renderer| {
+            let manager = &mut renderer.scene_manager;
+            manager.create_proxy(entity, world)?;
+            Ok(())
+        });
+    }
+    fn entity_sent(
+        &self,
+        _: &universe::Universe,
+        entity: universe::Entity,
+        _: universe::WorldId,
+        new: universe::WorldId,
+    ) {
+        self.sender.enqueue_command(move |renderer| {
+            let manager = &mut renderer.scene_manager;
+            manager.send_proxy(entity, new)?;
+            Ok(())
+        });
+    }
+
+    fn entity_despawned(&self, _: &universe::Universe, entity: universe::Entity) {
+        self.sender.enqueue_command(move |renderer| {
+            let manager = &mut renderer.scene_manager;
+            manager.destroy_proxy(entity)?;
+            Ok(())
+        });
+    }
 
     fn world_created(&self, _: &universe::Universe, world: &universe::World) {
         let world = world.id();
@@ -103,7 +79,7 @@ pub struct RendererMeshSystem {
 impl ComponentSystem for RendererMeshSystem {
     type Component = Renderable;
 
-    fn updated(&self, entity: universe::Entity, component: &Self::Component) {
+    fn added(&self, entity: universe::Entity, component: &Self::Component) {
         let model = component.model.clone();
         self.sender.enqueue_command(move |renderer| {
             let proxy = renderer
@@ -115,10 +91,20 @@ impl ComponentSystem for RendererMeshSystem {
         });
     }
 
-    // called before proxy creation, would be problematic
-    fn added(&self, _: universe::Entity, _: &Self::Component) {}
-    // called after proxy destruction, would be problematic
-    fn removed(&self, _: universe::Entity, _: &Self::Component) {}
+    fn updated(&self, entity: universe::Entity, component: &Self::Component) {
+        self.added(entity, component);
+    }
+
+    fn removed(&self, entity: universe::Entity, _: &Self::Component) {
+        self.sender.enqueue_command(move |renderer| {
+            let proxy = renderer
+                .scene_manager
+                .get_proxy_mut(entity)
+                .ok_or(Error::EntityDoesNotExist(entity))?;
+            proxy.set_model(None);
+            Ok(())
+        });
+    }
 }
 
 impl RendererMeshSystem {
@@ -135,7 +121,7 @@ pub struct RendererTransformSystem {
 impl ComponentSystem for RendererTransformSystem {
     type Component = Transform;
 
-    fn updated(&self, entity: universe::Entity, component: &Self::Component) {
+    fn added(&self, entity: universe::Entity, component: &Self::Component) {
         let model = component.matrix();
         let view = component.view();
         self.sender.enqueue_command(move |renderer| {
@@ -149,10 +135,21 @@ impl ComponentSystem for RendererTransformSystem {
         });
     }
 
-    // called before proxy creation, would be problematic
-    fn added(&self, _: universe::Entity, _: &Self::Component) {}
-    // called after proxy destruction, would be problematic
-    fn removed(&self, _: universe::Entity, _: &Self::Component) {}
+    fn updated(&self, entity: universe::Entity, component: &Self::Component) {
+        self.added(entity, component);
+    }
+
+    fn removed(&self, entity: universe::Entity, _: &Self::Component) {
+        self.sender.enqueue_command(move |renderer| {
+            let proxy = renderer
+                .scene_manager
+                .get_proxy_mut(entity)
+                .ok_or(Error::EntityDoesNotExist(entity))?;
+            proxy.set_model_matrix(None);
+            proxy.set_view(None);
+            Ok(())
+        });
+    }
 }
 
 impl RendererTransformSystem {
@@ -169,7 +166,7 @@ pub struct RendererCameraSystem {
 impl ComponentSystem for RendererCameraSystem {
     type Component = Camera;
 
-    fn updated(&self, entity: universe::Entity, component: &Self::Component) {
+    fn added(&self, entity: universe::Entity, component: &Self::Component) {
         let proj = component.projection();
         self.sender.enqueue_command(move |renderer| {
             let proxy = renderer
@@ -181,10 +178,20 @@ impl ComponentSystem for RendererCameraSystem {
         });
     }
 
-    // called before proxy creation, would be problematic
-    fn added(&self, _: universe::Entity, _: &Self::Component) {}
-    // called after proxy destruction, would be problematic
-    fn removed(&self, _: universe::Entity, _: &Self::Component) {}
+    fn updated(&self, entity: universe::Entity, component: &Self::Component) {
+        self.added(entity, component);
+    }
+
+    fn removed(&self, entity: universe::Entity, _: &Self::Component) {
+        self.sender.enqueue_command(move |renderer| {
+            let proxy = renderer
+                .scene_manager
+                .get_proxy_mut(entity)
+                .ok_or(Error::EntityDoesNotExist(entity))?;
+            proxy.set_proj(None);
+            Ok(())
+        });
+    }
 }
 
 impl RendererCameraSystem {

@@ -47,13 +47,13 @@ mod proxy;
 use proxy::{
     PlayerProxy,
     scene::SceneManager,
-    systems::{RendererEntitySystem, RendererUniverseSystem},
+    systems::{
+        RendererCameraSystem, RendererMeshSystem, RendererTransformSystem, RendererUniverseSystem,
+    },
 };
 
 mod render_commands;
 use render_commands::RenderCommandReceiver;
-
-use crate::proxy::systems::{RendererCameraSystem, RendererMeshSystem, RendererTransformSystem};
 
 mod models;
 mod physical_device;
@@ -464,20 +464,17 @@ impl Renderer {
     /// Returns a [`UniverseBuilder`] that is populated with [`Renderer`] systems.
     pub fn universe_builder(&mut self) -> UniverseBuilder {
         let (uni_sender, uni_receiver) = render_commands::channel();
-        let (ent_sender, ent_receiver) = render_commands::channel();
         let (mesh_sender, mesh_receiver) = render_commands::channel();
         let (trans_sender, trans_receiver) = render_commands::channel();
         let (cam_sender, cam_receiver) = render_commands::channel();
 
         self.receivers.push(uni_receiver);
-        self.receivers.push(ent_receiver);
         self.receivers.push(mesh_receiver);
         self.receivers.push(trans_receiver);
         self.receivers.push(cam_receiver);
 
         Universe::builder()
             .with_universe_system(RendererUniverseSystem::new(uni_sender))
-            .with_entity_system(RendererEntitySystem::new(ent_sender))
             .with_component_system(RendererMeshSystem::new(mesh_sender))
             .with_component_system(RendererTransformSystem::new(trans_sender))
             .with_component_system(RendererCameraSystem::new(cam_sender))
