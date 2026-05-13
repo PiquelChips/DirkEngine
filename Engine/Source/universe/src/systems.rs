@@ -141,6 +141,8 @@ impl ComponentSystemStorage {
     }
 
     pub fn iter(&self, type_id: TypeId) -> std::slice::Iter<'_, Box<dyn AnyComponentSystem>> {
+        // fixing the lint breaks because of some weird type stuff, so we allow.
+        #[allow(clippy::map_unwrap_or)]
         self.systems
             .get(&type_id)
             .map(Vec::as_slice)
