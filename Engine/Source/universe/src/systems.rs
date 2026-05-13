@@ -112,7 +112,7 @@ impl<T: ComponentSystem> AnyComponentSystem for T {
 
     fn updated(&self, entity: Entity, component: &dyn AnyComponent) {
         if let Some(component) = component.as_any().downcast_ref::<T::Component>() {
-            T::added(self, entity, component);
+            T::updated(self, entity, component);
         }
     }
 

@@ -284,8 +284,13 @@ impl Universe {
     /// Returns a mutable reference to a component, or `None` if the entity
     /// does not have one.
     pub fn component_mut<C: Component>(&mut self, entity: Entity) -> Option<&mut C> {
-        // TODO: call component_systems::updated
-        self.components.get_mut(entity)
+        let component: &mut C = self.components.get_mut(entity)?;
+
+        self.component_systems
+            .iter(TypeId::of::<C>())
+            .for_each(|system| system.updated(entity, component));
+
+        Some(component)
     }
 
     /// Removes a single component from an entity, calling [`ComponentSystem::removed`]
