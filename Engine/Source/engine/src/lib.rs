@@ -229,10 +229,12 @@ impl Engine {
             })
             .with_component(Renderable { model: duck_model });
 
-        let world_builder = World::builder("test world")
-            .with_entity(shrek_builder)
-            .with_entity(duck_builder);
+        let world_builder = World::builder("test world");
 
-        self.universe.create_world(world_builder)
+        let world = self.universe.create_world(world_builder);
+        // TODO: this allows world_created event to fire before spawn, command buffers should fix
+        self.universe.spawn(world, shrek_builder);
+        self.universe.spawn(world, duck_builder);
+        world
     }
 }
