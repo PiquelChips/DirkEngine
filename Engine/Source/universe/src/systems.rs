@@ -31,6 +31,8 @@ pub trait UniverseSystem: System {
     /// Called when an entity is spawned. At this point, components have
     /// already been added. They can thus be queried for.
     fn entity_spawned(&self, universe: &Universe, entity: Entity);
+    /// Called when the entity is moved to another [`World`].
+    fn entity_sent(&self, universe: &Universe, entity: Entity, old: WorldId, new: WorldId);
     /// Called when an entity is despawned. At this point, components have
     /// not yet been removed. They can thus be queried for.
     /// However, the entity has been removed from the [`World`], so

@@ -159,14 +159,6 @@ impl Universe {
             .iter()
             .for_each(|system| system.entity_spawned(self, entity));
 
-        for type_id in type_ids {
-            if let Some(component) = self.components.get_any(entity, type_id) {
-                self.component_systems
-                    .iter(type_id)
-                    .for_each(|system| system.added(entity, component));
-            }
-        }
-
         self.entity_systems.iter().for_each(|system| {
             if let Some(query) = system.query()
                 && !query.matches(self, entity)
@@ -175,6 +167,14 @@ impl Universe {
             }
             system.spawned(self, entity);
         });
+
+        for type_id in type_ids {
+            if let Some(component) = self.components.get_any(entity, type_id) {
+                self.component_systems
+                    .iter(type_id)
+                    .for_each(|system| system.added(entity, component));
+            }
+        }
 
         Some(entity)
     }
@@ -248,6 +248,10 @@ impl Universe {
         new.alive.insert(entity);
 
         self.entities.insert(entity, to);
+
+        self.universe_systems
+            .iter()
+            .for_each(|system| system.entity_sent(self, entity, world, to));
 
         self.entity_systems.iter().for_each(|system| {
             if let Some(query) = system.query()
