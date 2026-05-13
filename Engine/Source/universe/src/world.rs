@@ -15,7 +15,7 @@ pub struct World {
 impl World {
     /// Returns a [`WorldBuilder`].
     #[must_use]
-    pub fn builder(name: String) -> WorldBuilder {
+    pub fn builder(name: impl ToString) -> WorldBuilder {
         WorldBuilder::new(name)
     }
     /// Creates an empty world with a name & id.
@@ -47,11 +47,13 @@ pub struct WorldBuilder {
 }
 
 impl WorldBuilder {
+    // if we pass by reference, can't use string literals
+    #[allow(clippy::needless_pass_by_value)]
     /// Creates a new empty [`WorldBuilder`].
     #[must_use]
-    fn new(name: String) -> Self {
+    fn new(name: impl ToString) -> Self {
         Self {
-            name,
+            name: name.to_string(),
             ..Self::default()
         }
     }
