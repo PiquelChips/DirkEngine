@@ -239,12 +239,14 @@ impl Player {
                 height: 100.0,
             });
 
+        let mut cmd = Universe::new_command_buffer();
+        cmd.spawn(world, builder);
+        universe.submit_buffer(cmd);
+
         let player = Self {
             id,
             world,
-            entity: universe
-                .spawn(world, builder)
-                .expect("this world should exist"),
+            entity: Entity::default(), // TODO: have universe.spawn return an entity ID
             window,
             region: PlayerRegion::default(),
             dispatcher: event_manager.register(),
@@ -266,7 +268,9 @@ impl Player {
     /// Fires one [`PlayerUpdateEvent`] with `update_type =`
     /// [`PlayerUpdateType::Despawned`].
     pub fn despawn(self, universe: &mut Universe) {
-        universe.despawn(self.entity);
+        let mut cmd = Universe::new_command_buffer();
+        cmd.despawn(self.entity);
+        universe.submit_buffer(cmd);
         self.dispatcher.dispatch(PlayerUpdateEvent::from_player(
             &self,
             PlayerUpdateType::Despawned,
@@ -344,12 +348,17 @@ impl Player {
                 continue;
             }
 
-            let camera = universe
-                .component_mut::<Camera>(self.entity)
+            let mut camera = universe
+                .component::<Camera>(self.entity)
+                .cloned()
                 .expect("player should have his own camera");
 
             camera.width = width as f32;
             camera.height = height as f32;
+
+            let mut cmd = Universe::new_command_buffer();
+            cmd.set_component(self.entity, camera);
+            universe.submit_buffer(cmd);
         }
     }
 

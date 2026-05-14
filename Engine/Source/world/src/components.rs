@@ -7,7 +7,7 @@ use events::Dispatcher;
 use glam::{Mat4, Vec3};
 use tracing::warn;
 use universe::{
-    Entity,
+    CommandBuffer, Entity,
     components::Component,
     systems::{ComponentSystem, System},
 };
@@ -52,15 +52,22 @@ impl ModelUploadSystem {
 
 impl ComponentSystem for ModelUploadSystem {
     type Component = Renderable;
-    fn added(&self, _: Entity, component: &Self::Component) {
+    fn added(&self, _cmd: &mut CommandBuffer, _: Entity, component: &Self::Component) {
         self.dispatcher.dispatch(LoadAsset(component.model.clone()));
+        // TODO: if model_internal is none, load asset & update it
     }
-    fn updated(&self, _: Entity, component: &Self::Component) {
-        self.dispatcher.dispatch(LoadAsset(component.model.clone()));
+    fn updated(
+        &self,
+        cmd: &mut CommandBuffer,
+        entity: Entity,
+        _: &Self::Component,
+        new: &Self::Component,
+    ) {
+        self.added(cmd, entity, new);
     }
     /// Nothing happens when this component is removed. The asset will be unloaded
     /// automatically when it is no longer used.
-    fn removed(&self, _: Entity, _: &Self::Component) {}
+    fn removed(&self, _: &mut CommandBuffer, _: Entity, _: &Self::Component) {}
 }
 
 /// Spatial transform for an entity: position, orientation, and scale.
