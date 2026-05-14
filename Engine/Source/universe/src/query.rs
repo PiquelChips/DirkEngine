@@ -200,8 +200,8 @@ impl Query {
     pub(crate) fn query<'u>(&'u self, universe: &'u Universe) -> impl Iterator<Item = Entity> {
         universe
             .entities
-            .iter()
-            .filter(|&(&e, _)| self.matches(universe, e))
-            .map(|(&e, _)| e)
+            .keys()
+            .copied()
+            .filter(|&e| self.matches(universe, e))
     }
 }
