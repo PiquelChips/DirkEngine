@@ -159,6 +159,7 @@ impl Engine {
 
         self.platform.tick(delta_time);
         self.universe.tick(delta_time);
+        self.asset_registry.tick();
 
         self.renderer
             .tick(delta_time, self.platform.windows_mut())
