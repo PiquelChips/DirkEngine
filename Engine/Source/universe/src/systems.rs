@@ -68,8 +68,8 @@ pub trait EntitySystem: System {
         cmd: &mut CommandBuffer,
         universe: &Universe,
         entity: Entity,
-        old: WorldId,
-        new: WorldId,
+        from: WorldId,
+        to: WorldId,
     );
 
     /// This query will decide if `entity_spawned` & `entity_despawned` should
