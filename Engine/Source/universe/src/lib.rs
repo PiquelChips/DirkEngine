@@ -57,6 +57,8 @@ impl Universe {
 
     /// Ticks every the entire [`Universe`].
     pub fn tick(&mut self, delta_time: f32) {
+        let mut cmd = Universe::new_command_buffer();
+
         let buffers = std::mem::take(&mut self.buffers);
 
         let mut commands: Vec<Command> = Vec::new();
@@ -64,15 +66,141 @@ impl Universe {
             commands.append(&mut sub.commands());
         }
 
-        // TODO: run commands
+        // TODO: look into storing refs if possible to avoid
+        // querying & expecting in system calls
+        let mut created_worlds: Vec<WorldId> = Vec::new();
+        let mut destroyed_worlds: Vec<WorldId> = Vec::new();
+        let mut spawned_entities: Vec<Entity> = Vec::new();
+        let mut despawned_entities: Vec<Entity> = Vec::new();
+        // entity, from, to
+        let mut sent_entities: Vec<(Entity, WorldId, WorldId)> = Vec::new();
+        let mut added_components: Vec<(Entity, TypeId)> = Vec::new();
+        let mut updated_components: Vec<(Entity, TypeId, Box<dyn AnyComponent>)> = Vec::new();
+        let mut removed_components: Vec<(Entity, TypeId)> = Vec::new();
+
+        // TODO: create vectors of system data
+
+        for command in commands {
+            // TODO: run additive commands & populate system vectors
+            match command {
+                Command::CreateWorld(builder) => {}
+                Command::DestroyWorld(world) => {}
+                Command::Spawn(world, builder) => {}
+                Command::Despawn(entity) => {}
+                Command::Send(entity, world) => {}
+                Command::InsertComponent(world, component) => {}
+                Command::UpdateComponent(world, component) => {}
+                Command::RemoveComponent(world, type_id) => {}
+            }
+        }
+
+        // World: created
+        for world in created_worlds {
+            let world = self.worlds.get(&world).expect("we just added this world");
+            self.universe_systems
+                .iter()
+                .for_each(|system| system.world_created(&mut cmd, self, world));
+        }
+
+        // Entity: spawned
+        for entity in spawned_entities {
+            self.universe_systems
+                .iter()
+                .for_each(|system| system.entity_spawned(&mut cmd, self, entity));
+            self.entity_systems.iter().for_each(|system| {
+                if let Some(query) = system.query()
+                    && !query.matches(self, entity)
+                {
+                    return;
+                }
+                system.spawned(&mut cmd, self, entity);
+            });
+        }
+
+        // Component: added
+        for (entity, type_id) in added_components {
+            let component = self
+                .components
+                .get_any(entity, type_id)
+                .expect("just added component");
+            self.component_systems
+                .iter(type_id)
+                .for_each(|system| system.added(&mut cmd, entity, component));
+        }
+
+        // Component: updated
+        for (entity, type_id, old) in updated_components {
+            let component = self
+                .components
+                .get_any(entity, type_id)
+                .expect("just updated component");
+            self.component_systems
+                .iter(type_id)
+                .for_each(|system| system.updated(&mut cmd, entity, old.as_ref(), component));
+        }
+
+        // Entity: sent
+        for (entity, from, to) in sent_entities {
+            self.universe_systems
+                .iter()
+                .for_each(|system| system.entity_sent(&mut cmd, self, entity, from, to));
+            self.entity_systems.iter().for_each(|system| {
+                if let Some(query) = system.query()
+                    && !query.matches(self, entity)
+                {
+                    return;
+                }
+
+                system.sent(&mut cmd, self, entity, from, to);
+            });
+        }
+
+        // Component: removed
+        for (entity, type_id) in removed_components {
+            let component = self
+                .components
+                .get_any(entity, type_id)
+                .expect("haven't removed component yet");
+            self.component_systems
+                .iter(type_id)
+                .for_each(|system| system.removed(&mut cmd, entity, component));
+        }
+
+        // Entity: despawned
+        for entity in despawned_entities {
+            self.universe_systems
+                .iter()
+                .for_each(|system| system.entity_despawned(&mut cmd, self, entity));
+            self.entity_systems.iter().for_each(|system| {
+                if let Some(query) = system.query()
+                    && !query.matches(self, entity)
+                {
+                    return;
+                }
+
+                system.despawned(&mut cmd, self, entity);
+            });
+        }
+
+        // World: destroyed
+        for world in destroyed_worlds {
+            let world = self.worlds.get(&world).expect("world not added yet");
+            self.universe_systems
+                .iter()
+                .for_each(|system| system.world_destroyed(&mut cmd, self, world));
+        }
+
+        // TODO: run removall stuff
 
         self.universe_systems
             .iter()
-            .for_each(|system| system.tick(self, delta_time));
+            .for_each(|system| system.tick(&mut cmd, self, delta_time));
 
         self.ticking_systems.iter().for_each(|system| {
-            system.tick(self, delta_time, system.query().query(self));
+            system.tick(&mut cmd, self, delta_time, system.query().query(self));
         });
+
+        self.submit_buffer(cmd);
     }
 
     // COMMAND BUFFERS
