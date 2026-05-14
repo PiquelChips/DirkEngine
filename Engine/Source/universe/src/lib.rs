@@ -397,6 +397,9 @@ impl Universe {
     }
 
     /// Will create a new [`World`] & return it [`WorldId`].
+    ///
+    /// The world creation runs immediately unlike when directly
+    /// submitting a [`CommandBuffer`].
     pub fn create_world(&mut self, builder: WorldBuilder) -> Option<WorldId> {
         let next_id = self.next_world_id;
         let mut cmd = CommandBuffer::new();
@@ -411,7 +414,9 @@ impl Universe {
         }
     }
 
-    /// Will create a new [`World`] & return it [`WorldId`].
+    /// Will spawn a new [`Entity`] & return its ID.
+    ///
+    /// The spawning runs immediately unlike when directly submitting a [`CommandBuffer`].
     pub fn spawn_entity(&mut self, world: WorldId, builder: EntityBuilder) -> Option<Entity> {
         let next_id = self.next_entity_id;
         let mut cmd = CommandBuffer::new();
