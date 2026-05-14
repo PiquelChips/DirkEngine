@@ -259,7 +259,7 @@ impl Universe {
         }
 
         // Component: removed
-        for (entity, type_id) in removed_components {
+        for &(entity, type_id) in &removed_components {
             let component = self
                 .components
                 .get_any(entity, type_id)
@@ -270,7 +270,7 @@ impl Universe {
         }
 
         // Entity: despawned
-        for entity in despawned_entities {
+        for &entity in &despawned_entities {
             self.universe_systems
                 .iter()
                 .for_each(|system| system.entity_despawned(&mut cmd, self, entity));
@@ -286,17 +286,29 @@ impl Universe {
         }
 
         // World: destroyed
-        for world in destroyed_worlds {
-            let world = self.worlds.get(&world).expect("world not added yet");
+        for world in &destroyed_worlds {
+            let world = self.worlds.get(world).expect("world not added yet");
             self.universe_systems
                 .iter()
                 .for_each(|system| system.world_destroyed(&mut cmd, self, world));
         }
 
-        // TODO: run removall stuff
-        // remove all components
-        // remove all entities
-        // destroy world
+        for (entity, type_id) in removed_components {
+            self.components.remove_any(entity, type_id);
+        }
+
+        for entity in despawned_entities {
+            if let Some(world) = self.get_world(entity) {
+                if let Some(world) = self.worlds.get_mut(&world) {
+                    world.alive.remove(&entity);
+                }
+            }
+            self.entities.remove(&entity);
+        }
+
+        for world in destroyed_worlds {
+            self.worlds.remove(&world);
+        }
 
         self.universe_systems
             .iter()
