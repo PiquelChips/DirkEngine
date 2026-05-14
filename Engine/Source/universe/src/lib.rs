@@ -16,6 +16,9 @@ pub mod components;
 pub mod query;
 pub mod systems;
 
+mod command_buffer;
+pub use command_buffer::CommandBuffer;
+
 mod entity;
 pub use entity::{Entity, EntityBuilder};
 
