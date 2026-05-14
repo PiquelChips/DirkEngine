@@ -64,11 +64,6 @@ impl CommandBuffer {
         self.commands.push(Command::Despawn(entity));
     }
     /// Will send the [`Entity`] to the specified [`WorldId`].
-    ///
-    /// Returns if the operation was successful. Will fail if the [`Entity`]
-    /// or the [`World`] don't exist.
-    ///
-    /// If the `entity` is already in `to`, returns `true`
     pub fn send(&mut self, entity: Entity, to: WorldId) {
         self.commands.push(Command::Send(entity, to));
     }

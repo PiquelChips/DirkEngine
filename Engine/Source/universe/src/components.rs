@@ -194,8 +194,7 @@ impl Components {
             .get(entity)
     }
 
-    /// Remove **every** component attached to `entity` across all types,
-    /// returning them so callers can invoke lifecycle hooks before dropping.
+    /// Will remove the [`Component`] of the specified [`TypeId`] from the [`Entity`].
     pub fn remove_any(&mut self, entity: Entity, type_id: TypeId) -> Option<Box<dyn AnyComponent>> {
         self.storages
             .get_mut(&type_id)
