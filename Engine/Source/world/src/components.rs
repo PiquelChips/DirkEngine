@@ -2,7 +2,7 @@
 //!
 //! [`Component`]: universe::components::Component
 
-use assets::LoadAsset;
+use assets::{Handle, LoadAsset, Model};
 use events::Dispatcher;
 use glam::{Mat4, Vec3};
 use tracing::warn;
@@ -28,6 +28,20 @@ use universe::{
 pub struct Renderable {
     /// Asset-registry key for the mesh to render (e.g. `"meshes/cube.glb"`).
     pub model: assets::AssetHandle,
+    handle: Option<Handle<Model>>,
+}
+
+impl Renderable {
+    /// Creates a new [`Renderable`] component from an [`AssetHandle`].
+    ///
+    /// [`AssetHandle`]: assets::AssetHandle
+    #[must_use]
+    pub fn new(model: assets::AssetHandle) -> Self {
+        Self {
+            model,
+            handle: None,
+        }
+    }
 }
 
 /// A [`universe`] system that will automatically load a model
@@ -54,7 +68,11 @@ impl ComponentSystem for ModelUploadSystem {
     type Component = Renderable;
     fn added(&self, _cmd: &mut CommandBuffer, _: Entity, component: &Self::Component) {
         self.dispatcher.dispatch(LoadAsset(component.model.clone()));
-        // TODO: if model_internal is none, load asset & update it
+        if component.handle.is_some() {
+            return;
+        }
+
+        // TODO: load asset from registry & set handle
     }
     fn updated(
         &self,

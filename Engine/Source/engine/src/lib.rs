@@ -241,7 +241,7 @@ impl Engine {
                 rotation: glam::Vec3::ZERO,
                 scale: glam::Vec3::splat(1.),
             })
-            .with_component(Renderable { model: shrek_model });
+            .with_component(Renderable::new(shrek_model));
 
         let duck_builder = Entity::builder()
             .with_component(Transform {
@@ -249,7 +249,7 @@ impl Engine {
                 rotation: glam::Vec3::ZERO,
                 scale: glam::Vec3::splat(1.),
             })
-            .with_component(Renderable { model: duck_model });
+            .with_component(Renderable::new(duck_model));
 
         let world_builder = World::builder("test world")
             .with_entity(shrek_builder)
