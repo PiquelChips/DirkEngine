@@ -108,6 +108,8 @@ impl Universe {
         self.submit_buffer(cmd);
     }
 
+    // HELPERS FOR THE TICK FUNCTION
+
     #[allow(clippy::too_many_lines)]
     fn run_commands(&mut self, cmd: &mut CommandBuffer, commands: Vec<Command>) {
         let mut created_worlds: Vec<WorldId> = Vec::new();
@@ -332,6 +334,19 @@ impl Universe {
         }
     }
 
+    /// Just adds an [`Entity`] to the `world` & returns its ID.
+    /// Returns `None` if the `world` does not exist.
+    fn add_entity(&mut self, world: WorldId) -> Option<Entity> {
+        let world = self.worlds.get_mut(&world)?;
+
+        let entity = self.next_entity_id;
+        self.next_entity_id += 1;
+        self.entities.insert(entity, world.id());
+
+        world.alive.insert(entity);
+        Some(entity)
+    }
+
     // COMMAND BUFFERS
 
     /// Returns a new empty [`CommandBuffer`]
@@ -346,21 +361,6 @@ impl Universe {
             return;
         }
         self.buffers.push(buffer);
-    }
-
-    // HELPERS FOR THE TICK FUNCTION
-
-    /// Just adds an [`Entity`] to the `world` & returns its ID.
-    /// Returns `None` if the `world` does not exist.
-    fn add_entity(&mut self, world: WorldId) -> Option<Entity> {
-        let world = self.worlds.get_mut(&world)?;
-
-        let entity = self.next_entity_id;
-        self.next_entity_id += 1;
-        self.entities.insert(entity, world.id());
-
-        world.alive.insert(entity);
-        Some(entity)
     }
 
     // UTILITIES & GETTERS
