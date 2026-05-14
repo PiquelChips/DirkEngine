@@ -180,11 +180,10 @@ impl Components {
         self.storages.get(&type_id)?.get(entity)
     }
 
-    pub fn get_all(&self, entity: Entity) -> Vec<(TypeId, &dyn AnyComponent)> {
-        self.storages
-            .iter()
-            .filter_map(|(type_id, storage)| Some((*type_id, storage.get(entity)?)))
-            .collect()
+    pub fn get_all(&self, entity: Entity) -> impl Iterator<Item = (TypeId, &dyn AnyComponent)> {
+        self.storages.iter().filter_map(move |(type_id, storage)| {
+            storage.get(entity).map(|component| (*type_id, component))
+        })
     }
 
     pub fn get<C: Component>(&self, entity: Entity) -> Option<&C> {
