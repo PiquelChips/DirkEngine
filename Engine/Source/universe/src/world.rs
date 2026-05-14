@@ -1,9 +1,41 @@
-use std::collections::HashSet;
+use std::{
+    collections::HashSet,
+    fmt::Display,
+    ops::{Add, AddAssign},
+};
 
 use crate::{Entity, EntityBuilder};
 
 /// An identifier that distinguishes multiple [`World`] instances from each other.
-pub type WorldId = u32;
+#[derive(Clone, Copy, Debug, Default, Hash, Eq, PartialEq)]
+pub struct WorldId(u32);
+
+impl WorldId {
+    /// Returns the raw entity ID
+    #[must_use]
+    pub fn raw(&self) -> u32 {
+        self.0
+    }
+}
+
+impl Display for WorldId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Add<u32> for WorldId {
+    type Output = Self;
+    fn add(self, rhs: u32) -> Self::Output {
+        Self(self.0 + rhs)
+    }
+}
+
+impl AddAssign<u32> for WorldId {
+    fn add_assign(&mut self, rhs: u32) {
+        self.0 += rhs;
+    }
+}
 
 /// This is a world. It has entities and components.
 pub struct World {
