@@ -237,9 +237,7 @@ impl Universe {
                 .iter()
                 .for_each(|system| system.entity_spawned(cmd, self, entity));
             self.entity_systems.iter().for_each(|system| {
-                if let Some(query) = system.query()
-                    && !query.matches(self, entity)
-                {
+                if !system.query().matches(self, entity) {
                     return;
                 }
                 system.spawned(cmd, self, entity);
@@ -274,9 +272,7 @@ impl Universe {
                 .iter()
                 .for_each(|system| system.entity_sent(cmd, self, entity, from, to));
             self.entity_systems.iter().for_each(|system| {
-                if let Some(query) = system.query()
-                    && !query.matches(self, entity)
-                {
+                if !system.query().matches(self, entity) {
                     return;
                 }
 
@@ -301,9 +297,7 @@ impl Universe {
                 .iter()
                 .for_each(|system| system.entity_despawned(cmd, self, entity));
             self.entity_systems.iter().for_each(|system| {
-                if let Some(query) = system.query()
-                    && !query.matches(self, entity)
-                {
+                if !system.query().matches(self, entity) {
                     return;
                 }
 

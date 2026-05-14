@@ -75,7 +75,7 @@ pub trait EntitySystem: System {
     /// This query will decide if `entity_spawned` & `entity_despawned` should
     /// be run for given entities. If there is not query, the system will run
     /// on every entity.
-    fn query(&self) -> Option<Query>;
+    fn query(&self) -> Query;
 }
 
 /// Run for [`Entity`]s that match the query

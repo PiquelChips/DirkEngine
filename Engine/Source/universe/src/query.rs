@@ -56,7 +56,7 @@ pub struct Query {
 impl Query {
     /// Creates a new, empty [`Query`] that matches every entity.
     #[must_use]
-    pub fn new() -> Self {
+    pub fn empty() -> Self {
         Self::default()
     }
 
