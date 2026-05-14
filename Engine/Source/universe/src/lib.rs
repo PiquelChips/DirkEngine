@@ -28,7 +28,6 @@ use tracing::warn;
 pub use world::{World, WorldBuilder, WorldId};
 
 /// This struct is the manager for all the worlds.
-#[derive(Default)]
 pub struct Universe {
     worlds: HashMap<WorldId, World>,
     next_world_id: WorldId,
@@ -54,6 +53,29 @@ impl Universe {
     #[must_use]
     pub fn builder() -> UniverseBuilder {
         UniverseBuilder::new()
+    }
+
+    #[must_use]
+    fn build(builder: UniverseBuilder) -> Self {
+        let mut universe = Self {
+            worlds: HashMap::new(),
+            next_world_id: WorldId::default(),
+            entities: HashMap::new(),
+            next_entity_id: Entity::default(),
+            universe_systems: builder.universe_systems,
+            ticking_systems: builder.ticking_systems,
+            entity_systems: builder.entity_systems,
+            component_systems: builder.component_systems,
+            components: Components::default(),
+            buffers: Vec::new(),
+        };
+
+        let mut cmd = Universe::new_command_buffer();
+        for builder in builder.worlds {
+            cmd.create_world(builder);
+        }
+        universe.submit_buffer(cmd);
+        universe
     }
 
     /// Ticks every the entire [`Universe`].
@@ -376,22 +398,9 @@ impl UniverseBuilder {
         Self::default()
     }
 
-    /// Actually builds the [`Universe`].
-    #[must_use]
+    /// Will build a new [`Universe`] from the current builder.
     pub fn build(self) -> Universe {
-        let mut universe = Universe {
-            universe_systems: self.universe_systems,
-            ticking_systems: self.ticking_systems,
-            entity_systems: self.entity_systems,
-            component_systems: self.component_systems,
-            ..Universe::default()
-        };
-
-        for builder in self.worlds {
-            universe.create_world(builder);
-        }
-
-        universe
+        Universe::build(self)
     }
 
     /// Adds a [`World`] that will be created at the same time as the [`Universe`].
