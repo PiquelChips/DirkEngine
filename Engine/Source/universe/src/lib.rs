@@ -85,7 +85,6 @@ impl Universe {
     /// Will panic in certain internal conditions like if a [`World`] that
     /// was just created is not found in the [`Universe`].
     /// No panic should be caused by user error.
-    #[allow(clippy::too_many_lines)]
     pub fn tick(&mut self, delta_time: f32) {
         let mut cmd = Universe::new_command_buffer();
 
@@ -96,6 +95,21 @@ impl Universe {
             commands.append(&mut sub.commands());
         }
 
+        self.run_commands(&mut cmd, commands);
+
+        self.universe_systems
+            .iter()
+            .for_each(|system| system.tick(&mut cmd, self, delta_time));
+
+        self.ticking_systems.iter().for_each(|system| {
+            system.tick(&mut cmd, self, delta_time, system.query().query(self));
+        });
+
+        self.submit_buffer(cmd);
+    }
+
+    #[allow(clippy::too_many_lines)]
+    fn run_commands(&mut self, cmd: &mut CommandBuffer, commands: Vec<Command>) {
         let mut created_worlds: Vec<WorldId> = Vec::new();
         let mut destroyed_worlds: Vec<WorldId> = Vec::new();
         let mut spawned_entities: Vec<Entity> = Vec::new();
@@ -209,21 +223,21 @@ impl Universe {
             let world = self.worlds.get(&world).expect("we just added this world");
             self.universe_systems
                 .iter()
-                .for_each(|system| system.world_created(&mut cmd, self, world));
+                .for_each(|system| system.world_created(cmd, self, world));
         }
 
         // Entity: spawned
         for entity in spawned_entities {
             self.universe_systems
                 .iter()
-                .for_each(|system| system.entity_spawned(&mut cmd, self, entity));
+                .for_each(|system| system.entity_spawned(cmd, self, entity));
             self.entity_systems.iter().for_each(|system| {
                 if let Some(query) = system.query()
                     && !query.matches(self, entity)
                 {
                     return;
                 }
-                system.spawned(&mut cmd, self, entity);
+                system.spawned(cmd, self, entity);
             });
         }
 
@@ -235,7 +249,7 @@ impl Universe {
                 .expect("just added component");
             self.component_systems
                 .iter(type_id)
-                .for_each(|system| system.added(&mut cmd, entity, component));
+                .for_each(|system| system.added(cmd, entity, component));
         }
 
         // Component: updated
@@ -246,14 +260,14 @@ impl Universe {
                 .expect("just updated component");
             self.component_systems
                 .iter(type_id)
-                .for_each(|system| system.updated(&mut cmd, entity, old.as_ref(), component));
+                .for_each(|system| system.updated(cmd, entity, old.as_ref(), component));
         }
 
         // Entity: sent
         for (entity, from, to) in sent_entities {
             self.universe_systems
                 .iter()
-                .for_each(|system| system.entity_sent(&mut cmd, self, entity, from, to));
+                .for_each(|system| system.entity_sent(cmd, self, entity, from, to));
             self.entity_systems.iter().for_each(|system| {
                 if let Some(query) = system.query()
                     && !query.matches(self, entity)
@@ -261,7 +275,7 @@ impl Universe {
                     return;
                 }
 
-                system.sent(&mut cmd, self, entity, from, to);
+                system.sent(cmd, self, entity, from, to);
             });
         }
 
@@ -273,14 +287,14 @@ impl Universe {
                 .expect("haven't removed component yet");
             self.component_systems
                 .iter(type_id)
-                .for_each(|system| system.removed(&mut cmd, entity, component));
+                .for_each(|system| system.removed(cmd, entity, component));
         }
 
         // Entity: despawned
         for &entity in &despawned_entities {
             self.universe_systems
                 .iter()
-                .for_each(|system| system.entity_despawned(&mut cmd, self, entity));
+                .for_each(|system| system.entity_despawned(cmd, self, entity));
             self.entity_systems.iter().for_each(|system| {
                 if let Some(query) = system.query()
                     && !query.matches(self, entity)
@@ -288,7 +302,7 @@ impl Universe {
                     return;
                 }
 
-                system.despawned(&mut cmd, self, entity);
+                system.despawned(cmd, self, entity);
             });
         }
 
@@ -297,7 +311,7 @@ impl Universe {
             let world = self.worlds.get(world).expect("world not added yet");
             self.universe_systems
                 .iter()
-                .for_each(|system| system.world_destroyed(&mut cmd, self, world));
+                .for_each(|system| system.world_destroyed(cmd, self, world));
         }
 
         for (entity, type_id) in removed_components {
@@ -316,16 +330,6 @@ impl Universe {
         for world in destroyed_worlds {
             self.worlds.remove(&world);
         }
-
-        self.universe_systems
-            .iter()
-            .for_each(|system| system.tick(&mut cmd, self, delta_time));
-
-        self.ticking_systems.iter().for_each(|system| {
-            system.tick(&mut cmd, self, delta_time, system.query().query(self));
-        });
-
-        self.submit_buffer(cmd);
     }
 
     // COMMAND BUFFERS
