@@ -5,6 +5,7 @@ use crate::{
     components::{AnyComponent, Component},
 };
 
+/// A buffer to record edits to the [`Universe`].
 pub struct CommandBuffer {
     commands: Vec<Command>,
 }
@@ -30,7 +31,7 @@ impl CommandBuffer {
     }
     /// Returns if the command buffer has had no submitted commands. This is useful to skip
     /// all submission logic when no commands should be run.
-    #[must_use] 
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.commands.is_empty()
     }

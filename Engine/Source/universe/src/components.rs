@@ -72,7 +72,6 @@ pub(crate) trait AnyStorage {
     /// Returns `true` if this storage holds a component for `entity`.
     fn contains(&self, entity: Entity) -> bool;
     fn as_any(&self) -> &dyn Any;
-    fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
 struct ComponentStorage<C: Component> {
@@ -90,12 +89,6 @@ impl<C: Component> Default for ComponentStorage<C> {
 impl<C: Component> ComponentStorage<C> {
     fn get(&self, entity: Entity) -> Option<&C> {
         self.map.get(&entity)
-    }
-    fn get_mut(&mut self, entity: Entity) -> Option<&mut C> {
-        self.map.get_mut(&entity)
-    }
-    fn insert(&mut self, entity: Entity, component: C) -> Option<C> {
-        self.map.insert(entity, component)
     }
 }
 
@@ -128,9 +121,6 @@ impl<C: Component> AnyStorage for ComponentStorage<C> {
     }
 
     fn as_any(&self) -> &dyn Any {
-        self
-    }
-    fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
     fn get(&self, entity: Entity) -> Option<&dyn AnyComponent> {
@@ -170,33 +160,6 @@ impl std::fmt::Debug for Components {
 }
 
 impl Components {
-    /// Returns a shared reference to the typed storage bucket for `C`,
-    /// or `None` if no component of that type has ever been inserted.
-    fn typed<C: Component>(&self) -> Option<&ComponentStorage<C>> {
-        self.storages
-            .get(&TypeId::of::<C>())
-            .and_then(|b| b.as_any().downcast_ref::<ComponentStorage<C>>())
-    }
-
-    /// Returns a mutable reference to the typed storage bucket for `C`,
-    /// creating an empty one if it does not yet exist.
-    fn typed_mut<C: Component>(&mut self) -> Option<&mut ComponentStorage<C>> {
-        self.storages
-            .get_mut(&TypeId::of::<C>())
-            .and_then(|b| b.as_any_mut().downcast_mut::<ComponentStorage<C>>())
-    }
-
-    #[allow(unused)]
-    pub fn insert<C: Component>(&mut self, entity: Entity, component: C) {
-        self.storages
-            .entry(TypeId::of::<C>())
-            .or_insert_with(|| Box::new(ComponentStorage::<C>::default()))
-            .as_any_mut()
-            .downcast_mut::<ComponentStorage<C>>()
-            .expect("we just inserted exactly this type")
-            .insert(entity, component);
-    }
-
     /// Insert a type-erased component.
     ///
     /// Storage for the component's concrete type is created on demand using
@@ -225,19 +188,10 @@ impl Components {
     }
 
     pub fn get<C: Component>(&self, entity: Entity) -> Option<&C> {
-        self.typed::<C>()?.get(entity)
-    }
-
-    pub fn get_mut<C: Component>(&mut self, entity: Entity) -> Option<&mut C> {
-        self.typed_mut::<C>()?.get_mut(entity)
-    }
-
-    /// Remove a single typed component from `entity`, returning it if present.
-    pub fn remove<C: Component>(&mut self, entity: Entity) -> Option<C> {
         self.storages
-            .get_mut(&TypeId::of::<C>())
-            .and_then(|b| b.as_any_mut().downcast_mut::<ComponentStorage<C>>())
-            .and_then(|s| s.map.remove(&entity))
+            .get(&TypeId::of::<C>())
+            .and_then(|b| b.as_any().downcast_ref::<ComponentStorage<C>>())?
+            .get(entity)
     }
 
     /// Remove **every** component attached to `entity` across all types,
@@ -254,7 +208,7 @@ impl Components {
     /// than monomorphised generics.
     ///
     /// [`Query`]: crate::query::Query
-    pub(crate) fn contains(&self, entity: Entity, type_id: TypeId) -> bool {
+    pub fn contains(&self, entity: Entity, type_id: TypeId) -> bool {
         self.storages
             .get(&type_id)
             .is_some_and(|s| s.contains(entity))

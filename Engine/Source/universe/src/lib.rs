@@ -79,6 +79,13 @@ impl Universe {
     }
 
     /// Ticks every the entire [`Universe`].
+    ///
+    /// # Panics
+    ///
+    /// Will panic in certain internal conditions like if a [`World`] that
+    /// was just created is not found in the [`Universe`].
+    /// No panic should be caused by user error.
+    #[allow(clippy::too_many_lines)]
     pub fn tick(&mut self, delta_time: f32) {
         let mut cmd = Universe::new_command_buffer();
 
@@ -298,10 +305,10 @@ impl Universe {
         }
 
         for entity in despawned_entities {
-            if let Some(world) = self.get_world(entity) {
-                if let Some(world) = self.worlds.get_mut(&world) {
-                    world.alive.remove(&entity);
-                }
+            if let Some(world) = self.get_world(entity)
+                && let Some(world) = self.worlds.get_mut(&world)
+            {
+                world.alive.remove(&entity);
             }
             self.entities.remove(&entity);
         }
