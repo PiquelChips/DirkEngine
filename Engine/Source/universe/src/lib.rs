@@ -401,6 +401,36 @@ impl Universe {
     pub fn component<C: Component>(&self, entity: Entity) -> Option<&C> {
         self.components.get(entity)
     }
+
+    /// Will create a new [`World`] & return it [`WorldId`].
+    pub fn create_world(&mut self, builder: WorldBuilder) -> Option<WorldId> {
+        let next_id = self.next_world_id;
+        let mut cmd = Universe::new_command_buffer();
+        self.run_commands(&mut cmd, vec![Command::CreateWorld(builder)]);
+        self.submit_buffer(cmd);
+        let new_next = self.next_world_id;
+
+        if next_id == new_next {
+            None
+        } else {
+            Some(next_id)
+        }
+    }
+
+    /// Will create a new [`World`] & return it [`WorldId`].
+    pub fn spawn_entity(&mut self, world: WorldId, builder: EntityBuilder) -> Option<Entity> {
+        let next_id = self.next_entity_id;
+        let mut cmd = Universe::new_command_buffer();
+        self.run_commands(&mut cmd, vec![Command::Spawn(world, builder)]);
+        self.submit_buffer(cmd);
+        let new_next = self.next_entity_id;
+
+        if next_id == new_next {
+            None
+        } else {
+            Some(next_id)
+        }
+    }
 }
 
 /// Builder struct used to construct a [`Universe`].
