@@ -10,8 +10,7 @@ version.workspace = true
 macros.workspace = true
 
 serde.workspace = true
-
-pastey.workspace = true
+tracing.workspace = true
 
 [lints]
 workspace = true

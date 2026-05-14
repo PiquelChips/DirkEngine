@@ -140,7 +140,7 @@ pub(crate) fn empty_derive(input: TokenStream, trait_ident: &Ident) -> TokenStre
 ///
 /// // Registering and iterating systems:
 /// let mut storage = RenderSystemStorage::new();
-/// storage.insert(MyRenderer);
+/// storage.push(MyRenderer);
 ///
 /// for system in storage.iter() {
 ///     system.render(0.016);

@@ -3,7 +3,7 @@
 use std::{any::TypeId, collections::HashMap};
 
 use crate::{
-    Entity, Universe, World, WorldId,
+    CommandBuffer, Entity, Universe, World, WorldId,
     components::{AnyComponent, Component},
     entity::EntityIterator,
     query::Query,
@@ -22,25 +22,32 @@ pub use macros::System;
 #[system_trait]
 pub trait UniverseSystem: System {
     /// Called right after the world is created.
-    fn world_created(&self, universe: &Universe, world: &World);
+    fn world_created(&self, cmd: &mut CommandBuffer, universe: &Universe, world: &World);
     /// Called as the world is being destroyed.
     /// In this state, the world is still valid
     /// and no entities have been removed.
-    fn world_destroyed(&self, universe: &Universe, world: &World);
+    fn world_destroyed(&self, cmd: &mut CommandBuffer, universe: &Universe, world: &World);
 
     /// Called when an entity is spawned. At this point, components have
     /// already been added. They can thus be queried for.
-    fn entity_spawned(&self, universe: &Universe, entity: Entity);
+    fn entity_spawned(&self, cmd: &mut CommandBuffer, universe: &Universe, entity: Entity);
     /// Called when the entity is moved to another [`World`].
-    fn entity_sent(&self, universe: &Universe, entity: Entity, old: WorldId, new: WorldId);
+    fn entity_sent(
+        &self,
+        cmd: &mut CommandBuffer,
+        universe: &Universe,
+        entity: Entity,
+        old: WorldId,
+        new: WorldId,
+    );
     /// Called when an entity is despawned. At this point, components have
     /// not yet been removed. They can thus be queried for.
     /// However, the entity has been removed from the [`World`], so
     /// querying for it will not work.
-    fn entity_despawned(&self, universe: &Universe, entity: Entity);
+    fn entity_despawned(&self, cmd: &mut CommandBuffer, universe: &Universe, entity: Entity);
 
     /// This function will be called by the [`Universe`] on every tick.
-    fn tick(&self, universe: &Universe, delta_time: f32);
+    fn tick(&self, cmd: &mut CommandBuffer, universe: &Universe, delta_time: f32);
 }
 
 /// A [`System`] that is run on every entity that matches the query.
@@ -48,15 +55,22 @@ pub trait UniverseSystem: System {
 pub trait EntitySystem: System {
     /// Called when an entity is spawned. At this point, components have
     /// already been added. They can thus be queried for.
-    fn spawned(&self, universe: &Universe, entity: Entity);
+    fn spawned(&self, cmd: &mut CommandBuffer, universe: &Universe, entity: Entity);
     /// Called when an entity is despawned. At this point, components have
     /// not yet been removed. They can thus be queried for.
     /// However, the entity has been removed from the [`World`], so
     /// querying for it will not work.
-    fn despawned(&self, universe: &Universe, entity: Entity);
+    fn despawned(&self, cmd: &mut CommandBuffer, universe: &Universe, entity: Entity);
 
     /// Called when the entity is moved to another [`World`].
-    fn sent(&self, universe: &Universe, entity: Entity, old: WorldId, new: WorldId);
+    fn sent(
+        &self,
+        cmd: &mut CommandBuffer,
+        universe: &Universe,
+        entity: Entity,
+        from: WorldId,
+        to: WorldId,
+    );
 
     /// This query will decide if `entity_spawned` & `entity_despawned` should
     /// be run for given entities. If there is not query, the system will run
@@ -69,7 +83,13 @@ pub trait EntitySystem: System {
 pub trait TickingSystem: System {
     /// `entities`: the list of entities that were returned by the query returned
     /// by [`TickingSystem::query`].
-    fn tick(&self, universe: &Universe, delta_time: f32, entities: EntityIterator);
+    fn tick(
+        &self,
+        cmd: &mut CommandBuffer,
+        universe: &Universe,
+        delta_time: f32,
+        entities: EntityIterator,
+    );
     /// Returns the query used to construct the `entities` of the tick function.
     fn query(&self) -> Query;
 }
@@ -82,45 +102,69 @@ pub trait ComponentSystem: System {
 
     /// When a component is added.
     /// `entity`: the entity with this component.
-    fn added(&self, entity: Entity, component: &Self::Component);
+    fn added(&self, cmd: &mut CommandBuffer, entity: Entity, component: &Self::Component);
 
     /// When a component is updated.
     /// `entity`: the entity with this component.
-    fn updated(&self, entity: Entity, component: &Self::Component);
+    fn updated(
+        &self,
+        cmd: &mut CommandBuffer,
+        entity: Entity,
+        old: &Self::Component,
+        new: &Self::Component,
+    );
 
     /// When a component is removed.
     /// `entity`: the entity with this component.
-    fn removed(&self, entity: Entity, component: &Self::Component);
+    fn removed(&self, cmd: &mut CommandBuffer, entity: Entity, component: &Self::Component);
 }
 
 /// Private type-erasure trait for storage in [`Entity`] & [`Universe`]
 pub(crate) trait AnyComponentSystem {
-    fn type_id(&self) -> TypeId;
-    fn added(&self, entity: Entity, component: &dyn AnyComponent);
-    fn updated(&self, entity: Entity, component: &dyn AnyComponent);
-    fn removed(&self, entity: Entity, component: &dyn AnyComponent);
+    /// Returns the [`TypeId`] of the [`Component`] that this system is running for.
+    fn component_type_id(&self) -> TypeId;
+    fn added(&self, cmd: &mut CommandBuffer, entity: Entity, component: &dyn AnyComponent);
+    fn updated(
+        &self,
+        cmd: &mut CommandBuffer,
+        entity: Entity,
+        old: &dyn AnyComponent,
+        new: &dyn AnyComponent,
+    );
+    fn removed(&self, cmd: &mut CommandBuffer, entity: Entity, component: &dyn AnyComponent);
 }
 
 impl<T: ComponentSystem> AnyComponentSystem for T {
-    fn type_id(&self) -> TypeId {
+    fn component_type_id(&self) -> TypeId {
         TypeId::of::<T::Component>()
     }
 
-    fn added(&self, entity: Entity, component: &dyn AnyComponent) {
+    fn added(&self, cmd: &mut CommandBuffer, entity: Entity, component: &dyn AnyComponent) {
         if let Some(component) = component.as_any().downcast_ref::<T::Component>() {
-            T::added(self, entity, component);
+            T::added(self, cmd, entity, component);
         }
     }
 
-    fn updated(&self, entity: Entity, component: &dyn AnyComponent) {
-        if let Some(component) = component.as_any().downcast_ref::<T::Component>() {
-            T::updated(self, entity, component);
-        }
+    fn updated(
+        &self,
+        cmd: &mut CommandBuffer,
+        entity: Entity,
+        old: &dyn AnyComponent,
+        new: &dyn AnyComponent,
+    ) {
+        let Some(old) = old.as_any().downcast_ref::<T::Component>() else {
+            return;
+        };
+        let Some(new) = new.as_any().downcast_ref::<T::Component>() else {
+            return;
+        };
+
+        T::updated(self, cmd, entity, old, new);
     }
 
-    fn removed(&self, entity: Entity, component: &dyn AnyComponent) {
+    fn removed(&self, cmd: &mut CommandBuffer, entity: Entity, component: &dyn AnyComponent) {
         if let Some(component) = component.as_any().downcast_ref::<T::Component>() {
-            T::removed(self, entity, component);
+            T::removed(self, cmd, entity, component);
         }
     }
 }
@@ -131,14 +175,14 @@ pub(crate) struct ComponentSystemStorage {
 }
 
 impl ComponentSystemStorage {
-    pub fn insert<S: ComponentSystem>(&mut self, system: S) {
+    pub fn push<S: ComponentSystem>(&mut self, system: S) {
         self.systems
-            .entry(AnyComponentSystem::type_id(&system))
+            .entry(system.component_type_id())
             .or_default()
             .push(Box::new(system));
     }
 
-    pub fn insert_any(&mut self, type_id: TypeId, system: Box<dyn AnyComponentSystem>) {
+    pub fn push_any(&mut self, type_id: TypeId, system: Box<dyn AnyComponentSystem>) {
         self.systems.entry(type_id).or_default().push(system);
     }
 
