@@ -26,6 +26,9 @@ impl CommandBuffer {
             commands: Vec::new(),
         }
     }
+    pub(crate) fn commands(self) -> Vec<Command> {
+        self.commands
+    }
     /// Returns if the command buffer has had no submitted commands. This is useful to skip
     /// all submission logic when no commands should be run.
     pub fn is_empty(&self) -> bool {

@@ -5,6 +5,7 @@
 use std::{any::TypeId, collections::HashMap};
 
 use crate::{
+    command_buffer::Command,
     components::{AnyComponent, Component, Components},
     systems::{
         ComponentSystem, ComponentSystemStorage, EntitySystem, EntitySystemStorage, TickingSystem,
@@ -56,7 +57,14 @@ impl Universe {
 
     /// Ticks every the entire [`Universe`].
     pub fn tick(&mut self, delta_time: f32) {
-        // TODO: handle command buffers
+        let buffers = std::mem::take(&mut self.buffers);
+
+        let mut commands: Vec<Command> = Vec::new();
+        for sub in buffers {
+            commands.append(&mut sub.commands());
+        }
+
+        // TODO: run commands
 
         self.universe_systems
             .iter()
