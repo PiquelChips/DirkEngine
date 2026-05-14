@@ -102,10 +102,19 @@ impl Engine {
     ///
     /// None for now, will be one if an error occurs when creating the world.
     pub fn start(&mut self) -> anyhow::Result<()> {
+        // setup the world
         info!("starting engine");
         let world_id = self.create_test_world();
 
         self.spawn_player(world_id);
+
+        // we tick the engine a few times before entering proper
+        // game loop & rendering cycles. This allows the event manager
+        // to fire off its events & allows systems to process the first
+        // few volleys before rendering gets involved
+        for _ in 0..5 {
+            self.tick_inner().context("pre-start ticking")?;
+        }
 
         Ok(())
     }
