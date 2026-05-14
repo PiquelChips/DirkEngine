@@ -6,6 +6,7 @@ use crate::{
 };
 
 /// A buffer to record edits to the [`Universe`].
+#[derive(Default)]
 pub struct CommandBuffer {
     commands: Vec<Command>,
 }
@@ -21,10 +22,10 @@ pub(crate) enum Command {
 }
 
 impl CommandBuffer {
-    pub(crate) fn new() -> Self {
-        CommandBuffer {
-            commands: Vec::new(),
-        }
+    /// Creates a new empty command buffer
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
     }
     pub(crate) fn commands(self) -> Vec<Command> {
         self.commands

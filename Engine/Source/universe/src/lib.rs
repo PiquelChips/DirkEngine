@@ -73,7 +73,7 @@ impl Universe {
             buffers: Vec::new(),
         };
 
-        let mut cmd = Universe::new_command_buffer();
+        let mut cmd = CommandBuffer::new();
         for builder in builder.worlds {
             cmd.create_world(builder);
         }
@@ -89,7 +89,7 @@ impl Universe {
     /// was just created is not found in the [`Universe`].
     /// No panic should be caused by user error.
     pub fn tick(&mut self, delta_time: f32) {
-        let mut cmd = Universe::new_command_buffer();
+        let mut cmd = CommandBuffer::new();
 
         let buffers = std::mem::take(&mut self.buffers);
 
@@ -349,12 +349,6 @@ impl Universe {
 
     // COMMAND BUFFERS
 
-    /// Returns a new empty [`CommandBuffer`]
-    #[must_use]
-    pub fn new_command_buffer() -> CommandBuffer {
-        CommandBuffer::new()
-    }
-
     /// Will submit a buffer for execution.
     pub fn submit_buffer(&mut self, buffer: CommandBuffer) {
         if buffer.is_empty() {
@@ -405,7 +399,7 @@ impl Universe {
     /// Will create a new [`World`] & return it [`WorldId`].
     pub fn create_world(&mut self, builder: WorldBuilder) -> Option<WorldId> {
         let next_id = self.next_world_id;
-        let mut cmd = Universe::new_command_buffer();
+        let mut cmd = CommandBuffer::new();
         self.run_commands(&mut cmd, vec![Command::CreateWorld(builder)]);
         self.submit_buffer(cmd);
         let new_next = self.next_world_id;
@@ -420,7 +414,7 @@ impl Universe {
     /// Will create a new [`World`] & return it [`WorldId`].
     pub fn spawn_entity(&mut self, world: WorldId, builder: EntityBuilder) -> Option<Entity> {
         let next_id = self.next_entity_id;
-        let mut cmd = Universe::new_command_buffer();
+        let mut cmd = CommandBuffer::new();
         self.run_commands(&mut cmd, vec![Command::Spawn(world, builder)]);
         self.submit_buffer(cmd);
         let new_next = self.next_entity_id;
