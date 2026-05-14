@@ -1,12 +1,11 @@
 use std::any::TypeId;
 
 use crate::{
-    Entity, EntityBuilder, Universe, WorldBuilder, WorldId,
+    Entity, EntityBuilder, WorldBuilder, WorldId,
     components::{AnyComponent, Component},
 };
 
-pub struct CommandBuffer<'u> {
-    universe: &'u Universe,
+pub struct CommandBuffer {
     commands: Vec<Command>,
 }
 
@@ -21,12 +20,11 @@ pub(crate) enum Command {
     RemoveComponent(Entity, TypeId),
 }
 
-impl CommandBuffer<'_> {
-    /// Just returns a ref to the [`Universe`]
-    /// This allows the systems to have access to the simple getters on the [`Universe`] to avoid
-    /// code duplication.
-    pub fn universe(&self) -> &Universe {
-        self.universe
+impl CommandBuffer {
+    pub(crate) fn new() -> Self {
+        CommandBuffer {
+            commands: Vec::new(),
+        }
     }
     /// Returns if the command buffer has had no submitted commands. This is useful to skip
     /// all submission logic when no commands should be run.
