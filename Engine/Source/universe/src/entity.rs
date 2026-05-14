@@ -12,13 +12,18 @@ use crate::components::{AnyComponent, Component};
 
 /// A unique, opaque identifier for a spawned entity.
 #[derive(Clone, Copy, Debug, Default, Hash, Eq, PartialEq)]
-pub struct Entity(pub(crate) u64);
+pub struct Entity(u64);
 
 impl Entity {
     /// Returns an empty [`EntityBuilder`].
     #[must_use]
     pub fn builder() -> EntityBuilder {
         EntityBuilder::new()
+    }
+    /// Returns the raw entity ID
+    #[must_use]
+    pub fn raw(&self) -> u64 {
+        self.0
     }
 }
 
