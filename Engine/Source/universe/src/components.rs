@@ -242,11 +242,10 @@ impl Components {
 
     /// Remove **every** component attached to `entity` across all types,
     /// returning them so callers can invoke lifecycle hooks before dropping.
-    pub fn remove_all(&mut self, entity: Entity) -> Vec<(TypeId, Box<dyn AnyComponent>)> {
+    pub fn remove_any(&mut self, entity: Entity, type_id: TypeId) -> Option<Box<dyn AnyComponent>> {
         self.storages
-            .iter_mut()
-            .filter_map(|(type_id, storage)| storage.remove(entity).map(|c| (*type_id, c)))
-            .collect()
+            .get_mut(&type_id)
+            .and_then(|b| b.remove(entity))
     }
 
     /// Check whether `entity` has a component of the given `TypeId`.
