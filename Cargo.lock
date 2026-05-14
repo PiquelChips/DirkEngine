@@ -1845,7 +1845,6 @@ name = "universe"
 version = "0.1.0"
 dependencies = [
  "macros",
- "pastey",
  "serde",
 ]
 

@@ -11,7 +11,5 @@ macros.workspace = true
 
 serde.workspace = true
 
-pastey.workspace = true
-
 [lints]
 workspace = true
