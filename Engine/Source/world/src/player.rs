@@ -239,14 +239,12 @@ impl Player {
                 height: 100.0,
             });
 
-        let mut cmd = Universe::new_command_buffer();
-        cmd.spawn(world, builder);
-        universe.submit_buffer(cmd);
-
         let player = Self {
             id,
             world,
-            entity: Entity::default(), // TODO: have universe.spawn return an entity ID
+            entity: universe
+                .spawn_entity(world, builder)
+                .expect("the world should exist"),
             window,
             region: PlayerRegion::default(),
             dispatcher: event_manager.register(),

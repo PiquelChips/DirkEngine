@@ -256,6 +256,6 @@ impl Engine {
             .with_entity(duck_builder);
 
         let world = self.universe.create_world(world_builder);
-        world
+        world.expect("world creation shouldn't fail")
     }
 }
