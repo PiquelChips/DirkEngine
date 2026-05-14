@@ -33,7 +33,7 @@ use crate::{Entity, Universe, WorldId, components::Component};
 /// # struct Velocity;
 /// # #[derive(Component, Debug, serde::Deserialize, serde::Serialize)]
 /// # struct Frozen;
-/// let query = Query::new()
+/// let query = Query::empty()
 ///     .with_component::<Position>()
 ///     .with_component::<Velocity>()
 ///     .without_component::<Frozen>();
