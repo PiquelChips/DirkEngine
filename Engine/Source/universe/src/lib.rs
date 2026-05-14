@@ -123,9 +123,6 @@ impl Universe {
         let Some(world) = self.worlds.remove(&world) else {
             return;
         };
-        self.universe_systems
-            .iter()
-            .for_each(|system| system.world_destroyed(self, &world));
 
         // `clone` is expensive but its the only way I found for the
         // borrow checker. As this is called very rarely (on world destruction),
@@ -133,6 +130,11 @@ impl Universe {
         for entity in world.alive.clone() {
             self.despawn(entity);
         }
+
+        // TODO: this is temporary, fix with command buffer
+        self.universe_systems
+            .iter()
+            .for_each(|system| system.world_destroyed(self, &world));
     }
 
     // ENTITY MANAGEMENT
