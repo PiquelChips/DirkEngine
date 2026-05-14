@@ -144,7 +144,7 @@ impl Universe {
                     created_worlds.push(id);
                 }
                 Command::DestroyWorld(world) => {
-                    let Some(world) = self.worlds.remove(&world) else {
+                    let Some(world) = self.worlds.get(&world) else {
                         return;
                     };
 
@@ -316,10 +316,12 @@ impl Universe {
                 .for_each(|system| system.world_destroyed(cmd, self, world));
         }
 
+        // destroy components
         for (entity, type_id) in removed_components {
             self.components.remove_any(entity, type_id);
         }
 
+        // destroy entities
         for entity in despawned_entities {
             if let Some(world) = self.get_world(entity)
                 && let Some(world) = self.worlds.get_mut(&world)
@@ -329,6 +331,7 @@ impl Universe {
             self.entities.remove(&entity);
         }
 
+        // destroy worlds
         for world in destroyed_worlds {
             self.worlds.remove(&world);
         }
