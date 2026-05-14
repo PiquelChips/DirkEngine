@@ -24,6 +24,7 @@ mod entity;
 pub use entity::{Entity, EntityBuilder};
 
 mod world;
+use tracing::warn;
 pub use world::{World, WorldBuilder, WorldId};
 
 /// This struct is the manager for all the worlds.
@@ -78,19 +79,102 @@ impl Universe {
         let mut updated_components: Vec<(Entity, TypeId, Box<dyn AnyComponent>)> = Vec::new();
         let mut removed_components: Vec<(Entity, TypeId)> = Vec::new();
 
-        // TODO: create vectors of system data
-
         for command in commands {
-            // TODO: run additive commands & populate system vectors
             match command {
-                Command::CreateWorld(builder) => {}
-                Command::DestroyWorld(world) => {}
-                Command::Spawn(world, builder) => {}
-                Command::Despawn(entity) => {}
-                Command::Send(entity, world) => {}
-                Command::InsertComponent(world, component) => {}
-                Command::UpdateComponent(world, component) => {}
-                Command::RemoveComponent(world, type_id) => {}
+                Command::CreateWorld(builder) => {
+                    let id = self.next_world_id;
+                    self.next_world_id += 1;
+
+                    let world = World::new(id, builder.name);
+                    self.worlds.insert(id, world);
+
+                    for builder in builder.entities {
+                        let entity = self.add_entity(id).expect("just created world");
+                        spawned_entities.push(entity);
+
+                        builder.components.into_values().for_each(|component| {
+                            let type_id = component.component_type_id();
+                            self.components.insert_any(entity, component);
+                            added_components.push((entity, type_id));
+                        });
+                    }
+
+                    created_worlds.push(id);
+                }
+                Command::DestroyWorld(world) => {
+                    let Some(world) = self.worlds.remove(&world) else {
+                        return;
+                    };
+
+                    for &entity in &world.alive {
+                        despawned_entities.push(entity);
+                        for (type_id, _) in self.components.get_all(entity) {
+                            removed_components.push((entity, type_id));
+                        }
+                    }
+                    destroyed_worlds.push(world.id());
+                }
+                Command::Spawn(world, builder) => {
+                    let Some(entity) = self.add_entity(world) else {
+                        warn!("cannot add entity to world {world} as it does not exist");
+                        continue;
+                    };
+                    spawned_entities.push(entity);
+
+                    builder.components.into_values().for_each(|component| {
+                        let type_id = component.component_type_id();
+                        self.components.insert_any(entity, component);
+                        added_components.push((entity, type_id));
+                    });
+                }
+                Command::Despawn(entity) => {
+                    despawned_entities.push(entity);
+                    for (type_id, _) in self.components.get_all(entity) {
+                        removed_components.push((entity, type_id));
+                    }
+                }
+                Command::Send(entity, to) => {
+                    let Some(from) = self.entities.get(&entity).copied() else {
+                        warn!("cannot send {entity:?} as it does not exist");
+                        continue;
+                    };
+                    if from == to {
+                        continue;
+                    }
+                    if !self.worlds.contains_key(&to) {
+                        warn!("cannot send {entity:?} to world {to} as it does not exist");
+                        continue;
+                    }
+
+                    let old = self
+                        .worlds
+                        .get_mut(&from)
+                        .expect("entity is registered as in this world");
+                    old.alive.remove(&entity);
+
+                    let new = self.worlds.get_mut(&to).expect("just checked it exists");
+                    new.alive.insert(entity);
+
+                    self.entities.insert(entity, to);
+                    sent_entities.push((entity, from, to));
+                }
+                Command::SetComponent(entity, component) => {
+                    if !self.is_alive(entity) {
+                        continue;
+                    }
+
+                    let type_id = component.component_type_id();
+                    if let Some(old) = self.components.insert_any(entity, component) {
+                        updated_components.push((entity, type_id, old));
+                    } else {
+                        added_components.push((entity, type_id));
+                    }
+                }
+                Command::RemoveComponent(entity, type_id) => {
+                    if self.components.remove_any(entity, type_id).is_some() {
+                        removed_components.push((entity, type_id));
+                    }
+                }
             }
         }
 
@@ -191,6 +275,9 @@ impl Universe {
         }
 
         // TODO: run removall stuff
+        // remove all components
+        // remove all entities
+        // destroy world
 
         self.universe_systems
             .iter()
@@ -218,7 +305,22 @@ impl Universe {
         self.buffers.push(buffer);
     }
 
-    // UTILITIES
+    // HELPERS FOR THE TICK FUNCTION
+
+    /// Just adds an [`Entity`] to the `world` & returns its ID.
+    /// Returns `None` if the `world` does not exist.
+    fn add_entity(&mut self, world: WorldId) -> Option<Entity> {
+        let world = self.worlds.get_mut(&world)?;
+
+        let entity = self.next_entity_id;
+        self.next_entity_id += 1;
+        self.entities.insert(entity, world.id());
+
+        world.alive.insert(entity);
+        Some(entity)
+    }
+
+    // UTILITIES & GETTERS
 
     /// Returns an optional reference to the requested [`World`].
     #[must_use]
@@ -250,252 +352,11 @@ impl Universe {
         self.entities.contains_key(&entity)
     }
 
-    // WORLD MANAGEMENT
-
-    /// Will create a new empty world & return its ID.
-    ///
-    /// # Panics
-    ///
-    /// Will panic if cannot find the world just created
-    pub fn create_world(&mut self, builder: WorldBuilder) -> WorldId {
-        let id = self.next_world_id;
-        self.next_world_id += 1;
-
-        let world = World::new(id, builder.name);
-        self.worlds.insert(id, world);
-
-        for builder in builder.entities {
-            self.spawn(id, builder)
-                .expect("should spawn entity in just created world");
-        }
-
-        let world = self.worlds.get(&id).expect("we just added it");
-        self.universe_systems
-            .iter()
-            .for_each(|system| system.world_created(self, world));
-
-        id
-    }
-
-    /// Will destroy the world & call all its destruction systems.
-    pub fn destroy_world(&mut self, world: WorldId) {
-        let Some(world) = self.worlds.remove(&world) else {
-            return;
-        };
-
-        // `clone` is expensive but its the only way I found for the
-        // borrow checker. As this is called very rarely (on world destruction),
-        // it should not have too big of an effect on runtime performance.
-        for entity in world.alive.clone() {
-            self.despawn(entity);
-        }
-
-        // TODO: this is temporary, fix with command buffer
-        self.universe_systems
-            .iter()
-            .for_each(|system| system.world_destroyed(self, &world));
-    }
-
-    // ENTITY MANAGEMENT
-
-    /// Will spawn a new [`Entity`] using the provided [`EntityBuilder`].
-    /// Returns the handle of the new [`Entity`].
-    ///
-    /// If None, then the [`World`] does not exist.
-    pub fn spawn(&mut self, world: WorldId, builder: EntityBuilder) -> Option<Entity> {
-        let world = self.worlds.get_mut(&world)?;
-
-        let entity = self.next_entity_id;
-        self.next_entity_id += 1;
-        self.entities.insert(entity, world.id());
-        world.alive.insert(entity);
-
-        let type_ids: Vec<TypeId> = builder
-            .components
-            .into_values()
-            .map(|component| {
-                let type_id = component.component_type_id();
-                self.components.insert_any(entity, component);
-                type_id
-            })
-            .collect();
-
-        self.universe_systems
-            .iter()
-            .for_each(|system| system.entity_spawned(self, entity));
-
-        self.entity_systems.iter().for_each(|system| {
-            if let Some(query) = system.query()
-                && !query.matches(self, entity)
-            {
-                return;
-            }
-            system.spawned(self, entity);
-        });
-
-        for type_id in type_ids {
-            if let Some(component) = self.components.get_any(entity, type_id) {
-                self.component_systems
-                    .iter(type_id)
-                    .for_each(|system| system.added(entity, component));
-            }
-        }
-
-        Some(entity)
-    }
-
-    /// Will despawn the provided [`Entity`].
-    ///
-    /// Calls [`ComponentSystem::removed`] for every component still attached
-    /// to the entity before the components are actually dropped.
-    pub fn despawn(&mut self, entity: Entity) {
-        let Some(world) = self.entities.remove(&entity) else {
-            // if the entity was not present, systems shouldn't be called
-            return;
-        };
-        let Some(world) = self.worlds.get_mut(&world) else {
-            return;
-        };
-
-        if !world.alive.remove(&entity) {
-            // if the entity was not present, systems shouldn't be called
-            return;
-        }
-
-        for (type_id, component) in self.components.get_all(entity) {
-            self.component_systems
-                .iter(type_id)
-                .for_each(|system| system.removed(entity, component));
-        }
-
-        self.universe_systems
-            .iter()
-            .for_each(|system| system.entity_despawned(self, entity));
-
-        self.entity_systems.iter().for_each(|system| {
-            if let Some(query) = system.query()
-                && !query.matches(self, entity)
-            {
-                return;
-            }
-
-            system.despawned(self, entity);
-        });
-
-        self.components.remove_all(entity);
-    }
-
-    /// Will send the [`Entity`] to the specified [`WorldId`].
-    ///
-    /// Returns if the operation was successful. Will fail if the [`Entity`]
-    /// or the [`World`] don't exist.
-    ///
-    /// If the `entity` is already in `to`, returns `true`
-    pub fn send(&mut self, entity: Entity, to: WorldId) -> bool {
-        let Some(world) = self.entities.get(&entity).copied() else {
-            return false;
-        };
-
-        if world == to {
-            return true;
-        }
-
-        if !self.worlds.contains_key(&to) {
-            return false;
-        }
-
-        let Some(old) = self.worlds.get_mut(&world) else {
-            return false;
-        };
-        old.alive.remove(&entity);
-
-        let Some(new) = self.worlds.get_mut(&to) else {
-            return false;
-        };
-        new.alive.insert(entity);
-
-        self.entities.insert(entity, to);
-
-        self.universe_systems
-            .iter()
-            .for_each(|system| system.entity_sent(self, entity, world, to));
-
-        self.entity_systems.iter().for_each(|system| {
-            if let Some(query) = system.query()
-                && !query.matches(self, entity)
-            {
-                return;
-            }
-
-            system.sent(self, entity, world, to);
-        });
-
-        true
-    }
-
-    // COMPONENT MANAGEMENT
-
-    /// Attaches a [`Component`] to [`Entity`], replacing any existing component of
-    /// the same type.
-    ///
-    /// [`ComponentSystem::added`] is called every time.
-    ///
-    /// When replacing, [`ComponentSystem::removed`] is called.
-    ///
-    /// [`Entity`]: crate::Entity
-    pub fn insert<C: Component>(&mut self, entity: Entity, component: C) {
-        if !self.is_alive(entity) {
-            return;
-        }
-
-        let component: Box<dyn AnyComponent> = Box::new(component);
-
-        self.component_systems
-            .iter(TypeId::of::<C>())
-            .for_each(|system| system.added(entity, component.as_ref()));
-
-        if let Some(old) = self.components.insert_any(entity, component) {
-            self.component_systems
-                .iter(TypeId::of::<C>())
-                .for_each(|system| system.removed(entity, old.as_ref()));
-        }
-    }
-
     /// Returns a shared reference to a component, or `None` if the entity
     /// does not have one.
     #[must_use]
     pub fn component<C: Component>(&self, entity: Entity) -> Option<&C> {
         self.components.get(entity)
-    }
-
-    /// Returns a mutable reference to a component, or `None` if the entity
-    /// does not have one.
-    ///
-    /// This is a temporary solution as [`ComponentSystem::updated`] is being
-    /// called before anything is actually changed.
-    #[must_use]
-    pub fn component_mut<C: Component>(&mut self, entity: Entity) -> Option<&mut C> {
-        let component: &mut C = self.components.get_mut(entity)?;
-
-        self.component_systems
-            .iter(TypeId::of::<C>())
-            .for_each(|system| system.updated(entity, component));
-
-        Some(component)
-    }
-
-    /// Removes a single component from an entity, calling [`ComponentSystem::removed`]
-    /// if the component was present.
-    ///
-    /// The entity itself is **not** despawned. If the component is not
-    /// present this is a no-op.
-    pub fn remove<C: Component>(&mut self, entity: Entity) {
-        if let Some(component) = self.components.remove::<C>(entity) {
-            let component: Box<dyn AnyComponent> = Box::new(component);
-            self.component_systems
-                .iter(TypeId::of::<C>())
-                .for_each(|system| system.removed(entity, component.as_ref()));
-        }
     }
 }
 
