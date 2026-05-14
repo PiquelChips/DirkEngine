@@ -132,14 +132,14 @@ pub(crate) struct ComponentSystemStorage {
 }
 
 impl ComponentSystemStorage {
-    pub fn insert<S: ComponentSystem>(&mut self, system: S) {
+    pub fn push<S: ComponentSystem>(&mut self, system: S) {
         self.systems
             .entry(system.component_type_id())
             .or_default()
             .push(Box::new(system));
     }
 
-    pub fn insert_any(&mut self, type_id: TypeId, system: Box<dyn AnyComponentSystem>) {
+    pub fn push_any(&mut self, type_id: TypeId, system: Box<dyn AnyComponentSystem>) {
         self.systems.entry(type_id).or_default().push(system);
     }
 

@@ -113,12 +113,12 @@ pub fn generate_system_code(trait_def: &ItemTrait) -> syn::Result<TokenStream> {
             pub fn new() -> Self { Self::default() }
 
             #[doc = #insert_doc]
-            pub fn insert(&mut self, system: impl #trait_name) {
+            pub fn push(&mut self, system: impl #trait_name) {
                 self.systems.push(Box::new(system));
             }
 
             #[doc = #insert_any_doc]
-            pub fn insert_any(&mut self, system: Box<dyn #any_name>) {
+            pub fn push_any(&mut self, system: Box<dyn #any_name>) {
                 self.systems.push(system);
             }
 

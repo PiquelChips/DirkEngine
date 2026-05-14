@@ -384,28 +384,28 @@ impl UniverseBuilder {
     /// Adds a [`UniverseSystem`] that will be added to the [`Universe`].
     #[must_use]
     pub fn with_universe_system(mut self, system: impl UniverseSystem) -> Self {
-        self.universe_systems.insert(system);
+        self.universe_systems.push(system);
         self
     }
 
     /// Adds a [`EntitySystem`] that will be added to the [`Universe`].
     #[must_use]
     pub fn with_entity_system(mut self, system: impl EntitySystem) -> Self {
-        self.entity_systems.insert(system);
+        self.entity_systems.push(system);
         self
     }
 
     /// Adds a [`TickingSystem`] that will be added to the [`Universe`].
     #[must_use]
     pub fn with_ticking_system(mut self, system: impl TickingSystem) -> Self {
-        self.ticking_systems.insert(system);
+        self.ticking_systems.push(system);
         self
     }
 
     /// Adds a [`ComponentSystem`] that will be added to the [`Universe`].
     #[must_use]
     pub fn with_component_system(mut self, system: impl ComponentSystem) -> Self {
-        self.component_systems.insert(system);
+        self.component_systems.push(system);
         self
     }
 
@@ -417,20 +417,20 @@ impl UniverseBuilder {
         }
 
         for system in other.universe_systems {
-            self.universe_systems.insert_any(system);
+            self.universe_systems.push_any(system);
         }
 
         for system in other.entity_systems {
-            self.entity_systems.insert_any(system);
+            self.entity_systems.push_any(system);
         }
 
         for system in other.ticking_systems {
-            self.ticking_systems.insert_any(system);
+            self.ticking_systems.push_any(system);
         }
 
         for (type_id, systems) in other.component_systems {
             for system in systems {
-                self.component_systems.insert_any(type_id, system);
+                self.component_systems.push_any(type_id, system);
             }
         }
 
