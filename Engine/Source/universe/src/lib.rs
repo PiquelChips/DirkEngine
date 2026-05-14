@@ -89,14 +89,11 @@ impl Universe {
             commands.append(&mut sub.commands());
         }
 
-        // TODO: look into storing refs if possible to avoid
-        // querying & expecting in system calls
         let mut created_worlds: Vec<WorldId> = Vec::new();
         let mut destroyed_worlds: Vec<WorldId> = Vec::new();
         let mut spawned_entities: Vec<Entity> = Vec::new();
         let mut despawned_entities: Vec<Entity> = Vec::new();
-        // entity, from, to
-        let mut sent_entities: Vec<(Entity, WorldId, WorldId)> = Vec::new();
+        let mut sent_entities: Vec<(Entity, WorldId, WorldId)> = Vec::new(); // entity, from, to
         let mut added_components: Vec<(Entity, TypeId)> = Vec::new();
         let mut updated_components: Vec<(Entity, TypeId, Box<dyn AnyComponent>)> = Vec::new();
         let mut removed_components: Vec<(Entity, TypeId)> = Vec::new();
@@ -315,6 +312,7 @@ impl Universe {
     // COMMAND BUFFERS
 
     /// Returns a new empty [`CommandBuffer`]
+    #[must_use]
     pub fn new_command_buffer() -> CommandBuffer {
         CommandBuffer::new()
     }
@@ -399,6 +397,7 @@ impl UniverseBuilder {
     }
 
     /// Will build a new [`Universe`] from the current builder.
+    #[must_use]
     pub fn build(self) -> Universe {
         Universe::build(self)
     }
