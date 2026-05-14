@@ -5,7 +5,6 @@ use std::{any::TypeId, collections::HashMap};
 use crate::{
     CommandBuffer, Entity, Universe, World, WorldId,
     components::{AnyComponent, Component},
-    entity::EntityIterator,
     query::Query,
 };
 use macros::system_trait;
@@ -88,7 +87,7 @@ pub trait TickingSystem: System {
         cmd: &mut CommandBuffer,
         universe: &Universe,
         delta_time: f32,
-        entities: EntityIterator,
+        entities: &dyn Iterator<Item = Entity>,
     );
     /// Returns the query used to construct the `entities` of the tick function.
     fn query(&self) -> Query;

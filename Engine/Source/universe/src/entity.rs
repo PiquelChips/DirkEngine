@@ -63,35 +63,3 @@ impl EntityBuilder {
         self
     }
 }
-
-/// A concrete, lazily-evaluated iterator over [`Entity`] values.
-///
-/// # Lifetime
-///
-/// `'u` is the lifetime of the [`Universe`] borrow from which entities are
-/// sourced. The iterator must not outlive that borrow.
-///
-/// [`Universe`]: crate::Universe
-pub struct EntityIterator<'u> {
-    inner: Box<dyn Iterator<Item = Entity> + 'u>,
-}
-
-impl<'u> EntityIterator<'u> {
-    pub(crate) fn new(iter: impl Iterator<Item = Entity> + 'u) -> Self {
-        Self {
-            inner: Box::new(iter),
-        }
-    }
-}
-
-impl Iterator for EntityIterator<'_> {
-    type Item = Entity;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next()
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.inner.size_hint()
-    }
-}
