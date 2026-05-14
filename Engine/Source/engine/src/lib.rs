@@ -117,10 +117,19 @@ impl Engine {
     /// Errors can occure if the various ticking systems have errors.
     /// For now, only rendering can return an error.
     pub fn tick(&mut self) -> bool {
-        match self.tick_inner() {
+        if !match self.tick_inner() {
             Ok(exit) => exit,
             Err(err) => {
                 self.exit_error = Some(err.context("engine tick"));
+                false
+            }
+        } {
+            return false;
+        }
+        match self.render() {
+            Ok(()) => true,
+            Err(err) => {
+                self.exit_error = Some(err.context("rendering"));
                 false
             }
         }
@@ -150,8 +159,11 @@ impl Engine {
             .values_mut()
             .for_each(|player| player.tick(&mut self.universe));
 
-        self.renderer.render().context("rendering")?;
         Ok(!self.is_requesting_exit())
+    }
+
+    fn render(&mut self) -> anyhow::Result<()> {
+        Ok(self.renderer.render()?)
     }
 
     fn process_events(&mut self) {
