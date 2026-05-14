@@ -15,8 +15,7 @@ pub(crate) enum Command {
     Spawn(WorldId, EntityBuilder),
     Despawn(Entity),
     Send(Entity, WorldId),
-    InsertComponent(Entity, Box<dyn AnyComponent>),
-    UpdateComponent(Entity, Box<dyn AnyComponent>),
+    SetComponent(Entity, Box<dyn AnyComponent>),
     RemoveComponent(Entity, TypeId),
 }
 
@@ -82,17 +81,9 @@ impl CommandBuffer {
     /// When replacing, [`ComponentSystem::removed`] is called.
     ///
     /// [`Entity`]: crate::Entity
-    pub fn insert_component<C: Component>(&mut self, entity: Entity, component: C) {
+    pub fn set_component<C: Component>(&mut self, entity: Entity, component: C) {
         self.commands
-            .push(Command::InsertComponent(entity, Box::new(component)));
-    }
-    /// Will update the component with the new value.
-    ///
-    /// This is similar to insert, but it calls [`ComponentSystem::update`]
-    // instead of remove & added.
-    pub fn update_component<C: Component>(&mut self, entity: Entity, updated: C) {
-        self.commands
-            .push(Command::UpdateComponent(entity, Box::new(updated)));
+            .push(Command::SetComponent(entity, Box::new(component)));
     }
     /// Removes a single component from an entity, calling [`ComponentSystem::removed`]
     /// if the component was present.
