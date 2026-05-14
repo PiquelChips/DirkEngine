@@ -42,6 +42,9 @@ pub struct Universe {
     component_systems: ComponentSystemStorage,
 
     components: Components,
+
+    /// The queue of command buffers that need to be submitted
+    buffers: Vec<CommandBuffer>,
 }
 
 impl Universe {
@@ -53,6 +56,8 @@ impl Universe {
 
     /// Ticks every the entire [`Universe`].
     pub fn tick(&mut self, delta_time: f32) {
+        // TODO: handle command buffers
+
         self.universe_systems
             .iter()
             .for_each(|system| system.tick(self, delta_time));
@@ -60,6 +65,21 @@ impl Universe {
         self.ticking_systems.iter().for_each(|system| {
             system.tick(self, delta_time, system.query().query(self));
         });
+    }
+
+    // COMMAND BUFFERS
+
+    /// Returns a new empty [`CommandBuffer`]
+    pub fn new_command_buffer() -> CommandBuffer {
+        CommandBuffer::new()
+    }
+
+    /// Will submit a buffer for execution.
+    pub fn submit_buffer(&mut self, buffer: CommandBuffer) {
+        if buffer.is_empty() {
+            return;
+        }
+        self.buffers.push(buffer);
     }
 
     // UTILITIES
