@@ -155,7 +155,7 @@ impl Universe {
             .components
             .into_values()
             .map(|component| {
-                let type_id = AnyComponent::type_id(component.as_ref());
+                let type_id = component.component_type_id();
                 self.components.insert_any(entity, component);
                 type_id
             })

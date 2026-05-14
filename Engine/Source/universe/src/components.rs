@@ -30,7 +30,7 @@ pub(crate) trait AnyComponent: Any + Debug + 'static {
     fn new_storage(&self) -> Box<dyn AnyStorage>;
 
     /// Returns the [`TypeId`] of the concrete component behind the any type.
-    fn type_id(&self) -> TypeId;
+    fn component_type_id(&self) -> TypeId;
 }
 
 // Blanket impl: every concrete Component automatically becomes an AnyComponent.
@@ -45,7 +45,7 @@ impl<T: Component> AnyComponent for T {
     fn new_storage(&self) -> Box<dyn AnyStorage> {
         Box::new(ComponentStorage::<T>::default())
     }
-    fn type_id(&self) -> TypeId {
+    fn component_type_id(&self) -> TypeId {
         TypeId::of::<T>()
     }
 }
@@ -208,7 +208,7 @@ impl Components {
         component: Box<dyn AnyComponent>,
     ) -> Option<Box<dyn AnyComponent>> {
         self.storages
-            .entry(AnyComponent::type_id(component.as_ref()))
+            .entry(component.component_type_id())
             .or_insert_with(|| component.new_storage())
             .insert(entity, component)
     }
