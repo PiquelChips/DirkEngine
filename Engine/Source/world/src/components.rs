@@ -21,7 +21,7 @@ use universe::{
 /// ```
 /// # use world::components::Renderable;
 /// use assets::{AssetHandle, AssetType};
-/// let r = Renderable { model: AssetHandle::from_raw("meshes/cube.glb", AssetType::Model) };
+/// let r = Renderable::new(AssetHandle::from_raw("meshes/cube.glb", AssetType::Model));
 /// assert_eq!(r.model.raw(), "meshes/cube.glb");
 /// ```
 #[derive(Debug, Clone, Component)]
