@@ -1,4 +1,4 @@
-//! This crate exports all the proc-macros used in the engine.
+#![doc = include_str!("../README.md")]
 
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
