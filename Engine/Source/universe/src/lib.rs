@@ -219,7 +219,7 @@ impl Universe {
                     }
                 }
                 Command::RemoveComponent(entity, type_id) => {
-                    if self.components.remove_any(entity, type_id).is_some() {
+                    if self.components.get_any(entity, type_id).is_some() {
                         removed_components.insert((entity, type_id));
                     }
                 }
