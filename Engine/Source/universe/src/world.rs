@@ -13,7 +13,7 @@ pub struct WorldId(u32);
 impl WorldId {
     /// Returns the raw entity ID
     #[must_use]
-    pub fn raw(&self) -> u32 {
+    pub fn raw(self) -> u32 {
         self.0
     }
 }
