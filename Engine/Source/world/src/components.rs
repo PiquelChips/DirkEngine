@@ -67,12 +67,12 @@ impl ModelUploadSystem {
 impl ComponentSystem for ModelUploadSystem {
     type Component = Renderable;
     fn added(&self, _cmd: &mut CommandBuffer, _: Entity, component: &Self::Component) {
-        self.dispatcher.dispatch(LoadAsset(component.model.clone()));
         if component.handle.is_some() {
             return;
         }
 
         // TODO: load asset from registry & set handle
+        self.dispatcher.dispatch(LoadAsset(component.model.clone()));
     }
     fn updated(
         &self,
