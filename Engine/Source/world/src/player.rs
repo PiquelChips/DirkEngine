@@ -48,7 +48,7 @@ use events::{Consumer, Dispatcher, Event, EventManager};
 use platform::{WindowEvent, WindowId};
 
 use crate::components::{Camera, Transform};
-use universe::{Entity, Universe, WorldId};
+use universe::{CommandBuffer, Entity, Universe, WorldId};
 
 /// Opaque identifier for a player, unique within a session.
 pub type PlayerId = u32;
@@ -266,7 +266,7 @@ impl Player {
     /// Fires one [`PlayerUpdateEvent`] with `update_type =`
     /// [`PlayerUpdateType::Despawned`].
     pub fn despawn(self, universe: &mut Universe) {
-        let mut cmd = Universe::new_command_buffer();
+        let mut cmd = CommandBuffer::new();
         cmd.despawn(self.entity);
         universe.submit_buffer(cmd);
         self.dispatcher.dispatch(PlayerUpdateEvent::from_player(
@@ -354,7 +354,7 @@ impl Player {
             camera.width = width as f32;
             camera.height = height as f32;
 
-            let mut cmd = Universe::new_command_buffer();
+            let mut cmd = CommandBuffer::new();
             cmd.set_component(self.entity, camera);
             universe.submit_buffer(cmd);
         }
