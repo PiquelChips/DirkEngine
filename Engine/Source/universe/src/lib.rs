@@ -520,3 +520,6 @@ impl UniverseBuilder {
         self
     }
 }
+
+#[cfg(test)]
+mod tests;
