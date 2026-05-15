@@ -105,7 +105,7 @@ impl Universe {
             .for_each(|system| system.tick(&mut cmd, self, delta_time));
 
         self.ticking_systems.iter().for_each(|system| {
-            system.tick(&mut cmd, self, delta_time, &system.query().query(self));
+            system.tick(&mut cmd, self, delta_time, &mut system.query().query(self));
         });
 
         self.submit_buffer(cmd);

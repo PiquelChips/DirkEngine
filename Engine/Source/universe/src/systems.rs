@@ -87,7 +87,7 @@ pub trait TickingSystem: System {
         cmd: &mut CommandBuffer,
         universe: &Universe,
         delta_time: f32,
-        entities: &dyn Iterator<Item = Entity>,
+        entities: &mut dyn Iterator<Item = Entity>,
     );
     /// Returns the query used to construct the `entities` of the tick function.
     fn query(&self) -> Query;
