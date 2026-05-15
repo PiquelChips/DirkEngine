@@ -1,6 +1,4 @@
-//! This crate has a bunch of frequently used types in the [`World`].
-//!
-//! [`World`]: universe::world
+#![doc = include_str!("../README.md")]
 
 use dirk_events::EventManager;
 use dirk_universe::{Universe, UniverseBuilder};
