@@ -428,7 +428,7 @@ dependencies = [
 name = "dirk_events"
 version = "0.1.0-beta-1"
 dependencies = [
- "dirk_macros",
+ "dirk_proc",
  "parking_lot",
  "tracing",
 ]
@@ -446,15 +446,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dirk_macros"
-version = "0.1.0-beta-1"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "dirk_platform"
 version = "0.1.0-beta-1"
 dependencies = [
@@ -464,6 +455,15 @@ dependencies = [
  "thiserror 2.0.18",
  "tracing",
  "winit",
+]
+
+[[package]]
+name = "dirk_proc"
+version = "0.1.0-beta-1"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -503,7 +503,7 @@ dependencies = [
 name = "dirk_universe"
 version = "0.1.0-beta-1"
 dependencies = [
- "dirk_macros",
+ "dirk_proc",
  "serde",
  "tracing",
 ]

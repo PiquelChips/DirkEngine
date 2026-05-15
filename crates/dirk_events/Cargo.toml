@@ -9,7 +9,7 @@ version.workspace = true
 [dependencies]
 parking_lot.workspace = true
 
-dirk_macros.workspace = true
+dirk_proc.workspace = true
 
 tracing.workspace = true
 

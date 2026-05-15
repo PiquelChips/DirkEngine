@@ -7,7 +7,7 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
-dirk_macros.workspace = true
+dirk_proc.workspace = true
 
 serde.workspace = true
 tracing.workspace = true

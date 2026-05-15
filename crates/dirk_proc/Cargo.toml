@@ -1,5 +1,6 @@
 [package]
-name = "dirk_macros"
+name = "dirk_proc"
+description = "Procedural macros for the DirkEngine"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
