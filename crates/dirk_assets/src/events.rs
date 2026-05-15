@@ -1,7 +1,7 @@
 //! Public and internal events emitted by the asset subsystem.
 
 use crate::{Asset, AssetHandle, Handle};
-use events::Event;
+use dirk_events::Event;
 
 /// **Internal** event fired by an [`AssetRef`] when its owning [`Handle`]
 /// ref-count drops to zero.

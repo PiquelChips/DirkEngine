@@ -1,5 +1,5 @@
 #![allow(missing_docs)]
 
 fn main() {
-    build::configure_platform();
+    dirk_build::configure_platform();
 }

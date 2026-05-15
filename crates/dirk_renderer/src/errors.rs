@@ -20,10 +20,10 @@ pub enum Error {
     Loading(#[from] ash::LoadingError),
     /// Error produced by the [`platform`] crate.
     #[error("platform error: {0}")]
-    Platform(#[from] platform::Error),
+    Platform(#[from] dirk_platform::Error),
     /// Error produced by the [`assets`] crate.
     #[error("assets error: {0}")]
-    AssetError(#[from] assets::Error),
+    AssetError(#[from] dirk_assets::Error),
 
     /// If no physical device is found
     #[error("no suitable graphics device found")]
@@ -56,16 +56,16 @@ pub enum Error {
 
     /// If there is no camera in the scene
     #[error("camera {0:?} does not exist")]
-    CameraDoesNotExist(universe::Entity),
+    CameraDoesNotExist(dirk_universe::Entity),
     /// If the requested world does not exist
     #[error("world {0} is not registered on renderer")]
-    WorldDoesNotExist(universe::WorldId),
+    WorldDoesNotExist(dirk_universe::WorldId),
     /// If the requested entity does not exist
     #[error("entity {0:?} is not registered on renderer")]
-    EntityDoesNotExist(universe::Entity),
+    EntityDoesNotExist(dirk_universe::Entity),
     /// The requested window does not exist
     #[error("window {0:?} is not registered on renderer")]
-    WindowDoesNotExist(platform::WindowId),
+    WindowDoesNotExist(dirk_platform::WindowId),
 }
 
 impl From<HandleError> for Error {

@@ -1,8 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
 use ash::vk;
+use dirk_universe::{Entity, WorldId};
 use gpu_allocator::MemoryLocation;
-use universe::{Entity, WorldId};
 
 use crate::{
     Error, MAX_FRAMES_IN_FLIGHT, MAX_RENDERABLES, Result,
@@ -345,7 +345,7 @@ pub struct SceneProxy {
     proj: Option<glam::Mat4>,
     /// The name of the model. Used to request a [`crate::model::Model`] from the
     /// renderer at render time.
-    model: Option<assets::AssetHandle>,
+    model: Option<dirk_assets::AssetHandle>,
 
     // Per frame render stuff
     ubo: [UniformBuffer; MAX_FRAMES_IN_FLIGHT],
@@ -406,7 +406,7 @@ impl SceneProxy {
             sets,
         })
     }
-    pub fn set_model(&mut self, model: Option<assets::AssetHandle>) {
+    pub fn set_model(&mut self, model: Option<dirk_assets::AssetHandle>) {
         self.model = model;
     }
     pub fn set_model_matrix(&mut self, mat: Option<glam::Mat4>) {

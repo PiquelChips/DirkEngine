@@ -49,7 +49,7 @@ impl Vertex {
     }
 }
 
-pub fn make_version(version: utils::Version) -> u32 {
+pub fn make_version(version: dirk_utils::Version) -> u32 {
     vk::make_api_version(0, version.major(), version.minor(), version.patch())
 }
 

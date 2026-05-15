@@ -44,11 +44,11 @@
 
 use std::f32::consts::PI;
 
-use events::{Consumer, Dispatcher, Event, EventManager};
-use platform::{WindowEvent, WindowId};
+use dirk_events::{Consumer, Dispatcher, Event, EventManager};
+use dirk_platform::{WindowEvent, WindowId};
+use dirk_universe::{CommandBuffer, Entity, Universe, WorldId};
 
 use crate::components::{Camera, Transform};
-use universe::{CommandBuffer, Entity, Universe, WorldId};
 
 /// Opaque identifier for a player, unique within a session.
 pub type PlayerId = u32;

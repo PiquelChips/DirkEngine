@@ -50,7 +50,7 @@ pub trait Event: Send + Clone + 'static {
 }
 
 #[doc(hidden)]
-pub use macros::Event;
+pub use dirk_macros::Event;
 
 /// Private inner state, held behind the `Arc<Mutex<>>`.
 #[derive(Default)]

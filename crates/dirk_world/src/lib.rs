@@ -2,8 +2,8 @@
 //!
 //! [`World`]: universe::world
 
-use events::EventManager;
-use universe::{Universe, UniverseBuilder};
+use dirk_events::EventManager;
+use dirk_universe::{Universe, UniverseBuilder};
 
 pub mod components;
 use components::ModelUploadSystem;

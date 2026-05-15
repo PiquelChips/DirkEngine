@@ -2,15 +2,15 @@
 //!
 //! [`Component`]: universe::components::Component
 
-use assets::{Handle, LoadAsset, Model};
-use events::Dispatcher;
-use glam::{Mat4, Vec3};
-use tracing::warn;
-use universe::{
+use dirk_assets::{Handle, LoadAsset, Model};
+use dirk_events::Dispatcher;
+use dirk_universe::{
     CommandBuffer, Entity,
     components::Component,
     systems::{ComponentSystem, System},
 };
+use glam::{Mat4, Vec3};
+use tracing::warn;
 
 /// Marks an entity as having a renderable mesh.
 ///
@@ -27,7 +27,7 @@ use universe::{
 #[derive(Debug, Clone, Component)]
 pub struct Renderable {
     /// Asset-registry key for the mesh to render (e.g. `"meshes/cube.glb"`).
-    pub model: assets::AssetHandle,
+    pub model: dirk_assets::AssetHandle,
     handle: Option<Handle<Model>>,
 }
 
@@ -36,7 +36,7 @@ impl Renderable {
     ///
     /// [`AssetHandle`]: assets::AssetHandle
     #[must_use]
-    pub fn new(model: assets::AssetHandle) -> Self {
+    pub fn new(model: dirk_assets::AssetHandle) -> Self {
         Self {
             model,
             handle: None,
@@ -57,7 +57,7 @@ impl ModelUploadSystem {
     ///
     /// [`EventManager`]: events::EventManager
     #[must_use]
-    pub fn new(event_manager: &events::EventManager) -> Self {
+    pub fn new(event_manager: &dirk_events::EventManager) -> Self {
         Self {
             dispatcher: event_manager.register(),
         }
@@ -161,20 +161,20 @@ impl Transform {
     /// direction ([`utils::FORWARD_DIRECTION`]) by the current orientation.
     #[must_use]
     pub fn forward(&self) -> Vec3 {
-        self.rotation_quat() * utils::FORWARD_DIRECTION
+        self.rotation_quat() * dirk_utils::FORWARD_DIRECTION
     }
 
     /// Builds a **left-handed** view matrix for a camera placed at this
     /// transform, looking in the [`forward`](Self::forward) direction.
     pub fn view(&self) -> Mat4 {
         let forward = self.forward();
-        if forward.cross(utils::UP_DIRECTION).length() < 1e-4 {
+        if forward.cross(dirk_utils::UP_DIRECTION).length() < 1e-4 {
             warn!(
                 "camera forward {:?} is parallel to UP — view matrix will be NaN",
                 forward
             );
         }
-        Mat4::look_at_lh(self.location, self.location + forward, utils::UP_DIRECTION)
+        Mat4::look_at_lh(self.location, self.location + forward, dirk_utils::UP_DIRECTION)
     }
 }
 

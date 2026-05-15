@@ -1,7 +1,7 @@
 #![allow(missing_docs)]
 
 fn main() {
-    build::configure_platform();
+    dirk_build::configure_platform();
 
     println!("cargo:rustc-check-cfg=cfg(validation)");
 

@@ -85,7 +85,7 @@ struct Model {
     // this is just to keep the asset alive, we don't actually use it
     // TODO: the handle should be stored in Renderable. See TODO there
     #[allow(unused)]
-    pub handle: assets::Handle<assets::Model>,
+    pub handle: dirk_assets::Handle<dirk_assets::Model>,
 }
 
 pub struct ModelRegistry {
@@ -94,19 +94,19 @@ pub struct ModelRegistry {
     textures: slotmap::SlotMap<slotmap::DefaultKey, Texture>,
     meshes: slotmap::SlotMap<slotmap::DefaultKey, Mesh>,
     materials: slotmap::SlotMap<slotmap::DefaultKey, Material>,
-    models: HashMap<assets::AssetHandle, Model>,
+    models: HashMap<dirk_assets::AssetHandle, Model>,
 
     material_pool: vk::DescriptorPool,
 
-    asset_load_consumer: events::Consumer<::assets::AssetLoaded<::assets::Model>>,
-    asset_unload_consumer: events::Consumer<::assets::AssetUnloaded>,
+    asset_load_consumer: dirk_events::Consumer<::dirk_assets::AssetLoaded<::dirk_assets::Model>>,
+    asset_unload_consumer: dirk_events::Consumer<::dirk_assets::AssetUnloaded>,
 }
 
 /// TODO: descriptor pool
 const MAX_MATERIAL_DESCRIPTOR_SET: u32 = 256;
 
 impl ModelRegistry {
-    pub fn new(device: &RenderDevice, events: &events::EventManager) -> Result<Self> {
+    pub fn new(device: &RenderDevice, events: &dirk_events::EventManager) -> Result<Self> {
         let material_pool = {
             let pool_size = vk::DescriptorPoolSize {
                 ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
@@ -145,22 +145,22 @@ impl ModelRegistry {
     }
     pub fn render_model(
         &self,
-        handle: &assets::AssetHandle,
+        handle: &dirk_assets::AssetHandle,
         cmd: &CommandBuffer,
         scene_set: vk::DescriptorSet,
         proxy_set: vk::DescriptorSet,
         pipeline_layout: vk::PipelineLayout,
-    ) -> assets::Result<()> {
+    ) -> dirk_assets::Result<()> {
         let mut descriptor_sets = [scene_set, proxy_set, vk::DescriptorSet::null()];
 
-        if handle.asset_type() != assets::AssetType::Model {
-            return Err(assets::Error::TypeMismatch(handle.to_string()));
+        if handle.asset_type() != dirk_assets::AssetType::Model {
+            return Err(dirk_assets::Error::TypeMismatch(handle.to_string()));
         }
 
         let model = self
             .models
             .get(handle)
-            .ok_or(assets::Error::NotFound(handle.to_string()))?;
+            .ok_or(dirk_assets::Error::NotFound(handle.to_string()))?;
 
         let primitives = model
             .meshes
@@ -205,8 +205,8 @@ impl ModelRegistry {
         Ok(())
     }
 
-    fn load_model(&mut self, handle: &assets::Handle<assets::Model>) -> Result<()> {
-        let assets::Model {
+    fn load_model(&mut self, handle: &dirk_assets::Handle<dirk_assets::Model>) -> Result<()> {
+        let dirk_assets::Model {
             gltf,
             buffers,
             images,

@@ -7,7 +7,7 @@ use crate::{
     components::{AnyComponent, Component},
     query::Query,
 };
-use macros::system_trait;
+use dirk_macros::system_trait;
 
 /// All systems must implement this trait.
 pub trait System: 'static {
@@ -15,7 +15,7 @@ pub trait System: 'static {
     fn name() -> &'static str;
 }
 #[doc(hidden)]
-pub use macros::System;
+pub use dirk_macros::System;
 
 /// A system that is run by the [`Universe`].
 #[system_trait]

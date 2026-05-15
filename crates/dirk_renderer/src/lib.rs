@@ -26,12 +26,12 @@ use tracing::{debug, info};
 #[cfg(validation)]
 use tracing::{error, trace, warn};
 
-use platform::{PlatformEvent, WindowEvent, WindowId};
-use universe::{Universe, UniverseBuilder};
-use world::player::{PlayerId, PlayerUpdateType};
+use dirk_platform::{PlatformEvent, WindowEvent, WindowId};
+use dirk_universe::{Universe, UniverseBuilder};
+use dirk_world::player::{PlayerId, PlayerUpdateType};
 
 mod utils;
-use ::utils::Version;
+use dirk_utils::Version;
 use utils::{DescriptorLayouts, Frame, Queues, RendererProperties, Vertex, make_version};
 
 mod errors;
@@ -104,9 +104,9 @@ pub struct Renderer {
     current_frame: Arc<AtomicUsize>,
 
     // Events
-    window_consumer: events::Consumer<platform::WindowEvent>,
-    platform_consumer: events::Consumer<platform::PlatformEvent>,
-    player_consumer: events::Consumer<world::player::PlayerUpdateEvent>,
+    window_consumer: dirk_events::Consumer<dirk_platform::WindowEvent>,
+    platform_consumer: dirk_events::Consumer<dirk_platform::PlatformEvent>,
+    player_consumer: dirk_events::Consumer<dirk_world::player::PlayerUpdateEvent>,
 
     /// These receive all the commands from the game thread.
     receivers: Vec<RenderCommandReceiver>,
@@ -126,8 +126,8 @@ impl Renderer {
     #[allow(clippy::too_many_lines)]
     pub fn init(
         create_info: &RendererCreateInfo,
-        window: &platform::Window,
-        event_manager: &events::EventManager,
+        window: &dirk_platform::Window,
+        event_manager: &dirk_events::EventManager,
     ) -> Result<Self> {
         info!("Intializing Vulkan...");
 
@@ -496,7 +496,7 @@ impl Renderer {
     pub fn tick(
         &mut self,
         _delta_time: f32,
-        windows: &HashMap<WindowId, platform::Window>,
+        windows: &HashMap<WindowId, dirk_platform::Window>,
     ) -> Result<()> {
         // Temporarily move receivers out for the borrow checker
         let receivers = std::mem::take(&mut self.receivers);
@@ -818,7 +818,7 @@ impl Renderer {
 
     fn create_shader_module(
         device: &Device,
-        shader: &'static shaders::Shader,
+        shader: &'static dirk_shaders::Shader,
     ) -> Result<vk::ShaderModule> {
         let code = shader.code_as_u32();
         let info = vk::ShaderModuleCreateInfo::default().code(code.as_slice());

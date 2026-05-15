@@ -14,7 +14,7 @@ use std::{
 /// Base marker trait for component types.
 pub trait Component: 'static + Sized + Debug {}
 #[doc(hidden)]
-pub use macros::Component;
+pub use dirk_macros::Component;
 
 /// A dyn-compatible wrapper around Component, used wherever
 /// type-erased component values must be passed around at runtime.

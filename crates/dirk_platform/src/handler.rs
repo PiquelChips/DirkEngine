@@ -19,13 +19,13 @@ pub struct PlatformHandler {
     main_window: Option<WindowId>,
 
     /// Dispatch [`PlatformEvent`]
-    platform_dispatcher: events::Dispatcher<PlatformEvent>,
+    platform_dispatcher: dirk_events::Dispatcher<PlatformEvent>,
     /// Dispatch [`PlatformWindowEvent`]
-    window_dispatcher: events::Dispatcher<PlatformWindowEvent>,
+    window_dispatcher: dirk_events::Dispatcher<PlatformWindowEvent>,
 }
 
 impl PlatformHandler {
-    pub fn new(events: &events::EventManager) -> Self {
+    pub fn new(events: &dirk_events::EventManager) -> Self {
         Self {
             can_create_surfaces: false,
             windows: HashMap::new(),

@@ -30,8 +30,8 @@ pub struct Platform {
     handler: PlatformHandler,
     event_loop: EventLoop,
 
-    exit_dispatcher: events::Dispatcher<events::AppExit>,
-    window_consumer: events::Consumer<WindowEvent>,
+    exit_dispatcher: dirk_events::Dispatcher<dirk_events::AppExit>,
+    window_consumer: dirk_events::Consumer<WindowEvent>,
 }
 
 impl Platform {
@@ -42,7 +42,7 @@ impl Platform {
     ///
     /// Returns an error if the [winit] App exited while trying
     /// to start it.
-    pub fn init(events: &events::EventManager) -> Result<Self> {
+    pub fn init(events: &dirk_events::EventManager) -> Result<Self> {
         let mut platform = Self {
             handler: PlatformHandler::new(events),
             event_loop: EventLoop::new()?,
@@ -75,7 +75,7 @@ impl Platform {
         {
             PumpStatus::Exit(code) => {
                 // Treat a forced OS exit like a window close.
-                self.exit_dispatcher.dispatch(events::AppExit(format!(
+                self.exit_dispatcher.dispatch(dirk_events::AppExit(format!(
                     "Event loop exited with code {code}"
                 )));
                 return;
@@ -84,7 +84,7 @@ impl Platform {
         }
 
         if self.handler.windows.is_empty() {
-            self.exit_dispatcher.dispatch(events::AppExit(
+            self.exit_dispatcher.dispatch(dirk_events::AppExit(
                 "all platform windows have been closed".into(),
             ));
         }

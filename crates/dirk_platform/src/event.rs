@@ -1,4 +1,4 @@
-use events::Event;
+use dirk_events::Event;
 use winit::window::WindowId;
 
 /// All platform events.

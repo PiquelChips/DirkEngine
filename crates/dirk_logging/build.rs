@@ -1,6 +1,6 @@
 #![allow(missing_docs)]
 
 fn main() {
-    build::configure_editor();
-    build::setup_paths();
+    dirk_build::configure_editor();
+    dirk_build::setup_paths();
 }

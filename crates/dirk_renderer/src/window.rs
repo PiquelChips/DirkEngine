@@ -1,5 +1,5 @@
 use ash::vk;
-use platform::WindowId;
+use dirk_platform::WindowId;
 
 use crate::{
     Error, Renderer, Result,

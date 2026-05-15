@@ -1,8 +1,8 @@
 //! This module holds proxies for various engine objects
 
-use platform::WindowId;
-use universe::{Entity, WorldId};
-use world::player::PlayerId;
+use dirk_platform::WindowId;
+use dirk_universe::{Entity, WorldId};
+use dirk_world::player::{PlayerId, PlayerUpdateEvent};
 
 pub mod scene;
 pub mod systems;
@@ -17,8 +17,8 @@ pub struct PlayerProxy {
     // pub region: PlayerRegion,
 }
 
-impl From<world::player::PlayerUpdateEvent> for PlayerProxy {
-    fn from(event: world::player::PlayerUpdateEvent) -> Self {
+impl From<PlayerUpdateEvent> for PlayerProxy {
+    fn from(event: PlayerUpdateEvent) -> Self {
         Self {
             id: event.id,
             world: event.world,

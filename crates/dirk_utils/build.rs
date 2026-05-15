@@ -1,5 +1,5 @@
 #![allow(missing_docs)]
 
 fn main() {
-    build::setup_paths();
+    dirk_build::setup_paths();
 }

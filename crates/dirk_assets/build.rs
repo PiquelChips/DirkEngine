@@ -1,4 +1,4 @@
 fn main() {
-    build::setup_paths();
-    build::configure_editor();
+    dirk_build::setup_paths();
+    dirk_build::configure_editor();
 }

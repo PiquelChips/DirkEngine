@@ -77,7 +77,7 @@ mod handle;
 use handle::AssetRef;
 pub use handle::Handle;
 
-use ::events::{Consumer, Dispatcher, EventManager};
+use ::dirk_events::{Consumer, Dispatcher, EventManager};
 use std::{
     any::{Any, TypeId},
     collections::HashMap,

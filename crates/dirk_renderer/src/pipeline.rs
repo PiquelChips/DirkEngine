@@ -25,11 +25,11 @@ impl GraphicsPipeline {
         let layout_info = vk::PipelineLayoutCreateInfo::default().set_layouts(&set_layouts);
         let pipeline_layout = unsafe { device.device.create_pipeline_layout(&layout_info, None)? };
 
-        let vert = Renderer::create_shader_module(&device.device, &shaders::VERT)?;
-        let vert_name = shaders::VERT.entrypoint();
+        let vert = Renderer::create_shader_module(&device.device, &dirk_shaders::VERT)?;
+        let vert_name = dirk_shaders::VERT.entrypoint();
 
-        let frag = Renderer::create_shader_module(&device.device, &shaders::FRAG)?;
-        let frag_name = shaders::FRAG.entrypoint();
+        let frag = Renderer::create_shader_module(&device.device, &dirk_shaders::FRAG)?;
+        let frag_name = dirk_shaders::FRAG.entrypoint();
 
         let shader_stages = [
             vk::PipelineShaderStageCreateInfo::default()

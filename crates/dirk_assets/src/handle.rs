@@ -9,7 +9,7 @@
 
 use std::sync::Arc;
 
-use events::Dispatcher;
+use dirk_events::Dispatcher;
 use parking_lot::Mutex;
 
 use crate::{Asset, AssetHandle, Error, Result, events::InternalAssetUnloaded};

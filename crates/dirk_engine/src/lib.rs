@@ -4,23 +4,23 @@
 use std::{collections::HashMap, ffi::CString, str::FromStr, time::Instant};
 
 use anyhow::Context;
+use dirk_universe::{Entity, Universe, World, WorldId};
+use dirk_world::player::{Player, PlayerId};
 use tracing::info;
-use universe::{Entity, Universe, World, WorldId};
-use world::player::{Player, PlayerId};
 
-use logging::Logger;
+use dirk_logging::Logger;
 
 /// This is the main struct that holds global engine state.
 pub struct Engine {
-    exit_consumer: events::Consumer<events::AppExit>,
-    event_manager: events::EventManager,
+    exit_consumer: dirk_events::Consumer<dirk_events::AppExit>,
+    event_manager: dirk_events::EventManager,
 
     #[allow(unused)]
-    asset_registry: assets::AssetRegistry,
+    asset_registry: dirk_assets::AssetRegistry,
 
-    renderer: renderer::Renderer,
-    platform: platform::Platform,
-    universe: universe::Universe,
+    renderer: dirk_renderer::Renderer,
+    platform: dirk_platform::Platform,
+    universe: dirk_universe::Universe,
 
     next_player_id: PlayerId,
     players: HashMap<PlayerId, Player>,
@@ -45,22 +45,22 @@ impl Engine {
 
         info!("initialising engine");
 
-        let logger = logging::Logger::new()
+        let logger = dirk_logging::Logger::new()
             .write_fs(true)
-            .max_level(logging::LogLevel::Debug)
+            .max_level(dirk_logging::LogLevel::Debug)
             .init()
             .context("initialising logger")?;
 
-        let event_manager = events::EventManager::new();
-        let asset_registry =
-            assets::AssetRegistry::init(&event_manager).context("initialising asset registry")?;
+        let event_manager = dirk_events::EventManager::new();
+        let asset_registry = dirk_assets::AssetRegistry::init(&event_manager)
+            .context("initialising asset registry")?;
 
-        let version = utils::Version::from_str(env!("CARGO_PKG_VERSION"))?;
+        let version = dirk_utils::Version::from_str(env!("CARGO_PKG_VERSION"))?;
         let name = "DirkEngine";
 
-        let platform = platform::Platform::init(&event_manager).context("platform init")?;
-        let mut renderer = renderer::Renderer::init(
-            &renderer::RendererCreateInfo {
+        let platform = dirk_platform::Platform::init(&event_manager).context("platform init")?;
+        let mut renderer = dirk_renderer::Renderer::init(
+            &dirk_renderer::RendererCreateInfo {
                 engine_name: CString::from_str(name)?,
                 engine_version: version,
                 app_name: CString::from_str(name)?,
@@ -72,7 +72,7 @@ impl Engine {
         .context("renderer init")?;
 
         let universe = Universe::builder()
-            .with_other(world::universe_builder(&event_manager))
+            .with_other(dirk_world::universe_builder(&event_manager))
             .with_other(renderer.universe_builder())
             .build();
 
@@ -177,7 +177,7 @@ impl Engine {
     }
 
     fn process_events(&mut self) {
-        if let Some(events::AppExit(msg)) = self.exit_consumer.try_consume() {
+        if let Some(dirk_events::AppExit(msg)) = self.exit_consumer.try_consume() {
             info!("App exit requested: {msg}");
             self.exit(None);
         }
@@ -228,12 +228,16 @@ impl Engine {
     }
 
     fn create_test_world(&mut self) -> WorldId {
-        use world::components::{Renderable, Transform};
+        use dirk_world::components::{Renderable, Transform};
 
-        let duck_model =
-            assets::AssetHandle::from_raw("models/Duck/Duck.dirkasset", assets::AssetType::Model);
-        let shrek_model =
-            assets::AssetHandle::from_raw("models/Shrek/Shrek.dirkasset", assets::AssetType::Model);
+        let duck_model = dirk_assets::AssetHandle::from_raw(
+            "models/Duck/Duck.dirkasset",
+            dirk_assets::AssetType::Model,
+        );
+        let shrek_model = dirk_assets::AssetHandle::from_raw(
+            "models/Shrek/Shrek.dirkasset",
+            dirk_assets::AssetType::Model,
+        );
 
         let shrek_builder = Entity::builder()
             .with_component(Transform {

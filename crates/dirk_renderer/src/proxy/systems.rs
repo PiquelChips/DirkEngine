@@ -1,10 +1,10 @@
 //! ECS systems for proxy creation and synchrnozation
 
-use universe::{
+use dirk_universe::{
     CommandBuffer,
     systems::{ComponentSystem, System, UniverseSystem},
 };
-use world::components::{Camera, Renderable, Transform};
+use dirk_world::components::{Camera, Renderable, Transform};
 
 use crate::{Error, render_commands::RenderCommandSender};
 
@@ -21,13 +21,13 @@ impl RendererUniverseSystem {
 
 impl UniverseSystem for RendererUniverseSystem {
     // these functions aren't needed
-    fn tick(&self, _: &mut CommandBuffer, _: &universe::Universe, _: f32) {}
+    fn tick(&self, _: &mut CommandBuffer, _: &dirk_universe::Universe, _: f32) {}
 
     fn entity_spawned(
         &self,
         _: &mut CommandBuffer,
-        universe: &universe::Universe,
-        entity: universe::Entity,
+        universe: &dirk_universe::Universe,
+        entity: dirk_universe::Entity,
     ) {
         let world = universe
             .get_world(entity)
@@ -42,10 +42,10 @@ impl UniverseSystem for RendererUniverseSystem {
     fn entity_sent(
         &self,
         _: &mut CommandBuffer,
-        _: &universe::Universe,
-        entity: universe::Entity,
-        _: universe::WorldId,
-        new: universe::WorldId,
+        _: &dirk_universe::Universe,
+        entity: dirk_universe::Entity,
+        _: dirk_universe::WorldId,
+        new: dirk_universe::WorldId,
     ) {
         self.sender.enqueue_command(move |renderer| {
             let manager = &mut renderer.scene_manager;
@@ -57,8 +57,8 @@ impl UniverseSystem for RendererUniverseSystem {
     fn entity_despawned(
         &self,
         _: &mut CommandBuffer,
-        _: &universe::Universe,
-        entity: universe::Entity,
+        _: &dirk_universe::Universe,
+        entity: dirk_universe::Entity,
     ) {
         self.sender.enqueue_command(move |renderer| {
             let manager = &mut renderer.scene_manager;
@@ -70,8 +70,8 @@ impl UniverseSystem for RendererUniverseSystem {
     fn world_created(
         &self,
         _: &mut CommandBuffer,
-        _: &universe::Universe,
-        world: &universe::World,
+        _: &dirk_universe::Universe,
+        world: &dirk_universe::World,
     ) {
         let world = world.id();
         self.sender.enqueue_command(move |renderer| {
@@ -83,8 +83,8 @@ impl UniverseSystem for RendererUniverseSystem {
     fn world_destroyed(
         &self,
         _: &mut CommandBuffer,
-        _: &universe::Universe,
-        world: &universe::World,
+        _: &dirk_universe::Universe,
+        world: &dirk_universe::World,
     ) {
         let world = world.id();
         self.sender.enqueue_command(move |renderer| {
@@ -103,7 +103,12 @@ pub struct RendererMeshSystem {
 impl ComponentSystem for RendererMeshSystem {
     type Component = Renderable;
 
-    fn added(&self, _: &mut CommandBuffer, entity: universe::Entity, component: &Self::Component) {
+    fn added(
+        &self,
+        _: &mut CommandBuffer,
+        entity: dirk_universe::Entity,
+        component: &Self::Component,
+    ) {
         let model = component.model.clone();
         self.sender.enqueue_command(move |renderer| {
             let proxy = renderer
@@ -118,14 +123,14 @@ impl ComponentSystem for RendererMeshSystem {
     fn updated(
         &self,
         cmd: &mut CommandBuffer,
-        entity: universe::Entity,
+        entity: dirk_universe::Entity,
         _: &Self::Component,
         new: &Self::Component,
     ) {
         self.added(cmd, entity, new);
     }
 
-    fn removed(&self, _: &mut CommandBuffer, entity: universe::Entity, _: &Self::Component) {
+    fn removed(&self, _: &mut CommandBuffer, entity: dirk_universe::Entity, _: &Self::Component) {
         self.sender.enqueue_command(move |renderer| {
             let proxy = renderer
                 .scene_manager
@@ -151,7 +156,12 @@ pub struct RendererTransformSystem {
 impl ComponentSystem for RendererTransformSystem {
     type Component = Transform;
 
-    fn added(&self, _: &mut CommandBuffer, entity: universe::Entity, component: &Self::Component) {
+    fn added(
+        &self,
+        _: &mut CommandBuffer,
+        entity: dirk_universe::Entity,
+        component: &Self::Component,
+    ) {
         let model = component.matrix();
         let view = component.view();
         self.sender.enqueue_command(move |renderer| {
@@ -168,14 +178,14 @@ impl ComponentSystem for RendererTransformSystem {
     fn updated(
         &self,
         cmd: &mut CommandBuffer,
-        entity: universe::Entity,
+        entity: dirk_universe::Entity,
         _: &Self::Component,
         new: &Self::Component,
     ) {
         self.added(cmd, entity, new);
     }
 
-    fn removed(&self, _: &mut CommandBuffer, entity: universe::Entity, _: &Self::Component) {
+    fn removed(&self, _: &mut CommandBuffer, entity: dirk_universe::Entity, _: &Self::Component) {
         self.sender.enqueue_command(move |renderer| {
             let proxy = renderer
                 .scene_manager
@@ -202,7 +212,12 @@ pub struct RendererCameraSystem {
 impl ComponentSystem for RendererCameraSystem {
     type Component = Camera;
 
-    fn added(&self, _: &mut CommandBuffer, entity: universe::Entity, component: &Self::Component) {
+    fn added(
+        &self,
+        _: &mut CommandBuffer,
+        entity: dirk_universe::Entity,
+        component: &Self::Component,
+    ) {
         let proj = component.projection();
         self.sender.enqueue_command(move |renderer| {
             let proxy = renderer
@@ -217,14 +232,14 @@ impl ComponentSystem for RendererCameraSystem {
     fn updated(
         &self,
         cmd: &mut CommandBuffer,
-        entity: universe::Entity,
+        entity: dirk_universe::Entity,
         _: &Self::Component,
         new: &Self::Component,
     ) {
         self.added(cmd, entity, new);
     }
 
-    fn removed(&self, _: &mut CommandBuffer, entity: universe::Entity, _: &Self::Component) {
+    fn removed(&self, _: &mut CommandBuffer, entity: dirk_universe::Entity, _: &Self::Component) {
         self.sender.enqueue_command(move |renderer| {
             let proxy = renderer
                 .scene_manager
