@@ -7,7 +7,7 @@ use tracing::error;
 fn run() -> anyhow::Result<()> {
     tracing_log::LogTracer::init().context("init log_tracer")?;
 
-    let mut engine = dirk_engine::Engine::init().context("engine init")?;
+    let mut engine = dirkengine::engine::Engine::init().context("engine init")?;
     engine.start().context("start engine")?;
     while engine.tick() {}
 

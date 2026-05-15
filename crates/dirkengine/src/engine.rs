@@ -1,4 +1,4 @@
-//! The [`Engine`] crate. The engine holds all the state & manages
+//! The engine module. The engine holds all the state & manages
 //! all the systems for the engine to run properly.
 
 use std::{collections::HashMap, ffi::CString, str::FromStr, time::Instant};

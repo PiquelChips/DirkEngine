@@ -425,25 +425,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dirk_engine"
-version = "0.1.0-beta-1"
-dependencies = [
- "anyhow",
- "dirk_assets",
- "dirk_build",
- "dirk_events",
- "dirk_logging",
- "dirk_platform",
- "dirk_renderer",
- "dirk_universe",
- "dirk_utils",
- "dirk_world",
- "glam",
- "thiserror 2.0.18",
- "tracing",
-]
-
-[[package]]
 name = "dirk_events"
 version = "0.1.0-beta-1"
 dependencies = [
@@ -512,16 +493,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dirk_run"
-version = "0.1.0-beta-1"
-dependencies = [
- "anyhow",
- "dirk_engine",
- "tracing",
- "tracing-log",
-]
-
-[[package]]
 name = "dirk_shaders"
 version = "0.1.0-beta-1"
 dependencies = [
@@ -557,6 +528,26 @@ dependencies = [
  "dirk_utils",
  "glam",
  "tracing",
+]
+
+[[package]]
+name = "dirkengine"
+version = "0.1.0-beta-1"
+dependencies = [
+ "anyhow",
+ "dirk_assets",
+ "dirk_build",
+ "dirk_events",
+ "dirk_logging",
+ "dirk_platform",
+ "dirk_renderer",
+ "dirk_universe",
+ "dirk_utils",
+ "dirk_world",
+ "glam",
+ "thiserror 2.0.18",
+ "tracing",
+ "tracing-log",
 ]
 
 [[package]]

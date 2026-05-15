@@ -1,5 +1,6 @@
 [package]
-name = "dirk_engine"
+name = "dirkengine"
+default-run = "dirkengine"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -10,6 +11,7 @@ version.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+tracing-log.workspace = true
 
 dirk_logging.workspace = true
 dirk_utils.workspace = true
