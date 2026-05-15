@@ -1,19 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
-    "Engine/Source/build",
-    "Engine/Source/utils",
-    "Engine/Source/engine",
-    "Engine/Source/events",
-    "Engine/Source/macros",
-    "Engine/Source/logging",
-    "Engine/Source/platform",
-    "Engine/Source/run",
-    "Engine/Source/assets",
-    "Engine/Source/utils",
-    "Engine/Source/renderer",
-    "Engine/Source/world",
-    "Engine/Source/universe",
+    "crates/*",
     "Engine/Shaders"
 ]
 
@@ -39,18 +27,18 @@ anyhow = "1"
 cargo_metadata = "0.23"
 
 # Engine modules
-build = { path = "Engine/Source/build" }
-utils = { path = "Engine/Source/utils" }
-logging = { path = "Engine/Source/logging" }
-engine = { path = "Engine/Source/engine" }
-events = { path = "Engine/Source/events" }
-macros = { path = "Engine/Source/macros" }
-platform = { path = "Engine/Source/platform" }
-renderer = { path = "Engine/Source/renderer" }
-assets = { path = "Engine/Source/assets" }
-world = { path = "Engine/Source/world" }
-universe = { path = "Engine/Source/universe" }
-shaders = { path = "Engine/Shaders" }
+build =    { path = "crates/build" }
+utils =    { path = "crates/utils" }
+logging =  { path = "crates/logging" }
+engine =   { path = "crates/engine" }
+events =   { path = "crates/events" }
+macros =   { path = "crates/macros" }
+platform = { path = "crates/platform" }
+renderer = { path = "crates/renderer" }
+assets =   { path = "crates/assets" }
+world =    { path = "crates/world" }
+universe = { path = "crates/universe" }
+shaders =  { path = "Engine/Shaders" }
 
 # Main Engine Dependencies
 winit = "0.31.0-beta.2"
