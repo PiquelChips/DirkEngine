@@ -174,7 +174,11 @@ impl Transform {
                 forward
             );
         }
-        Mat4::look_at_lh(self.location, self.location + forward, dirk_utils::UP_DIRECTION)
+        Mat4::look_at_lh(
+            self.location,
+            self.location + forward,
+            dirk_utils::UP_DIRECTION,
+        )
     }
 }
 
