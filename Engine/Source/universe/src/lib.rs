@@ -105,7 +105,7 @@ impl Universe {
             .for_each(|system| system.tick(&mut cmd, self, delta_time));
 
         self.ticking_systems.iter().for_each(|system| {
-            system.tick(&mut cmd, self, delta_time, &system.query().query(self));
+            system.tick(&mut cmd, self, delta_time, &mut system.query().query(self));
         });
 
         self.submit_buffer(cmd);
@@ -173,6 +173,9 @@ impl Universe {
                     });
                 }
                 Command::Despawn(entity) => {
+                    if !self.is_alive(entity) {
+                        continue;
+                    }
                     despawned_entities.insert(entity);
                     for (type_id, _) in self.components.get_all(entity) {
                         removed_components.insert((entity, type_id));
@@ -216,7 +219,7 @@ impl Universe {
                     }
                 }
                 Command::RemoveComponent(entity, type_id) => {
-                    if self.components.remove_any(entity, type_id).is_some() {
+                    if self.components.get_any(entity, type_id).is_some() {
                         removed_components.insert((entity, type_id));
                     }
                 }
