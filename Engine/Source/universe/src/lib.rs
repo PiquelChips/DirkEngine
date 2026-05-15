@@ -173,6 +173,9 @@ impl Universe {
                     });
                 }
                 Command::Despawn(entity) => {
+                    if !self.is_alive(entity) {
+                        continue;
+                    }
                     despawned_entities.insert(entity);
                     for (type_id, _) in self.components.get_all(entity) {
                         removed_components.insert((entity, type_id));
