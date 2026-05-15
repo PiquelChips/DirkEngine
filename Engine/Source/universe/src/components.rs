@@ -180,11 +180,10 @@ impl Components {
         self.storages.get(&type_id)?.get(entity)
     }
 
-    pub fn get_all(&self, entity: Entity) -> Vec<(TypeId, &dyn AnyComponent)> {
-        self.storages
-            .iter()
-            .filter_map(|(type_id, storage)| Some((*type_id, storage.get(entity)?)))
-            .collect()
+    pub fn get_all(&self, entity: Entity) -> impl Iterator<Item = (TypeId, &dyn AnyComponent)> {
+        self.storages.iter().filter_map(move |(type_id, storage)| {
+            storage.get(entity).map(|component| (*type_id, component))
+        })
     }
 
     pub fn get<C: Component>(&self, entity: Entity) -> Option<&C> {
@@ -194,8 +193,7 @@ impl Components {
             .get(entity)
     }
 
-    /// Remove **every** component attached to `entity` across all types,
-    /// returning them so callers can invoke lifecycle hooks before dropping.
+    /// Will remove the [`Component`] of the specified [`TypeId`] from the [`Entity`].
     pub fn remove_any(&mut self, entity: Entity, type_id: TypeId) -> Option<Box<dyn AnyComponent>> {
         self.storages
             .get_mut(&type_id)

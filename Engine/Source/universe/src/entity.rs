@@ -12,13 +12,18 @@ use crate::components::{AnyComponent, Component};
 
 /// A unique, opaque identifier for a spawned entity.
 #[derive(Clone, Copy, Debug, Default, Hash, Eq, PartialEq)]
-pub struct Entity(pub(crate) u64);
+pub struct Entity(u64);
 
 impl Entity {
     /// Returns an empty [`EntityBuilder`].
     #[must_use]
     pub fn builder() -> EntityBuilder {
         EntityBuilder::new()
+    }
+    /// Returns the raw entity ID
+    #[must_use]
+    pub fn raw(&self) -> u64 {
+        self.0
     }
 }
 
@@ -56,37 +61,5 @@ impl EntityBuilder {
         self.components
             .insert(TypeId::of::<C>(), Box::new(component));
         self
-    }
-}
-
-/// A concrete, lazily-evaluated iterator over [`Entity`] values.
-///
-/// # Lifetime
-///
-/// `'u` is the lifetime of the [`Universe`] borrow from which entities are
-/// sourced. The iterator must not outlive that borrow.
-///
-/// [`Universe`]: crate::Universe
-pub struct EntityIterator<'u> {
-    inner: Box<dyn Iterator<Item = Entity> + 'u>,
-}
-
-impl<'u> EntityIterator<'u> {
-    pub(crate) fn new(iter: impl Iterator<Item = Entity> + 'u) -> Self {
-        Self {
-            inner: Box::new(iter),
-        }
-    }
-}
-
-impl Iterator for EntityIterator<'_> {
-    type Item = Entity;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next()
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.inner.size_hint()
     }
 }

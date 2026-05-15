@@ -2,7 +2,10 @@
 //!
 //! The **Universe** is `DirkEngine`'s ECS system.
 
-use std::{any::TypeId, collections::HashMap};
+use std::{
+    any::TypeId,
+    collections::{HashMap, HashSet},
+};
 
 use crate::{
     command_buffer::Command,
@@ -70,7 +73,7 @@ impl Universe {
             buffers: Vec::new(),
         };
 
-        let mut cmd = Universe::new_command_buffer();
+        let mut cmd = CommandBuffer::new();
         for builder in builder.worlds {
             cmd.create_world(builder);
         }
@@ -86,7 +89,7 @@ impl Universe {
     /// was just created is not found in the [`Universe`].
     /// No panic should be caused by user error.
     pub fn tick(&mut self, delta_time: f32) {
-        let mut cmd = Universe::new_command_buffer();
+        let mut cmd = CommandBuffer::new();
 
         let buffers = std::mem::take(&mut self.buffers);
 
@@ -102,7 +105,7 @@ impl Universe {
             .for_each(|system| system.tick(&mut cmd, self, delta_time));
 
         self.ticking_systems.iter().for_each(|system| {
-            system.tick(&mut cmd, self, delta_time, system.query().query(self));
+            system.tick(&mut cmd, self, delta_time, &system.query().query(self));
         });
 
         self.submit_buffer(cmd);
@@ -112,14 +115,14 @@ impl Universe {
 
     #[allow(clippy::too_many_lines)]
     fn run_commands(&mut self, cmd: &mut CommandBuffer, commands: Vec<Command>) {
-        let mut created_worlds: Vec<WorldId> = Vec::new();
-        let mut destroyed_worlds: Vec<WorldId> = Vec::new();
-        let mut spawned_entities: Vec<Entity> = Vec::new();
-        let mut despawned_entities: Vec<Entity> = Vec::new();
-        let mut sent_entities: Vec<(Entity, WorldId, WorldId)> = Vec::new(); // entity, from, to
-        let mut added_components: Vec<(Entity, TypeId)> = Vec::new();
-        let mut updated_components: Vec<(Entity, TypeId, Box<dyn AnyComponent>)> = Vec::new();
-        let mut removed_components: Vec<(Entity, TypeId)> = Vec::new();
+        let mut created_worlds: HashSet<WorldId> = HashSet::new();
+        let mut destroyed_worlds: HashSet<WorldId> = HashSet::new();
+        let mut spawned_entities: HashSet<Entity> = HashSet::new();
+        let mut despawned_entities: HashSet<Entity> = HashSet::new();
+        let mut sent_entities: HashSet<(Entity, WorldId, WorldId)> = HashSet::new(); // entity, from, to
+        let mut added_components: HashSet<(Entity, TypeId)> = HashSet::new();
+        let mut updated_components: Vec<(Entity, TypeId, Box<dyn AnyComponent>)> = Vec::new(); // we use a vec as updated_components is not `Hash`
+        let mut removed_components: HashSet<(Entity, TypeId)> = HashSet::new();
 
         for command in commands {
             match command {
@@ -132,47 +135,47 @@ impl Universe {
 
                     for builder in builder.entities {
                         let entity = self.add_entity(id).expect("just created world");
-                        spawned_entities.push(entity);
+                        spawned_entities.insert(entity);
 
                         builder.components.into_values().for_each(|component| {
                             let type_id = component.component_type_id();
                             self.components.insert_any(entity, component);
-                            added_components.push((entity, type_id));
+                            added_components.insert((entity, type_id));
                         });
                     }
 
-                    created_worlds.push(id);
+                    created_worlds.insert(id);
                 }
                 Command::DestroyWorld(world) => {
-                    let Some(world) = self.worlds.remove(&world) else {
-                        return;
+                    let Some(world) = self.worlds.get(&world) else {
+                        continue;
                     };
 
                     for &entity in &world.alive {
-                        despawned_entities.push(entity);
+                        despawned_entities.insert(entity);
                         for (type_id, _) in self.components.get_all(entity) {
-                            removed_components.push((entity, type_id));
+                            removed_components.insert((entity, type_id));
                         }
                     }
-                    destroyed_worlds.push(world.id());
+                    destroyed_worlds.insert(world.id());
                 }
                 Command::Spawn(world, builder) => {
                     let Some(entity) = self.add_entity(world) else {
                         warn!("cannot add entity to world {world} as it does not exist");
                         continue;
                     };
-                    spawned_entities.push(entity);
+                    spawned_entities.insert(entity);
 
                     builder.components.into_values().for_each(|component| {
                         let type_id = component.component_type_id();
                         self.components.insert_any(entity, component);
-                        added_components.push((entity, type_id));
+                        added_components.insert((entity, type_id));
                     });
                 }
                 Command::Despawn(entity) => {
-                    despawned_entities.push(entity);
+                    despawned_entities.insert(entity);
                     for (type_id, _) in self.components.get_all(entity) {
-                        removed_components.push((entity, type_id));
+                        removed_components.insert((entity, type_id));
                     }
                 }
                 Command::Send(entity, to) => {
@@ -198,7 +201,7 @@ impl Universe {
                     new.alive.insert(entity);
 
                     self.entities.insert(entity, to);
-                    sent_entities.push((entity, from, to));
+                    sent_entities.insert((entity, from, to));
                 }
                 Command::SetComponent(entity, component) => {
                     if !self.is_alive(entity) {
@@ -209,12 +212,12 @@ impl Universe {
                     if let Some(old) = self.components.insert_any(entity, component) {
                         updated_components.push((entity, type_id, old));
                     } else {
-                        added_components.push((entity, type_id));
+                        added_components.insert((entity, type_id));
                     }
                 }
                 Command::RemoveComponent(entity, type_id) => {
                     if self.components.remove_any(entity, type_id).is_some() {
-                        removed_components.push((entity, type_id));
+                        removed_components.insert((entity, type_id));
                     }
                 }
             }
@@ -234,9 +237,7 @@ impl Universe {
                 .iter()
                 .for_each(|system| system.entity_spawned(cmd, self, entity));
             self.entity_systems.iter().for_each(|system| {
-                if let Some(query) = system.query()
-                    && !query.matches(self, entity)
-                {
+                if !system.query().matches(self, entity) {
                     return;
                 }
                 system.spawned(cmd, self, entity);
@@ -271,9 +272,7 @@ impl Universe {
                 .iter()
                 .for_each(|system| system.entity_sent(cmd, self, entity, from, to));
             self.entity_systems.iter().for_each(|system| {
-                if let Some(query) = system.query()
-                    && !query.matches(self, entity)
-                {
+                if !system.query().matches(self, entity) {
                     return;
                 }
 
@@ -298,9 +297,7 @@ impl Universe {
                 .iter()
                 .for_each(|system| system.entity_despawned(cmd, self, entity));
             self.entity_systems.iter().for_each(|system| {
-                if let Some(query) = system.query()
-                    && !query.matches(self, entity)
-                {
+                if !system.query().matches(self, entity) {
                     return;
                 }
 
@@ -316,10 +313,12 @@ impl Universe {
                 .for_each(|system| system.world_destroyed(cmd, self, world));
         }
 
+        // destroy components
         for (entity, type_id) in removed_components {
             self.components.remove_any(entity, type_id);
         }
 
+        // destroy entities
         for entity in despawned_entities {
             if let Some(world) = self.get_world(entity)
                 && let Some(world) = self.worlds.get_mut(&world)
@@ -329,6 +328,7 @@ impl Universe {
             self.entities.remove(&entity);
         }
 
+        // destroy worlds
         for world in destroyed_worlds {
             self.worlds.remove(&world);
         }
@@ -348,12 +348,6 @@ impl Universe {
     }
 
     // COMMAND BUFFERS
-
-    /// Returns a new empty [`CommandBuffer`]
-    #[must_use]
-    pub fn new_command_buffer() -> CommandBuffer {
-        CommandBuffer::new()
-    }
 
     /// Will submit a buffer for execution.
     pub fn submit_buffer(&mut self, buffer: CommandBuffer) {
@@ -403,9 +397,12 @@ impl Universe {
     }
 
     /// Will create a new [`World`] & return it [`WorldId`].
+    ///
+    /// The world creation runs immediately unlike when directly
+    /// submitting a [`CommandBuffer`].
     pub fn create_world(&mut self, builder: WorldBuilder) -> Option<WorldId> {
         let next_id = self.next_world_id;
-        let mut cmd = Universe::new_command_buffer();
+        let mut cmd = CommandBuffer::new();
         self.run_commands(&mut cmd, vec![Command::CreateWorld(builder)]);
         self.submit_buffer(cmd);
         let new_next = self.next_world_id;
@@ -417,10 +414,12 @@ impl Universe {
         }
     }
 
-    /// Will create a new [`World`] & return it [`WorldId`].
+    /// Will spawn a new [`Entity`] & return its ID.
+    ///
+    /// The spawning runs immediately unlike when directly submitting a [`CommandBuffer`].
     pub fn spawn_entity(&mut self, world: WorldId, builder: EntityBuilder) -> Option<Entity> {
         let next_id = self.next_entity_id;
-        let mut cmd = Universe::new_command_buffer();
+        let mut cmd = CommandBuffer::new();
         self.run_commands(&mut cmd, vec![Command::Spawn(world, builder)]);
         self.submit_buffer(cmd);
         let new_next = self.next_entity_id;

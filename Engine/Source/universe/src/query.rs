@@ -5,7 +5,7 @@
 
 use std::any::TypeId;
 
-use crate::{Entity, Universe, WorldId, components::Component, entity::EntityIterator};
+use crate::{Entity, Universe, WorldId, components::Component};
 
 /// A struct to query entities from a [`World`].
 ///
@@ -33,7 +33,7 @@ use crate::{Entity, Universe, WorldId, components::Component, entity::EntityIter
 /// # struct Velocity;
 /// # #[derive(Component, Debug, serde::Deserialize, serde::Serialize)]
 /// # struct Frozen;
-/// let query = Query::new()
+/// let query = Query::empty()
 ///     .with_component::<Position>()
 ///     .with_component::<Velocity>()
 ///     .without_component::<Frozen>();
@@ -56,7 +56,7 @@ pub struct Query {
 impl Query {
     /// Creates a new, empty [`Query`] that matches every entity.
     #[must_use]
-    pub fn new() -> Self {
+    pub fn empty() -> Self {
         Self::default()
     }
 
@@ -197,13 +197,11 @@ impl Query {
     /// never returned, even if their component data has not yet been cleaned up.
     ///
     /// [`World`]: crate::World
-    pub(crate) fn query<'u>(&'u self, universe: &'u Universe) -> EntityIterator<'u> {
-        EntityIterator::new(
-            universe
-                .entities
-                .iter()
-                .filter(|&(&e, _)| self.matches(universe, e))
-                .map(|(&e, _)| e),
-        )
+    pub(crate) fn query<'u>(&'u self, universe: &'u Universe) -> impl Iterator<Item = Entity> {
+        universe
+            .entities
+            .keys()
+            .copied()
+            .filter(|&e| self.matches(universe, e))
     }
 }

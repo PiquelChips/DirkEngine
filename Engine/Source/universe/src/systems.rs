@@ -5,7 +5,6 @@ use std::{any::TypeId, collections::HashMap};
 use crate::{
     CommandBuffer, Entity, Universe, World, WorldId,
     components::{AnyComponent, Component},
-    entity::EntityIterator,
     query::Query,
 };
 use macros::system_trait;
@@ -75,7 +74,7 @@ pub trait EntitySystem: System {
     /// This query will decide if `entity_spawned` & `entity_despawned` should
     /// be run for given entities. If there is not query, the system will run
     /// on every entity.
-    fn query(&self) -> Option<Query>;
+    fn query(&self) -> Query;
 }
 
 /// Run for [`Entity`]s that match the query
@@ -88,7 +87,7 @@ pub trait TickingSystem: System {
         cmd: &mut CommandBuffer,
         universe: &Universe,
         delta_time: f32,
-        entities: EntityIterator,
+        entities: &dyn Iterator<Item = Entity>,
     );
     /// Returns the query used to construct the `entities` of the tick function.
     fn query(&self) -> Query;

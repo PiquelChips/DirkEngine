@@ -6,6 +6,7 @@ use crate::{
 };
 
 /// A buffer to record edits to the [`Universe`].
+#[derive(Default)]
 pub struct CommandBuffer {
     commands: Vec<Command>,
 }
@@ -21,10 +22,10 @@ pub(crate) enum Command {
 }
 
 impl CommandBuffer {
-    pub(crate) fn new() -> Self {
-        CommandBuffer {
-            commands: Vec::new(),
-        }
+    /// Creates a new empty command buffer
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
     }
     pub(crate) fn commands(self) -> Vec<Command> {
         self.commands
@@ -64,11 +65,6 @@ impl CommandBuffer {
         self.commands.push(Command::Despawn(entity));
     }
     /// Will send the [`Entity`] to the specified [`WorldId`].
-    ///
-    /// Returns if the operation was successful. Will fail if the [`Entity`]
-    /// or the [`World`] don't exist.
-    ///
-    /// If the `entity` is already in `to`, returns `true`
     pub fn send(&mut self, entity: Entity, to: WorldId) {
         self.commands.push(Command::Send(entity, to));
     }
