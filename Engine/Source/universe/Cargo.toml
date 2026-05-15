@@ -1,5 +1,5 @@
 [package]
-name = "world"
+name = "universe"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -7,14 +7,10 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
-glam.workspace = true
-tracing.workspace = true
+macros.workspace = true
 
-events.workspace = true
-utils.workspace = true
-platform.workspace = true
-assets.workspace = true
-universe.workspace = true
+serde.workspace = true
+tracing.workspace = true
 
 [lints]
 workspace = true

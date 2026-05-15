@@ -27,11 +27,8 @@ use tracing::{debug, info};
 use tracing::{error, trace, warn};
 
 use platform::{PlatformEvent, WindowEvent, WindowId};
-use world::{
-    World, WorldId,
-    events::{PlayerUpdateType, WorldEvent},
-    player::PlayerId,
-};
+use universe::{Universe, UniverseBuilder};
+use world::player::{PlayerId, PlayerUpdateType};
 
 mod utils;
 use ::utils::Version;
@@ -40,9 +37,6 @@ use utils::{DescriptorLayouts, Frame, Queues, RendererProperties, Vertex, make_v
 mod errors;
 pub use errors::{Error, Result};
 
-mod scene;
-use scene::Scene;
-
 mod window;
 use window::Window;
 
@@ -50,7 +44,16 @@ mod resources;
 use resources::{command_pool::CommandPool, device::RenderDevice, image::SwapchainImage};
 
 mod proxy;
-use proxy::PlayerProxy;
+use proxy::{
+    PlayerProxy,
+    scene::SceneManager,
+    systems::{
+        RendererCameraSystem, RendererMeshSystem, RendererTransformSystem, RendererUniverseSystem,
+    },
+};
+
+mod render_commands;
+use render_commands::RenderCommandReceiver;
 
 mod models;
 mod physical_device;
@@ -90,7 +93,7 @@ pub struct Renderer {
     /// All of the [`window::Window`]s constructed from [`platform::Window`]s.
     windows: HashMap<WindowId, Window>,
     /// All of the internal [`world::World`] representations.
-    scenes: HashMap<world::WorldId, Scene>,
+    scene_manager: SceneManager,
     /// The management for all the models.
     models: models::ModelRegistry,
     /// All the players currently being managed by the engine.
@@ -103,13 +106,10 @@ pub struct Renderer {
     // Events
     window_consumer: events::Consumer<platform::WindowEvent>,
     platform_consumer: events::Consumer<platform::PlatformEvent>,
-    world_consumer: events::Consumer<world::events::WorldEvent>,
-    player_consumer: events::Consumer<world::events::PlayerUpdateEvent>,
+    player_consumer: events::Consumer<world::player::PlayerUpdateEvent>,
 
-    /// The size of the output
-    /// TODO: should be removed once we get the frame graph to
-    /// handle transient resources
-    extent: vk::Extent2D,
+    /// These receive all the commands from the game thread.
+    receivers: Vec<RenderCommandReceiver>,
 
     // last as should be dropped last
     render_device: RenderDevice,
@@ -429,6 +429,7 @@ impl Renderer {
         // let frames: [Frame; MAX_FRAMES_IN_FLIGHT] = std::array::try_from_fn(|_| build_frame())?;
         // could be nice in the future
 
+        // TODO: should be removed once we get the frame graph to handle transient resources
         let extent = {
             let size = window.size();
             vk::Extent2D {
@@ -439,25 +440,44 @@ impl Renderer {
 
         let models = models::ModelRegistry::new(&render_device, event_manager)?;
 
+        let scene_manager = SceneManager::init(&render_device, extent)?;
+
         Ok(Self {
             entry,
             render_device,
 
             windows: HashMap::new(),
-            scenes: HashMap::new(),
+            scene_manager,
             players: HashMap::new(),
             models,
 
             frames,
             current_frame,
 
-            extent,
-
             window_consumer: event_manager.subscribe(),
             platform_consumer: event_manager.subscribe(),
-            world_consumer: event_manager.subscribe(),
             player_consumer: event_manager.subscribe(),
+            receivers: Vec::new(),
         })
+    }
+
+    /// Returns a [`UniverseBuilder`] that is populated with [`Renderer`] systems.
+    pub fn universe_builder(&mut self) -> UniverseBuilder {
+        let (uni_sender, uni_receiver) = render_commands::channel();
+        let (mesh_sender, mesh_receiver) = render_commands::channel();
+        let (trans_sender, trans_receiver) = render_commands::channel();
+        let (cam_sender, cam_receiver) = render_commands::channel();
+
+        self.receivers.push(uni_receiver);
+        self.receivers.push(mesh_receiver);
+        self.receivers.push(trans_receiver);
+        self.receivers.push(cam_receiver);
+
+        Universe::builder()
+            .with_universe_system(RendererUniverseSystem::new(uni_sender))
+            .with_component_system(RendererMeshSystem::new(mesh_sender))
+            .with_component_system(RendererTransformSystem::new(trans_sender))
+            .with_component_system(RendererCameraSystem::new(cam_sender))
     }
 
     /// Ticks the renderer. Used to improve the various internal representations
@@ -476,30 +496,14 @@ impl Renderer {
     pub fn tick(
         &mut self,
         _delta_time: f32,
-        worlds: &HashMap<WorldId, World>,
         windows: &HashMap<WindowId, platform::Window>,
     ) -> Result<()> {
-        let world_events: Vec<_> = self.world_consumer.consume_all().collect();
-        for event in world_events {
-            match event {
-                WorldEvent::Created(id) => {
-                    let scene = Scene::build(&self.render_device, self.extent, id)?;
-                    self.scenes.insert(id, scene);
-                }
-                WorldEvent::Destroyed(id) => {
-                    self.scenes.remove(&id);
-                }
-                // TODO: move this to a scene tick function when it uses a
-                // universe system
-                WorldEvent::EntitySpawn { world, .. }
-                | WorldEvent::EntityUpdate { world, .. }
-                | WorldEvent::EntityDespawn { world, .. } => {
-                    let scene = self.scenes.get_mut(&world).expect("scene should exist");
-                    let world = &worlds[&world];
-                    scene.process_event(world, &event)?;
-                }
-            }
+        // Temporarily move receivers out for the borrow checker
+        let receivers = std::mem::take(&mut self.receivers);
+        for receiver in &receivers {
+            receiver.flush(self)?;
         }
+        self.receivers = receivers;
 
         let platform_events: Vec<_> = self.platform_consumer.consume_all().collect();
         for event in platform_events {
@@ -595,9 +599,6 @@ impl Renderer {
             let Some(window) = self.windows.get_mut(&player.window) else {
                 return Err(Error::WindowDoesNotExist(player.window));
             };
-            let Some(scene) = self.scenes.get(&player.world) else {
-                return Err(Error::WorldDoesNotExist(player.world));
-            };
 
             let size = window.extent();
             let render_image = window.next_image()?;
@@ -628,9 +629,10 @@ impl Renderer {
                 vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
             )?;
 
-            scene.render(
+            self.scene_manager.render(
                 &self.models,
                 &cmd,
+                player.world,
                 size,
                 render_image.image.view(),
                 player.entity,
@@ -836,7 +838,6 @@ impl Drop for Renderer {
         }
         info!("cleaning up renderer");
 
-        self.scenes.clear();
         self.windows.clear();
         self.frames.iter().for_each(utils::Frame::destroy);
         self.render_device.flush_all();

@@ -44,14 +44,11 @@
 
 use std::f32::consts::PI;
 
-use events::{Consumer, Dispatcher, EventManager};
+use events::{Consumer, Dispatcher, Event, EventManager};
 use platform::{WindowEvent, WindowId};
 
-use crate::{
-    Entity, World, WorldId,
-    components::Camera,
-    events::{PlayerUpdateEvent, PlayerUpdateType},
-};
+use crate::components::{Camera, Transform};
+use universe::{CommandBuffer, Entity, Universe, WorldId};
 
 /// Opaque identifier for a player, unique within a session.
 pub type PlayerId = u32;
@@ -223,35 +220,31 @@ impl Player {
     /// (implementation-defined).
     pub fn spawn(
         id: PlayerId,
-        world: &mut World,
+        universe: &mut Universe,
+        world: WorldId,
         window: WindowId,
         event_manager: &EventManager,
     ) -> Self {
-        use crate::components;
-        let entity = world.spawn();
-        world.insert(
-            entity,
-            components::Transform {
+        let builder = Entity::builder()
+            .with_component(Transform {
                 location: glam::vec3(0.0, 500.0, 500.0),
                 rotation: glam::vec3(-PI / 4.0, 0.0, 0.0),
                 scale: glam::Vec3::ONE,
-            },
-        );
-        world.insert(
-            entity,
-            components::Camera {
+            })
+            .with_component(Camera {
                 fov: 45_f32.to_radians(),
                 near_clip: 0.1,
                 far_clip: 100_000.0,
                 width: 100.0,
                 height: 100.0,
-            },
-        );
+            });
 
         let player = Self {
             id,
-            world: world.id(),
-            entity,
+            world,
+            entity: universe
+                .spawn_entity(world, builder)
+                .expect("the world should exist"),
             window,
             region: PlayerRegion::default(),
             dispatcher: event_manager.register(),
@@ -272,8 +265,10 @@ impl Player {
     ///
     /// Fires one [`PlayerUpdateEvent`] with `update_type =`
     /// [`PlayerUpdateType::Despawned`].
-    pub fn despawn(self, world: &mut World) {
-        world.despawn(self.entity);
+    pub fn despawn(self, universe: &mut Universe) {
+        let mut cmd = CommandBuffer::new();
+        cmd.despawn(self.entity);
+        universe.submit_buffer(cmd);
         self.dispatcher.dispatch(PlayerUpdateEvent::from_player(
             &self,
             PlayerUpdateType::Despawned,
@@ -342,7 +337,7 @@ impl Player {
     /// Will panic if the player entity does not have a [`Camera`] component.
     // the window size will never get close to 2^23
     #[allow(clippy::cast_precision_loss)]
-    pub fn tick(&mut self, world: &mut World) {
+    pub fn tick(&mut self, universe: &mut Universe) {
         for event in self.platform_consumer.consume_all() {
             let WindowEvent::Resized { id, width, height } = event else {
                 continue;
@@ -351,12 +346,17 @@ impl Player {
                 continue;
             }
 
-            let camera = world
-                .get_mut::<Camera>(self.entity)
+            let mut camera = universe
+                .component::<Camera>(self.entity)
+                .cloned()
                 .expect("player should have his own camera");
 
             camera.width = width as f32;
             camera.height = height as f32;
+
+            let mut cmd = CommandBuffer::new();
+            cmd.set_component(self.entity, camera);
+            universe.submit_buffer(cmd);
         }
     }
 
@@ -365,5 +365,91 @@ impl Player {
             self,
             PlayerUpdateType::Updated,
         ));
+    }
+}
+
+/// A snapshot of a player's observable state at the moment a change occurred.
+///
+/// Emitted by [`Player`] on spawn, every call to
+/// [`Player::set_region`](crate::player::Player::set_region), and on despawn.
+/// Because the event is a *value snapshot* (not a reference), listeners can
+/// safely store it or send it across threads without holding a lock on the
+/// player.
+///
+/// # Fields
+///
+/// | Field | Description |
+/// |-------|-------------|
+/// | `id`          | The player's unique [`PlayerId`]. |
+/// | `world`       | The [`WorldId`] the player lives in. |
+/// | `entity`      | The ECS [`Entity`] for this player. |
+/// | `window`      | The [`WindowId`] the player renders into. |
+/// | `region`      | A clone of the player's [`PlayerRegion`] at the time of the event. |
+/// | `update_type` | Why the event was fired — see [`PlayerUpdateType`]. |
+///
+/// # Examples
+///
+/// ```rust
+/// # use world::player::{PlayerUpdateEvent, PlayerUpdateType};
+/// # fn example(evt: PlayerUpdateEvent) {
+/// match evt.update_type {
+///     PlayerUpdateType::Spawned   => { /* initialise per-player state */ }
+///     PlayerUpdateType::Updated   => { /* refresh cached region / camera */ }
+///     PlayerUpdateType::Despawned => { /* free per-player resources */ }
+/// }
+/// # }
+/// ```
+#[derive(Clone, Debug, Event)]
+pub struct PlayerUpdateEvent {
+    /// The player's ID
+    pub id: PlayerId,
+    /// The world the player currently is in
+    pub world: WorldId,
+    /// The entity that the player possesses in the world
+    pub entity: Entity,
+    /// The window the player's viewport is being drawn to
+    pub window: WindowId,
+    /// The region of the window that the player's viewport is being draw to
+    pub region: PlayerRegion,
+    /// The kind of update that triggered this event. See [`PlayerUpdateType`]
+    pub update_type: PlayerUpdateType,
+}
+
+/// The reason a [`PlayerUpdateEvent`] was fired.
+///
+/// Variants are ordered chronologically: a player is first `Spawned`, may be
+/// `Updated` zero or more times, and is finally `Despawned`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PlayerUpdateType {
+    /// The player was just created and its entity inserted into the world.
+    Spawned,
+    /// Some player state changed (currently: the viewport region).
+    Updated,
+    /// The player's entity was removed from the world.
+    Despawned,
+}
+
+impl PlayerUpdateEvent {
+    /// Constructs a [`PlayerUpdateEvent`] by snapshotting the relevant fields
+    /// from `player`.
+    ///
+    /// This is the canonical constructor; it is called internally by [`Player`]
+    /// and is exposed so that test harnesses or mock dispatchers can create
+    /// events without going through the full `Player` machinery.
+    ///
+    /// # Arguments
+    ///
+    /// * `player`      — the player whose state should be snapshotted.
+    /// * `update_type` — the reason for the event.
+    #[must_use]
+    pub fn from_player(player: &Player, update_type: PlayerUpdateType) -> Self {
+        Self {
+            id: player.id(),
+            world: player.world(),
+            entity: player.entity(),
+            window: player.window(),
+            region: player.region().clone(),
+            update_type,
+        }
     }
 }

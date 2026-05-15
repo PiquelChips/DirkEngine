@@ -1,14 +1,11 @@
 //! This module holds proxies for various engine objects
 
 use platform::WindowId;
-use world::{Entity, WorldId, player::PlayerId};
+use universe::{Entity, WorldId};
+use world::player::PlayerId;
 
-pub struct CameraProxy {
-    /// View matrix calculated from camera position.
-    pub view: glam::Mat4,
-    /// Projection matrix calculated from camera settings.
-    pub proj: glam::Mat4,
-}
+pub mod scene;
+pub mod systems;
 
 pub struct PlayerProxy {
     #[allow(unused)]
@@ -20,8 +17,8 @@ pub struct PlayerProxy {
     // pub region: PlayerRegion,
 }
 
-impl From<world::events::PlayerUpdateEvent> for PlayerProxy {
-    fn from(event: world::events::PlayerUpdateEvent) -> Self {
+impl From<world::player::PlayerUpdateEvent> for PlayerProxy {
+    fn from(event: world::player::PlayerUpdateEvent) -> Self {
         Self {
             id: event.id,
             world: event.world,

@@ -82,6 +82,10 @@ struct Material {
 struct Model {
     // TODO: store transform with each mesh handle
     pub meshes: Vec<Handle<Mesh>>,
+    // this is just to keep the asset alive, we don't actually use it
+    // TODO: the handle should be stored in Renderable. See TODO there
+    #[allow(unused)]
+    pub handle: assets::Handle<assets::Model>,
 }
 
 pub struct ModelRegistry {
@@ -230,7 +234,13 @@ impl ModelRegistry {
             })
             .collect::<Result<Vec<_>>>()?;
 
-        self.models.insert(handle.handle(), Model { meshes });
+        self.models.insert(
+            handle.handle(),
+            Model {
+                meshes,
+                handle: handle.clone(),
+            },
+        );
         Ok(())
     }
 

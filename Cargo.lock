@@ -469,6 +469,7 @@ dependencies = [
  "renderer",
  "thiserror 2.0.18",
  "tracing",
+ "universe",
  "utils",
  "world",
 ]
@@ -1343,6 +1344,7 @@ dependencies = [
  "slotmap",
  "thiserror 2.0.18",
  "tracing",
+ "universe",
  "utils",
  "world",
 ]
@@ -1840,6 +1842,15 @@ name = "unicode-segmentation"
 version = "1.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9629274872b2bfaf8d66f5f15725007f635594914870f65218920345aa11aa8c"
+
+[[package]]
+name = "universe"
+version = "0.1.0"
+dependencies = [
+ "macros",
+ "serde",
+ "tracing",
+]
 
 [[package]]
 name = "urlencoding"
@@ -2441,9 +2452,9 @@ dependencies = [
  "assets",
  "events",
  "glam",
- "macros",
  "platform",
  "tracing",
+ "universe",
  "utils",
 ]
 

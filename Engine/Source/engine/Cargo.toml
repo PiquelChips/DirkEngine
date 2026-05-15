@@ -16,6 +16,7 @@ utils.workspace = true
 events.workspace = true
 platform.workspace = true
 renderer.workspace = true
+universe.workspace = true
 world.workspace = true
 assets.workspace = true
 

@@ -4,11 +4,9 @@
 use std::{collections::HashMap, ffi::CString, str::FromStr, time::Instant};
 
 use anyhow::Context;
-use tracing::{info, warn};
-use world::{
-    World, WorldId,
-    player::{Player, PlayerId},
-};
+use tracing::info;
+use universe::{Entity, Universe, World, WorldId};
+use world::player::{Player, PlayerId};
 
 use logging::Logger;
 
@@ -22,9 +20,8 @@ pub struct Engine {
 
     renderer: renderer::Renderer,
     platform: platform::Platform,
+    universe: universe::Universe,
 
-    next_world_id: WorldId,
-    worlds: HashMap<WorldId, World>,
     next_player_id: PlayerId,
     players: HashMap<PlayerId, Player>,
 
@@ -62,7 +59,7 @@ impl Engine {
         let name = "DirkEngine";
 
         let platform = platform::Platform::init(&event_manager).context("platform init")?;
-        let renderer = renderer::Renderer::init(
+        let mut renderer = renderer::Renderer::init(
             &renderer::RendererCreateInfo {
                 engine_name: CString::from_str(name)?,
                 engine_version: version,
@@ -74,6 +71,11 @@ impl Engine {
         )
         .context("renderer init")?;
 
+        let universe = Universe::builder()
+            .with_other(world::universe_builder(&event_manager))
+            .with_other(renderer.universe_builder())
+            .build();
+
         info!("engine initialised");
         Ok(Self {
             exit_consumer: event_manager.subscribe(),
@@ -83,9 +85,8 @@ impl Engine {
 
             platform,
             renderer,
+            universe,
 
-            next_world_id: 0,
-            worlds: HashMap::new(),
             next_player_id: 0,
             players: HashMap::new(),
 
@@ -101,12 +102,18 @@ impl Engine {
     ///
     /// None for now, will be one if an error occurs when creating the world.
     pub fn start(&mut self) -> anyhow::Result<()> {
+        // setup the world
         info!("starting engine");
-        let world_id = self.create_test_world().context("creating test world")?;
+        let world_id = self.create_test_world();
 
-        if self.spawn_player(world_id).is_none() {
-            // TODO: return a proper error (one received from the universe)
-            warn!("unable to spawn player in world {world_id}");
+        self.spawn_player(world_id);
+
+        // we tick the engine a few times before entering proper
+        // game loop & rendering cycles. This allows the event manager
+        // to fire off its events & allows systems to process the first
+        // few volleys before rendering gets involved
+        for _ in 0..5 {
+            self.tick_inner().context("pre-start ticking")?;
         }
 
         Ok(())
@@ -119,10 +126,19 @@ impl Engine {
     /// Errors can occure if the various ticking systems have errors.
     /// For now, only rendering can return an error.
     pub fn tick(&mut self) -> bool {
-        match self.tick_inner() {
+        if !match self.tick_inner() {
             Ok(exit) => exit,
             Err(err) => {
                 self.exit_error = Some(err.context("engine tick"));
+                false
+            }
+        } {
+            return false;
+        }
+        match self.render() {
+            Ok(()) => true,
+            Err(err) => {
+                self.exit_error = Some(err.context("rendering"));
                 false
             }
         }
@@ -142,19 +158,22 @@ impl Engine {
         }
 
         self.platform.tick(delta_time);
+        self.universe.tick(delta_time);
+        self.asset_registry.tick();
+
         self.renderer
-            .tick(delta_time, &self.worlds, self.platform.windows_mut())
+            .tick(delta_time, self.platform.windows_mut())
             .context("renderer")?;
 
-        self.players.values_mut().for_each(|player| {
-            let Some(world) = self.worlds.get_mut(&player.world()) else {
-                return;
-            };
-            player.tick(world);
-        });
+        self.players
+            .values_mut()
+            .for_each(|player| player.tick(&mut self.universe));
 
-        self.renderer.render().context("rendering")?;
         Ok(!self.is_requesting_exit())
+    }
+
+    fn render(&mut self) -> anyhow::Result<()> {
+        Ok(self.renderer.render()?)
     }
 
     fn process_events(&mut self) {
@@ -185,90 +204,58 @@ impl Engine {
         delta
     }
 
-    fn create_world(&mut self) -> WorldId {
-        let id = self.next_world_id;
-        self.next_world_id += 1;
-
-        let world = World::new(id, &self.event_manager);
-        self.worlds.insert(id, world);
-        id
-    }
-    #[allow(unused)]
-    fn destroy_world(&mut self, id: WorldId) {
-        self.worlds.remove(&id);
-    }
-
-    fn spawn_player(&mut self, world: WorldId) -> Option<PlayerId> {
+    fn spawn_player(&mut self, world: WorldId) -> PlayerId {
         let id = self.next_player_id;
         self.next_player_id += 1;
 
-        let world = self.worlds.get_mut(&world)?;
-
         let player = Player::spawn(
             id,
+            &mut self.universe,
             world,
             self.platform.main_window().id(),
             &self.event_manager,
         );
 
         self.players.insert(id, player);
-        Some(id)
+        id
     }
     #[allow(unused)]
     fn kill_player(&mut self, id: PlayerId) {
         let Some(player) = self.players.remove(&id) else {
             return;
         };
-        let Some(world) = self.worlds.get_mut(&player.world()) else {
-            return;
-        };
-        player.despawn(world);
+        player.despawn(&mut self.universe);
     }
 
-    fn create_test_world(&mut self) -> anyhow::Result<WorldId> {
+    fn create_test_world(&mut self) -> WorldId {
         use world::components::{Renderable, Transform};
 
-        // TODO: with universe system, will be able to listen to events when
-        // specific components are added. This means some subsystem will
-        // be able to listen for when a renderable is added, and load the
-        // asset appropriately
         let duck_model =
             assets::AssetHandle::from_raw("models/Duck/Duck.dirkasset", assets::AssetType::Model);
-        self.asset_registry
-            .load_asset::<assets::Model>(&duck_model)?;
-
         let shrek_model =
             assets::AssetHandle::from_raw("models/Shrek/Shrek.dirkasset", assets::AssetType::Model);
-        self.asset_registry
-            .load_asset::<assets::Model>(&shrek_model)?;
 
-        let world_id = self.create_world();
-        let world = self
-            .worlds
-            .get_mut(&world_id)
-            .expect("world was just created, ID should be valid");
-
-        let shrek = world.spawn();
-        world.insert(
-            shrek,
-            Transform {
+        let shrek_builder = Entity::builder()
+            .with_component(Transform {
                 location: glam::Vec3::ZERO,
                 rotation: glam::Vec3::ZERO,
                 scale: glam::Vec3::splat(1.),
-            },
-        );
-        world.insert(shrek, Renderable { model: shrek_model });
+            })
+            .with_component(Renderable::new(shrek_model));
 
-        let duck = world.spawn();
-        world.insert(
-            duck,
-            Transform {
+        let duck_builder = Entity::builder()
+            .with_component(Transform {
                 location: glam::vec3(100., 0., 0.),
                 rotation: glam::Vec3::ZERO,
                 scale: glam::Vec3::splat(1.),
-            },
-        );
-        world.insert(duck, Renderable { model: duck_model });
-        Ok(world_id)
+            })
+            .with_component(Renderable::new(duck_model));
+
+        let world_builder = World::builder("test world")
+            .with_entity(shrek_builder)
+            .with_entity(duck_builder);
+
+        let world = self.universe.create_world(world_builder);
+        world.expect("world creation shouldn't fail")
     }
 }
