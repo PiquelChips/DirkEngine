@@ -10,7 +10,7 @@ edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/DirkEngine/DirkEngine"
 rust-version = "1.94.0"
-version = "0.1.0-alpha-1"
+version = "0.1.0-alpha-2"
 
 homepage = "https://piquel.fr" # TODO: should piquel.fr/dirk of dirkengine.fr
 authors = ["Piquel Chips <contact@piquel.fr>"]
