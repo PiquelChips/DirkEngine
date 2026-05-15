@@ -53,7 +53,7 @@ pub fn setup_paths() {
     let workspace_root = PathBuf::from(".");
 
     let mut paths = HashMap::new();
-    paths.insert("SAVED_PATH", "Saved");
+    paths.insert("SAVED_PATH", "saved");
     paths.insert("ASSETS_PATH", "assets");
 
     for (name, path) in paths {
