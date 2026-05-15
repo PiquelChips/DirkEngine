@@ -3,7 +3,6 @@
 pub mod engine;
 
 pub use dirk_assets as assets;
-pub use dirk_build as build;
 pub use dirk_events as events;
 pub use dirk_logging as logging;
 pub use dirk_platform as platform;
