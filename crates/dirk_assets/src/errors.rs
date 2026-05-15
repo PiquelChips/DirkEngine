@@ -41,10 +41,10 @@ pub enum Error {
     /// # Example
     ///
     /// ```rust
-    /// # use assets::{Model, AssetType, AssetHandle};
+    /// # use dirk_assets::{Model, AssetType, AssetHandle};
     /// # fn test() -> anyhow::Result<()> {
-    /// # let events = ::events::EventManager::new();
-    /// # let mut registry = assets::AssetRegistry::init(&events)?;
+    /// # let events = dirk_events::EventManager::new();
+    /// # let mut registry = dirk_assets::AssetRegistry::init(&events)?;
     /// # let asset_handle = AssetHandle::from_raw("", AssetType::Model);
     /// // release build only
     /// let handle = registry.load_asset::<Model>(&asset_handle)?;

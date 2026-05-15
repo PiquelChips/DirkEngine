@@ -19,8 +19,8 @@ use tracing::warn;
 ///
 /// # Examples
 /// ```
-/// # use world::components::Renderable;
-/// use assets::{AssetHandle, AssetType};
+/// # use dirk_world::components::Renderable;
+/// use dirk_assets::{AssetHandle, AssetType};
 /// let r = Renderable::new(AssetHandle::from_raw("meshes/cube.glb", AssetType::Model));
 /// assert_eq!(r.model.raw(), "meshes/cube.glb");
 /// ```
@@ -95,7 +95,7 @@ impl ComponentSystem for ModelUploadSystem {
 ///
 /// # Examples
 /// ```
-/// # use world::components::Transform;
+/// # use dirk_world::components::Transform;
 /// # use glam::Vec3;
 /// let t = Transform {
 ///     location: Vec3::new(1.0, 0.0, 0.0),
@@ -194,7 +194,7 @@ impl From<Transform> for Mat4 {
 ///
 /// # Examples
 /// ```
-/// # use world::components::Camera;
+/// # use dirk_world::components::Camera;
 /// let cam = Camera::default();
 /// let proj = cam.projection();
 /// // The matrix must be finite.

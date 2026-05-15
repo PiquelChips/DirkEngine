@@ -16,7 +16,7 @@
 //! 5. Follow compile errors untile everything is ready.
 //!
 //! ```rust
-//! use assets::{Asset, AssetConfig, AssetHandle, AssetType, Result};
+//! use dirk_assets::{Asset, AssetConfig, AssetHandle, AssetType, Result};
 //! use serde::{Deserialize, Serialize};
 //!
 //! /// Fields from the `.dirkasset` JSON for an audio clip.
@@ -25,7 +25,7 @@
 //!     pub wav: String,
 //! }
 //!
-//! # use assets::Metadata;
+//! # use dirk_assets::Metadata;
 //! impl AssetConfig for AudioConfig {
 //!     fn validate(&self, _: &Metadata) -> bool {
 //!         // ...
@@ -106,7 +106,7 @@ pub trait Asset: Clone + Sized + Send + 'static {
     ///
     /// ```rust
     /// use anyhow::Context as _;
-    /// use assets::{Error, Result};
+    /// use dirk_assets::{Error, Result};
     ///
     /// # fn test() -> anyhow::Result<()> {
     /// # let path = "";
@@ -136,7 +136,7 @@ pub trait Asset: Clone + Sized + Send + 'static {
 /// [`AssetType`] serialises as a JSON string:
 ///
 /// ```rust
-/// # use assets::AssetType;
+/// # use dirk_assets::AssetType;
 /// let json = serde_json::to_string(&AssetType::Model).unwrap();
 /// assert_eq!(json, r#""Model""#);
 ///
@@ -151,7 +151,7 @@ pub trait Asset: Clone + Sized + Send + 'static {
 /// will deserialise to `Unknown` and be rejected by validation:
 ///
 /// ```rust
-/// # use assets::AssetType;
+/// # use dirk_assets::AssetType;
 /// assert_eq!(AssetType::default(), AssetType::Unknown);
 /// ```
 #[derive(Default, PartialEq, Eq, Hash, Clone, Copy, Serialize, Deserialize, Debug)]
@@ -175,7 +175,7 @@ pub enum AssetType {
 /// `.dirkasset` JSON file and deserialised by the registry at startup.
 ///
 /// ```rust
-/// use assets::{AssetConfig, Metadata};
+/// use dirk_assets::{AssetConfig, Metadata};
 /// use serde::{Deserialize, Serialize};
 ///
 /// #[derive(Serialize, Deserialize, Clone)]

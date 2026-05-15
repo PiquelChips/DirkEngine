@@ -4,7 +4,7 @@
 //! They cover cross-crate usage of the Event derive macro, realistic engine-loop
 //! simulations, and concurrency safety.
 
-use events::{Consumer, Dispatcher, Event, EventManager};
+use dirk_events::{Consumer, Dispatcher, Event, EventManager};
 use std::thread;
 
 // =============================================================================

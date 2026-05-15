@@ -44,7 +44,7 @@ use tracing::warn;
 /// # Serialisation
 ///
 /// ```rust
-/// # use assets::ModelConfig;
+/// # use dirk_assets::ModelConfig;
 /// let json = r#"{"gltf":"meshes/hero.gltf"}"#;
 /// let config: ModelConfig = serde_json::from_str(json).unwrap();
 /// assert_eq!(config.gltf, "meshes/hero.gltf");

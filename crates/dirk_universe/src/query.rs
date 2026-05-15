@@ -25,8 +25,8 @@ use crate::{Entity, Universe, WorldId, components::Component};
 ///
 /// # Example
 /// ```rust
-/// # use universe::components::Component;
-/// # use universe::query::Query;
+/// # use dirk_universe::components::Component;
+/// # use dirk_universe::query::Query;
 /// # #[derive(Component, Debug, serde::Deserialize, serde::Serialize)]
 /// # struct Position;
 /// # #[derive(Component, Debug, serde::Deserialize, serde::Serialize)]

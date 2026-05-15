@@ -12,7 +12,7 @@
 //!
 //! ```rust
 //! // Verbose mode enables DEBUG and TRACE levels; pass `false` for INFO+.
-//! let logger = logging::Logger::new().verbose(true).init().expect("logger init failed");
+//! let logger = dirk_logging::Logger::new().verbose(true).init().expect("logger init failed");
 //! ```
 //!
 //! ## Emitting log events
@@ -34,8 +34,8 @@
 //! captures every event. Use [`Logger::query`] with a [`Filter`] to search it:
 //!
 //! ```rust
-//! # let logger = logging::Logger::new().init().unwrap();
-//! use logging::{Filter, LogLevel};
+//! # let logger = dirk_logging::Logger::new().init().unwrap();
+//! use dirk_logging::{Filter, LogLevel};
 //!
 //! // The 50 most recent warnings or worse from the Rendering target:
 //! # #[cfg(editor)]
@@ -95,7 +95,7 @@ use crate::layers::{console::ConsoleLayer, file::FileLayer};
 /// `Error` is the **most** severe and `Trace` is the **least**.
 ///
 /// ```rust
-/// use logging::LogLevel;
+/// use dirk_logging::LogLevel;
 ///
 /// assert!(LogLevel::Error < LogLevel::Warn);
 /// assert!(LogLevel::Warn  < LogLevel::Info);
@@ -184,7 +184,7 @@ pub struct LogEntry {
 /// to install the global [`tracing`] subscriber.
 ///
 /// ```rust
-/// # use logging::{LogLevel, Logger};
+/// # use dirk_logging::{LogLevel, Logger};
 /// # fn test() -> Result<(), Box<dyn std::error::Error>> {
 /// let logger = Logger::new()
 ///     .max_level(LogLevel::Debug)
@@ -253,7 +253,7 @@ impl Logger {
     ///
     /// # Example
     /// ```rust
-    /// # use logging::{Logger, LogLevel};
+    /// # use dirk_logging::{Logger, LogLevel};
     /// # fn test() -> Result<(), Box<dyn std::error::Error>> {
     /// // Suppress debug and trace in a staging build:
     /// Logger::new().max_level(LogLevel::Info).init()?;
@@ -283,7 +283,7 @@ impl Logger {
     ///
     /// # Example
     /// ```rust
-    /// # use logging::Logger;
+    /// # use dirk_logging::Logger;
     /// # fn test() -> Result<(), Box<dyn std::error::Error>> {
     /// Logger::new()
     ///     .allowed_targets(["Rendering", "Physics", "Audio"])
@@ -310,7 +310,7 @@ impl Logger {
     /// # Example
     ///
     /// ```rust
-    /// # use logging::{LogLevel, Logger};
+    /// # use dirk_logging::{LogLevel, Logger};
     /// # fn test() -> Result<(), Box<dyn std::error::Error>> {
     /// let logger = Logger::new()
     ///     .max_level(LogLevel::Warn)   // only Warn and Error
@@ -380,8 +380,8 @@ impl Logger {
     /// # Example
     ///
     /// ```rust
-    /// # let logger = logging::Logger::new().init().unwrap();
-    /// use logging::{Filter, LogLevel};
+    /// # let logger = dirk_logging::Logger::new().init().unwrap();
+    /// use dirk_logging::{Filter, LogLevel};
     ///
     /// // All errors across every target:
     /// let all_errors = logger

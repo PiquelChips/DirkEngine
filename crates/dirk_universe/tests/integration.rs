@@ -1,6 +1,6 @@
 //! Integration tests for the `universe` crate.
 
-use universe::{Entity, Universe, World, components::Component};
+use dirk_universe::{Entity, Universe, World, components::Component};
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Component)]
 struct Position(i32, i32);
@@ -16,7 +16,7 @@ fn universe_public_api_supports_entity_lifecycle_across_worlds() {
         .build();
     universe.tick(0.0);
 
-    let overworld = universe::WorldId::default();
+    let overworld = dirk_universe::WorldId::default();
     let dungeon = overworld + 1;
 
     let entity = universe
@@ -27,7 +27,7 @@ fn universe_public_api_supports_entity_lifecycle_across_worlds() {
     assert!(universe.is_in_world(overworld, entity));
     assert_eq!(universe.get_world(entity), Some(overworld));
 
-    let mut cmd = universe::CommandBuffer::new();
+    let mut cmd = dirk_universe::CommandBuffer::new();
     cmd.send(entity, dungeon);
     universe.submit_buffer(cmd);
     universe.tick(0.016);
@@ -35,7 +35,7 @@ fn universe_public_api_supports_entity_lifecycle_across_worlds() {
     assert!(universe.is_in_world(dungeon, entity));
     assert_eq!(universe.get_world(entity), Some(dungeon));
 
-    let mut cmd = universe::CommandBuffer::new();
+    let mut cmd = dirk_universe::CommandBuffer::new();
     cmd.despawn(entity);
     universe.submit_buffer(cmd);
     universe.tick(0.016);
@@ -47,9 +47,9 @@ fn universe_public_api_supports_entity_lifecycle_across_worlds() {
 fn buffered_spawns_are_applied_on_tick_and_components_are_readable() {
     let mut universe = Universe::builder().with_world(World::builder("w")).build();
     universe.tick(0.0);
-    let world = universe::WorldId::default();
+    let world = dirk_universe::WorldId::default();
 
-    let mut cmd = universe::CommandBuffer::new();
+    let mut cmd = dirk_universe::CommandBuffer::new();
     cmd.spawn(world, Entity::builder().with_component(Position(1, 1)));
     cmd.spawn(
         world,

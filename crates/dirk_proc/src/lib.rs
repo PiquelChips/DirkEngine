@@ -24,7 +24,7 @@ mod universe;
 ///
 /// ```rust
 /// # pub trait Event: Send + Clone + 'static { fn debug(&self) -> String; }
-/// # use macros::Event;
+/// # use dirk_proc::Event;
 /// #[derive(Event, Clone)]
 /// #[event("player {name} joined with {hp} hp")]
 /// struct PlayerJoined { name: String, hp: u32 }
@@ -37,7 +37,7 @@ mod universe;
 ///
 /// ```rust
 /// # pub trait Event: Send + Clone + 'static { fn debug(&self) -> String; }
-/// # use macros::Event;
+/// # use dirk_proc::Event;
 /// #[derive(Event, Clone)]
 /// enum Msg {
 ///     #[event("moved to ({0}, {1})")]
@@ -51,7 +51,7 @@ mod universe;
 ///
 /// ```rust
 /// # pub trait Event: Send + Clone + 'static { fn debug(&self) -> String; }
-/// # use macros::Event;
+/// # use dirk_proc::Event;
 /// #[derive(Event, Clone)]
 /// #[event("server stopped")]
 /// struct ServerStopped;
@@ -79,7 +79,7 @@ pub fn derive_event(input: proc_macro::TokenStream) -> TokenStream {
 ///
 /// ```rust
 /// # trait Component {}
-/// # use macros::Component;
+/// # use dirk_proc::Component;
 /// #[derive(Component, Clone)]
 /// struct Transform { position: (i32, i32) }
 /// ```
@@ -106,7 +106,7 @@ pub(crate) fn empty_derive(input: TokenStream, trait_ident: &Ident) -> TokenStre
 ///
 /// ```rust
 /// # pub trait System: 'static { fn name() -> &'static str; }
-/// # use macros::system_trait;
+/// # use dirk_proc::system_trait;
 /// #[system_trait]
 /// pub trait RenderSystem: System {
 ///     fn render(&self, delta_time: f32);
@@ -128,7 +128,7 @@ pub(crate) fn empty_derive(input: TokenStream, trait_ident: &Ident) -> TokenStre
 /// //   }
 ///
 /// // Implementing the system:
-/// # use macros::System;
+/// # use dirk_proc::System;
 /// #[derive(System)]
 /// struct MyRenderer;
 ///
@@ -176,7 +176,7 @@ pub fn system_trait(_attr: TokenStream, item: TokenStream) -> TokenStream {
 ///
 /// ```rust
 /// # pub trait System: 'static { fn name() -> &'static str; }
-/// # use macros::System;
+/// # use dirk_proc::System;
 /// #[derive(System)]
 /// struct PhysicsSystem;
 ///
@@ -187,7 +187,7 @@ pub fn system_trait(_attr: TokenStream, item: TokenStream) -> TokenStream {
 ///
 /// ```rust
 /// # pub trait System: 'static { fn name() -> &'static str; }
-/// # use macros::System;
+/// # use dirk_proc::System;
 /// #[derive(System)]
 /// #[system(name = "Collision Detection")]
 /// struct NarrowPhaseCollision;
@@ -202,7 +202,7 @@ pub fn system_trait(_attr: TokenStream, item: TokenStream) -> TokenStream {
 ///
 /// ```rust
 /// # pub trait System: 'static { fn name() -> &'static str; }
-/// # use macros::{System, system_trait};
+/// # use dirk_proc::{System, system_trait};
 /// #[system_trait]
 /// pub trait AudioSystem: System {
 ///     fn play(&self, clip_id: u32);

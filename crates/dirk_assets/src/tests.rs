@@ -67,7 +67,7 @@ use super::{
     handle::AssetRef,
 };
 
-use events::EventManager;
+use dirk_events::EventManager;
 use serde_json;
 use std::{
     fs,

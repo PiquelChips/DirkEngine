@@ -29,7 +29,7 @@ mod tests;
 /// # Manual Implementation
 ///
 /// ```rust
-/// use events::Event;
+/// use dirk_events::Event;
 ///
 /// #[derive(Clone)]
 /// struct MyEvent { value: i32 }
@@ -72,7 +72,7 @@ struct EventManagerInner {
 /// into every system that needs to produce or consume events.
 ///
 /// ```rust
-/// use events::EventManager;
+/// use dirk_events::EventManager;
 ///
 /// let mgr_a = EventManager::new();
 /// let mgr_b = mgr_a.clone(); // same bus, different handle
@@ -81,7 +81,7 @@ struct EventManagerInner {
 /// # Frame Loop Integration
 ///
 /// ```rust
-/// use events::EventManager;
+/// use dirk_events::EventManager;
 ///
 /// let mgr = EventManager::new();
 ///
@@ -108,7 +108,7 @@ impl EventManager {
     /// Equivalent to [`EventManager::default`].
     ///
     /// ```rust
-    /// use events::EventManager;
+    /// use dirk_events::EventManager;
     ///
     /// let mgr = EventManager::new();
     /// ```
@@ -129,7 +129,7 @@ impl EventManager {
     /// turbofish syntax:
     ///
     /// ```rust
-    /// use events::{EventManager, Dispatcher, Event};
+    /// use dirk_events::{EventManager, Dispatcher, Event};
     ///
     /// #[derive(Debug, Clone, Event)]
     /// struct MyEvent;
@@ -169,7 +169,7 @@ impl EventManager {
     /// # Type Inference
     ///
     /// ```rust
-    /// use events::{EventManager, Consumer, Event};
+    /// use dirk_events::{EventManager, Consumer, Event};
     ///
     /// #[derive(Debug, Clone, Event)]
     /// struct MyEvent;
@@ -220,7 +220,7 @@ impl EventManager {
     /// # Example — Two-Frame Simulation
     ///
     /// ```rust
-    /// use events::{EventManager, Event};
+    /// use dirk_events::{EventManager, Event};
     ///
     /// #[derive(Debug, Clone, Event)]
     /// struct TickEvent(u32);
@@ -306,7 +306,7 @@ struct Subscriber {
 /// subscribers on the next `dispatch_all`.
 ///
 /// ```rust
-/// use events::{EventManager, Event};
+/// use dirk_events::{EventManager, Event};
 ///
 /// #[derive(Debug, Clone, Event)]
 /// struct Hit(u32);
@@ -338,7 +338,7 @@ impl<T: Event> Dispatcher<T> {
     /// # Example
     ///
     /// ```rust
-    /// use events::{EventManager, Event};
+    /// use dirk_events::{EventManager, Event};
     ///
     /// #[derive(Debug, Clone, Event)]
     /// #[event("enemy spawned at ({x}, {y})")]
@@ -389,7 +389,7 @@ impl<T: Event> std::fmt::Debug for Dispatcher<T> {
 /// in the original.
 ///
 /// ```rust
-/// use events::{EventManager, Event};
+/// use dirk_events::{EventManager, Event};
 ///
 /// #[derive(Debug, Clone, Event)]
 /// struct Signal;
@@ -426,7 +426,7 @@ impl<T: Event> Consumer<T> {
     /// # Example
     ///
     /// ```rust
-    /// use events::{EventManager, Event};
+    /// use dirk_events::{EventManager, Event};
     ///
     /// #[derive(Debug, Clone, Event)]
     /// struct Counter(u32);
@@ -461,7 +461,7 @@ impl<T: Event> Consumer<T> {
     /// # Example — Collect into a Vec
     ///
     /// ```rust
-    /// use events::{EventManager, Event};
+    /// use dirk_events::{EventManager, Event};
     ///
     /// #[derive(Debug, Clone, Event)]
     /// struct Score(u32);
@@ -480,7 +480,7 @@ impl<T: Event> Consumer<T> {
     /// # Example — `for` Loop
     ///
     /// ```rust
-    /// use events::{EventManager, Event};
+    /// use dirk_events::{EventManager, Event};
     ///
     /// #[derive(Debug, Clone, Event)]
     /// #[event("damage={0}")]

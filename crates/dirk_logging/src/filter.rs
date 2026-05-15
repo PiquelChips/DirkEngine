@@ -17,7 +17,7 @@ type Filter = Box<dyn Fn(&LogEntry) -> bool + Send + Sync>;
 /// # Quick start
 ///
 /// ```rust
-/// use logging::{Filter, LogLevel, LogEntry};
+/// use dirk_logging::{Filter, LogLevel, LogEntry};
 /// use time::OffsetDateTime;
 ///
 /// let entry = LogEntry {
@@ -44,8 +44,8 @@ type Filter = Box<dyn Fn(&LogEntry) -> bool + Send + Sync>;
 /// [`last`](StoreFilter::last), [`count`](StoreFilter::count)).
 ///
 /// ```rust
-/// # use logging::{Filter, LogLevel};
-/// # let logger = logging::Logger::new().init().unwrap();
+/// # use dirk_logging::{Filter, LogLevel};
+/// # let logger = dirk_logging::Logger::new().init().unwrap();
 /// # #[cfg(editor)]
 /// let recent_render_errors = logger
 ///     .query(
@@ -72,7 +72,7 @@ impl LogFilter {
     ///
     /// # Example
     /// ```rust
-    /// # use logging::{Filter, LogLevel, LogEntry};
+    /// # use dirk_logging::{Filter, LogLevel, LogEntry};
     /// # use time::OffsetDateTime;
     /// # fn make(cat: &str) -> LogEntry {
     /// #     LogEntry { level: LogLevel::Info, target: cat.to_string(),
@@ -97,7 +97,7 @@ impl LogFilter {
     ///
     /// # Example
     /// ```rust
-    /// # use logging::{Filter, LogLevel, LogEntry};
+    /// # use dirk_logging::{Filter, LogLevel, LogEntry};
     /// # use time::OffsetDateTime;
     /// # fn make(cat: &str) -> LogEntry {
     /// #     LogEntry { level: LogLevel::Info, target: cat.to_string(),
@@ -123,7 +123,7 @@ impl LogFilter {
     ///
     /// # Example
     /// ```rust
-    /// # use logging::{Filter, LogLevel, LogEntry};
+    /// # use dirk_logging::{Filter, LogLevel, LogEntry};
     /// # use time::OffsetDateTime;
     /// # fn make(lvl: LogLevel) -> LogEntry {
     /// #     LogEntry { level: lvl, target: String::new(),
@@ -147,7 +147,7 @@ impl LogFilter {
     ///
     /// # Example
     /// ```rust
-    /// # use logging::{Filter, LogLevel, LogEntry};
+    /// # use dirk_logging::{Filter, LogLevel, LogEntry};
     /// # use time::OffsetDateTime;
     /// # fn make(lvl: LogLevel) -> LogEntry {
     /// #     LogEntry { level: lvl, target: String::new(),
@@ -171,7 +171,7 @@ impl LogFilter {
     ///
     /// # Example
     /// ```rust
-    /// # use logging::{Filter, LogLevel, LogEntry};
+    /// # use dirk_logging::{Filter, LogLevel, LogEntry};
     /// # use time::OffsetDateTime;
     /// let cutoff = OffsetDateTime::now_utc();
     /// let f = Filter::new().since(cutoff);
@@ -197,7 +197,7 @@ impl LogFilter {
     ///
     /// # Example
     /// ```rust
-    /// # use logging::{Filter, LogLevel, LogEntry};
+    /// # use dirk_logging::{Filter, LogLevel, LogEntry};
     /// # use time::OffsetDateTime;
     /// let now = OffsetDateTime::now_utc();
     /// // Entries from the last 10 seconds only:
@@ -218,7 +218,7 @@ impl LogFilter {
     ///
     /// # Example
     /// ```rust
-    /// # use logging::{Filter, LogLevel, LogEntry};
+    /// # use dirk_logging::{Filter, LogLevel, LogEntry};
     /// # use time::OffsetDateTime;
     /// // Keep only entries from the last minute:
     /// let f = Filter::new()
@@ -235,7 +235,7 @@ impl LogFilter {
     ///
     /// # Example
     /// ```rust
-    /// # use logging::{Filter, LogLevel, LogEntry};
+    /// # use dirk_logging::{Filter, LogLevel, LogEntry};
     /// # use time::OffsetDateTime;
     /// # fn make(msg: &str) -> LogEntry {
     /// #     LogEntry { level: LogLevel::Error, target: String::new(),
@@ -284,8 +284,8 @@ impl LogFilter {
 ///
 /// # Example
 /// ```rust
-/// # let logger = logging::Logger::new().init().unwrap();
-/// # use logging::{Filter, LogLevel};
+/// # let logger = dirk_logging::Logger::new().init().unwrap();
+/// # use dirk_logging::{Filter, LogLevel};
 /// let errors = logger
 ///     .query(Filter::new().min_level(LogLevel::Error))
 ///     .last(100);
@@ -303,8 +303,8 @@ impl StoreFilter {
     ///
     /// # Example
     /// ```rust
-    /// # let logger = logging::Logger::new().init().unwrap();
-    /// # use logging::{LogEntry, LogLevel, Filter};
+    /// # let logger = dirk_logging::Logger::new().init().unwrap();
+    /// # use dirk_logging::{LogEntry, LogLevel, Filter};
     /// let all_warnings: Vec<LogEntry> = logger
     ///     .query(Filter::new().min_level(LogLevel::Warn))
     ///     .execute();
@@ -328,8 +328,8 @@ impl StoreFilter {
     /// # Example
     /// ```rust
     /// // Show the 50 most recent Rendering entries in the log panel:
-    /// # let logger = logging::Logger::new().init().unwrap();
-    /// # use logging::{LogEntry, LogLevel, Filter};
+    /// # let logger = dirk_logging::Logger::new().init().unwrap();
+    /// # use dirk_logging::{LogEntry, LogLevel, Filter};
     /// let recent: Vec<LogEntry> = logger
     ///     .query(Filter::new().of_target("Rendering"))
     ///     .last(50);
@@ -351,8 +351,8 @@ impl StoreFilter {
     ///
     /// # Example
     /// ```rust
-    /// # let logger = logging::Logger::new().init().unwrap();
-    /// # use logging::{LogEntry, LogLevel, Filter};
+    /// # let logger = dirk_logging::Logger::new().init().unwrap();
+    /// # use dirk_logging::{LogEntry, LogLevel, Filter};
     /// let error_count: usize = logger
     ///     .query(Filter::new().of_level(LogLevel::Error))
     ///     .count();

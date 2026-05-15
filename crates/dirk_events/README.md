@@ -15,7 +15,7 @@ use inside a game-engine loop.
 ## Quick Start
 
 ```rust
-use events::{Event, EventManager};
+use dirk_events::{Event, EventManager};
 
 // 1. Define your event type.
 #[derive(Debug, Clone, Event)]
@@ -74,7 +74,7 @@ lets you customise the string returned by [`Event::debug`] via an optional
 ### No attribute — falls back to `{self:?}`
 
 ```rust
-use events::Event;
+use dirk_events::Event;
 
 #[derive(Debug, Clone, Event)]
 struct RawEvent { id: u32 }
@@ -85,7 +85,7 @@ assert!(RawEvent { id: 7 }.debug().contains("RawEvent"));
 ### Named-field struct — reference fields by name
 
 ```rust
-use events::Event;
+use dirk_events::Event;
 
 #[derive(Debug, Clone, Event)]
 #[event("moved to ({x}, {y})")]
@@ -97,7 +97,7 @@ assert_eq!(EntityMoved { x: 1.0, y: 2.5 }.debug(), "moved to (1, 2.5)");
 ### Tuple struct — reference fields by zero-based index
 
 ```rust
-use events::Event;
+use dirk_events::Event;
 
 #[derive(Debug, Clone, Event)]
 #[event("key pressed: code={0}")]
@@ -109,7 +109,7 @@ assert_eq!(KeyPressed(65).debug(), "key pressed: code=65");
 ### Enum — annotate each variant individually
 
 ```rust
-use events::Event;
+use dirk_events::Event;
 
 #[derive(Debug, Clone, Event)]
 enum NetworkEvent {
@@ -137,7 +137,7 @@ You do **not** have to reference every field. Unreferenced fields are simply
 ignored; the macro handles the binding silently.
 
 ```rust
-use events::Event;
+use dirk_events::Event;
 
 #[derive(Debug, Clone, Event)]
 #[event("x only: {x}")]
@@ -153,7 +153,7 @@ underlying state via `Arc<Mutex<…>>`. Pass it by value (or clone it freely)
 into as many systems as you like:
 
 ```rust
-use events::EventManager;
+use dirk_events::EventManager;
 
 let mgr = EventManager::new();
 
@@ -169,7 +169,7 @@ Several systems can independently produce events of the same type. All of
 their events are delivered to all subscribers in the next `dispatch_all`.
 
 ```rust
-use events::{EventManager, Event};
+use dirk_events::{EventManager, Event};
 
 #[derive(Debug, Clone, Event)]
 struct DamageEvent(u32);
@@ -194,7 +194,7 @@ same manager. Cloning a [`Consumer`] creates a **fresh, independent
 subscription** — it does not share the receiver of the original.
 
 ```rust
-use events::{EventManager, Event};
+use dirk_events::{EventManager, Event};
 
 #[derive(Debug, Clone, Event)]
 struct Ping;
@@ -220,7 +220,7 @@ produce events off the main thread. [`EventManager::dispatch_all`] is
 typically called from the main game-loop thread.
 
 ```rust
-use events::{EventManager, Event};
+use dirk_events::{EventManager, Event};
 use std::thread;
 
 #[derive(Debug, Clone, Event)]

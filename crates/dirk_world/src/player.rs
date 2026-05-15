@@ -69,7 +69,7 @@ pub type PlayerId = u32;
 /// # Examples
 ///
 /// ```rust
-/// # use world::player::PlayerRegion;
+/// # use dirk_world::player::PlayerRegion;
 /// // Left half of the screen (Player 1 in a horizontal split-screen).
 /// let p1 = PlayerRegion {
 ///     offset: glam::vec2(0.0, 0.0),
@@ -112,7 +112,7 @@ impl PlayerRegion {
     /// # Examples
     ///
     /// ```rust
-    /// # use world::player::PlayerRegion;
+    /// # use dirk_world::player::PlayerRegion;
     /// let region = PlayerRegion {
     ///     offset: glam::vec2(0.25, 0.25),
     ///     size:   glam::vec2(0.5,  0.5),
@@ -144,7 +144,7 @@ impl PlayerRegion {
     /// # Examples
     ///
     /// ```rust
-    /// # use world::player::PlayerRegion;
+    /// # use dirk_world::player::PlayerRegion;
     /// // Right half of the screen.
     /// let region = PlayerRegion {
     ///     offset: glam::vec2(0.5, 0.0),
@@ -315,7 +315,7 @@ impl Player {
     /// # Examples
     ///
     /// ```rust
-    /// # use world::player::{Player, PlayerRegion};
+    /// # use dirk_world::player::{Player, PlayerRegion};
     /// # fn example(mut player: Player) {
     /// // Assign the left half of the screen to this player.
     /// player.set_region(PlayerRegion {
@@ -390,7 +390,7 @@ impl Player {
 /// # Examples
 ///
 /// ```rust
-/// # use world::player::{PlayerUpdateEvent, PlayerUpdateType};
+/// # use dirk_world::player::{PlayerUpdateEvent, PlayerUpdateType};
 /// # fn example(evt: PlayerUpdateEvent) {
 /// match evt.update_type {
 ///     PlayerUpdateType::Spawned   => { /* initialise per-player state */ }

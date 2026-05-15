@@ -29,8 +29,8 @@
 //! # Quick start
 //!
 //! ```rust
-//! use assets::{AssetRegistry, AssetHandle, AssetType, AssetLoaded, AssetUnloaded, Model};
-//! use ::events::EventManager;
+//! use dirk_assets::{AssetRegistry, AssetHandle, AssetType, AssetLoaded, AssetUnloaded, Model};
+//! use dirk_events::EventManager;
 //!
 //! # fn test() -> anyhow::Result<()> {
 //! // 1. Initialise — scans ASSETS_PATH and validates all .dirkasset files.
@@ -131,7 +131,7 @@ impl AssetHandle {
     /// handles are issued by [`AssetRegistry`] during scanning.
     ///
     /// ```rust
-    /// # use assets::{AssetHandle, AssetType};
+    /// # use dirk_assets::{AssetHandle, AssetType};
     /// let handle = AssetHandle::from_raw("models/hero.dirkasset", AssetType::Model);
     /// assert_eq!(handle.raw(), "models/hero.dirkasset");
     /// assert_eq!(handle.asset_type(), AssetType::Model);
@@ -169,7 +169,7 @@ impl AssetHandle {
     /// `.dirkasset` extension).
     ///
     /// ```rust
-    /// # use assets::{AssetHandle, AssetType};
+    /// # use dirk_assets::{AssetHandle, AssetType};
     /// let handle = AssetHandle::from_raw("models/hero.dirkasset", AssetType::Model);
     /// assert_eq!(handle.name(), "hero.dirkasset");
     /// ```
@@ -184,7 +184,7 @@ impl AssetHandle {
     /// Returns the [`AssetType`] discriminant embedded in this handle.
     ///
     /// ```rust
-    /// # use assets::{AssetHandle, AssetType};
+    /// # use dirk_assets::{AssetHandle, AssetType};
     /// let handle = AssetHandle::from_raw("models/hero.dirkasset", AssetType::Model);
     /// assert_eq!(handle.asset_type(), AssetType::Model);
     /// ```
@@ -195,7 +195,7 @@ impl AssetHandle {
     /// Returns the raw handle string (the path relative to `ASSETS_PATH`).
     ///
     /// ```rust
-    /// # use assets::{AssetHandle, AssetType};
+    /// # use dirk_assets::{AssetHandle, AssetType};
     /// let handle = AssetHandle::from_raw("models/hero.dirkasset", AssetType::Model);
     /// assert_eq!(handle.raw(), "models/hero.dirkasset");
     /// ```
@@ -316,8 +316,8 @@ impl DirkAsset {
 /// # Initialisation
 ///
 /// ```rust
-/// use assets::AssetRegistry;
-/// use events::EventManager;
+/// use dirk_assets::AssetRegistry;
+/// use dirk_events::EventManager;
 ///
 /// # fn test() -> anyhow::Result<()> {
 /// let events = EventManager::new();
@@ -329,8 +329,8 @@ impl DirkAsset {
 ///
 /// ```rust
 /// # fn test() -> anyhow::Result<()> {
-/// # let events = ::events::EventManager::new();
-/// # let mut registry = assets::AssetRegistry::init(&events).unwrap();
+/// # let events = dirk_events::EventManager::new();
+/// # let mut registry = dirk_assets::AssetRegistry::init(&events).unwrap();
 /// // Must be called once per frame, *after* EventManager::dispatch_all.
 /// registry.tick();
 /// # Ok(()) }
@@ -539,10 +539,10 @@ impl AssetRegistry {
     ///
     /// ```rust
     /// # fn test() -> anyhow::Result<()> {
-    /// # let events = ::events::EventManager::new();
-    /// # let mut registry = assets::AssetRegistry::init(&events).unwrap();
-    /// use assets::{AssetHandle, AssetRegistry, AssetType};
-    /// use assets::Model;
+    /// # let events = dirk_events::EventManager::new();
+    /// # let mut registry = dirk_assets::AssetRegistry::init(&events).unwrap();
+    /// use dirk_assets::{AssetHandle, AssetRegistry, AssetType};
+    /// use dirk_assets::Model;
     ///
     /// let handle = AssetHandle::from_raw("models/hero.dirkasset", AssetType::Model);
     /// let typed_handle = registry.load_asset::<Model>(&handle)?;
