@@ -1,6 +1,4 @@
-//! This crate holds the entire universe.
-//!
-//! The **Universe** is `DirkEngine`'s ECS system.
+#![doc = include_str!("../README.md")]
 
 use std::{
     any::TypeId,
