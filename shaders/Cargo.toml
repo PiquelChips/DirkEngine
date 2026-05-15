@@ -1,5 +1,5 @@
 [package]
-name = "shaders"
+name = "dirk_shaders"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
