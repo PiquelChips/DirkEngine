@@ -469,6 +469,7 @@ dependencies = [
  "renderer",
  "thiserror 2.0.18",
  "tracing",
+ "universe",
  "utils",
  "world",
 ]
@@ -1342,6 +1343,7 @@ dependencies = [
  "slotmap",
  "thiserror 2.0.18",
  "tracing",
+ "universe",
  "utils",
  "world",
 ]
@@ -2449,9 +2451,9 @@ dependencies = [
  "assets",
  "events",
  "glam",
- "macros",
  "platform",
  "tracing",
+ "universe",
  "utils",
 ]
 

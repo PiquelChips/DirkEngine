@@ -1,8 +1,16 @@
-//! This crate has a bunch of frequently used and central [`crate::Component`]s
+//! This module has a bunch of frequently used and central [`Component`]s
+//!
+//! [`Component`]: universe::components::Component
 
-use crate::Component;
+use assets::{Handle, LoadAsset, Model};
+use events::Dispatcher;
 use glam::{Mat4, Vec3};
 use tracing::warn;
+use universe::{
+    CommandBuffer, Entity,
+    components::Component,
+    systems::{ComponentSystem, System},
+};
 
 /// Marks an entity as having a renderable mesh.
 ///
@@ -13,13 +21,71 @@ use tracing::warn;
 /// ```
 /// # use world::components::Renderable;
 /// use assets::{AssetHandle, AssetType};
-/// let r = Renderable { model: AssetHandle::from_raw("meshes/cube.glb", AssetType::Model) };
+/// let r = Renderable::new(AssetHandle::from_raw("meshes/cube.glb", AssetType::Model));
 /// assert_eq!(r.model.raw(), "meshes/cube.glb");
 /// ```
 #[derive(Debug, Clone, Component)]
 pub struct Renderable {
     /// Asset-registry key for the mesh to render (e.g. `"meshes/cube.glb"`).
     pub model: assets::AssetHandle,
+    handle: Option<Handle<Model>>,
+}
+
+impl Renderable {
+    /// Creates a new [`Renderable`] component from an [`AssetHandle`].
+    ///
+    /// [`AssetHandle`]: assets::AssetHandle
+    #[must_use]
+    pub fn new(model: assets::AssetHandle) -> Self {
+        Self {
+            model,
+            handle: None,
+        }
+    }
+}
+
+/// A [`universe`] system that will automatically load a model
+/// when a [`Renderable`] is added to an [`universe::Entity`].
+#[derive(System)]
+pub struct ModelUploadSystem {
+    dispatcher: Dispatcher<LoadAsset>,
+}
+
+impl ModelUploadSystem {
+    /// Creates a new [`ModelUploadSystem`] creating a [`Dispatcher`] with
+    /// the provided [`EventManager`].
+    ///
+    /// [`EventManager`]: events::EventManager
+    #[must_use]
+    pub fn new(event_manager: &events::EventManager) -> Self {
+        Self {
+            dispatcher: event_manager.register(),
+        }
+    }
+}
+
+impl ComponentSystem for ModelUploadSystem {
+    type Component = Renderable;
+    fn added(&self, _cmd: &mut CommandBuffer, _: Entity, component: &Self::Component) {
+        if component.handle.is_some() {
+            return;
+        }
+
+        // TODO: load asset from registry & set handle
+        self.dispatcher.dispatch(LoadAsset(component.model.clone()));
+    }
+    fn updated(
+        &self,
+        cmd: &mut CommandBuffer,
+        entity: Entity,
+        _: &Self::Component,
+        new: &Self::Component,
+    ) {
+        self.added(cmd, entity, new);
+    }
+    /// Nothing happens when this component is removed. The asset will be unloaded
+    /// automatically when it is no longer used.
+    fn removed(&self, _: &mut CommandBuffer, _: Entity, _: &Self::Component) {}
 }
 
 /// Spatial transform for an entity: position, orientation, and scale.
@@ -134,7 +200,7 @@ impl From<Transform> for Mat4 {
 /// // The matrix must be finite.
 /// assert!(proj.to_cols_array().iter().all(|v| v.is_finite()));
 /// ```
-#[derive(Debug, Component)]
+#[derive(Debug, Clone, Component)]
 pub struct Camera {
     /// Vertical field of view **in radians**.
     pub fov: f32,

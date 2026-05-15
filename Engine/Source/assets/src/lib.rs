@@ -68,7 +68,7 @@ mod errors;
 pub use errors::{Error, Result};
 
 mod events;
-pub use events::{AssetLoaded, AssetUnloaded};
+pub use events::{AssetLoaded, AssetUnloaded, LoadAsset};
 
 mod assets;
 pub use assets::*;
@@ -350,6 +350,9 @@ pub struct AssetRegistry {
     /// ref-count reaches zero.
     internal_unload_consumer: Consumer<InternalAssetUnloaded>,
 
+    /// Receives [`LoadAsset`] events.
+    load_consumer: Consumer<LoadAsset>,
+
     /// Emits the public [`AssetUnloaded`] event consumed by e.g. the renderer.
     unload_dispatcher: Dispatcher<AssetUnloaded>,
 
@@ -386,6 +389,7 @@ impl AssetRegistry {
         let mut registry = Self {
             assets: HashMap::new(),
 
+            load_consumer: event_manager.subscribe(),
             unload_dispatcher: event_manager.register(),
             internal_unload_consumer: event_manager.subscribe(),
             event_manager: event_manager.clone(),
@@ -406,9 +410,29 @@ impl AssetRegistry {
     /// [`EventManager::dispatch_all`]. Skipping this call means
     /// [`AssetUnloaded`] events are never delivered, causing potential
     /// memory leaks (e.g. the renderer cannot free GPU resources).
-    pub fn tick(&self) {
+    pub fn tick(&mut self) {
         for InternalAssetUnloaded(handle) in self.internal_unload_consumer.consume_all() {
             self.unload_dispatcher.dispatch(AssetUnloaded { handle });
+        }
+
+        let pending: Vec<AssetHandle> = self
+            .load_consumer
+            .consume_all()
+            .map(|LoadAsset(h)| h)
+            .collect();
+
+        for asset in pending {
+            match asset.asset_type() {
+                AssetType::Model => {
+                    let _ = self.load_asset::<Model>(&asset);
+                }
+                AssetType::Unknown => {
+                    warn!(
+                        "LoadAsset event received for asset {} with Unknown type, ignoring",
+                        asset.raw()
+                    );
+                }
+            }
         }
     }
 
