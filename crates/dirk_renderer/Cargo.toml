@@ -1,5 +1,6 @@
 [package]
 name = "dirk_renderer"
+description = "DirkEngine's renderer"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true

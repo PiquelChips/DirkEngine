@@ -1,5 +1,6 @@
 [package]
 name = "dirk_world"
+description = "Types used to populate the world of DirkEngine"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true

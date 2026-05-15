@@ -1,5 +1,6 @@
 [package]
 name = "dirk_utils"
+description = "Small utilities used by the DirkEngine"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true

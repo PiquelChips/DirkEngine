@@ -1,6 +1,7 @@
 [package]
 name = "dirkengine"
 default-run = "dirkengine"
+description = "A pure Rust Vulkan game engine"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true

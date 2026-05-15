@@ -1,5 +1,6 @@
 [package]
 name = "dirk_universe"
+description = "DirkEngine's ECS system"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true

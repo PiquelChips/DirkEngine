@@ -1,5 +1,6 @@
 [package]
 name = "dirk_assets"
+description = "The DirkEngine's asset system"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true

@@ -1,5 +1,6 @@
 [package]
 name = "dirk_platform"
+description = "DirkEngine platform API"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true

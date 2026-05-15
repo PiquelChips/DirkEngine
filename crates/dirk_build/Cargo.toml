@@ -1,5 +1,6 @@
 [package]
 name = "dirk_build"
+description = "Build script utilities for DirkEngine"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true

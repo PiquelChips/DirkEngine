@@ -1,5 +1,6 @@
 [package]
 name = "dirk_logging"
+description = "`tracing` backend for DirkEngine"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
