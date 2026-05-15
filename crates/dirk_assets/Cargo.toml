@@ -1,5 +1,5 @@
 [package]
-name = "assets"
+name = "dirk_assets"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -14,12 +14,12 @@ serde.workspace = true
 serde_json.workspace = true
 parking_lot.workspace = true
 
-events.workspace = true
+dirk_events.workspace = true
 
 gltf.workspace = true
 
 [build-dependencies]
-build.workspace = true
+dirk_build.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

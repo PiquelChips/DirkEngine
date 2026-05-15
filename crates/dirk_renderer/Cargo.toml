@@ -1,5 +1,5 @@
 [package]
-name = "renderer"
+name = "dirk_renderer"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -13,13 +13,13 @@ anyhow.workspace = true
 parking_lot.workspace = true
 pastey.workspace = true
 
-utils.workspace = true
-platform.workspace = true
-universe.workspace = true
-world.workspace = true
-shaders.workspace = true
-events.workspace = true
-assets.workspace = true
+dirk_utils.workspace = true
+dirk_platform.workspace = true
+dirk_universe.workspace = true
+dirk_world.workspace = true
+dirk_shaders.workspace = true
+dirk_events.workspace = true
+dirk_assets.workspace = true
 
 ash.workspace = true
 ash-window.workspace = true
@@ -30,7 +30,7 @@ gltf.workspace = true
 slotmap.workspace = true
 
 [build-dependencies]
-build.workspace = true
+dirk_build.workspace = true
 
 [lints.rust]
 missing_docs = "warn"

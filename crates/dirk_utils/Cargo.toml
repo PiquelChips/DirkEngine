@@ -1,5 +1,5 @@
 [package]
-name = "universe"
+name = "dirk_utils"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -7,10 +7,11 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
-macros.workspace = true
+thiserror.workspace = true
+glam.workspace = true
 
-serde.workspace = true
-tracing.workspace = true
+[build-dependencies]
+dirk_build.workspace = true
 
 [lints]
 workspace = true

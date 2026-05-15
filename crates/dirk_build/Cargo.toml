@@ -1,5 +1,5 @@
 [package]
-name = "utils"
+name = "dirk_build"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -7,11 +7,7 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
-thiserror.workspace = true
-glam.workspace = true
-
-[build-dependencies]
-build.workspace = true
+cargo_metadata.workspace = true
 
 [lints]
 workspace = true

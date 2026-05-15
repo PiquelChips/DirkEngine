@@ -1,5 +1,6 @@
 [package]
-name = "platform"
+name = "dirk_run"
+default-run = "dirk_run"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -8,14 +9,10 @@ version.workspace = true
 
 [dependencies]
 tracing.workspace = true
+tracing-log.workspace = true
 anyhow.workspace = true
-thiserror.workspace = true
-winit.workspace = true
 
-events.workspace = true
-
-[build-dependencies]
-build.workspace = true
+dirk_engine.workspace = true
 
 [lints]
 workspace = true

@@ -1,5 +1,5 @@
 [package]
-name = "engine"
+name = "dirk_engine"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -11,19 +11,19 @@ anyhow.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 
-logging.workspace = true
-utils.workspace = true
-events.workspace = true
-platform.workspace = true
-renderer.workspace = true
-universe.workspace = true
-world.workspace = true
-assets.workspace = true
+dirk_logging.workspace = true
+dirk_utils.workspace = true
+dirk_events.workspace = true
+dirk_platform.workspace = true
+dirk_renderer.workspace = true
+dirk_universe.workspace = true
+dirk_world.workspace = true
+dirk_assets.workspace = true
 
 glam.workspace = true
 
 [build-dependencies]
-build.workspace = true
+dirk_build.workspace = true
 
 [lints]
 workspace = true
