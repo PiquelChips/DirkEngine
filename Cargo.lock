@@ -403,7 +403,7 @@ dependencies = [
 
 [[package]]
 name = "dirk_assets"
-version = "0.1.0-alpha-1"
+version = "0.1.0-alpha-2"
 dependencies = [
  "anyhow",
  "dirk_build",
@@ -419,14 +419,14 @@ dependencies = [
 
 [[package]]
 name = "dirk_build"
-version = "0.1.0-alpha-1"
+version = "0.1.0-alpha-2"
 dependencies = [
  "cargo_metadata",
 ]
 
 [[package]]
 name = "dirk_events"
-version = "0.1.0-alpha-1"
+version = "0.1.0-alpha-2"
 dependencies = [
  "dirk_proc",
  "parking_lot",
@@ -435,7 +435,7 @@ dependencies = [
 
 [[package]]
 name = "dirk_logging"
-version = "0.1.0-alpha-1"
+version = "0.1.0-alpha-2"
 dependencies = [
  "dirk_build",
  "parking_lot",
@@ -447,7 +447,7 @@ dependencies = [
 
 [[package]]
 name = "dirk_platform"
-version = "0.1.0-alpha-1"
+version = "0.1.0-alpha-2"
 dependencies = [
  "anyhow",
  "dirk_build",
@@ -459,7 +459,7 @@ dependencies = [
 
 [[package]]
 name = "dirk_proc"
-version = "0.1.0-alpha-1"
+version = "0.1.0-alpha-2"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -468,7 +468,7 @@ dependencies = [
 
 [[package]]
 name = "dirk_renderer"
-version = "0.1.0-alpha-1"
+version = "0.1.0-alpha-2"
 dependencies = [
  "anyhow",
  "ash",
@@ -494,14 +494,14 @@ dependencies = [
 
 [[package]]
 name = "dirk_shaders"
-version = "0.1.0-alpha-1"
+version = "0.1.0-alpha-2"
 dependencies = [
  "shaderc",
 ]
 
 [[package]]
 name = "dirk_universe"
-version = "0.1.0-alpha-1"
+version = "0.1.0-alpha-2"
 dependencies = [
  "dirk_proc",
  "serde",
@@ -510,7 +510,7 @@ dependencies = [
 
 [[package]]
 name = "dirk_utils"
-version = "0.1.0-alpha-1"
+version = "0.1.0-alpha-2"
 dependencies = [
  "dirk_build",
  "glam",
@@ -519,7 +519,7 @@ dependencies = [
 
 [[package]]
 name = "dirk_world"
-version = "0.1.0-alpha-1"
+version = "0.1.0-alpha-2"
 dependencies = [
  "dirk_assets",
  "dirk_events",
@@ -532,7 +532,7 @@ dependencies = [
 
 [[package]]
 name = "dirkengine"
-version = "0.1.0-alpha-1"
+version = "0.1.0-alpha-2"
 dependencies = [
  "anyhow",
  "dirk_assets",
