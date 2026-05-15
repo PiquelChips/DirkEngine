@@ -22,7 +22,7 @@ impl Entity {
     }
     /// Returns the raw entity ID
     #[must_use]
-    pub fn raw(&self) -> u64 {
+    pub fn raw(self) -> u64 {
         self.0
     }
 }
