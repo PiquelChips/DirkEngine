@@ -1,5 +1,4 @@
-//! The Renderer. This monolithic crate handles all the rendering of
-//! the engine. All of the GPU operations are handled by [ash].
+#![doc = include_str!("../README.md")]
 
 #[cfg(validation)]
 use std::os::raw::c_void;
