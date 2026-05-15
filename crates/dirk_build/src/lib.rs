@@ -54,7 +54,7 @@ pub fn setup_paths() {
 
     let mut paths = HashMap::new();
     paths.insert("SAVED_PATH", "Saved");
-    paths.insert("ASSETS_PATH", "Engine/Assets");
+    paths.insert("ASSETS_PATH", "assets");
 
     for (name, path) in paths {
         println!(
