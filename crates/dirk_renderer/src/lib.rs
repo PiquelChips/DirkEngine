@@ -494,7 +494,7 @@ impl Renderer {
     /// world (unless in [`WorldEvent::Created`] or [`WorldEvent::Destroyed`].
     pub fn tick(
         &mut self,
-        _delta_time: f32,
+        _delta_time: f64,
         windows: &HashMap<WindowId, dirk_platform::Window>,
     ) -> Result<()> {
         // Temporarily move receivers out for the borrow checker

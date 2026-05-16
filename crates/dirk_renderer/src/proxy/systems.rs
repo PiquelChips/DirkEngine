@@ -21,7 +21,7 @@ impl RendererUniverseSystem {
 
 impl UniverseSystem for RendererUniverseSystem {
     // these functions aren't needed
-    fn tick(&self, _: &mut CommandBuffer, _: &dirk_universe::Universe, _: f32) {}
+    fn tick(&self, _: &mut CommandBuffer, _: &dirk_universe::Universe, _: f64) {}
 
     fn entity_spawned(
         &self,

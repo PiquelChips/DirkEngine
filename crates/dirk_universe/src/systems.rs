@@ -46,7 +46,7 @@ pub trait UniverseSystem: System {
     fn entity_despawned(&self, cmd: &mut CommandBuffer, universe: &Universe, entity: Entity);
 
     /// This function will be called by the [`Universe`] on every tick.
-    fn tick(&self, cmd: &mut CommandBuffer, universe: &Universe, delta_time: f32);
+    fn tick(&self, cmd: &mut CommandBuffer, universe: &Universe, delta_time: f64);
 }
 
 /// A [`System`] that is run on every entity that matches the query.
@@ -86,7 +86,7 @@ pub trait TickingSystem: System {
         &self,
         cmd: &mut CommandBuffer,
         universe: &Universe,
-        delta_time: f32,
+        delta_time: f64,
         entities: &mut dyn Iterator<Item = Entity>,
     );
     /// Returns the query used to construct the `entities` of the tick function.
