@@ -1,0 +1,18 @@
+[package]
+name = "dirk_build"
+description = "Build script utilities for DirkEngine"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+homepage.workspace = true
+authors.workspace = true
+documentation.workspace = true
+
+[dependencies]
+cargo_metadata.workspace = true
+
+[lints]
+workspace = true

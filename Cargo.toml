@@ -1,20 +1,57 @@
+# `dirkengine` PACKAGE DOCUMENTATION
+
+[package]
+name = "dirkengine"
+default-run = "dirkengine"
+description = "A pure Rust Vulkan game engine"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+homepage.workspace = true
+authors.workspace = true
+documentation.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-log.workspace = true
+glam.workspace = true
+
+dirk_logging.workspace = true
+dirk_utils.workspace = true
+dirk_events.workspace = true
+dirk_platform.workspace = true
+dirk_renderer.workspace = true
+dirk_universe.workspace = true
+dirk_world.workspace = true
+dirk_assets.workspace = true
+
+[build-dependencies]
+dirk_build.workspace = true
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["-Zunstable-options", "--cfg", "docsrs"]
+
+[features]
+default = ["editor"]
+
+editor = ["dirk_logging/editor"]
+
+# WORKSPACE CONFIGURATION
+
 [workspace]
 resolver = "3"
 members = [
-    "Engine/Source/build",
-    "Engine/Source/utils",
-    "Engine/Source/engine",
-    "Engine/Source/events",
-    "Engine/Source/macros",
-    "Engine/Source/logging",
-    "Engine/Source/platform",
-    "Engine/Source/run",
-    "Engine/Source/assets",
-    "Engine/Source/utils",
-    "Engine/Source/renderer",
-    "Engine/Source/world",
-    "Engine/Source/universe",
-    "Engine/Shaders"
+    "crates/*",
+    "shaders"
 ]
 
 [workspace.package]
@@ -22,7 +59,13 @@ edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/DirkEngine/DirkEngine"
 rust-version = "1.94.0"
-version = "0.1.0"
+version = "0.1.0-alpha-3"
+
+homepage = "https://piquel.fr" # TODO: should piquel.fr/dirk of dirkengine.fr
+authors = ["Piquel Chips <contact@piquel.fr>"]
+documentation = "https://docs.rs/dirkengine"
+keywords = ["game", "engine", "gamedev", "graphics", "vulkan"]
+categories = ["game-engines", "graphics", "rendering", "vulkan"]
 
 [workspace.dependencies]
 # Basic stuff
@@ -39,18 +82,18 @@ anyhow = "1"
 cargo_metadata = "0.23"
 
 # Engine modules
-build = { path = "Engine/Source/build" }
-utils = { path = "Engine/Source/utils" }
-logging = { path = "Engine/Source/logging" }
-engine = { path = "Engine/Source/engine" }
-events = { path = "Engine/Source/events" }
-macros = { path = "Engine/Source/macros" }
-platform = { path = "Engine/Source/platform" }
-renderer = { path = "Engine/Source/renderer" }
-assets = { path = "Engine/Source/assets" }
-world = { path = "Engine/Source/world" }
-universe = { path = "Engine/Source/universe" }
-shaders = { path = "Engine/Shaders" }
+dirk_build    = { version = "0.1.0-alpha-1", path = "crates/dirk_build" }
+dirk_utils    = { version = "0.1.0-alpha-1", path = "crates/dirk_utils" }
+dirk_logging  = { version = "0.1.0-alpha-1", path = "crates/dirk_logging" }
+dirk_events   = { version = "0.1.0-alpha-1", path = "crates/dirk_events" }
+dirk_proc     = { version = "0.1.0-alpha-1", path = "crates/dirk_proc" }
+dirk_platform = { version = "0.1.0-alpha-1", path = "crates/dirk_platform" }
+dirk_renderer = { version = "0.1.0-alpha-1", path = "crates/dirk_renderer" }
+dirk_assets   = { version = "0.1.0-alpha-1", path = "crates/dirk_assets" }
+dirk_world    = { version = "0.1.0-alpha-1", path = "crates/dirk_world" }
+dirk_universe = { version = "0.1.0-alpha-1", path = "crates/dirk_universe" }
+
+dirk_shaders  = { version = "0.1.0-alpha-1", path = "shaders" }
 
 # Main Engine Dependencies
 winit = "0.31.0-beta.2"
