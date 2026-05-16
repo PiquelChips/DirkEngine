@@ -92,6 +92,7 @@ dirk_renderer = { version = "0.0.1", path = "crates/dirk_renderer" }
 dirk_assets   = { version = "0.0.1", path = "crates/dirk_assets" }
 dirk_world    = { version = "0.0.1", path = "crates/dirk_world" }
 dirk_universe = { version = "0.0.1", path = "crates/dirk_universe" }
+dirk_player   = { version = "0.0.1", path = "crates/dirk_player" }
 
 dirk_shaders  = { version = "0.0.1", path = "shaders" }
 

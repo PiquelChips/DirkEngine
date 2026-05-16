@@ -458,6 +458,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "dirk_player"
+version = "0.0.1"
+
+[[package]]
 name = "dirk_proc"
 version = "0.0.1"
 dependencies = [
