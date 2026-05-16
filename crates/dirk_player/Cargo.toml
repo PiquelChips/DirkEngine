@@ -14,5 +14,7 @@ documentation.workspace = true
 [dependencies]
 dirk_universe.workspace = true
 
+glam.workspace = true
+
 [lints]
 workspace = true
