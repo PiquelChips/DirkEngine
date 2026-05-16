@@ -86,7 +86,7 @@ impl Universe {
     /// Will panic in certain internal conditions like if a [`World`] that
     /// was just created is not found in the [`Universe`].
     /// No panic should be caused by user error.
-    pub fn tick(&mut self, delta_time: f32) {
+    pub fn tick(&mut self, delta_time: f64) {
         let mut cmd = CommandBuffer::new();
 
         let buffers = std::mem::take(&mut self.buffers);
