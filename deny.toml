@@ -81,12 +81,12 @@ allow-workspace = true
 deny = []
 
 # Certain crates/versions that will be skipped when doing duplicate detection.
-skip = [
-    #{ crate = "ansi_term@0.11.0", reason = "you can specify a reason why it can't be updated/removed" },
-]
+skip = []
 
 # Like skip but with entire direct & transitive dependency tree of crate
-skip-tree = []
+skip-tree = [
+    { crate = "winit", reason = "depends on platform specific libraries that update very frequently" },
+]
 
 [sources]
 unknown-registry = "deny"
