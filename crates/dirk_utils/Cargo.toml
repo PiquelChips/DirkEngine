@@ -1,0 +1,22 @@
+[package]
+name = "dirk_utils"
+description = "Small utilities used by the DirkEngine"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+homepage.workspace = true
+authors.workspace = true
+documentation.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+glam.workspace = true
+
+[build-dependencies]
+dirk_build.workspace = true
+
+[lints]
+workspace = true

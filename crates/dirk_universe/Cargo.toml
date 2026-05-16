@@ -1,0 +1,21 @@
+[package]
+name = "dirk_universe"
+description = "DirkEngine's ECS system"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+homepage.workspace = true
+authors.workspace = true
+documentation.workspace = true
+
+[dependencies]
+dirk_proc.workspace = true
+
+serde.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

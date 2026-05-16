@@ -1,0 +1,1131 @@
+//! Comprehensive tests for the `assets` crate.
+//!
+//! # Test organisation
+//!
+//! | Module | What is covered |
+//! |--------|-----------------|
+//! | `asset_handle` | Construction, accessors, Display, Hash, serde |
+//! | `asset_type` | Default, Copy, serde, unknown rejection |
+//! | `model_config` | Serde round-trip, validation (file present / absent) |
+//! | `errors` | Display messages, `From` impls |
+//! | `handle` | `get`/`take` semantics, clone sharing, drop event |
+//! | `dirk_asset_validation` | All failure branches + success branch |
+//! | `registry` | Error paths + full happy-path integration (requires ASSETS_PATH) |
+//!
+//! # Placement
+//!
+//! Drop this file into `Engine/Source/assets/src/tests.rs` and add the
+//! following line to `src/lib.rs`:
+//!
+//! ```rust
+//! #[cfg(test)]
+//! mod tests;
+//! ```
+//!
+//! # Dev-dependencies required (add to `Cargo.toml`)
+//!
+//! ```toml
+//! [dev-dependencies]
+//! tempfile = "3"
+//! ```
+//!
+//! # Registry integration tests
+//!
+//! Tests in `registry::` that exercise `AssetRegistry::init` require
+//! `ASSETS_PATH` (the compile-time constant baked in by `build.rs`) to point
+//! to an existing directory. If the directory does not exist at test run time
+//! the tests **skip** rather than fail, so CI without a real asset tree stays
+//! green.
+
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::missing_panics_doc,
+    clippy::too_many_lines
+)]
+
+// ── bring the entire crate into scope ────────────────────────────────────────
+use super::{
+    ASSETS_PATH,
+    // public
+    Asset,
+    AssetConfig,
+    AssetHandle,
+    AssetLoaded,
+    AssetRegistry,
+    AssetType,
+    AssetUnloaded,
+    DirkAsset,
+    Error,
+    Handle,
+    Metadata,
+    Model,
+    ModelConfig,
+    Result,
+    // pub(crate)
+    events::InternalAssetUnloaded,
+    handle::AssetRef,
+};
+
+use dirk_events::EventManager;
+use serde_json;
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
+use tempfile::TempDir;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared test helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Returns `true` when `ASSETS_PATH` exists on disk so registry-dependent
+/// tests can skip gracefully in environments without a real asset tree.
+fn assets_path_exists() -> bool {
+    Path::new(ASSETS_PATH).exists()
+}
+
+/// A minimal valid glTF 2.0 document accepted by the `gltf` crate.
+fn minimal_gltf_json() -> &'static str {
+    r#"{"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[]}],"nodes":[]}"#
+}
+
+/// Writes a `<name>.gltf` + `<name>.dirkasset` fixture pair into `dir`.
+/// Returns the path of the `.dirkasset` file.
+fn write_model_fixture(dir: &Path, name: &str) -> PathBuf {
+    let gltf_name = format!("{name}.gltf");
+    fs::write(dir.join(&gltf_name), minimal_gltf_json()).unwrap();
+
+    let descriptor = serde_json::json!({
+        "meta": { "asset_type": "Model" },
+        "model": { "gltf": gltf_name }
+    });
+    let dirkasset = dir.join(format!("{name}.dirkasset"));
+    fs::write(&dirkasset, descriptor.to_string()).unwrap();
+    dirkasset
+}
+
+/// A minimal `Asset` implementation used only in tests that need a typed
+/// `Handle<T>` without going through the full registry/filesystem machinery.
+#[derive(Clone, Debug, PartialEq)]
+struct FakeAsset {
+    value: u32,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+struct FakeConfig;
+
+impl AssetConfig for FakeConfig {
+    fn validate(&self, _meta: &Metadata) -> bool {
+        true
+    }
+}
+
+impl Asset for FakeAsset {
+    type Config = FakeConfig;
+
+    fn load(_config: &FakeConfig, _handle: &AssetHandle) -> Result<Self> {
+        Ok(FakeAsset { value: 0 })
+    }
+
+    fn asset_type() -> AssetType {
+        // Use Unknown so this fake type never conflicts with real registry entries.
+        AssetType::Unknown
+    }
+}
+
+/// Builds a `Handle<FakeAsset>` containing `value`, bypassing the registry.
+fn fake_handle(value: u32, raw_path: &str) -> Handle<FakeAsset> {
+    let events = EventManager::new();
+    let dispatcher = events.register::<InternalAssetUnloaded>();
+    let asset_ref = AssetRef::new(
+        AssetHandle::from_raw(raw_path, AssetType::Unknown),
+        FakeAsset { value },
+        dispatcher,
+    );
+    Handle::new(asset_ref)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AssetHandle
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod asset_handle {
+    use super::*;
+
+    #[test]
+    fn raw_returns_construction_path() {
+        let h = AssetHandle::from_raw("models/hero.dirkasset", AssetType::Model);
+        assert_eq!(h.raw(), "models/hero.dirkasset");
+    }
+
+    #[test]
+    fn asset_type_accessor_matches_constructor_arg() {
+        let h = AssetHandle::from_raw("x.dirkasset", AssetType::Model);
+        assert_eq!(h.asset_type(), AssetType::Model);
+    }
+
+    #[test]
+    fn display_prints_raw_path() {
+        let h = AssetHandle::from_raw("foo/bar.dirkasset", AssetType::Model);
+        assert_eq!(h.to_string(), "foo/bar.dirkasset");
+    }
+
+    #[test]
+    fn name_returns_filename_with_extension() {
+        let h = AssetHandle::from_raw("models/hero.dirkasset", AssetType::Model);
+        assert_eq!(h.name(), "hero.dirkasset");
+    }
+
+    #[test]
+    fn name_returns_filename_for_nested_path() {
+        let h = AssetHandle::from_raw("a/b/c/mesh.dirkasset", AssetType::Model);
+        assert_eq!(h.name(), "mesh.dirkasset");
+    }
+
+    #[test]
+    fn dir_ends_with_parent_directory() {
+        let h = AssetHandle::from_raw("models/hero.dirkasset", AssetType::Model);
+        // dir() = ASSETS_PATH / models
+        assert!(h.dir().ends_with("models"));
+    }
+
+    #[test]
+    fn path_ends_with_relative_handle() {
+        let h = AssetHandle::from_raw("models/hero.dirkasset", AssetType::Model);
+        assert!(h.path().ends_with("models/hero.dirkasset"));
+    }
+
+    #[test]
+    fn path_dir_relationship_is_consistent() {
+        let h = AssetHandle::from_raw("a/b.dirkasset", AssetType::Model);
+        // dir() must be the parent of path()
+        assert_eq!(h.dir(), h.path().parent().unwrap());
+    }
+
+    #[test]
+    fn default_has_empty_path_and_unknown_type() {
+        let h = AssetHandle::default();
+        assert_eq!(h.raw(), "");
+        assert_eq!(h.asset_type(), AssetType::Unknown);
+    }
+
+    #[test]
+    fn equality_same_path_same_type() {
+        let a = AssetHandle::from_raw("x.dirkasset", AssetType::Model);
+        let b = AssetHandle::from_raw("x.dirkasset", AssetType::Model);
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn inequality_different_path() {
+        let a = AssetHandle::from_raw("a.dirkasset", AssetType::Model);
+        let b = AssetHandle::from_raw("b.dirkasset", AssetType::Model);
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn inequality_different_type() {
+        let a = AssetHandle::from_raw("x.dirkasset", AssetType::Model);
+        let b = AssetHandle::from_raw("x.dirkasset", AssetType::Unknown);
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn clone_is_equal_to_original() {
+        let a = AssetHandle::from_raw("x.dirkasset", AssetType::Model);
+        let b = a.clone();
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn can_be_used_as_hash_map_key() {
+        use std::collections::HashMap;
+        let h = AssetHandle::from_raw("x.dirkasset", AssetType::Model);
+        let mut map = HashMap::new();
+        map.insert(h.clone(), 42u32);
+        assert_eq!(map[&h], 42);
+    }
+
+    #[test]
+    fn serde_round_trip_preserves_path_and_type() {
+        let original = AssetHandle::from_raw("textures/dirt.dirkasset", AssetType::Model);
+        let json = serde_json::to_string(&original).unwrap();
+        let restored: AssetHandle = serde_json::from_str(&json).unwrap();
+        assert_eq!(original.raw(), restored.raw());
+        assert_eq!(original.asset_type(), restored.asset_type());
+    }
+
+    #[test]
+    fn serde_round_trip_unknown_type() {
+        let original = AssetHandle::from_raw("x.dirkasset", AssetType::Unknown);
+        let json = serde_json::to_string(&original).unwrap();
+        let restored: AssetHandle = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.asset_type(), AssetType::Unknown);
+    }
+
+    #[test]
+    fn debug_output_is_non_empty() {
+        let h = AssetHandle::from_raw("a/b.dirkasset", AssetType::Model);
+        assert!(!format!("{h:?}").is_empty());
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AssetType
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod asset_type {
+    use super::*;
+
+    #[test]
+    fn default_is_unknown() {
+        assert_eq!(AssetType::default(), AssetType::Unknown);
+    }
+
+    #[test]
+    fn copy_semantics() {
+        let a = AssetType::Model;
+        let b = a; // Copy, not move
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn model_serialises_as_string_model() {
+        assert_eq!(
+            serde_json::to_string(&AssetType::Model).unwrap(),
+            r#""Model""#
+        );
+    }
+
+    #[test]
+    fn unknown_serialises_as_string_unknown() {
+        assert_eq!(
+            serde_json::to_string(&AssetType::Unknown).unwrap(),
+            r#""Unknown""#
+        );
+    }
+
+    #[test]
+    fn deserialise_model() {
+        let v: AssetType = serde_json::from_str(r#""Model""#).unwrap();
+        assert_eq!(v, AssetType::Model);
+    }
+
+    #[test]
+    fn deserialise_unknown() {
+        let v: AssetType = serde_json::from_str(r#""Unknown""#).unwrap();
+        assert_eq!(v, AssetType::Unknown);
+    }
+
+    #[test]
+    fn deserialise_unrecognised_variant_fails() {
+        let result: std::result::Result<AssetType, _> = serde_json::from_str(r#""Texture""#);
+        assert!(
+            result.is_err(),
+            "Unrecognised variant should fail deserialisation"
+        );
+    }
+
+    #[test]
+    fn serde_round_trip_model() {
+        let json = serde_json::to_string(&AssetType::Model).unwrap();
+        let back: AssetType = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, AssetType::Model);
+    }
+
+    #[test]
+    fn inequality() {
+        assert_ne!(AssetType::Model, AssetType::Unknown);
+    }
+
+    #[test]
+    fn usable_as_hash_map_key() {
+        use std::collections::HashMap;
+        let mut m: HashMap<AssetType, &str> = HashMap::new();
+        m.insert(AssetType::Model, "model");
+        m.insert(AssetType::Unknown, "unknown");
+        assert_eq!(m[&AssetType::Model], "model");
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ModelConfig
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod model_config {
+    use super::*;
+
+    fn make_meta(handle_path: &str) -> Metadata {
+        Metadata {
+            asset_type: AssetType::Model,
+            handle: AssetHandle::from_raw(handle_path, AssetType::Model),
+        }
+    }
+
+    #[test]
+    fn serde_round_trip() {
+        let json = r#"{"gltf":"meshes/hero.gltf"}"#;
+        let config: ModelConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(config.gltf, "meshes/hero.gltf");
+        assert_eq!(serde_json::to_string(&config).unwrap(), json);
+    }
+
+    #[test]
+    fn validate_returns_false_when_gltf_file_missing() {
+        let config = ModelConfig {
+            gltf: "definitely_does_not_exist.gltf".to_string(),
+        };
+        assert!(!config.validate(&make_meta("models/x.dirkasset")));
+    }
+
+    #[test]
+    fn validate_returns_true_when_gltf_file_exists() {
+        // When the gltf path is absolute, handle.dir().join(abs) == abs path,
+        // so we can test the success branch by writing a real temp file.
+        let dir = TempDir::new().unwrap();
+        let gltf_path = dir.path().join("cube.gltf");
+        fs::write(&gltf_path, minimal_gltf_json()).unwrap();
+
+        let config = ModelConfig {
+            // Absolute path: join() returns the absolute path unchanged.
+            gltf: gltf_path.to_string_lossy().into_owned(),
+        };
+        // handle.dir() will be ASSETS_PATH; joining an absolute path ignores it.
+        assert!(config.validate(&make_meta("")));
+    }
+
+    #[test]
+    fn validate_emits_warning_for_missing_file() {
+        // Regression: validate must not panic even with an empty handle path.
+        let config = ModelConfig {
+            gltf: "no_such_file.gltf".to_string(),
+        };
+        // Should return false gracefully (warning is emitted via tracing, not panics).
+        let _ = config.validate(&make_meta(""));
+    }
+
+    #[test]
+    fn clone_is_independent() {
+        let a = ModelConfig {
+            gltf: "file.gltf".to_string(),
+        };
+        let mut b = a.clone();
+        b.gltf = "other.gltf".to_string();
+        assert_eq!(a.gltf, "file.gltf");
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Error types
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod errors {
+    use super::*;
+
+    #[test]
+    fn io_error_display_mentions_io() {
+        let io = std::io::Error::new(std::io::ErrorKind::NotFound, "test");
+        assert!(Error::IoError(io).to_string().contains("IO error"));
+    }
+
+    #[test]
+    fn serialisation_error_display_mentions_serialisation() {
+        let se: serde_json::Error = serde_json::from_str::<i32>("bad").unwrap_err();
+        assert!(
+            Error::SerialisationError(se)
+                .to_string()
+                .to_lowercase()
+                .contains("serialis")
+        );
+    }
+
+    #[test]
+    fn already_taken_display_mentions_consumed() {
+        assert!(Error::AlreadyTaken.to_string().contains("consumed"));
+    }
+
+    #[test]
+    fn not_found_display_contains_handle_path() {
+        let path = "models/missing.dirkasset";
+        let msg = Error::NotFound(path.to_string()).to_string();
+        assert!(msg.contains(path), "Expected '{path}' in error: {msg}");
+    }
+
+    #[test]
+    fn not_found_display_mentions_not_found() {
+        let msg = Error::NotFound("x".to_string()).to_string().to_lowercase();
+        assert!(msg.contains("not found"), "Expected 'not found' in: {msg}");
+    }
+
+    #[test]
+    fn type_mismatch_display_contains_handle_path() {
+        let path = "models/hero.dirkasset";
+        let msg = Error::TypeMismatch(path.to_string()).to_string();
+        assert!(msg.contains(path));
+    }
+
+    #[test]
+    fn type_mismatch_display_mentions_type() {
+        let msg = Error::TypeMismatch("x".to_string())
+            .to_string()
+            .to_lowercase();
+        assert!(msg.contains("type"), "Expected 'type' in: {msg}");
+    }
+
+    #[test]
+    fn asset_load_error_display_includes_source() {
+        let source = anyhow::anyhow!("gltf parse failed");
+        let msg = Error::AssetLoadError(source).to_string();
+        assert!(msg.contains("gltf parse failed"));
+    }
+
+    #[test]
+    fn from_io_error_produces_io_variant() {
+        let io = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "denied");
+        let err: Error = io.into();
+        assert!(matches!(err, Error::IoError(_)));
+    }
+
+    #[test]
+    fn from_serde_error_produces_serialisation_variant() {
+        let se: serde_json::Error = serde_json::from_str::<i32>("bad").unwrap_err();
+        let err: Error = se.into();
+        assert!(matches!(err, Error::SerialisationError(_)));
+    }
+
+    #[test]
+    fn debug_output_is_non_empty() {
+        assert!(!format!("{:?}", Error::AlreadyTaken).is_empty());
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Handle<T>
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod handle {
+    use super::*;
+
+    // ── get ──────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn get_returns_correct_value() {
+        let h = fake_handle(42, "test.dirkasset");
+        assert_eq!(h.get().unwrap().value, 42);
+    }
+
+    #[test]
+    fn get_is_non_destructive_on_first_call() {
+        let h = fake_handle(7, "test.dirkasset");
+        h.get().unwrap();
+        // Second call must still succeed.
+        assert_eq!(h.get().unwrap().value, 7);
+    }
+
+    #[test]
+    fn get_is_callable_many_times() {
+        let h = fake_handle(1, "test.dirkasset");
+        for _ in 0..10 {
+            assert!(h.get().is_ok());
+        }
+    }
+
+    #[test]
+    fn get_after_take_returns_already_taken() {
+        let h = fake_handle(1, "test.dirkasset");
+        h.take().unwrap();
+        assert!(matches!(h.get().unwrap_err(), Error::AlreadyTaken));
+    }
+
+    // ── take ─────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn take_returns_correct_value() {
+        let h = fake_handle(99, "test.dirkasset");
+        assert_eq!(h.take().unwrap().value, 99);
+    }
+
+    #[test]
+    fn take_second_call_returns_already_taken() {
+        let h = fake_handle(1, "test.dirkasset");
+        h.take().unwrap();
+        assert!(matches!(h.take().unwrap_err(), Error::AlreadyTaken));
+    }
+
+    #[test]
+    fn take_is_destructive_across_clones() {
+        // Both handle and its clone share the same inner Arc<Mutex<AssetRef>>.
+        // Taking via one should make the data unavailable via the other.
+        let h = fake_handle(5, "test.dirkasset");
+        let clone = h.clone();
+        clone.take().unwrap();
+        assert!(
+            matches!(h.take().unwrap_err(), Error::AlreadyTaken),
+            "Original should reflect the take performed via its clone"
+        );
+    }
+
+    #[test]
+    fn get_is_non_destructive_across_clones() {
+        let h = fake_handle(3, "test.dirkasset");
+        let clone = h.clone();
+        h.get().unwrap();
+        // Clone can still get the data.
+        assert_eq!(clone.get().unwrap().value, 3);
+    }
+
+    // ── clone ────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn clone_shares_inner_data() {
+        let h = fake_handle(8, "test.dirkasset");
+        let c = h.clone();
+        assert_eq!(h.get().unwrap().value, c.get().unwrap().value);
+    }
+
+    #[test]
+    fn multiple_clones_all_share_data() {
+        let h = fake_handle(4, "test.dirkasset");
+        let c1 = h.clone();
+        let c2 = h.clone();
+        let c3 = c1.clone();
+        for handle in [&h, &c1, &c2, &c3] {
+            assert_eq!(handle.get().unwrap().value, 4);
+        }
+    }
+
+    // ── drop event ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn drop_of_sole_handle_fires_internal_unloaded_event() {
+        let events = EventManager::new();
+        let consumer = events.subscribe::<InternalAssetUnloaded>();
+        let dispatcher = events.register::<InternalAssetUnloaded>();
+
+        let asset_handle = AssetHandle::from_raw("sole.dirkasset", AssetType::Unknown);
+        let asset_ref = AssetRef::new(asset_handle.clone(), FakeAsset { value: 0 }, dispatcher);
+        let handle = Handle::new(asset_ref);
+
+        events.dispatch_all();
+        assert_eq!(consumer.consume_all().count(), 0, "no event yet");
+
+        drop(handle);
+        events.dispatch_all();
+
+        let fired: Vec<_> = consumer.consume_all().collect();
+        assert_eq!(fired.len(), 1, "exactly one InternalAssetUnloaded event");
+        assert_eq!(fired[0].0, asset_handle);
+    }
+
+    #[test]
+    fn drop_does_not_fire_while_clones_still_live() {
+        let events = EventManager::new();
+        let consumer = events.subscribe::<InternalAssetUnloaded>();
+        let dispatcher = events.register::<InternalAssetUnloaded>();
+
+        let asset_ref = AssetRef::new(
+            AssetHandle::from_raw("multi.dirkasset", AssetType::Unknown),
+            FakeAsset { value: 0 },
+            dispatcher,
+        );
+        let h1 = Handle::new(asset_ref);
+        let h2 = h1.clone();
+        let h3 = h1.clone();
+
+        drop(h1);
+        events.dispatch_all();
+        assert_eq!(consumer.consume_all().count(), 0, "clones still alive");
+
+        drop(h2);
+        events.dispatch_all();
+        assert_eq!(consumer.consume_all().count(), 0, "one clone still alive");
+
+        drop(h3); // last reference
+        events.dispatch_all();
+        assert_eq!(consumer.consume_all().count(), 1, "last clone dropped");
+    }
+
+    #[test]
+    fn drop_event_carries_correct_asset_handle() {
+        let events = EventManager::new();
+        let consumer = events.subscribe::<InternalAssetUnloaded>();
+        let dispatcher = events.register::<InternalAssetUnloaded>();
+
+        let expected = AssetHandle::from_raw("foo/bar.dirkasset", AssetType::Unknown);
+        let asset_ref = AssetRef::new(expected.clone(), FakeAsset { value: 0 }, dispatcher);
+        let handle = Handle::new(asset_ref);
+        drop(handle);
+        events.dispatch_all();
+
+        let ev = consumer.consume_all().next().unwrap();
+        assert_eq!(ev.0, expected);
+    }
+
+    // ── Debug ─────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn debug_output_includes_asset_path() {
+        let h = fake_handle(0, "models/debug_test.dirkasset");
+        let dbg = format!("{h:?}");
+        assert!(
+            dbg.contains("debug_test"),
+            "Expected asset path in debug output: {dbg}"
+        );
+    }
+
+    #[test]
+    fn debug_does_not_require_mutable_access() {
+        let h = fake_handle(0, "test.dirkasset");
+        // Should compile and run without locking the inner mutex for a write.
+        let _ = format!("{h:?}");
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DirkAsset validation
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod dirk_asset_validation {
+    use super::*;
+
+    fn model_meta(raw: &str) -> Metadata {
+        Metadata {
+            asset_type: AssetType::Model,
+            handle: AssetHandle::from_raw(raw, AssetType::Model),
+        }
+    }
+
+    fn unknown_meta() -> Metadata {
+        Metadata {
+            asset_type: AssetType::Unknown,
+            handle: AssetHandle::from_raw("x.dirkasset", AssetType::Unknown),
+        }
+    }
+
+    // ── Unknown type ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn unknown_type_is_rejected() {
+        let asset = DirkAsset {
+            meta: unknown_meta(),
+            model: None,
+        };
+        assert!(!asset.validate(), "Unknown type must fail validation");
+    }
+
+    #[test]
+    fn unknown_type_with_model_section_is_still_rejected() {
+        // The model section is irrelevant when the type is Unknown.
+        let asset = DirkAsset {
+            meta: unknown_meta(),
+            model: Some(ModelConfig {
+                gltf: "ignored.gltf".to_string(),
+            }),
+        };
+        assert!(!asset.validate());
+    }
+
+    // ── Model type ────────────────────────────────────────────────────────────
+
+    #[test]
+    fn model_without_model_section_is_rejected() {
+        let asset = DirkAsset {
+            meta: model_meta("models/x.dirkasset"),
+            model: None,
+        };
+        assert!(!asset.validate(), "Model asset must have a [model] section");
+    }
+
+    #[test]
+    fn model_with_missing_gltf_file_is_rejected() {
+        let asset = DirkAsset {
+            meta: model_meta("models/x.dirkasset"),
+            model: Some(ModelConfig {
+                gltf: "absolutely_does_not_exist_xyz.gltf".to_string(),
+            }),
+        };
+        assert!(!asset.validate(), "Missing gltf file must fail validation");
+    }
+
+    #[test]
+    fn model_with_existing_gltf_file_is_accepted() {
+        let dir = TempDir::new().unwrap();
+        let gltf_path = dir.path().join("cube.gltf");
+        fs::write(&gltf_path, minimal_gltf_json()).unwrap();
+
+        // Use the absolute path as the gltf value so that
+        // handle.dir().join(abs_path) == abs_path regardless of ASSETS_PATH.
+        let asset = DirkAsset {
+            meta: model_meta(""),
+            model: Some(ModelConfig {
+                gltf: gltf_path.to_string_lossy().into_owned(),
+            }),
+        };
+        assert!(asset.validate(), "Existing gltf file must pass validation");
+    }
+
+    #[test]
+    fn validation_does_not_panic_on_empty_handle_path() {
+        let asset = DirkAsset {
+            meta: model_meta(""),
+            model: Some(ModelConfig {
+                gltf: "missing.gltf".to_string(),
+            }),
+        };
+        // Should return false, not panic.
+        assert!(!asset.validate());
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AssetRegistry — tests requiring ASSETS_PATH
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod registry {
+    use super::*;
+
+    // ── init ──────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn init_returns_io_error_when_assets_path_missing() {
+        if assets_path_exists() {
+            return; // skip — this machine has a real asset tree
+        }
+        let events = EventManager::new();
+        assert!(
+            matches!(AssetRegistry::init(&events), Err(Error::IoError(_))),
+            "Missing ASSETS_PATH should produce IoError"
+        );
+    }
+
+    #[test]
+    fn init_succeeds_when_assets_path_exists() {
+        if !assets_path_exists() {
+            return;
+        }
+        let events = EventManager::new();
+        assert!(
+            AssetRegistry::init(&events).is_ok(),
+            "init should succeed with a valid ASSETS_PATH"
+        );
+    }
+
+    // ── load_asset error paths (do not require valid assets on disk) ──────────
+
+    #[test]
+    fn load_asset_returns_type_mismatch_for_wrong_type_tag() {
+        if !assets_path_exists() {
+            return;
+        }
+        let events = EventManager::new();
+        let mut registry = AssetRegistry::init(&events).unwrap();
+
+        // Pass a handle whose AssetType is Unknown but request Model — must be TypeMismatch.
+        let bad_handle = AssetHandle::from_raw("anything.dirkasset", AssetType::Unknown);
+        let result = registry.load_asset::<Model>(&bad_handle);
+        assert!(
+            matches!(result, Err(Error::TypeMismatch(_))),
+            "Wrong type tag must produce TypeMismatch"
+        );
+    }
+
+    #[test]
+    fn load_asset_returns_not_found_for_missing_handle() {
+        if !assets_path_exists() {
+            return;
+        }
+        let events = EventManager::new();
+        let mut registry = AssetRegistry::init(&events).unwrap();
+
+        let ghost = AssetHandle::from_raw(
+            "nonexistent/ghost_that_will_never_exist.dirkasset",
+            AssetType::Model,
+        );
+        assert!(
+            matches!(
+                registry.load_asset::<Model>(&ghost),
+                Err(Error::NotFound(_))
+            ),
+            "Unknown handle must produce NotFound"
+        );
+    }
+
+    #[test]
+    fn type_mismatch_error_contains_handle_path() {
+        if !assets_path_exists() {
+            return;
+        }
+        let events = EventManager::new();
+        let mut registry = AssetRegistry::init(&events).unwrap();
+
+        let path = "specific/path.dirkasset";
+        let bad = AssetHandle::from_raw(path, AssetType::Unknown);
+        match registry.load_asset::<Model>(&bad) {
+            Err(Error::TypeMismatch(p)) => assert_eq!(p, path),
+            other => panic!("expected TypeMismatch, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn not_found_error_contains_handle_path() {
+        if !assets_path_exists() {
+            return;
+        }
+        let events = EventManager::new();
+        let mut registry = AssetRegistry::init(&events).unwrap();
+
+        let path = "no/such/asset.dirkasset";
+        let ghost = AssetHandle::from_raw(path, AssetType::Model);
+        match registry.load_asset::<Model>(&ghost) {
+            Err(Error::NotFound(p)) => assert_eq!(p, path),
+            other => panic!("expected NotFound, got {other:?}"),
+        }
+    }
+
+    // ── tick + full happy-path (requires writing fixtures to ASSETS_PATH) ─────
+
+    /// Creates a unique test sub-directory inside ASSETS_PATH, runs the
+    /// callback with a freshly-initialised registry scoped to that directory,
+    /// then removes the sub-directory regardless of test outcome.
+    fn with_temp_fixtures<F>(test_name: &str, f: F)
+    where
+        F: FnOnce(&mut AssetRegistry, &EventManager, &str),
+    {
+        if !assets_path_exists() {
+            return;
+        }
+
+        let sub = format!("__test_{test_name}__");
+        let dir = PathBuf::from(ASSETS_PATH).join(&sub);
+        fs::create_dir_all(&dir).expect("failed to create test fixture dir");
+
+        let events = EventManager::new();
+        let mut registry = AssetRegistry::init(&events).expect("init failed");
+
+        f(&mut registry, &events, &sub);
+
+        // Best-effort cleanup — leave no test artefacts behind.
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn load_asset_returns_handle_for_valid_model() {
+        with_temp_fixtures("load_valid", |_registry, _events, sub| {
+            let dir = PathBuf::from(ASSETS_PATH).join(sub);
+            write_model_fixture(&dir, "hero");
+
+            // Re-init so the registry picks up the freshly written fixture.
+            let events2 = EventManager::new();
+            let mut r2 = AssetRegistry::init(&events2).unwrap();
+
+            let raw = format!("{sub}/hero.dirkasset");
+            let handle = AssetHandle::from_raw(raw, AssetType::Model);
+            assert!(
+                r2.load_asset::<Model>(&handle).is_ok(),
+                "Valid model asset must load without error"
+            );
+        });
+    }
+
+    #[test]
+    fn load_asset_fires_asset_loaded_event() {
+        with_temp_fixtures("event_loaded", |_registry, _events, sub| {
+            let dir = PathBuf::from(ASSETS_PATH).join(sub);
+            write_model_fixture(&dir, "ship");
+
+            let events2 = EventManager::new();
+            let loaded_consumer = events2.subscribe::<AssetLoaded<Model>>();
+            let mut r2 = AssetRegistry::init(&events2).unwrap();
+
+            let raw = format!("{sub}/ship.dirkasset");
+            let handle_id = AssetHandle::from_raw(raw, AssetType::Model);
+            let _handle = r2.load_asset::<Model>(&handle_id).unwrap();
+
+            events2.dispatch_all();
+            let events_fired: Vec<_> = loaded_consumer.consume_all().collect();
+            assert_eq!(events_fired.len(), 1, "Exactly one AssetLoaded event");
+        });
+    }
+
+    #[test]
+    fn loaded_event_handle_gives_access_to_model_data() {
+        with_temp_fixtures("event_data", |_registry, _events, sub| {
+            let dir = PathBuf::from(ASSETS_PATH).join(sub);
+            write_model_fixture(&dir, "tank");
+
+            let events2 = EventManager::new();
+            let loaded_consumer = events2.subscribe::<AssetLoaded<Model>>();
+            let mut r2 = AssetRegistry::init(&events2).unwrap();
+
+            let raw = format!("{sub}/tank.dirkasset");
+            let _handle = r2
+                .load_asset::<Model>(&AssetHandle::from_raw(raw, AssetType::Model))
+                .unwrap();
+
+            events2.dispatch_all();
+            let ev = loaded_consumer.consume_all().next().unwrap();
+            let model = ev.handle.get().expect("handle.get() must succeed");
+            // A minimal glTF has exactly one scene.
+            assert_eq!(model.gltf.scenes().count(), 1);
+        });
+    }
+
+    #[test]
+    fn tick_emits_asset_unloaded_after_all_handles_dropped() {
+        with_temp_fixtures("tick_unload", |_registry, _events, sub| {
+            let dir = PathBuf::from(ASSETS_PATH).join(sub);
+            write_model_fixture(&dir, "barrel");
+
+            let events2 = EventManager::new();
+            let unloaded_consumer = events2.subscribe::<AssetUnloaded>();
+            let mut r2 = AssetRegistry::init(&events2).unwrap();
+
+            let raw = format!("{sub}/barrel.dirkasset");
+            let handle = r2
+                .load_asset::<Model>(&AssetHandle::from_raw(raw, AssetType::Model))
+                .unwrap();
+
+            // Drop all references → InternalAssetUnloaded is queued.
+            drop(handle);
+            events2.dispatch_all(); // forward InternalAssetUnloaded to registry
+            r2.tick(); // registry converts it to AssetUnloaded
+            events2.dispatch_all(); // forward AssetUnloaded to consumers
+
+            let fired: Vec<_> = unloaded_consumer.consume_all().collect();
+            assert_eq!(fired.len(), 1, "Exactly one AssetUnloaded event after drop");
+            assert!(
+                fired[0].handle.raw().contains("barrel"),
+                "Unloaded event must carry the correct handle"
+            );
+        });
+    }
+
+    #[test]
+    fn tick_does_not_emit_unloaded_while_handle_still_live() {
+        with_temp_fixtures("tick_no_unload", |_registry, _events, sub| {
+            let dir = PathBuf::from(ASSETS_PATH).join(sub);
+            write_model_fixture(&dir, "plane");
+
+            let events2 = EventManager::new();
+            let unloaded_consumer = events2.subscribe::<AssetUnloaded>();
+            let mut r2 = AssetRegistry::init(&events2).unwrap();
+
+            let raw = format!("{sub}/plane.dirkasset");
+            let handle = r2
+                .load_asset::<Model>(&AssetHandle::from_raw(raw, AssetType::Model))
+                .unwrap();
+
+            events2.dispatch_all();
+            r2.tick();
+            events2.dispatch_all();
+
+            assert_eq!(
+                unloaded_consumer.consume_all().count(),
+                0,
+                "No AssetUnloaded should fire while the handle is still alive"
+            );
+
+            drop(handle); // ensure RAII cleanup actually happens
+        });
+    }
+
+    #[test]
+    fn tick_emits_unloaded_only_when_last_clone_dropped() {
+        with_temp_fixtures("tick_clone_drop", |_registry, _events, sub| {
+            let dir = PathBuf::from(ASSETS_PATH).join(sub);
+            write_model_fixture(&dir, "crate_mesh");
+
+            let events2 = EventManager::new();
+            let unloaded_consumer = events2.subscribe::<AssetUnloaded>();
+            let mut r2 = AssetRegistry::init(&events2).unwrap();
+
+            let raw = format!("{sub}/crate_mesh.dirkasset");
+            let h1 = r2
+                .load_asset::<Model>(&AssetHandle::from_raw(raw, AssetType::Model))
+                .unwrap();
+            let h2 = h1.clone();
+            let h3 = h1.clone();
+
+            drop(h1);
+            events2.dispatch_all();
+            r2.tick();
+            events2.dispatch_all();
+            assert_eq!(unloaded_consumer.consume_all().count(), 0);
+
+            drop(h2);
+            events2.dispatch_all();
+            r2.tick();
+            events2.dispatch_all();
+            assert_eq!(unloaded_consumer.consume_all().count(), 0);
+
+            drop(h3); // last clone
+            events2.dispatch_all();
+            r2.tick();
+            events2.dispatch_all();
+            assert_eq!(
+                unloaded_consumer.consume_all().count(),
+                1,
+                "AssetUnloaded fires after last clone drops"
+            );
+        });
+    }
+
+    #[test]
+    fn handle_take_gives_correct_gltf_data() {
+        with_temp_fixtures("take_model", |_registry, _events, sub| {
+            let dir = PathBuf::from(ASSETS_PATH).join(sub);
+            write_model_fixture(&dir, "sphere");
+
+            let events2 = EventManager::new();
+            let mut r2 = AssetRegistry::init(&events2).unwrap();
+
+            let raw = format!("{sub}/sphere.dirkasset");
+            let handle = r2
+                .load_asset::<Model>(&AssetHandle::from_raw(raw, AssetType::Model))
+                .unwrap();
+
+            let model = handle.take().expect("take must succeed on first call");
+            // Minimal glTF has 0 meshes.
+            assert_eq!(model.gltf.meshes().count(), 0);
+            assert_eq!(model.buffers.len(), 0);
+            assert_eq!(model.images.len(), 0);
+
+            // Second take must fail.
+            assert!(matches!(handle.take(), Err(Error::AlreadyTaken)));
+        });
+    }
+
+    #[test]
+    fn loading_same_handle_twice_creates_independent_handles() {
+        with_temp_fixtures("double_load", |_registry, _events, sub| {
+            let dir = PathBuf::from(ASSETS_PATH).join(sub);
+            write_model_fixture(&dir, "rock");
+
+            let events2 = EventManager::new();
+            let mut r2 = AssetRegistry::init(&events2).unwrap();
+
+            let raw = format!("{sub}/rock.dirkasset");
+            let h1 = r2
+                .load_asset::<Model>(&AssetHandle::from_raw(raw.clone(), AssetType::Model))
+                .unwrap();
+            let h2 = r2
+                .load_asset::<Model>(&AssetHandle::from_raw(raw, AssetType::Model))
+                .unwrap();
+
+            // Both handles are independent; taking from one must not affect the other.
+            h1.take().unwrap();
+            assert!(
+                h2.take().is_ok(),
+                "Second handle is independent; take must succeed"
+            );
+        });
+    }
+}

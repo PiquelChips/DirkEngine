@@ -1,0 +1,25 @@
+[package]
+name = "dirk_world"
+description = "Types used to populate the world of DirkEngine"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+homepage.workspace = true
+authors.workspace = true
+documentation.workspace = true
+
+[dependencies]
+glam.workspace = true
+tracing.workspace = true
+
+dirk_events.workspace = true
+dirk_utils.workspace = true
+dirk_platform.workspace = true
+dirk_assets.workspace = true
+dirk_universe.workspace = true
+
+[lints]
+workspace = true
