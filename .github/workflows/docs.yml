@@ -42,7 +42,7 @@ jobs:
           shared-key: "ci-ubuntu-latest"
 
       - name: Run docs-tests
-        run: cargo test --workspace --locked --doc
+        run: cargo test --workspace --locked --doc --all-features
 
       - name: Build docs
         run: cargo doc --no-deps --locked --workspace --all-features
