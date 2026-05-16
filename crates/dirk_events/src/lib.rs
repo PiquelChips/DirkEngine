@@ -535,5 +535,5 @@ pub struct AppExit(pub String);
 /// This event contains the frame number.
 /// Used for thread synchronization.
 #[derive(Debug, Clone, Event)]
-#[event("App exit requested: {0}")]
+#[event("Begin frame number {0}")]
 pub struct BeginFrame(pub u64);
