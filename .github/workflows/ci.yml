@@ -71,14 +71,23 @@ jobs:
         with:
           shared-key: "ci-${{ matrix.os }}"
 
-      - name: Build
+      - name: Build debug
         run: cargo build --workspace --locked
 
-      - name: Upload Artifact
+      - name: Upload Debug Artifact
         uses: actions/upload-artifact@v6
         with:
-          name: dirkengine-${{ matrix.os }}
-          path: target/debug/run
+          name: dirkengine-debug-${{ matrix.os }}
+          path: target/debug/dirkengine
+
+      - name: Build release
+        run: cargo build --workspace --locked --release
+
+      - name: Upload Release Artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: dirkengine-release-${{ matrix.os }}
+          path: target/release/dirkengine
 
   test:
     name: Test (${{ matrix.os }})
