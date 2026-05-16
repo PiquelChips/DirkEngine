@@ -29,6 +29,7 @@ dirk_renderer.workspace = true
 dirk_universe.workspace = true
 dirk_world.workspace = true
 dirk_assets.workspace = true
+dirk_player.workspace = true
 
 [build-dependencies]
 dirk_build.workspace = true
