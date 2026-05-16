@@ -1,0 +1,96 @@
+# The graph table configures how the dependency graph is constructed and thus
+# which crates the checks are performed against
+[graph]
+# The platform targets to build for.
+targets = []
+# Packages to exclude from dependency graph.
+exclude = []
+
+all-features = true
+no-default-features = false
+
+# Features to enable when building the dependency graph.
+features = []
+
+# The output table provides options for how/if diagnostics are outputted
+[output]
+feature-depth = 1
+
+[advisories]
+db-urls = ["https://github.com/rustsec/advisory-db"]
+ignore = []
+
+[licenses]
+allow = [
+    # Apache
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",   # used by some LLVM-derived crates
+
+    # MIT family
+    "MIT",
+    #"MIT-0",                             # MIT without attribution clause
+
+    # BSD family
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    #"BSD-4-Clause",
+
+    # ISC (functionally equivalent to MIT)
+    "ISC",
+    #"OpenSSL",                           # used by openssl-sys and derivatives
+
+    # Creative Commons / public domain
+    #"CC0-1.0",
+    "Unlicense",
+
+    # Other common permissive licenses seen in the crates.io ecosystem
+    "Zlib",
+    #"Unicode-DFS-2016",                  # required by the `unicode-ident` crate
+    "Unicode-3.0",
+]
+
+confidence-threshold = 0.8
+exceptions = []
+
+[licenses.private]
+ignore = true
+registries = []
+
+[bans]
+# Lint level for when multiple versions of the same crate are detected
+multiple-versions = "warn"
+# Lint level for when a crate version requirement is `*`
+wildcards = "deny"
+# The graph highlighting used when creating dotgraphs for crates
+# with multiple versions
+# * lowest-version - The path to the lowest versioned duplicate is highlighted
+# * simplest-path - The path to the version with the fewest edges is highlighted
+# * all - Both lowest-version and simplest-path are used
+highlight = "all"
+# The default lint level for `default` features for crates that are members of
+# the workspace that is being checked. This can be overridden by allowing/denying
+# `default` on a crate-by-crate basis if desired.
+workspace-default-features = "allow"
+# The default lint level for `default` features for external crates that are not
+# members of the workspace. This can be overridden by allowing/denying `default`
+# on a crate-by-crate basis if desired.
+external-default-features = "allow"
+# List of crates that are allowed. Use with care!
+allow = []
+allow-workspace = true
+deny = []
+
+# Certain crates/versions that will be skipped when doing duplicate detection.
+skip = [
+    #{ crate = "ansi_term@0.11.0", reason = "you can specify a reason why it can't be updated/removed" },
+]
+
+# Like skip but with entire direct & transitive dependency tree of crate
+skip-tree = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []
