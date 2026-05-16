@@ -1,7 +1,13 @@
 //! The engine module. The engine holds all the state & manages
 //! all the systems for the engine to run properly.
 
-use std::{collections::HashMap, ffi::CString, str::FromStr, time::Instant};
+use std::{
+    collections::HashMap,
+    ffi::CString,
+    str::FromStr,
+    sync::atomic::{AtomicU64, Ordering},
+    time::Instant,
+};
 
 use anyhow::Context;
 use dirk_universe::{Entity, Universe, World, WorldId};
@@ -13,7 +19,10 @@ use dirk_logging::Logger;
 /// This is the main struct that holds global engine state.
 pub struct Engine {
     exit_consumer: dirk_events::Consumer<dirk_events::AppExit>,
+    frame_dispatcher: dirk_events::Dispatcher<dirk_events::BeginFrame>,
     event_manager: dirk_events::EventManager,
+
+    frame: AtomicU64,
 
     #[allow(unused)]
     asset_registry: dirk_assets::AssetRegistry,
@@ -79,9 +88,12 @@ impl Engine {
         info!("engine initialised");
         Ok(Self {
             exit_consumer: event_manager.subscribe(),
+            frame_dispatcher: event_manager.register(),
             event_manager,
             logger,
             asset_registry,
+
+            frame: AtomicU64::new(0),
 
             platform,
             renderer,
@@ -145,6 +157,10 @@ impl Engine {
     }
 
     fn tick_inner(&mut self) -> anyhow::Result<bool> {
+        let frame = self.frame.fetch_add(1, Ordering::Relaxed);
+        self.frame_dispatcher
+            .dispatch(dirk_events::BeginFrame(frame));
+
         let delta_time = self.capture_delta_time();
         self.event_manager.dispatch_all();
 

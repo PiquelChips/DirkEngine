@@ -529,3 +529,11 @@ impl<T: Event> std::fmt::Debug for Consumer<T> {
 #[derive(Debug, Clone, Event)]
 #[event("App exit requested: {0}")]
 pub struct AppExit(pub String);
+
+/// An event run at the beginning of every tick.
+///
+/// This event contains the frame number.
+/// Used for thread synchronization.
+#[derive(Debug, Clone, Event)]
+#[event("App exit requested: {0}")]
+pub struct BeginFrame(pub u64);
