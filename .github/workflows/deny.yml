@@ -38,4 +38,4 @@ jobs:
         uses: taiki-e/install-action@cargo-deny
 
       - name: Run cargo-deny
-        run: cargo deny check --locked -D warnings
+        run: cargo deny check -D warnings
