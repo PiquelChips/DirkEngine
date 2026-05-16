@@ -12,6 +12,7 @@ authors.workspace = true
 documentation.workspace = true
 
 [dependencies]
+dirk_universe.workspace = true
 
 [lints]
 workspace = true
