@@ -63,7 +63,7 @@ version = "0.1.0-alpha-3"
 
 homepage = "https://piquel.fr" # TODO: should piquel.fr/dirk of dirkengine.fr
 authors = ["Piquel Chips <contact@piquel.fr>"]
-documentation = "https://docs.rs/dirkengine/latest/dirkengine"
+documentation = "https://docs.rs/dirkengine"
 keywords = ["game", "engine", "gamedev", "graphics", "vulkan"]
 categories = ["game-engines", "graphics", "rendering", "vulkan"]
 
