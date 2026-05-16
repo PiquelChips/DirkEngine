@@ -24,8 +24,8 @@ env:
 
 jobs:
   check:
-    name: Check (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    name: Docs
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
     steps:
