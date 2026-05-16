@@ -197,9 +197,9 @@ impl Engine {
         &self.exit_error
     }
     /// Returns the time in seconds since last tick. This consumes the delta time.
-    fn capture_delta_time(&mut self) -> f32 {
+    fn capture_delta_time(&mut self) -> f64 {
         let current_time = Instant::now();
-        let delta = current_time.duration_since(self.last_tick).as_secs_f32();
+        let delta = current_time.duration_since(self.last_tick).as_secs_f64();
         self.last_tick = current_time;
         delta
     }

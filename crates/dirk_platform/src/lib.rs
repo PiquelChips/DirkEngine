@@ -63,7 +63,7 @@ impl Platform {
     }
     /// Process pending OS events without blocking.
     /// Returns the events that occurred this tick for the engine to handle.
-    pub fn tick(&mut self, _delta_time: f32) {
+    pub fn tick(&mut self, _delta_time: f64) {
         match self
             .event_loop
             .pump_app_events(Some(Duration::ZERO), &mut self.handler)
