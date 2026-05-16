@@ -1,4 +1,4 @@
-name: Cargo Deny
+name: Dependency Audit
 
 on:
   push:
