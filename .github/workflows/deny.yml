@@ -21,6 +21,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: read
+
 jobs:
   audit:
     name: Dependency Audit
