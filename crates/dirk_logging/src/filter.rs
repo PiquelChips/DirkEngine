@@ -1,4 +1,4 @@
-#[cfg(editor)]
+#[cfg(feature = "editor")]
 use {crate::store::LogStore, std::sync::Arc};
 
 use time::OffsetDateTime;
@@ -46,7 +46,7 @@ type Filter = Box<dyn Fn(&LogEntry) -> bool + Send + Sync>;
 /// ```rust
 /// # use dirk_logging::{Filter, LogLevel};
 /// # let logger = dirk_logging::Logger::new().init().unwrap();
-/// # #[cfg(editor)]
+/// # #[cfg(feature = "editor")]
 /// let recent_render_errors = logger
 ///     .query(
 ///         Filter::new()
@@ -268,7 +268,7 @@ impl LogFilter {
     /// execute the query against the live log store.
     ///
     /// Typically called indirectly via [`Logger::query`](crate::Logger::query).
-    #[cfg(editor)]
+    #[cfg(feature = "editor")]
     pub fn with_store(self, store: Arc<LogStore>) -> StoreFilter {
         StoreFilter {
             filter: self,
@@ -290,13 +290,13 @@ impl LogFilter {
 ///     .query(Filter::new().min_level(LogLevel::Error))
 ///     .last(100);
 /// ```
-#[cfg(editor)]
+#[cfg(feature = "editor")]
 pub struct StoreFilter {
     filter: LogFilter,
     store: Arc<LogStore>,
 }
 
-#[cfg(editor)]
+#[cfg(feature = "editor")]
 impl StoreFilter {
     /// Run the filter and return **all** matching entries in chronological
     /// order (oldest first).

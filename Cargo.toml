@@ -41,6 +41,9 @@ all-features = true
 rustdoc-args = ["-Zunstable-options", "--cfg", "docsrs"]
 
 [features]
+default = ["editor"]
+
+editor = ["dirk_logging/editor"]
 
 # WORKSPACE CONFIGURATION
 

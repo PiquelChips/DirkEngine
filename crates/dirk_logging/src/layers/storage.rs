@@ -1,4 +1,4 @@
-#![cfg(editor)]
+#![cfg(feature = "editor")]
 
 use std::sync::Arc;
 

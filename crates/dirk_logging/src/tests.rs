@@ -389,7 +389,7 @@ mod log_filter {
 
 // ── LogStore (editor only) ────────────────────────────────────────────────────
 
-#[cfg(editor)]
+#[cfg(cfg = "editor")]
 mod log_store {
     use super::*;
     use crate::store::LogStore;
@@ -469,7 +469,7 @@ mod log_store {
 
 // ── StoreFilter (editor only) ─────────────────────────────────────────────────
 
-#[cfg(editor)]
+#[cfg(feature = "editor")]
 mod store_filter {
     use super::*;
     use crate::store::LogStore;

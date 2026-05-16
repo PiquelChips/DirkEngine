@@ -14,17 +14,6 @@ pub fn configure_platform() {
     println!("cargo:rustc-check-cfg=cfg(platform_ios)");
 }
 
-/// Setup build for editor configuration.
-/// Run this function in build.rs of a create that
-/// runs editor (or not) specific code.
-pub fn configure_editor() {
-    // declare editor config keys
-    println!("cargo:rustc-check-cfg=cfg(editor)");
-
-    // always build as editor for now
-    println!("cargo:rustc-cfg=editor");
-}
-
 /// Returns the directory of the current cargo workspace
 ///
 /// # Panics

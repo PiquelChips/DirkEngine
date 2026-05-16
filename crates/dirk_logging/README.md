@@ -38,7 +38,7 @@ captures every event. Use [`Logger::query`] with a [`Filter`] to search it:
 use dirk_logging::{Filter, LogLevel};
 
 // The 50 most recent warnings or worse from the Rendering target:
-# #[cfg(editor)]
+# #[cfg(feature = "editor")]
 let entries = logger
     .query(
         Filter::new()
@@ -48,7 +48,7 @@ let entries = logger
     .last(50);
 
 // Count all errors since the session started:
-# #[cfg(editor)]
+# #[cfg(feature = "editor")]
 let error_count = logger
     .query(Filter::new().of_level(LogLevel::Error))
     .count();

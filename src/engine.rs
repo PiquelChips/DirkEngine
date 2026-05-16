@@ -40,7 +40,7 @@ impl Engine {
     ///
     /// Errors can be returned during platform & renderer initialisation
     pub fn init() -> anyhow::Result<Self> {
-        #[cfg(editor)]
+        #[cfg(feature = "editor")]
         info!("starting editor");
 
         info!("initialising engine");

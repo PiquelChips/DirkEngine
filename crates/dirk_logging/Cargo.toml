@@ -21,5 +21,9 @@ thiserror.workspace = true
 [build-dependencies]
 dirk_build.workspace = true
 
+[features]
+default = []
+editor = []
+
 [lints]
 workspace = true

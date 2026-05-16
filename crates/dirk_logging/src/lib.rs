@@ -6,9 +6,9 @@ mod store;
 #[cfg(test)]
 mod tests;
 
-#[cfg(editor)]
+#[cfg(feature = "editor")]
 pub use filter::StoreFilter;
-#[cfg(editor)]
+#[cfg(feature = "editor")]
 use {
     crate::{layers::storage::StorageLayer, store::LogStore},
     std::sync::Arc,
@@ -144,7 +144,7 @@ pub struct LogEntry {
 /// |---|---|---|
 /// | Console (ANSI, stderr/stdout) | ✓ | — |
 /// | File (`latest.log` + timestamped) | | `write_fs(true)` |
-/// | In-memory store | | `#[cfg(editor)]` |
+/// | In-memory store | | `#[cfg(feature = "editor")]` |
 ///
 /// # Errors
 ///
@@ -162,7 +162,7 @@ pub struct Logger {
     write_fs: bool,
     /// Allowlist of target names. Empty means all targets pass.
     allowed_targets: Vec<String>,
-    #[cfg(editor)]
+    #[cfg(feature = "editor")]
     store: Arc<LogStore>,
 }
 
@@ -295,7 +295,7 @@ impl Logger {
                     None
                 });
 
-        #[cfg(editor)]
+        #[cfg(feature = "editor")]
         let registry = registry.with(StorageLayer::new(Arc::clone(&self.store)));
 
         // always add the filter last
@@ -343,7 +343,7 @@ impl Logger {
     ///     .query(Filter::new().of_level(LogLevel::Error))
     ///     .count();
     /// ```
-    #[cfg(editor)]
+    #[cfg(feature = "editor")]
     #[must_use]
     pub fn query(&self, filter: Filter) -> StoreFilter {
         filter.with_store(Arc::clone(&self.store))

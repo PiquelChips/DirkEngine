@@ -1,4 +1,4 @@
-#![cfg(editor)]
+#![cfg(feature = "editor")]
 
 use parking_lot::RwLock;
 
