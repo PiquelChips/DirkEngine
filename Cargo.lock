@@ -452,6 +452,7 @@ dependencies = [
  "anyhow",
  "dirk_build",
  "dirk_events",
+ "glam",
  "thiserror 2.0.18",
  "tracing",
  "winit",
