@@ -35,8 +35,9 @@ jobs:
       - uses: actions/checkout@v6
       - name: Install Rust toolchain with Clippy
         uses: dtolnay/rust-toolchain@stable
-      - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "ci-${{ matrix.os }}"
       # -D warnings promotes all Clippy warnings to errors, failing the job
       - name: cargo clippy (default features)
         run: cargo clippy --workspace --locked -- -D warnings
