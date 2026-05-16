@@ -95,7 +95,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Install cargo-nextest
-        run: cargo install cargo-nextest
+        uses: taiki-e/install-action@cargo-nextest
 
       - name: Test
         run: cargo nextest run --workspace --locked

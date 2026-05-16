@@ -35,7 +35,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install cargo-deny
-        run: cargo install cargo-deny
+        uses: taiki-e/install-action@cargo-deny
 
       - name: Run cargo-deny
         run: cargo deny check --locked -D warnings
