@@ -71,6 +71,7 @@ impl DirkPlayer {
 }
 
 /// This manages all the players in the game.
+#[derive(Default)]
 pub struct PlayerManager {
     // TODO: setup generation based player allocation
     next_player_id: PlayerId,
@@ -81,10 +82,7 @@ impl PlayerManager {
     /// Create a new empty [`PlayerManager`].
     #[must_use]
     pub fn new() -> Self {
-        Self {
-            next_player_id: PlayerId(0),
-            players: HashMap::new(),
-        }
+        Self::default()
     }
     /// Create a new player.
     ///
