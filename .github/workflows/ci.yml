@@ -80,14 +80,16 @@ jobs:
           name: dirkengine-debug-${{ matrix.os }}
           path: target/debug/dirkengine
 
-      - name: Build release
-        run: cargo build --workspace --locked --release
+          # This isn't cached properly, runs take 7min.
+          # When we fix caching, uncomment
+      # - name: Build release
+      #   run: cargo build --workspace --locked --release
 
-      - name: Upload Release Artifact
-        uses: actions/upload-artifact@v6
-        with:
-          name: dirkengine-release-${{ matrix.os }}
-          path: target/release/dirkengine
+      # - name: Upload Release Artifact
+      #   uses: actions/upload-artifact@v6
+      #   with:
+      #     name: dirkengine-release-${{ matrix.os }}
+      #     path: target/release/dirkengine
 
   test:
     name: Test (${{ matrix.os }})
