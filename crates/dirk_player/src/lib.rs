@@ -54,14 +54,17 @@ pub struct DirkPlayer {
 
 impl DirkPlayer {
     /// Returns the [`PlayerId`] of `self`.
+    #[must_use]
     pub fn id(&self) -> PlayerId {
         self.id
     }
     /// Returns the [`WindowId`] of the window the player is rendered to.
+    #[must_use]
     pub fn window(&self) -> WindowId {
         self.window
     }
     /// Returns the [`PlayerId`] of `self`.
+    #[must_use]
     pub fn region(&self) -> &PlayerRegion {
         &self.region
     }
@@ -76,6 +79,7 @@ pub struct PlayerManager {
 
 impl PlayerManager {
     /// Create a new empty [`PlayerManager`].
+    #[must_use]
     pub fn new() -> Self {
         Self {
             next_player_id: PlayerId(0),
@@ -94,10 +98,12 @@ impl PlayerManager {
     /// Returns a reference to the player with the specified ID
     ///
     /// Returns `None` if the player does note exist.
+    #[must_use]
     pub fn get_player(&self, id: PlayerId) -> Option<&DirkPlayer> {
         self.players.get(&id)
     }
 
+    #[must_use]
     fn allocate_new_player(&mut self) -> PlayerId {
         let id = self.next_player_id;
         self.next_player_id += 1;
