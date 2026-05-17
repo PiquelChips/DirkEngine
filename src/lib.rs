@@ -12,6 +12,8 @@ pub use dirk_logging as logging;
 #[doc(inline)]
 pub use dirk_platform as platform;
 #[doc(inline)]
+pub use dirk_player as player;
+#[doc(inline)]
 pub use dirk_renderer as renderer;
 #[doc(inline)]
 pub use dirk_universe as universe;
@@ -19,5 +21,3 @@ pub use dirk_universe as universe;
 pub use dirk_utils as utils;
 #[doc(inline)]
 pub use dirk_world as world;
-#[doc(inline)]
-pub use dirk_player as player;
