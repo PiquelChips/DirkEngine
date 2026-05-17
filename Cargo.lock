@@ -462,6 +462,7 @@ name = "dirk_player"
 version = "0.0.1"
 dependencies = [
  "dirk_events",
+ "dirk_platform",
  "dirk_universe",
  "glam",
 ]

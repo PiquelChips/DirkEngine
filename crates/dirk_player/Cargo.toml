@@ -12,7 +12,9 @@ authors.workspace = true
 documentation.workspace = true
 
 [dependencies]
+dirk_events.workspace = true
 dirk_universe.workspace = true
+dirk_platform.workspace = true
 
 glam.workspace = true
 

@@ -1,11 +1,18 @@
 #![doc = include_str!("../README.md")]
 
 use std::{
+    collections::HashMap,
     fmt::Display,
     ops::{Add, AddAssign},
 };
 
+use dirk_platform::WindowId;
 use dirk_universe::components::Component;
+
+pub mod region;
+use region::PlayerRegion;
+
+pub mod events;
 
 /// A light identifier for [`DirkPlayer`]s.
 ///
@@ -32,5 +39,68 @@ impl Add<u32> for PlayerId {
 impl AddAssign<u32> for PlayerId {
     fn add_assign(&mut self, rhs: u32) {
         self.0 += rhs;
+    }
+}
+
+/// This is the internal engine representation of a player.
+///
+/// It receives input, owns its region of the screen, ...
+/// [`PlayerId`] is used as a handle.
+pub struct DirkPlayer {
+    id: PlayerId,
+    window: WindowId,
+    region: PlayerRegion,
+}
+
+impl DirkPlayer {
+    /// Returns the [`PlayerId`] of `self`.
+    pub fn id(&self) -> PlayerId {
+        self.id
+    }
+    /// Returns the [`WindowId`] of the window the player is rendered to.
+    pub fn window(&self) -> WindowId {
+        self.window
+    }
+    /// Returns the [`PlayerId`] of `self`.
+    pub fn region(&self) -> &PlayerRegion {
+        &self.region
+    }
+}
+
+/// This manages all the players in the game.
+pub struct PlayerManager {
+    // TODO: setup generation based player allocation
+    next_player_id: PlayerId,
+    players: HashMap<PlayerId, DirkPlayer>,
+}
+
+impl PlayerManager {
+    /// Create a new empty [`PlayerManager`].
+    pub fn new() -> Self {
+        Self {
+            next_player_id: PlayerId(0),
+            players: HashMap::new(),
+        }
+    }
+    /// Create a new player.
+    ///
+    /// This does not spawn the player in the world.
+    pub fn new_player(&mut self, window: WindowId, region: PlayerRegion) -> PlayerId {
+        let id = self.allocate_new_player();
+        self.players.insert(id, DirkPlayer { id, window, region });
+        id
+    }
+
+    /// Returns a reference to the player with the specified ID
+    ///
+    /// Returns `None` if the player does note exist.
+    pub fn get_player(&self, id: PlayerId) -> Option<&DirkPlayer> {
+        self.players.get(&id)
+    }
+
+    fn allocate_new_player(&mut self) -> PlayerId {
+        let id = self.next_player_id;
+        self.next_player_id += 1;
+        id
     }
 }
