@@ -114,14 +114,6 @@ impl Engine {
 
         self.spawn_player(world_id);
 
-        // we tick the engine a few times before entering proper
-        // game loop & rendering cycles. This allows the event manager
-        // to fire off its events & allows systems to process the first
-        // few volleys before rendering gets involved
-        for _ in 0..5 {
-            self.tick_inner().context("pre-start ticking")?;
-        }
-
         Ok(())
     }
     /// Ticks the engine. This is the master function that calls
@@ -132,24 +124,14 @@ impl Engine {
     /// Errors can occure if the various ticking systems have errors.
     /// For now, only rendering can return an error.
     pub fn tick(&mut self) -> bool {
-        if !match self.tick_inner() {
+        self.frame += 1;
+        match self.tick_inner() {
             Ok(exit) => exit,
             Err(err) => {
                 self.exit_error = Some(err.context("engine tick"));
                 false
             }
-        } {
-            return false;
         }
-        let ret = match self.render() {
-            Ok(()) => true,
-            Err(err) => {
-                self.exit_error = Some(err.context("rendering"));
-                false
-            }
-        };
-        self.frame += 1;
-        ret
     }
 
     fn tick_inner(&mut self) -> anyhow::Result<bool> {
@@ -180,6 +162,7 @@ impl Engine {
             .values_mut()
             .for_each(|player| player.tick(&mut self.universe));
 
+        self.render().context("rendering")?;
         Ok(!self.is_requesting_exit())
     }
 
