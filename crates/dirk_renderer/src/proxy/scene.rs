@@ -170,13 +170,16 @@ impl SceneManager {
                 continue;
             };
 
-            models.render_model(
+            match models.render_model(
                 model,
                 cmd,
                 scene.descriptor_sets[frame],
                 proxy.sets[frame],
                 self.graphics_pipeline.layout(),
-            )?;
+            ) {
+                Ok(()) | Err(dirk_assets::Error::NotFound(_)) => (),
+                Err(err) => return Err(err.into()),
+            }
         }
 
         RenderPass::end(&self.device.device, cmd);
