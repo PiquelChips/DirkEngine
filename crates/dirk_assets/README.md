@@ -44,8 +44,8 @@ let handle = registry.load_asset::<Model>(
     &AssetHandle::from_raw("models/hero.dirkasset", AssetType::Model))?;
 
 // 3. Subscribe to receive load events for future loads.
-let loaded_consumer = events.subscribe::<AssetLoaded<Model>>();
-let unloaded_consumer = events.subscribe::<AssetUnloaded>();
+let mut loaded_consumer = events.subscribe::<AssetLoaded<Model>>();
+let mut unloaded_consumer = events.subscribe::<AssetUnloaded>();
 
 // 4. Game loop — call once per frame.
 loop {

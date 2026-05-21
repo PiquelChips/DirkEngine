@@ -15,7 +15,7 @@ use crate::{Consumer, Dispatcher, Event, EventManager};
 // Helper: drain every pending event from a Consumer into a Vec.
 // =========================================================================
 
-fn collect<T: Event>(consumer: &Consumer<T>) -> Vec<T> {
+fn collect<T: Event>(consumer: &mut Consumer<T>) -> Vec<T> {
     consumer.consume_all().collect()
 }
 
@@ -378,12 +378,12 @@ mod event_manager {
     fn single_event_reaches_single_subscriber() {
         let mgr = EventManager::new();
         let dispatcher: Dispatcher<CounterEvent> = mgr.register();
-        let consumer: Consumer<CounterEvent> = mgr.subscribe();
+        let mut consumer: Consumer<CounterEvent> = mgr.subscribe();
 
         dispatcher.dispatch(CounterEvent(1));
         mgr.dispatch_all();
 
-        let events = collect(&consumer);
+        let events = collect(&mut consumer);
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].0, 1);
     }
@@ -392,14 +392,14 @@ mod event_manager {
     fn multiple_events_all_reach_subscriber() {
         let mgr = EventManager::new();
         let dispatcher = mgr.register::<CounterEvent>();
-        let consumer = mgr.subscribe::<CounterEvent>();
+        let mut consumer = mgr.subscribe::<CounterEvent>();
 
         for i in 0..5 {
             dispatcher.dispatch(CounterEvent(i));
         }
         mgr.dispatch_all();
 
-        let values: Vec<u32> = collect(&consumer).into_iter().map(|e| e.0).collect();
+        let values: Vec<u32> = collect(&mut consumer).into_iter().map(|e| e.0).collect();
         assert_eq!(values, vec![0, 1, 2, 3, 4]);
     }
 
@@ -409,35 +409,35 @@ mod event_manager {
     fn events_are_buffered_until_dispatch_all() {
         let mgr = EventManager::new();
         let dispatcher = mgr.register::<CounterEvent>();
-        let consumer = mgr.subscribe::<CounterEvent>();
+        let mut consumer = mgr.subscribe::<CounterEvent>();
 
         dispatcher.dispatch(CounterEvent(42));
 
         // Nothing delivered yet.
-        assert!(collect(&consumer).is_empty());
+        assert!(collect(&mut consumer).is_empty());
 
         mgr.dispatch_all();
-        assert_eq!(collect(&consumer).len(), 1);
+        assert_eq!(collect(&mut consumer).len(), 1);
     }
 
     #[test]
     fn dispatch_all_can_be_called_multiple_times() {
         let mgr = EventManager::new();
         let dispatcher = mgr.register::<CounterEvent>();
-        let consumer = mgr.subscribe::<CounterEvent>();
+        let mut consumer = mgr.subscribe::<CounterEvent>();
 
         // Each tick delivers one event.
         dispatcher.dispatch(CounterEvent(1));
         mgr.dispatch_all();
 
-        let first = collect(&consumer);
+        let first = collect(&mut consumer);
         assert_eq!(first.len(), 1);
         assert_eq!(first[0].0, 1);
 
         dispatcher.dispatch(CounterEvent(2));
         mgr.dispatch_all();
 
-        let second = collect(&consumer);
+        let second = collect(&mut consumer);
         assert_eq!(second.len(), 1);
         assert_eq!(second[0].0, 2);
     }
@@ -446,10 +446,10 @@ mod event_manager {
     fn no_events_means_empty_consumer() {
         let mgr = EventManager::new();
         let _dispatcher = mgr.register::<CounterEvent>();
-        let consumer = mgr.subscribe::<CounterEvent>();
+        let mut consumer = mgr.subscribe::<CounterEvent>();
 
         mgr.dispatch_all();
-        assert!(collect(&consumer).is_empty());
+        assert!(collect(&mut consumer).is_empty());
     }
 
     // ── 3.3  Fan-out: multiple subscribers ────────────────────────────────
@@ -458,14 +458,14 @@ mod event_manager {
     fn single_event_reaches_all_subscribers() {
         let mgr = EventManager::new();
         let dispatcher = mgr.register::<CounterEvent>();
-        let c1 = mgr.subscribe::<CounterEvent>();
-        let c2 = mgr.subscribe::<CounterEvent>();
-        let c3 = mgr.subscribe::<CounterEvent>();
+        let mut c1 = mgr.subscribe::<CounterEvent>();
+        let mut c2 = mgr.subscribe::<CounterEvent>();
+        let mut c3 = mgr.subscribe::<CounterEvent>();
 
         dispatcher.dispatch(CounterEvent(99));
         mgr.dispatch_all();
 
-        for consumer in [&c1, &c2, &c3] {
+        for consumer in [&mut c1, &mut c2, &mut c3] {
             let events = collect(consumer);
             assert_eq!(events.len(), 1);
             assert_eq!(events[0].0, 99);
@@ -476,15 +476,15 @@ mod event_manager {
     fn multiple_events_fan_out_to_all_subscribers() {
         let mgr = EventManager::new();
         let dispatcher = mgr.register::<CounterEvent>();
-        let c1 = mgr.subscribe::<CounterEvent>();
-        let c2 = mgr.subscribe::<CounterEvent>();
+        let mut c1 = mgr.subscribe::<CounterEvent>();
+        let mut c2 = mgr.subscribe::<CounterEvent>();
 
         for i in 0..3 {
             dispatcher.dispatch(CounterEvent(i));
         }
         mgr.dispatch_all();
 
-        for consumer in [&c1, &c2] {
+        for consumer in [&mut c1, &mut c2] {
             let values: Vec<u32> = collect(consumer).into_iter().map(|e| e.0).collect();
             assert_eq!(values, vec![0, 1, 2]);
         }
@@ -498,18 +498,18 @@ mod event_manager {
         let counter_dispatcher = mgr.register::<CounterEvent>();
         let label_dispatcher = mgr.register::<LabelEvent>();
 
-        let counter_consumer = mgr.subscribe::<CounterEvent>();
-        let label_consumer = mgr.subscribe::<LabelEvent>();
+        let mut counter_consumer = mgr.subscribe::<CounterEvent>();
+        let mut label_consumer = mgr.subscribe::<LabelEvent>();
 
         counter_dispatcher.dispatch(CounterEvent(7));
         label_dispatcher.dispatch(LabelEvent("hello".into()));
         mgr.dispatch_all();
 
-        let counters = collect(&counter_consumer);
+        let counters = collect(&mut counter_consumer);
         assert_eq!(counters.len(), 1);
         assert_eq!(counters[0].0, 7);
 
-        let labels = collect(&label_consumer);
+        let labels = collect(&mut label_consumer);
         assert_eq!(labels.len(), 1);
         assert_eq!(labels[0].0, "hello");
     }
@@ -520,15 +520,15 @@ mod event_manager {
         let counter_dispatcher = mgr.register::<CounterEvent>();
         let _label_dispatcher = mgr.register::<LabelEvent>();
 
-        let counter_consumer = mgr.subscribe::<CounterEvent>();
-        let label_consumer = mgr.subscribe::<LabelEvent>();
+        let mut counter_consumer = mgr.subscribe::<CounterEvent>();
+        let mut label_consumer = mgr.subscribe::<LabelEvent>();
 
         // Only fire a CounterEvent.
         counter_dispatcher.dispatch(CounterEvent(1));
         mgr.dispatch_all();
 
-        assert_eq!(collect(&counter_consumer).len(), 1);
-        assert!(collect(&label_consumer).is_empty()); // Must not receive anything.
+        assert_eq!(collect(&mut counter_consumer).len(), 1);
+        assert!(collect(&mut label_consumer).is_empty()); // Must not receive anything.
     }
 
     // ── 3.5  No subscribers registered ───────────────────────────────────
@@ -556,7 +556,7 @@ mod event_manager {
         let mgr = EventManager::new();
         let dispatcher = mgr.register::<CounterEvent>();
 
-        let alive = mgr.subscribe::<CounterEvent>();
+        let mut alive = mgr.subscribe::<CounterEvent>();
         {
             let _dead = mgr.subscribe::<CounterEvent>();
             // `_dead` is dropped here; its receiver is gone.
@@ -566,7 +566,7 @@ mod event_manager {
         dispatcher.dispatch(CounterEvent(5));
         mgr.dispatch_all();
 
-        let events = collect(&alive);
+        let events = collect(&mut alive);
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].0, 5);
     }
@@ -591,13 +591,13 @@ mod event_manager {
     fn subscribing_without_dispatcher_gives_empty_consumer() {
         let mgr = EventManager::new();
         // Subscribe before any dispatcher is registered for this type.
-        let consumer = mgr.subscribe::<CounterEvent>();
+        let mut consumer = mgr.subscribe::<CounterEvent>();
 
         let _dispatcher = mgr.register::<CounterEvent>();
         // No events dispatched.
         mgr.dispatch_all();
 
-        assert!(collect(&consumer).is_empty());
+        assert!(collect(&mut consumer).is_empty());
     }
 
     // ── 3.8  High-volume stress ───────────────────────────────────────────
@@ -608,14 +608,14 @@ mod event_manager {
 
         let mgr = EventManager::new();
         let dispatcher = mgr.register::<CounterEvent>();
-        let consumer = mgr.subscribe::<CounterEvent>();
+        let mut consumer = mgr.subscribe::<CounterEvent>();
 
         for i in 0..N {
             dispatcher.dispatch(CounterEvent(i));
         }
         mgr.dispatch_all();
 
-        let events = collect(&consumer);
+        let events = collect(&mut consumer);
         assert_eq!(events.len() as u32, N);
         for (i, event) in events.iter().enumerate() {
             assert_eq!(event.0, i as u32);
@@ -628,7 +628,7 @@ mod event_manager {
     fn events_accumulate_correctly_across_many_ticks() {
         let mgr = EventManager::new();
         let dispatcher = mgr.register::<CounterEvent>();
-        let consumer = mgr.subscribe::<CounterEvent>();
+        let mut consumer = mgr.subscribe::<CounterEvent>();
 
         let ticks = 10u32;
         let per_tick = 3u32;
@@ -641,7 +641,7 @@ mod event_manager {
         }
 
         // Drain everything accumulated.
-        let all: Vec<u32> = collect(&consumer).into_iter().map(|e| e.0).collect();
+        let all: Vec<u32> = collect(&mut consumer).into_iter().map(|e| e.0).collect();
         let expected: Vec<u32> = (0..ticks * per_tick).collect();
         assert_eq!(all, expected);
     }
@@ -652,7 +652,7 @@ mod event_manager {
     fn try_consume_returns_none_when_empty() {
         let mgr = EventManager::new();
         let _dispatcher = mgr.register::<CounterEvent>();
-        let consumer = mgr.subscribe::<CounterEvent>();
+        let mut consumer = mgr.subscribe::<CounterEvent>();
 
         mgr.dispatch_all();
         assert!(consumer.try_consume().is_none());
@@ -662,7 +662,7 @@ mod event_manager {
     fn try_consume_drains_one_at_a_time() {
         let mgr = EventManager::new();
         let dispatcher = mgr.register::<CounterEvent>();
-        let consumer = mgr.subscribe::<CounterEvent>();
+        let mut consumer = mgr.subscribe::<CounterEvent>();
 
         dispatcher.dispatch(CounterEvent(1));
         dispatcher.dispatch(CounterEvent(2));
@@ -680,13 +680,13 @@ mod event_manager {
         let mgr = EventManager::new();
         let d1 = mgr.register::<CounterEvent>();
         let d2 = mgr.register::<CounterEvent>();
-        let consumer = mgr.subscribe::<CounterEvent>();
+        let mut consumer = mgr.subscribe::<CounterEvent>();
 
         d1.dispatch(CounterEvent(1));
         d2.dispatch(CounterEvent(2));
         mgr.dispatch_all();
 
-        let mut values: Vec<u32> = collect(&consumer).into_iter().map(|e| e.0).collect();
+        let mut values: Vec<u32> = collect(&mut consumer).into_iter().map(|e| e.0).collect();
         values.sort(); // Order across producers is not guaranteed.
         assert_eq!(values, vec![1, 2]);
     }
@@ -699,15 +699,15 @@ mod event_manager {
         let mgr_default = EventManager::default();
 
         let d1 = mgr_new.register::<CounterEvent>();
-        let c1 = mgr_new.subscribe::<CounterEvent>();
+        let mut c1 = mgr_new.subscribe::<CounterEvent>();
         d1.dispatch(CounterEvent(1));
         mgr_new.dispatch_all();
-        assert_eq!(collect(&c1).len(), 1);
+        assert_eq!(collect(&mut c1).len(), 1);
 
         let d2 = mgr_default.register::<CounterEvent>();
-        let c2 = mgr_default.subscribe::<CounterEvent>();
+        let mut c2 = mgr_default.subscribe::<CounterEvent>();
         d2.dispatch(CounterEvent(1));
         mgr_default.dispatch_all();
-        assert_eq!(collect(&c2).len(), 1);
+        assert_eq!(collect(&mut c2).len(), 1);
     }
 }

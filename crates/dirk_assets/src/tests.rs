@@ -605,7 +605,7 @@ mod handle {
     #[test]
     fn drop_of_sole_handle_fires_internal_unloaded_event() {
         let events = EventManager::new();
-        let consumer = events.subscribe::<InternalAssetUnloaded>();
+        let mut consumer = events.subscribe::<InternalAssetUnloaded>();
         let dispatcher = events.register::<InternalAssetUnloaded>();
 
         let asset_handle = AssetHandle::from_raw("sole.dirkasset", AssetType::Unknown);
@@ -626,7 +626,7 @@ mod handle {
     #[test]
     fn drop_does_not_fire_while_clones_still_live() {
         let events = EventManager::new();
-        let consumer = events.subscribe::<InternalAssetUnloaded>();
+        let mut consumer = events.subscribe::<InternalAssetUnloaded>();
         let dispatcher = events.register::<InternalAssetUnloaded>();
 
         let asset_ref = AssetRef::new(
@@ -654,7 +654,7 @@ mod handle {
     #[test]
     fn drop_event_carries_correct_asset_handle() {
         let events = EventManager::new();
-        let consumer = events.subscribe::<InternalAssetUnloaded>();
+        let mut consumer = events.subscribe::<InternalAssetUnloaded>();
         let dispatcher = events.register::<InternalAssetUnloaded>();
 
         let expected = AssetHandle::from_raw("foo/bar.dirkasset", AssetType::Unknown);
@@ -942,7 +942,7 @@ mod registry {
             write_model_fixture(&dir, "ship");
 
             let events2 = EventManager::new();
-            let loaded_consumer = events2.subscribe::<AssetLoaded<Model>>();
+            let mut loaded_consumer = events2.subscribe::<AssetLoaded<Model>>();
             let mut r2 = AssetRegistry::init(&events2).unwrap();
 
             let raw = format!("{sub}/ship.dirkasset");
@@ -962,7 +962,7 @@ mod registry {
             write_model_fixture(&dir, "tank");
 
             let events2 = EventManager::new();
-            let loaded_consumer = events2.subscribe::<AssetLoaded<Model>>();
+            let mut loaded_consumer = events2.subscribe::<AssetLoaded<Model>>();
             let mut r2 = AssetRegistry::init(&events2).unwrap();
 
             let raw = format!("{sub}/tank.dirkasset");
@@ -985,7 +985,7 @@ mod registry {
             write_model_fixture(&dir, "barrel");
 
             let events2 = EventManager::new();
-            let unloaded_consumer = events2.subscribe::<AssetUnloaded>();
+            let mut unloaded_consumer = events2.subscribe::<AssetUnloaded>();
             let mut r2 = AssetRegistry::init(&events2).unwrap();
 
             let raw = format!("{sub}/barrel.dirkasset");
@@ -1015,7 +1015,7 @@ mod registry {
             write_model_fixture(&dir, "plane");
 
             let events2 = EventManager::new();
-            let unloaded_consumer = events2.subscribe::<AssetUnloaded>();
+            let mut unloaded_consumer = events2.subscribe::<AssetUnloaded>();
             let mut r2 = AssetRegistry::init(&events2).unwrap();
 
             let raw = format!("{sub}/plane.dirkasset");
@@ -1044,7 +1044,7 @@ mod registry {
             write_model_fixture(&dir, "crate_mesh");
 
             let events2 = EventManager::new();
-            let unloaded_consumer = events2.subscribe::<AssetUnloaded>();
+            let mut unloaded_consumer = events2.subscribe::<AssetUnloaded>();
             let mut r2 = AssetRegistry::init(&events2).unwrap();
 
             let raw = format!("{sub}/crate_mesh.dirkasset");

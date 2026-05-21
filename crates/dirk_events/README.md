@@ -27,7 +27,7 @@ let mgr = EventManager::new();
 
 // 3. Obtain a dispatcher (producer side) and a consumer (subscriber side).
 let dispatcher = mgr.register::<PlayerScored>();
-let consumer   = mgr.subscribe::<PlayerScored>();
+let mut consumer   = mgr.subscribe::<PlayerScored>();
 
 // 4. Queue an event from anywhere that holds the dispatcher.
 dispatcher.dispatch(PlayerScored { points: 42 });
@@ -177,7 +177,7 @@ struct DamageEvent(u32);
 let mgr = EventManager::new();
 let d1 = mgr.register::<DamageEvent>(); // melee system
 let d2 = mgr.register::<DamageEvent>(); // projectile system
-let consumer = mgr.subscribe::<DamageEvent>();
+let mut consumer = mgr.subscribe::<DamageEvent>();
 
 d1.dispatch(DamageEvent(10));
 d2.dispatch(DamageEvent(25));
@@ -202,8 +202,8 @@ struct Ping;
 let mgr  = EventManager::new();
 let d1   = mgr.register::<Ping>();
 let d2   = d1.clone(); // independent dispatcher
-let c1   = mgr.subscribe::<Ping>();
-let c2   = c1.clone(); // independent consumer — its own subscription
+let mut c1   = mgr.subscribe::<Ping>();
+let mut c2   = c1.clone(); // independent consumer — its own subscription
 
 d1.dispatch(Ping);
 d2.dispatch(Ping);
@@ -228,7 +228,7 @@ struct WorkDone(u32);
 
 let mgr = EventManager::new();
 let dispatcher = mgr.register::<WorkDone>();
-let consumer   = mgr.subscribe::<WorkDone>();
+let mut consumer   = mgr.subscribe::<WorkDone>();
 
 thread::spawn(move || {
     dispatcher.dispatch(WorkDone(1));

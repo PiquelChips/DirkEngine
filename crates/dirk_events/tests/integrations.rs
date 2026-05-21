@@ -11,7 +11,7 @@ use std::thread;
 // Helper
 // =============================================================================
 
-fn collect_all<T: Event>(consumer: &Consumer<T>) -> Vec<T> {
+fn collect_all<T: Event>(consumer: &mut Consumer<T>) -> Vec<T> {
     consumer.consume_all().collect()
 }
 
@@ -167,8 +167,8 @@ fn realistic_multi_system_engine_loop() {
     let key_dispatcher: Dispatcher<KeyPressed> = mgr.register();
     let win_dispatcher: Dispatcher<WindowResized> = mgr.register();
 
-    let key_consumer: Consumer<KeyPressed> = mgr.subscribe();
-    let win_consumer: Consumer<WindowResized> = mgr.subscribe();
+    let mut key_consumer: Consumer<KeyPressed> = mgr.subscribe();
+    let mut win_consumer: Consumer<WindowResized> = mgr.subscribe();
 
     // Simulate three frames.
     for frame in 0u32..3 {
@@ -185,13 +185,13 @@ fn realistic_multi_system_engine_loop() {
     }
 
     // Drain and verify.
-    let keys: Vec<u32> = collect_all(&key_consumer)
+    let keys: Vec<u32> = collect_all(&mut key_consumer)
         .into_iter()
         .map(|e| e.0)
         .collect();
     assert_eq!(keys, vec![65, 66, 67]);
 
-    let wins = collect_all(&win_consumer);
+    let wins = collect_all(&mut win_consumer);
     assert_eq!(wins.len(), 1);
     assert_eq!(wins[0].width, 800);
 }
@@ -204,14 +204,14 @@ fn fan_out_to_many_consumers() {
     let mgr = EventManager::new();
     let dispatcher = mgr.register::<KeyPressed>();
 
-    let consumers: Vec<Consumer<KeyPressed>> = (0..8).map(|_| mgr.subscribe()).collect();
+    let mut consumers: Vec<Consumer<KeyPressed>> = (0..8).map(|_| mgr.subscribe()).collect();
 
     for i in 0..N as u32 {
         dispatcher.dispatch(KeyPressed(i));
     }
     mgr.dispatch_all();
 
-    for consumer in &consumers {
+    for consumer in &mut consumers {
         let events = collect_all(consumer);
         assert_eq!(events.len(), N, "consumer did not receive all events");
         for (i, event) in events.iter().enumerate() {
@@ -226,7 +226,7 @@ fn fan_out_to_many_consumers() {
 fn dispatcher_is_send_and_can_be_moved_to_thread() {
     let mgr = EventManager::new();
     let dispatcher = mgr.register::<KeyPressed>();
-    let consumer = mgr.subscribe::<KeyPressed>();
+    let mut consumer = mgr.subscribe::<KeyPressed>();
 
     let handle = thread::spawn(move || {
         for i in 0..10u32 {
@@ -237,7 +237,7 @@ fn dispatcher_is_send_and_can_be_moved_to_thread() {
     handle.join().expect("thread panicked");
     mgr.dispatch_all();
 
-    let events = collect_all(&consumer);
+    let events = collect_all(&mut consumer);
     assert_eq!(events.len(), 10);
 }
 
@@ -247,14 +247,14 @@ fn dispatcher_is_send_and_can_be_moved_to_thread() {
 fn unit_event_reaches_all_consumers() {
     let mgr = EventManager::new();
     let dispatcher = mgr.register::<ShutdownRequested>();
-    let c1 = mgr.subscribe::<ShutdownRequested>();
-    let c2 = mgr.subscribe::<ShutdownRequested>();
+    let mut c1 = mgr.subscribe::<ShutdownRequested>();
+    let mut c2 = mgr.subscribe::<ShutdownRequested>();
 
     dispatcher.dispatch(ShutdownRequested);
     mgr.dispatch_all();
 
-    assert_eq!(collect_all(&c1).len(), 1);
-    assert_eq!(collect_all(&c2).len(), 1);
+    assert_eq!(collect_all(&mut c1).len(), 1);
+    assert_eq!(collect_all(&mut c2).len(), 1);
 }
 
 // =============================================================================
@@ -275,9 +275,9 @@ fn register_without_subscribe_is_safe() {
 #[test]
 fn subscribe_without_register_yields_empty_consumer() {
     let mgr = EventManager::new();
-    let consumer = mgr.subscribe::<KeyPressed>();
+    let mut consumer = mgr.subscribe::<KeyPressed>();
     mgr.dispatch_all();
-    assert!(collect_all(&consumer).is_empty());
+    assert!(collect_all(&mut consumer).is_empty());
 }
 
 /// Calling dispatch_all repeatedly without any events in between is a no-op.
@@ -285,12 +285,12 @@ fn subscribe_without_register_yields_empty_consumer() {
 fn repeated_dispatch_all_with_no_events() {
     let mgr = EventManager::new();
     let _d = mgr.register::<KeyPressed>();
-    let consumer = mgr.subscribe::<KeyPressed>();
+    let mut consumer = mgr.subscribe::<KeyPressed>();
 
     for _ in 0..100 {
         mgr.dispatch_all();
     }
-    assert!(collect_all(&consumer).is_empty());
+    assert!(collect_all(&mut consumer).is_empty());
 }
 
 /// Consumers that are dropped mid-simulation are silently pruned; remaining
@@ -299,7 +299,7 @@ fn repeated_dispatch_all_with_no_events() {
 fn mid_simulation_consumer_drop_is_handled() {
     let mgr = EventManager::new();
     let dispatcher = mgr.register::<KeyPressed>();
-    let alive = mgr.subscribe::<KeyPressed>();
+    let mut alive = mgr.subscribe::<KeyPressed>();
 
     {
         let _dying = mgr.subscribe::<KeyPressed>();
@@ -312,7 +312,7 @@ fn mid_simulation_consumer_drop_is_handled() {
     dispatcher.dispatch(KeyPressed(2));
     mgr.dispatch_all();
 
-    let events: Vec<u32> = collect_all(&alive).into_iter().map(|e| e.0).collect();
+    let events: Vec<u32> = collect_all(&mut alive).into_iter().map(|e| e.0).collect();
     // Both events delivered to `alive` (which was never dropped).
     assert_eq!(events, vec![1, 2]);
 }
@@ -322,11 +322,11 @@ fn mid_simulation_consumer_drop_is_handled() {
 fn consume_all_before_dispatch_all_is_empty() {
     let mgr = EventManager::new();
     let dispatcher = mgr.register::<KeyPressed>();
-    let consumer = mgr.subscribe::<KeyPressed>();
+    let mut consumer = mgr.subscribe::<KeyPressed>();
 
     dispatcher.dispatch(KeyPressed(42));
     // Not yet dispatched.
-    assert!(collect_all(&consumer).is_empty());
+    assert!(collect_all(&mut consumer).is_empty());
 }
 
 /// Verifies that an enum event (NetworkEvent) goes through the full pipeline.
@@ -334,7 +334,7 @@ fn consume_all_before_dispatch_all_is_empty() {
 fn enum_event_round_trips_through_manager() {
     let mgr = EventManager::new();
     let dispatcher = mgr.register::<NetworkEvent>();
-    let consumer = mgr.subscribe::<NetworkEvent>();
+    let mut consumer = mgr.subscribe::<NetworkEvent>();
 
     dispatcher.dispatch(NetworkEvent::Connected {
         host: "example.com".into(),
@@ -344,7 +344,7 @@ fn enum_event_round_trips_through_manager() {
     dispatcher.dispatch(NetworkEvent::Disconnected);
     mgr.dispatch_all();
 
-    let events = collect_all(&consumer);
+    let events = collect_all(&mut consumer);
     assert_eq!(events.len(), 3);
     assert_eq!(events[0].debug(), "connected to example.com:443");
     assert_eq!(events[1].debug(), "packet received: 1024 bytes");

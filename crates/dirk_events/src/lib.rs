@@ -218,8 +218,8 @@ impl EventManager {
     /// struct TickEvent(u32);
     ///
     /// let mgr = EventManager::new();
-    /// let dispatcher = mgr.register::<TickEvent>();
-    /// let consumer   = mgr.subscribe::<TickEvent>();
+    /// let mut dispatcher = mgr.register::<TickEvent>();
+    /// let mut consumer   = mgr.subscribe::<TickEvent>();
     ///
     /// // Frame 1
     /// dispatcher.dispatch(TickEvent(1));
@@ -303,7 +303,7 @@ struct Subscriber {
 /// let mgr = EventManager::new();
 /// let d1  = mgr.register::<Hit>();
 /// let d2  = d1.clone(); // independent producer
-/// let c   = mgr.subscribe::<Hit>();
+/// let mut c   = mgr.subscribe::<Hit>();
 ///
 /// d1.dispatch(Hit(1));
 /// d2.dispatch(Hit(2));
@@ -335,7 +335,7 @@ impl<T: Event> Dispatcher<T> {
     ///
     /// let mgr = EventManager::new();
     /// let dispatcher = mgr.register::<EnemySpawned>();
-    /// let consumer   = mgr.subscribe::<EnemySpawned>();
+    /// let mut consumer   = mgr.subscribe::<EnemySpawned>();
     ///
     /// // Queued — not yet visible.
     /// dispatcher.dispatch(EnemySpawned { x: 10.0, y: 20.0 });
@@ -385,8 +385,8 @@ impl<T: Event> std::fmt::Debug for Dispatcher<T> {
 ///
 /// let mgr = EventManager::new();
 /// let d   = mgr.register::<Signal>();
-/// let c1  = mgr.subscribe::<Signal>();
-/// let c2  = c1.clone(); // fresh, independent subscription
+/// let mut c1  = mgr.subscribe::<Signal>();
+/// let mut c2  = c1.clone(); // fresh, independent subscription
 ///
 /// d.dispatch(Signal);
 /// mgr.dispatch_all();
@@ -422,7 +422,7 @@ impl<T: Event> Consumer<T> {
     ///
     /// let mgr = EventManager::new();
     /// let d   = mgr.register::<Counter>();
-    /// let c   = mgr.subscribe::<Counter>();
+    /// let mut c   = mgr.subscribe::<Counter>();
     ///
     /// d.dispatch(Counter(1));
     /// d.dispatch(Counter(2));
@@ -459,7 +459,7 @@ impl<T: Event> Consumer<T> {
     ///
     /// let mgr = EventManager::new();
     /// let d   = mgr.register::<Score>();
-    /// let c   = mgr.subscribe::<Score>();
+    /// let mut c   = mgr.subscribe::<Score>();
     ///
     /// for i in 0..5 { d.dispatch(Score(i)); }
     /// mgr.dispatch_all();
@@ -479,7 +479,7 @@ impl<T: Event> Consumer<T> {
     ///
     /// let mgr = EventManager::new();
     /// let d   = mgr.register::<DamageEvent>();
-    /// let c   = mgr.subscribe::<DamageEvent>();
+    /// let mut c   = mgr.subscribe::<DamageEvent>();
     ///
     /// d.dispatch(DamageEvent(10));
     /// d.dispatch(DamageEvent(5));
