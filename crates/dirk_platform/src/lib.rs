@@ -102,10 +102,6 @@ impl Platform {
     pub fn windows(&self) -> &HashMap<WindowId, Window> {
         &self.handler.windows
     }
-    /// Same as [`Platform::windows`] but returns a mutable `HashMap`
-    pub fn windows_mut(&mut self) -> &HashMap<WindowId, Window> {
-        &self.handler.windows
-    }
 }
 
 impl Drop for Platform {

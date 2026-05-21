@@ -173,7 +173,7 @@ impl Engine {
         self.asset_registry.tick();
 
         self.renderer
-            .tick(delta_time, self.platform.windows_mut())
+            .tick(delta_time, self.platform.windows())
             .context("renderer")?;
 
         self.players
