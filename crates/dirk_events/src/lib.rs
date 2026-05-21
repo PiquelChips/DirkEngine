@@ -1,15 +1,14 @@
 #![doc = include_str!("../README.md")]
 
-use parking_lot::Mutex;
+use parking_lot::RwLock;
 use std::{
     any::{Any, TypeId},
     collections::HashMap,
-    sync::{
-        Arc,
-        mpsc::{self, Receiver, Sender},
-    },
+    sync::Arc,
 };
+use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tracing::trace;
+
 mod tests;
 
 /// The marker trait that every event type must implement.
@@ -52,13 +51,6 @@ pub trait Event: Send + Clone + 'static {
 #[doc(hidden)]
 pub use dirk_proc::Event;
 
-/// Private inner state, held behind the `Arc<Mutex<>>`.
-#[derive(Default)]
-struct EventManagerInner {
-    producers: Vec<Box<dyn AnyProducer>>,
-    subscribers: HashMap<TypeId, Vec<Subscriber>>,
-}
-
 /// The central event bus.
 ///
 /// `EventManager` owns the internal channel infrastructure and is responsible
@@ -99,7 +91,8 @@ struct EventManagerInner {
 /// [`dispatch_all`]: EventManager::dispatch_all
 #[derive(Clone, Default)]
 pub struct EventManager {
-    inner: Arc<Mutex<EventManagerInner>>,
+    producers: Arc<RwLock<Vec<Box<dyn AnyProducer>>>>,
+    subscribers: Arc<RwLock<HashMap<TypeId, Vec<Subscriber>>>>,
 }
 
 impl EventManager {
@@ -146,8 +139,8 @@ impl EventManager {
     /// [`dispatch_all`]: EventManager::dispatch_all
     #[must_use]
     pub fn register<T: Event>(&self) -> Dispatcher<T> {
-        let (sender, receiver) = mpsc::channel::<T>();
-        self.inner.lock().producers.push(Box::new(TypedProducer {
+        let (sender, receiver) = mpsc::unbounded_channel::<T>();
+        self.producers.write().push(Box::new(TypedProducer {
             type_id: TypeId::of::<T>(),
             receiver,
         }));
@@ -184,11 +177,10 @@ impl EventManager {
     /// ```
     #[must_use]
     pub fn subscribe<T: Event>(&self) -> Consumer<T> {
-        let (sender, receiver) = mpsc::channel::<T>();
+        let (sender, receiver) = mpsc::unbounded_channel::<T>();
         let type_id = TypeId::of::<T>();
-        self.inner
-            .lock()
-            .subscribers
+        self.subscribers
+            .write()
             .entry(type_id)
             .or_default()
             .push(Subscriber {
@@ -240,21 +232,18 @@ impl EventManager {
     /// assert_eq!(consumer.try_consume().unwrap().0, 2);
     /// ```
     pub fn dispatch_all(&self) {
-        let mut inner = self.inner.lock();
-        let EventManagerInner {
-            producers,
-            subscribers,
-        } = &mut *inner;
-        for producer in producers.iter() {
-            producer.forward_pending(subscribers);
+        let mut producers = self.producers.write();
+        let mut subscribers = self.subscribers.write();
+        for producer in producers.iter_mut() {
+            producer.forward_pending(&mut subscribers);
         }
     }
 }
 
 /// The Type Erasure Trait.
 /// Allows the `EventManager` to forward pending events without knowing `T`.
-trait AnyProducer: Send {
-    fn forward_pending(&self, subscribers: &mut HashMap<TypeId, Vec<Subscriber>>);
+trait AnyProducer: Send + Sync {
+    fn forward_pending(&mut self, subscribers: &mut HashMap<TypeId, Vec<Subscriber>>);
 }
 
 /// A producer is an object that will be queried for events.
@@ -266,17 +255,17 @@ trait AnyProducer: Send {
 /// trait to hide the event type from the event manager.
 struct TypedProducer<T: Event> {
     type_id: TypeId,
-    receiver: Receiver<T>,
+    receiver: UnboundedReceiver<T>,
 }
 
 impl<T: Event> AnyProducer for TypedProducer<T> {
-    fn forward_pending(&self, subscribers: &mut HashMap<TypeId, Vec<Subscriber>>) {
+    fn forward_pending(&mut self, subscribers: &mut HashMap<TypeId, Vec<Subscriber>>) {
         let Some(subscribers) = subscribers.get_mut(&self.type_id) else {
             return;
         };
         while let Ok(event) = self.receiver.try_recv() {
             subscribers.retain(|sub| {
-                let Some(sender) = sub.sender.downcast_ref::<Sender<T>>() else {
+                let Some(sender) = sub.sender.downcast_ref::<UnboundedSender<T>>() else {
                     return true;
                 };
                 sender.send(event.clone()).is_ok()
@@ -289,7 +278,7 @@ impl<T: Event> AnyProducer for TypedProducer<T> {
 /// On event dispatching, will send the events through the
 /// channels of every subscriber.
 struct Subscriber {
-    sender: Box<dyn Any + Send>,
+    sender: Box<dyn Any + Send + Sync>,
 }
 
 /// Queues events to be forwarded to subscribers on the next
@@ -324,7 +313,7 @@ struct Subscriber {
 /// assert_eq!(hits.len(), 2);
 /// ```
 pub struct Dispatcher<T: Event> {
-    sender: Sender<T>,
+    sender: UnboundedSender<T>,
     manager: EventManager,
 }
 
@@ -412,7 +401,7 @@ impl<T: Event> std::fmt::Debug for Dispatcher<T> {
 /// the next [`EventManager::dispatch_all`]. No explicit unsubscribe call is
 /// needed.
 pub struct Consumer<T: Event> {
-    receiver: Receiver<T>,
+    receiver: UnboundedReceiver<T>,
     manager: EventManager,
 }
 
@@ -445,13 +434,15 @@ impl<T: Event> Consumer<T> {
     /// ```
     ///
     /// [`consume_all`]: Consumer::consume_all
-    pub fn try_consume(&self) -> Option<T> {
+    pub fn try_consume(&mut self) -> Option<T> {
         let res = self.receiver.try_recv().ok();
         if let Some(event) = res.clone() {
             trace!("consuming {}", event.debug());
         }
         res
     }
+
+    // TODO: async consume function
 
     /// Returns a lazy iterator that **drains all currently pending events**.
     ///
@@ -502,7 +493,7 @@ impl<T: Event> Consumer<T> {
     /// ```
     ///
     /// [`try_consume`]: Consumer::try_consume
-    pub fn consume_all(&self) -> impl Iterator<Item = T> {
+    pub fn consume_all(&mut self) -> impl Iterator<Item = T> {
         std::iter::from_fn(|| self.try_consume())
     }
 }
