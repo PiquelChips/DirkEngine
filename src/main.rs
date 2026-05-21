@@ -2,6 +2,7 @@
 //! just engine init & tick looping
 
 use anyhow::Context;
+use dirkengine::engine::ExitState;
 use tracing::error;
 
 fn run() -> anyhow::Result<()> {
@@ -11,10 +12,14 @@ fn run() -> anyhow::Result<()> {
     engine.start().context("start engine")?;
     while engine.tick() {}
 
-    if let Some(err) = engine.get_exit_error() {
-        error!("{err:#}");
+    match engine.exit_state() {
+        ExitState::Running => panic!(""),
+        ExitState::Requested => Ok(()),
+        ExitState::Error(err) => {
+            error!("{err:#}");
+            Ok(())
+        }
     }
-    Ok(())
 }
 
 fn main() {
