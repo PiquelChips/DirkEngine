@@ -203,6 +203,10 @@ impl Engine {
     }
     /// Specify `err` to exit with an error.
     pub fn exit(&mut self, err: Option<anyhow::Error>) {
+        if matches!(self.exit_state, ExitState::Error(_)) {
+            return;
+        }
+
         self.exit_state = match err {
             Some(err) => ExitState::Error(err),
             None => ExitState::Requested,
