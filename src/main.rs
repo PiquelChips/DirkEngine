@@ -13,7 +13,7 @@ fn run() -> anyhow::Result<()> {
     while engine.tick() {}
 
     match engine.exit_state() {
-        ExitState::Running => panic!(""),
+        ExitState::Running => unreachable!("engine loop only stops once exit is requested"),
         ExitState::Requested => Ok(()),
         ExitState::Error(err) => {
             error!("{err:#}");
