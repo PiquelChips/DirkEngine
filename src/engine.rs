@@ -139,22 +139,22 @@ impl Engine {
     /// Ticks the engine. This is the master function that calls
     /// every other system's tick function.
     ///
-    /// # Errors
-    ///
-    /// Errors can occure if the various ticking systems have errors.
-    /// For now, only rendering can return an error.
-    pub fn tick(&mut self) -> bool {
-        self.frame += 1;
-        match self.tick_inner() {
-            Ok(exit) => exit,
-            Err(err) => {
-                self.exit_state = ExitState::Error(err.context("engine tick"));
-                false
-            }
+    /// Returns the current exit state after advancing one frame, unless an
+    /// exit has already been requested.
+    pub fn tick(&mut self) -> &ExitState {
+        if self.is_requesting_exit() {
+            return &self.exit_state;
         }
+
+        self.frame += 1;
+        if let Err(err) = self.tick_inner() {
+            self.exit(Some(err.context("engine tick")));
+        }
+
+        &self.exit_state
     }
 
-    fn tick_inner(&mut self) -> anyhow::Result<bool> {
+    fn tick_inner(&mut self) -> anyhow::Result<()> {
         self.frame_dispatcher
             .dispatch(dirk_events::BeginFrame(self.frame));
 
@@ -167,7 +167,7 @@ impl Engine {
 
         self.process_events();
         if self.is_requesting_exit() {
-            return Ok(false);
+            return Ok(());
         }
 
         self.platform.tick(delta_time);
@@ -183,7 +183,7 @@ impl Engine {
             .for_each(|player| player.tick(&mut self.universe));
 
         self.render().context("rendering")?;
-        Ok(!self.is_requesting_exit())
+        Ok(())
     }
 
     fn render(&mut self) -> anyhow::Result<()> {

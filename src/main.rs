@@ -10,7 +10,7 @@ fn run() -> anyhow::Result<()> {
 
     let mut engine = dirkengine::engine::Engine::init().context("engine init")?;
     engine.start().context("start engine")?;
-    while engine.tick() {}
+    while matches!(engine.tick(), ExitState::Running) {}
 
     match engine.exit_state() {
         ExitState::Running => unreachable!("engine loop only stops once exit is requested"),
