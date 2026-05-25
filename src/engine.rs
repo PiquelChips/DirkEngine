@@ -4,6 +4,7 @@
 use std::{collections::HashMap, ffi::CString, str::FromStr, time::Instant};
 
 use anyhow::Context;
+use dirk_threads::WorkerPool;
 use dirk_universe::{Entity, Universe, World, WorldId};
 use dirk_world::player::{Player, PlayerId};
 use tracing::info;
@@ -38,23 +39,25 @@ pub struct Engine {
     frame_dispatcher: dirk_events::Dispatcher<dirk_events::BeginFrame>,
     event_manager: dirk_events::EventManager,
 
+    /// This is a thread pool use by various engine systems for async tasks.
+    #[allow(unused)]
+    workers: WorkerPool,
+    #[allow(unused)]
+    logger: Logger,
+
     frame: u64,
     last_tick: Instant,
-
-    #[allow(unused)]
-    asset_registry: dirk_assets::AssetRegistry,
 
     renderer: dirk_renderer::Renderer,
     platform: dirk_platform::Platform,
     universe: dirk_universe::Universe,
+    #[allow(unused)]
+    asset_registry: dirk_assets::AssetRegistry,
 
     next_player_id: PlayerId,
     players: HashMap<PlayerId, Player>,
 
     exit_state: ExitState,
-
-    #[allow(unused)]
-    logger: Logger,
 }
 
 impl Engine {
@@ -75,7 +78,9 @@ impl Engine {
             .init()
             .context("initialising logger")?;
 
-        let event_manager = dirk_events::EventManager::new();
+        let workers = WorkerPool::new("dirk-workers");
+
+        let event_manager = dirk_events::EventManager::new(workers.clone());
         let asset_registry = dirk_assets::AssetRegistry::init(&event_manager)
             .context("initialising asset registry")?;
 
@@ -107,6 +112,7 @@ impl Engine {
             event_manager,
             logger,
             asset_registry,
+            workers,
 
             frame: 0,
             last_tick: Instant::now(),
