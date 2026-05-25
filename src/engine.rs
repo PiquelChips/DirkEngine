@@ -165,7 +165,6 @@ impl Engine {
             .dispatch(dirk_events::BeginFrame(self.frame));
 
         let delta_time = self.capture_delta_time();
-        self.event_manager.dispatch_all();
 
         // TODO: renders too fast and semaphores have problem.
         // remove when rendering takes longer

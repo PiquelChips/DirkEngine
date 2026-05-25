@@ -96,11 +96,6 @@ pub use dirk_proc::Event;
 /// [`dispatch_all`]: EventManager::dispatch_all
 #[derive(Clone)]
 pub struct EventManager {
-    /// We only store the producers to be able to sync them
-    /// with [`dispatch_all`].
-    ///
-    /// [`dispatch_all`]: EventManager::dispatch_all
-    producers: Arc<RwLock<Vec<Box<dyn AnyProducer>>>>,
     subscribers: Arc<RwLock<HashMap<TypeId, Vec<Subscriber>>>>, // TODO: see about better HashMap where we can lock just the value instead of entire thing
     workers: WorkerPool,
 }
@@ -118,7 +113,6 @@ impl EventManager {
     #[must_use]
     pub fn new(workers: WorkerPool) -> Self {
         Self {
-            producers: Arc::default(),
             subscribers: Arc::default(),
             workers,
         }
@@ -153,10 +147,7 @@ impl EventManager {
     /// [`dispatch_all`]: EventManager::dispatch_all
     #[must_use]
     pub fn register<T: Event>(&self) -> Dispatcher<T> {
-        let (sender, receiver) = mpsc::unbounded_channel::<ProducerMessage<T>>();
-        self.producers.write().push(Box::new(TypedProducer {
-            sender: sender.clone(),
-        }));
+        let (sender, receiver) = mpsc::unbounded_channel::<T>();
         self.spawn_router(receiver);
         Dispatcher {
             sender,
@@ -206,111 +197,25 @@ impl EventManager {
         }
     }
 
-    /// Waits until all events queued before this call have been forwarded to
-    /// their subscribers.
-    ///
-    /// This remains useful as a frame barrier for systems that want to observe
-    /// a quiescent event state, but delivery itself happens immediately on
-    /// background worker threads.
-    ///
-    /// Dropped consumers are silently pruned during this call — no panic, no
-    /// memory leak.
-    ///
-    /// # Behaviour Summary
-    ///
-    /// * Iterates over all registered producers.
-    /// * Inserts a barrier into each producer queue.
-    /// * Waits until each producer has routed every event queued before that barrier.
-    /// * Dead subscribers (those whose [`Consumer`] has been dropped) are pruned
-    ///   during routing.
-    ///
-    /// # Example — Two-Frame Simulation
-    ///
-    /// ```rust
-    /// use dirk_events::{EventManager, Event};
-    ///
-    /// #[derive(Debug, Clone, Event)]
-    /// struct TickEvent(u32);
-    ///
-    /// let mgr = EventManager::new();
-    /// let mut dispatcher = mgr.register::<TickEvent>();
-    /// let mut consumer   = mgr.subscribe::<TickEvent>();
-    ///
-    /// // Frame 1
-    /// dispatcher.dispatch(TickEvent(1));
-    /// mgr.dispatch_all();
-    /// assert_eq!(consumer.try_consume().unwrap().0, 1);
-    ///
-    /// // Frame 2
-    /// dispatcher.dispatch(TickEvent(2));
-    /// mgr.dispatch_all();
-    /// assert_eq!(consumer.try_consume().unwrap().0, 2);
-    /// ```
-    pub fn dispatch_all(&self) {
-        let producers = self.producers.read();
-        for producer in producers.iter() {
-            producer.sync();
-        }
-    }
-
-    fn spawn_router<T: Event>(&self, mut receiver: UnboundedReceiver<ProducerMessage<T>>) {
+    fn spawn_router<T: Event>(&self, mut receiver: UnboundedReceiver<T>) {
         let subscribers = Arc::clone(&self.subscribers);
         self.workers.spawn(async move {
-            while let Some(message) = receiver.recv().await {
-                match message {
-                    ProducerMessage::Event(event) => {
-                        let mut subscribers = subscribers.write();
-                        let Some(listeners) = subscribers.get_mut(&TypeId::of::<T>()) else {
-                            continue;
-                        };
+            while let Some(event) = receiver.recv().await {
+                let mut subscribers = subscribers.write();
+                let Some(listeners) = subscribers.get_mut(&TypeId::of::<T>()) else {
+                    continue;
+                };
 
-                        listeners.retain(|sub| {
-                            let Some(sender) = sub.sender.downcast_ref::<UnboundedSender<T>>()
-                            else {
-                                // TODO: do we really want to keep what isn't being downcasted?
-                                return true;
-                            };
-                            sender.send(event.clone()).is_ok()
-                        });
-                    }
-                    ProducerMessage::Barrier(barrier) => {
-                        let _ = barrier.send(());
-                    }
-                }
+                listeners.retain(|sub| {
+                    let Some(sender) = sub.sender.downcast_ref::<UnboundedSender<T>>() else {
+                        // TODO: do we really want to keep what isn't being downcasted?
+                        return true;
+                    };
+                    sender.send(event.clone()).is_ok()
+                });
             }
         });
     }
-}
-
-/// The Type Erasure Trait.
-/// Allows the `EventManager` to forward pending events without knowing `T`.
-trait AnyProducer: Send + Sync {
-    fn sync(&self);
-}
-
-/// A producer is an object that will be queried for events.
-/// On event collection, the event manager loops through every
-/// producer and collects pending events.
-///
-/// This is a typed producer as it stores the actual type of the
-/// event it is producing. It is then wrapped by the [`AnyProducer`]
-/// trait to hide the event type from the event manager.
-struct TypedProducer<T: Event> {
-    sender: UnboundedSender<ProducerMessage<T>>,
-}
-
-impl<T: Event> AnyProducer for TypedProducer<T> {
-    fn sync(&self) {
-        let (tx, rx) = std::sync::mpsc::channel();
-        if self.sender.send(ProducerMessage::Barrier(tx)).is_ok() {
-            let _ = rx.recv();
-        }
-    }
-}
-
-enum ProducerMessage<T: Event> {
-    Event(T),
-    Barrier(std::sync::mpsc::Sender<()>),
 }
 
 /// A subscriber is a sender for events.
@@ -351,7 +256,7 @@ struct Subscriber {
 /// assert_eq!(hits.len(), 2);
 /// ```
 pub struct Dispatcher<T: Event> {
-    sender: UnboundedSender<ProducerMessage<T>>,
+    sender: UnboundedSender<T>,
     manager: EventManager,
 }
 
@@ -382,7 +287,7 @@ impl<T: Event> Dispatcher<T> {
     /// ```
     pub fn dispatch(&self, event: T) {
         trace!("dispatching event {}", event.debug());
-        let _ = self.sender.send(ProducerMessage::Event(event));
+        let _ = self.sender.send(event);
     }
 }
 
