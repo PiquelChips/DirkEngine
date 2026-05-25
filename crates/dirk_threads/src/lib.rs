@@ -1,4 +1,4 @@
-//! This crate contains DirkEngine's async threading primitives.
+//! This crate contains `DirkEngine`'s async threading primitives.
 
 use std::{
     future::Future,
@@ -12,6 +12,7 @@ use tokio::{
     sync::{Mutex, oneshot},
     task::JoinHandle as TaskJoinHandle,
 };
+use tracing::info;
 
 /// A cheap clonable handle to a pool of background worker threads.
 ///
@@ -25,6 +26,8 @@ pub struct WorkerPool {
 
 struct Inner {
     handle: Handle,
+    /// Stored as an [`Option`] as the sender is consumed when sending
+    /// shutdown message.
     shutdown: Mutex<Option<oneshot::Sender<()>>>,
     coordinator: Mutex<Option<JoinHandle<()>>>,
 }
@@ -46,17 +49,19 @@ impl WorkerPool {
             .spawn(move || {
                 let runtime = Builder::new_multi_thread()
                     .worker_threads(default_worker_count().get())
-                    .thread_name(thread_name)
+                    .thread_name(thread_name.clone())
                     .enable_all()
                     .build()
                     .expect("failed to build worker runtime");
 
                 runtime.block_on(async move {
+                    info!("starting worker pool: {thread_name}");
                     let handle = Handle::current();
                     handle_tx
                         .send(handle)
                         .expect("worker pool handle receiver should be open");
                     let _ = shutdown_rx.await;
+                    info!("shutdown worker pool {thread_name}");
                 });
             })
             .expect("failed to spawn worker coordinator thread");
