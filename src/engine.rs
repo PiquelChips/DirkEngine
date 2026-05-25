@@ -187,12 +187,8 @@ impl Engine {
             .values_mut()
             .for_each(|player| player.tick(&mut self.universe));
 
-        self.render().context("rendering")?;
+        self.renderer.render().context("rendering")?;
         Ok(())
-    }
-
-    fn render(&mut self) -> anyhow::Result<()> {
-        Ok(self.renderer.render()?)
     }
 
     fn process_events(&mut self) {
