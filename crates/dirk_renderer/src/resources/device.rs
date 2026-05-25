@@ -40,6 +40,7 @@ pub struct RenderDeviceInner {
     pub swapchain_loader: swapchain::Device,
 
     pub instance: ash::Instance,
+    pub entry: ash::Entry,
     pub physical_device: vk::PhysicalDevice,
     pub queues: Queues,
     /// For single use buffers.
@@ -64,7 +65,7 @@ pub struct RenderDeviceInner {
 
 impl RenderDevice {
     pub fn new(
-        entry: &ash::Entry,
+        entry: ash::Entry,
         instance: ash::Instance,
         device: ash::Device,
         physical_device: vk::PhysicalDevice,
@@ -152,7 +153,7 @@ impl RenderDevice {
 
         Ok(Self(Arc::new(RenderDeviceInner {
             device,
-            surface_loader: surface::Instance::new(entry, &instance),
+            surface_loader: surface::Instance::new(&entry, &instance),
             swapchain_loader,
             physical_device,
             queues,
@@ -168,11 +169,12 @@ impl RenderDevice {
             current_frame,
 
             #[cfg(validation)]
-            debug_utils_loader: debug_utils::Instance::new(entry, &instance),
+            debug_utils_loader: debug_utils::Instance::new(&entry, &instance),
             #[cfg(validation)]
             debug_messenger,
 
             instance,
+            entry,
         })))
     }
 

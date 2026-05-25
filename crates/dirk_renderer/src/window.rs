@@ -1,5 +1,6 @@
 use ash::vk;
 use dirk_platform::WindowId;
+use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
 use crate::{
     Error, Renderer, Result,
@@ -42,23 +43,29 @@ pub struct Window {
 }
 
 impl Window {
-    pub fn build(
-        id: WindowId,
-        renderer: &Renderer,
-        surface: vk::SurfaceKHR,
-        size: vk::Extent2D,
-    ) -> Result<Self> {
+    pub fn build(device: &RenderDevice, plat_window: &dirk_platform::Window) -> Result<Self> {
+        let surface = unsafe {
+            ash_window::create_surface(
+                &device.entry,
+                &device.instance,
+                plat_window.display_handle()?.as_raw(),
+                plat_window.window_handle()?.as_raw(),
+                None,
+            )?
+        };
+
+        let window_size = plat_window.size();
+        let size = vk::Extent2D {
+            width: window_size.width,
+            height: window_size.height,
+        };
+
         let (swapchain, extent, images) =
-            renderer.create_swap_chain(surface, size, vk::SwapchainKHR::null())?;
+            Renderer::create_swap_chain(device, surface, size, vk::SwapchainKHR::null())?;
 
         let semaphore_info = vk::SemaphoreCreateInfo::default();
         let create_semaphore = || unsafe {
-            Ok::<vk::Semaphore, Error>(
-                renderer
-                    .render_device
-                    .device
-                    .create_semaphore(&semaphore_info, None)?,
-            )
+            Ok::<vk::Semaphore, Error>(device.device.create_semaphore(&semaphore_info, None)?)
         };
 
         let semaphores = (0..images.len())
@@ -66,8 +73,8 @@ impl Window {
             .collect::<Result<Vec<_>>>()?;
 
         Ok(Self {
-            id,
-            device: renderer.render_device.clone(),
+            id: plat_window.id(),
+            device: device.clone(),
             surface,
             swapchain,
             extent,
@@ -83,12 +90,6 @@ impl Window {
     }
     pub fn extent(&self) -> vk::Extent2D {
         self.extent
-    }
-    pub fn swapchain(&self) -> vk::SwapchainKHR {
-        self.swapchain
-    }
-    pub fn surface(&self) -> vk::SurfaceKHR {
-        self.surface
     }
     pub fn next_image(&mut self) -> Result<RenderImage<'_>> {
         self.semaphore_count = (self.semaphore_count + 1) % self.semaphores.len();
@@ -116,15 +117,13 @@ impl Window {
             render_finished_semaphore,
         })
     }
-    pub fn update_swapcahin(
-        &mut self,
-        swapchain: vk::SwapchainKHR,
-        extent: vk::Extent2D,
-        images: Vec<SwapchainImage>,
-    ) {
+    pub fn resize(&mut self, extent: vk::Extent2D) -> Result<()> {
+        let (swapchain, extent, images) =
+            Renderer::create_swap_chain(&self.device, self.surface, extent, self.swapchain)?;
         self.swapchain = swapchain;
         self.extent = extent;
         self.images = images;
+        Ok(())
     }
     pub fn set_occluded(&mut self, occluded: bool) {
         self.occluded = occluded;

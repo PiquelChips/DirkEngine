@@ -86,8 +86,6 @@ pub struct RendererCreateInfo {
 /// The Renderer struct that holds all render state and is called upon to handle
 /// all rendering operations
 pub struct Renderer {
-    entry: Entry,
-
     // Heavy renderer state:
     /// All of the [`window::Window`]s constructed from [`platform::Window`]s.
     windows: HashMap<WindowId, Window>,
@@ -393,7 +391,7 @@ impl Renderer {
 
         // RENDER DEVICE
         let render_device = RenderDevice::new(
-            &entry,
+            entry.clone(),
             instance.clone(),
             device.clone(),
             physical_device,
@@ -441,11 +439,15 @@ impl Renderer {
 
         let scene_manager = SceneManager::init(&render_device, extent)?;
 
+        // create the first window as we do not receive a create event for it
+        let window = window::Window::build(&render_device, window)?;
+        let mut windows = HashMap::new();
+        windows.insert(window.id(), window);
+
         Ok(Self {
-            entry,
             render_device,
 
-            windows: HashMap::new(),
+            windows,
             scene_manager,
             players: HashMap::new(),
             models,
@@ -512,23 +514,7 @@ impl Renderer {
                         continue;
                     };
 
-                    let surface = unsafe {
-                        ash_window::create_surface(
-                            &self.entry,
-                            &self.render_device.instance,
-                            plat_window.display_handle()?.as_raw(),
-                            plat_window.window_handle()?.as_raw(),
-                            None,
-                        )?
-                    };
-
-                    let window_size = plat_window.size();
-                    let size = vk::Extent2D {
-                        width: window_size.width,
-                        height: window_size.height,
-                    };
-
-                    let window = window::Window::build(plat_window.id(), self, surface, size)?;
+                    let window = window::Window::build(&self.render_device, plat_window)?;
                     self.windows.insert(window.id(), window);
 
                     debug!("created renderer window with id {}", id.into_raw());
@@ -547,19 +533,10 @@ impl Renderer {
         for event in window_events {
             match event {
                 WindowEvent::Resized { id, width, height } => {
-                    let Some(window) = self.windows.get(&id) else {
-                        continue;
-                    };
-                    let surface = window.surface();
-                    let (swapchain, extent, images) = self.create_swap_chain(
-                        surface,
-                        vk::Extent2D { width, height },
-                        window.swapchain(),
-                    )?;
                     let Some(window) = self.windows.get_mut(&id) else {
                         continue;
                     };
-                    window.update_swapcahin(swapchain, extent, images);
+                    window.resize(vk::Extent2D { width, height })?;
                 }
                 WindowEvent::Occluded { id, occluded } => {
                     let Some(window) = self.windows.get_mut(&id) else {
@@ -593,6 +570,7 @@ impl Renderer {
     ///
     /// Vulkan errors can occur during rendering
     pub fn render(&mut self) -> Result<()> {
+        // TODO: is engine is shutting down, window will no longer exist so engine stops with error
         for player in self.players.values() {
             let frame = &self.frames[self.current_frame()];
             let Some(window) = self.windows.get_mut(&player.window) else {
@@ -689,18 +667,15 @@ impl Renderer {
     // WINDOW MANAGEMENT
 
     fn create_swap_chain(
-        &self,
+        device: &RenderDevice,
         surface: vk::SurfaceKHR,
         window_size: vk::Extent2D,
         old_swapchain: vk::SwapchainKHR,
     ) -> Result<(vk::SwapchainKHR, vk::Extent2D, Vec<SwapchainImage>)> {
         let capabilities = unsafe {
-            self.render_device
+            device
                 .surface_loader
-                .get_physical_device_surface_capabilities(
-                    self.render_device.physical_device,
-                    surface,
-                )?
+                .get_physical_device_surface_capabilities(device.physical_device, surface)?
         };
 
         let extent = if capabilities.current_extent.width == u32::MAX {
@@ -723,7 +698,7 @@ impl Renderer {
             image_count = capabilities.max_image_count;
         }
 
-        let indices = &self.render_device.properties.queue_family_indices;
+        let indices = &device.properties.queue_family_indices;
         // Deduplicate — concurrent mode requires unique family indices
         let mut unique_indices: Vec<u32> =
             vec![indices.graphics, indices.present, indices.transfer];
@@ -739,8 +714,8 @@ impl Renderer {
         let create_info = vk::SwapchainCreateInfoKHR::default()
             .surface(surface)
             .min_image_count(image_count)
-            .image_format(self.render_device.properties.surface_format.format)
-            .image_color_space(self.render_device.properties.surface_format.color_space)
+            .image_format(device.properties.surface_format.format)
+            .image_color_space(device.properties.surface_format.color_space)
             .image_extent(extent)
             .image_array_layers(1)
             .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)
@@ -748,34 +723,26 @@ impl Renderer {
             .queue_family_indices(indices_slice)
             .pre_transform(capabilities.current_transform)
             .composite_alpha(vk::CompositeAlphaFlagsKHR::OPAQUE)
-            .present_mode(self.render_device.properties.present_mode)
+            .present_mode(device.properties.present_mode)
             .clipped(true)
             .old_swapchain(old_swapchain);
 
         let swapchain = unsafe {
-            self.render_device
+            device
                 .swapchain_loader
                 .create_swapchain(&create_info, None)?
         };
-        let images = unsafe {
-            self.render_device
-                .swapchain_loader
-                .get_swapchain_images(swapchain)?
-        };
+        let images = unsafe { device.swapchain_loader.get_swapchain_images(swapchain)? };
 
         let swap_images = images
             .into_iter()
             .map(|image| {
-                SwapchainImage::new(
-                    &self.render_device,
-                    image,
-                    self.render_device.properties.surface_format.format,
-                )
+                SwapchainImage::new(device, image, device.properties.surface_format.format)
             })
             .collect::<Result<Vec<_>>>()?;
 
         unsafe {
-            self.render_device
+            device
                 .swapchain_loader
                 .destroy_swapchain(old_swapchain, None);
         };
