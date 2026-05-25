@@ -33,10 +33,12 @@ asset type has its own optional config object (currently only `"model"`).
 ```rust
 use dirk_assets::{AssetRegistry, AssetHandle, AssetType, AssetLoaded, AssetUnloaded, Model};
 use dirk_events::EventManager;
+use dirk_threads::WorkerPool;
 
 # fn test() -> anyhow::Result<()> {
 // 1. Initialise — scans ASSETS_PATH and validates all .dirkasset files.
-let events = EventManager::new();
+let workers = WorkerPool::new("test");
+let events = EventManager::new(workers);
 let mut registry = AssetRegistry::init(&events)?;
 
 // 2. Load an asset by its handle string (path relative to ASSETS_PATH).
@@ -49,7 +51,6 @@ let mut unloaded_consumer = events.subscribe::<AssetUnloaded>();
 
 // 4. Game loop — call once per frame.
 loop {
-    events.dispatch_all();
     registry.tick();
 
     for event in loaded_consumer.consume_all() {

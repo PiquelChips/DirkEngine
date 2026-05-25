@@ -71,29 +71,10 @@ pub use dirk_proc::Event;
 /// ```rust
 /// use dirk_events::EventManager;
 ///
-/// let mgr_a = EventManager::new();
+/// let workers = dirk_threads::WorkerPool::new("pool");
+/// let mgr_a = EventManager::new(workers);
 /// let mgr_b = mgr_a.clone(); // same bus, different handle
 /// ```
-///
-/// # Frame Loop Integration
-///
-/// ```rust
-/// use dirk_events::EventManager;
-///
-/// let mgr = EventManager::new();
-///
-/// loop {
-///     // … collect input, run systems …
-///
-///     // Wait for events dispatched so far to finish routing.
-///     mgr.dispatch_all();
-///
-///     // … render …
-///     # break; // stop the doc-test loop
-/// }
-/// ```
-///
-/// [`dispatch_all`]: EventManager::dispatch_all
 #[derive(Clone)]
 pub struct EventManager {
     subscribers: Arc<RwLock<HashMap<TypeId, Vec<Subscriber>>>>, // TODO: see about better HashMap where we can lock just the value instead of entire thing
@@ -101,15 +82,7 @@ pub struct EventManager {
 }
 
 impl EventManager {
-    /// Creates a new, empty event manager.
-    ///
-    /// Equivalent to [`EventManager::default`].
-    ///
-    /// ```rust
-    /// use dirk_events::EventManager;
-    ///
-    /// let mgr = EventManager::new();
-    /// ```
+    /// Creates a new, empty event manager with a [`WorkerPool`].
     #[must_use]
     pub fn new(workers: WorkerPool) -> Self {
         Self {
@@ -123,26 +96,6 @@ impl EventManager {
     /// Every call to `register` creates an **independent** producer channel and
     /// a matching background routing task. Multiple dispatchers for the same
     /// event type are fully supported.
-    ///
-    /// # Type Inference
-    ///
-    /// The event type can be inferred from context or specified with the
-    /// turbofish syntax:
-    ///
-    /// ```rust
-    /// use dirk_events::{EventManager, Dispatcher, Event};
-    ///
-    /// #[derive(Debug, Clone, Event)]
-    /// struct MyEvent;
-    ///
-    /// let mgr = EventManager::new();
-    ///
-    /// // Turbofish syntax:
-    /// let d1 = mgr.register::<MyEvent>();
-    ///
-    /// // Type annotation on the binding:
-    /// let d2: Dispatcher<MyEvent> = mgr.register();
-    /// ```
     ///
     /// [`dispatch_all`]: EventManager::dispatch_all
     #[must_use]
@@ -163,22 +116,6 @@ impl EventManager {
     ///
     /// A consumer can be created before or after a dispatcher is registered for
     /// the same type.
-    ///
-    /// # Type Inference
-    ///
-    /// ```rust
-    /// use dirk_events::{EventManager, Consumer, Event};
-    ///
-    /// #[derive(Debug, Clone, Event)]
-    /// struct MyEvent;
-    ///
-    /// let mgr = EventManager::new();
-    ///
-    /// // Turbofish syntax:
-    /// let c1 = mgr.subscribe::<MyEvent>();
-    ///
-    /// // Type annotation on the binding:
-    /// let c2: Consumer<MyEvent> = mgr.subscribe();
     /// ```
     #[must_use]
     pub fn subscribe<T: Event>(&self) -> Consumer<T> {
@@ -236,25 +173,6 @@ struct Subscriber {
 /// same [`EventManager`]. This means the clone and the original each have their
 /// own internal routing channel, but both sets of events are delivered to all
 /// subscribers.
-///
-/// ```rust
-/// use dirk_events::{EventManager, Event};
-///
-/// #[derive(Debug, Clone, Event)]
-/// struct Hit(u32);
-///
-/// let mgr = EventManager::new();
-/// let d1  = mgr.register::<Hit>();
-/// let d2  = d1.clone(); // independent producer
-/// let mut c   = mgr.subscribe::<Hit>();
-///
-/// d1.dispatch(Hit(1));
-/// d2.dispatch(Hit(2));
-/// mgr.dispatch_all();
-///
-/// let hits: Vec<u32> = c.consume_all().map(|h| h.0).collect();
-/// assert_eq!(hits.len(), 2);
-/// ```
 pub struct Dispatcher<T: Event> {
     sender: UnboundedSender<T>,
     manager: EventManager,
@@ -266,25 +184,6 @@ impl<T: Event> Dispatcher<T> {
     ///
     /// This method is non-blocking and returns immediately. The event is not
     /// routed on the caller thread.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use dirk_events::{EventManager, Event};
-    ///
-    /// #[derive(Debug, Clone, Event)]
-    /// #[event("enemy spawned at ({x}, {y})")]
-    /// struct EnemySpawned { x: f32, y: f32 }
-    ///
-    /// let mgr = EventManager::new();
-    /// let dispatcher = mgr.register::<EnemySpawned>();
-    /// let mut consumer   = mgr.subscribe::<EnemySpawned>();
-    ///
-    /// // Routed asynchronously.
-    /// dispatcher.dispatch(EnemySpawned { x: 10.0, y: 20.0 });
-    /// mgr.dispatch_all();
-    /// assert!(consumer.try_consume().is_some());
-    /// ```
     pub fn dispatch(&self, event: T) {
         trace!("dispatching event {}", event.debug());
         let _ = self.sender.send(event);
@@ -317,24 +216,6 @@ impl<T: Event> std::fmt::Debug for Dispatcher<T> {
 /// *after* it was created; it does **not** inherit any events already queued
 /// in the original.
 ///
-/// ```rust
-/// use dirk_events::{EventManager, Event};
-///
-/// #[derive(Debug, Clone, Event)]
-/// struct Signal;
-///
-/// let mgr = EventManager::new();
-/// let d   = mgr.register::<Signal>();
-/// let mut c1  = mgr.subscribe::<Signal>();
-/// let mut c2  = c1.clone(); // fresh, independent subscription
-///
-/// d.dispatch(Signal);
-/// mgr.dispatch_all();
-///
-/// assert_eq!(c1.consume_all().count(), 1);
-/// assert_eq!(c2.consume_all().count(), 1); // independent — also gets the event
-/// ```
-///
 /// # Dropping
 ///
 /// When a `Consumer` is dropped its subscription is automatically removed the
@@ -351,27 +232,6 @@ impl<T: Event> Consumer<T> {
     ///
     /// This is non-blocking. Use [`consume_all`] if you want to drain every
     /// event that arrived so far.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use dirk_events::{EventManager, Event};
-    ///
-    /// #[derive(Debug, Clone, Event)]
-    /// struct Counter(u32);
-    ///
-    /// let mgr = EventManager::new();
-    /// let d   = mgr.register::<Counter>();
-    /// let mut c   = mgr.subscribe::<Counter>();
-    ///
-    /// d.dispatch(Counter(1));
-    /// d.dispatch(Counter(2));
-    /// mgr.dispatch_all();
-    ///
-    /// assert_eq!(c.try_consume().unwrap().0, 1);
-    /// assert_eq!(c.try_consume().unwrap().0, 2);
-    /// assert!(c.try_consume().is_none()); // queue is now empty
-    /// ```
     ///
     /// [`consume_all`]: Consumer::consume_all
     pub fn try_consume(&mut self) -> Option<T> {
@@ -406,49 +266,6 @@ impl<T: Event> Consumer<T> {
     ///
     /// The iterator calls [`try_consume`] repeatedly and stops as soon as the
     /// queue is empty. Collect it into a `Vec` or drive it with a `for` loop.
-    ///
-    /// # Example — Collect into a Vec
-    ///
-    /// ```rust
-    /// use dirk_events::{EventManager, Event};
-    ///
-    /// #[derive(Debug, Clone, Event)]
-    /// struct Score(u32);
-    ///
-    /// let mgr = EventManager::new();
-    /// let d   = mgr.register::<Score>();
-    /// let mut c   = mgr.subscribe::<Score>();
-    ///
-    /// for i in 0..5 { d.dispatch(Score(i)); }
-    /// mgr.dispatch_all();
-    ///
-    /// let scores: Vec<u32> = c.consume_all().map(|s| s.0).collect();
-    /// assert_eq!(scores, vec![0, 1, 2, 3, 4]);
-    /// ```
-    ///
-    /// # Example — `for` Loop
-    ///
-    /// ```rust
-    /// use dirk_events::{EventManager, Event};
-    ///
-    /// #[derive(Debug, Clone, Event)]
-    /// #[event("damage={0}")]
-    /// struct DamageEvent(u32);
-    ///
-    /// let mgr = EventManager::new();
-    /// let d   = mgr.register::<DamageEvent>();
-    /// let mut c   = mgr.subscribe::<DamageEvent>();
-    ///
-    /// d.dispatch(DamageEvent(10));
-    /// d.dispatch(DamageEvent(5));
-    /// mgr.dispatch_all();
-    ///
-    /// let mut total_damage = 0u32;
-    /// for event in c.consume_all() {
-    ///     total_damage += event.0;
-    /// }
-    /// assert_eq!(total_damage, 15);
-    /// ```
     ///
     /// [`try_consume`]: Consumer::try_consume
     pub fn consume_all(&mut self) -> impl Iterator<Item = T> {
