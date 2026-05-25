@@ -9,6 +9,8 @@ use std::{
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tracing::trace;
 
+use dirk_threads::WorkerPool;
+
 mod tests;
 
 /// The marker trait that every event type must implement.
@@ -54,8 +56,8 @@ pub use dirk_proc::Event;
 /// The central event bus.
 ///
 /// `EventManager` owns the internal channel infrastructure and is responsible
-/// for forwarding buffered events to the right subscribers on every call to
-/// [`dispatch_all`].
+/// for routing dispatched events to the right subscribers on background worker
+/// threads.
 ///
 /// # Cloning
 ///
@@ -80,7 +82,7 @@ pub use dirk_proc::Event;
 /// loop {
 ///     // … collect input, run systems …
 ///
-///     // Forward all queued events to subscribers.
+///     // Wait for events dispatched so far to finish routing.
 ///     mgr.dispatch_all();
 ///
 ///     // … render …
@@ -89,10 +91,15 @@ pub use dirk_proc::Event;
 /// ```
 ///
 /// [`dispatch_all`]: EventManager::dispatch_all
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct EventManager {
+    /// We only store the producers to be able to sync them
+    /// with [`dispatch_all`].
+    ///
+    /// [`dispatch_all`]: EventManager::dispatch_all
     producers: Arc<RwLock<Vec<Box<dyn AnyProducer>>>>,
-    subscribers: Arc<RwLock<HashMap<TypeId, Vec<Subscriber>>>>,
+    subscribers: Arc<RwLock<HashMap<TypeId, Vec<Subscriber>>>>, // TODO: see about better HashMap where we can lock just the value instead of entire thing
+    workers: WorkerPool,
 }
 
 impl EventManager {
@@ -106,15 +113,19 @@ impl EventManager {
     /// let mgr = EventManager::new();
     /// ```
     #[must_use]
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(workers: WorkerPool) -> Self {
+        Self {
+            producers: Arc::default(),
+            subscribers: Arc::default(),
+            workers,
+        }
     }
 
     /// Registers a new event type and returns a [`Dispatcher`] for it.
     ///
-    /// Every call to `register` creates an **independent** producer channel.
-    /// Multiple dispatchers for the same event type are fully supported — their
-    /// events are all forwarded on the next [`dispatch_all`].
+    /// Every call to `register` creates an **independent** producer channel and
+    /// a matching background routing task. Multiple dispatchers for the same
+    /// event type are fully supported.
     ///
     /// # Type Inference
     ///
@@ -139,11 +150,11 @@ impl EventManager {
     /// [`dispatch_all`]: EventManager::dispatch_all
     #[must_use]
     pub fn register<T: Event>(&self) -> Dispatcher<T> {
-        let (sender, receiver) = mpsc::unbounded_channel::<T>();
+        let (sender, receiver) = mpsc::unbounded_channel::<ProducerMessage<T>>();
         self.producers.write().push(Box::new(TypedProducer {
-            type_id: TypeId::of::<T>(),
-            receiver,
+            sender: sender.clone(),
         }));
+        self.spawn_router(receiver);
         Dispatcher {
             sender,
             manager: self.clone(),
@@ -192,22 +203,23 @@ impl EventManager {
         }
     }
 
-    /// Drains all registered producers and forwards their pending events to
-    /// every matching subscriber.
+    /// Waits until all events queued before this call have been forwarded to
+    /// their subscribers.
     ///
-    /// **Call this exactly once per frame / tick** from your main engine loop.
-    /// Events queued via [`Dispatcher::dispatch`] are invisible to consumers
-    /// until this method is called.
+    /// This remains useful as a frame barrier for systems that want to observe
+    /// a quiescent event state, but delivery itself happens immediately on
+    /// background worker threads.
     ///
     /// Dropped consumers are silently pruned during this call — no panic, no
     /// memory leak.
     ///
     /// # Behaviour Summary
     ///
-    /// * Iterates over all registered producers in registration order.
-    /// * For each producer, drains all pending events from its internal channel.
-    /// * Clones each event and sends it to every live subscriber of that type.
-    /// * Removes dead subscribers (those whose [`Consumer`] has been dropped).
+    /// * Iterates over all registered producers.
+    /// * Inserts a barrier into each producer queue.
+    /// * Waits until each producer has routed every event queued before that barrier.
+    /// * Dead subscribers (those whose [`Consumer`] has been dropped) are pruned
+    ///   during routing.
     ///
     /// # Example — Two-Frame Simulation
     ///
@@ -232,18 +244,45 @@ impl EventManager {
     /// assert_eq!(consumer.try_consume().unwrap().0, 2);
     /// ```
     pub fn dispatch_all(&self) {
-        let mut producers = self.producers.write();
-        let mut subscribers = self.subscribers.write();
-        for producer in producers.iter_mut() {
-            producer.forward_pending(&mut subscribers);
+        let producers = self.producers.read();
+        for producer in producers.iter() {
+            producer.sync();
         }
+    }
+
+    fn spawn_router<T: Event>(&self, mut receiver: UnboundedReceiver<ProducerMessage<T>>) {
+        let subscribers = Arc::clone(&self.subscribers);
+        self.workers.spawn(async move {
+            while let Some(message) = receiver.recv().await {
+                match message {
+                    ProducerMessage::Event(event) => {
+                        let mut subscribers = subscribers.write();
+                        let Some(listeners) = subscribers.get_mut(&TypeId::of::<T>()) else {
+                            continue;
+                        };
+
+                        listeners.retain(|sub| {
+                            let Some(sender) = sub.sender.downcast_ref::<UnboundedSender<T>>()
+                            else {
+                                // TODO: do we really want to keep what isn't being downcasted?
+                                return true;
+                            };
+                            sender.send(event.clone()).is_ok()
+                        });
+                    }
+                    ProducerMessage::Barrier(barrier) => {
+                        let _ = barrier.send(());
+                    }
+                }
+            }
+        });
     }
 }
 
 /// The Type Erasure Trait.
 /// Allows the `EventManager` to forward pending events without knowing `T`.
 trait AnyProducer: Send + Sync {
-    fn forward_pending(&mut self, subscribers: &mut HashMap<TypeId, Vec<Subscriber>>);
+    fn sync(&self);
 }
 
 /// A producer is an object that will be queried for events.
@@ -254,24 +293,21 @@ trait AnyProducer: Send + Sync {
 /// event it is producing. It is then wrapped by the [`AnyProducer`]
 /// trait to hide the event type from the event manager.
 struct TypedProducer<T: Event> {
-    type_id: TypeId,
-    receiver: UnboundedReceiver<T>,
+    sender: UnboundedSender<ProducerMessage<T>>,
 }
 
 impl<T: Event> AnyProducer for TypedProducer<T> {
-    fn forward_pending(&mut self, subscribers: &mut HashMap<TypeId, Vec<Subscriber>>) {
-        let Some(subscribers) = subscribers.get_mut(&self.type_id) else {
-            return;
-        };
-        while let Ok(event) = self.receiver.try_recv() {
-            subscribers.retain(|sub| {
-                let Some(sender) = sub.sender.downcast_ref::<UnboundedSender<T>>() else {
-                    return true;
-                };
-                sender.send(event.clone()).is_ok()
-            });
+    fn sync(&self) {
+        let (tx, rx) = std::sync::mpsc::channel();
+        if self.sender.send(ProducerMessage::Barrier(tx)).is_ok() {
+            let _ = rx.recv();
         }
     }
+}
+
+enum ProducerMessage<T: Event> {
+    Event(T),
+    Barrier(std::sync::mpsc::Sender<()>),
 }
 
 /// A subscriber is a sender for events.
@@ -281,8 +317,7 @@ struct Subscriber {
     sender: Box<dyn Any + Send + Sync>,
 }
 
-/// Queues events to be forwarded to subscribers on the next
-/// [`EventManager::dispatch_all`].
+/// Queues events to be forwarded to subscribers by a background worker task.
 ///
 /// Created by [`EventManager::register`]. Cheaply shareable — pass it by clone
 /// into any number of systems.
@@ -291,8 +326,8 @@ struct Subscriber {
 ///
 /// Cloning a `Dispatcher` registers a **new, independent producer** with the
 /// same [`EventManager`]. This means the clone and the original each have their
-/// own internal channel, but both sets of events are delivered to all
-/// subscribers on the next `dispatch_all`.
+/// own internal routing channel, but both sets of events are delivered to all
+/// subscribers.
 ///
 /// ```rust
 /// use dirk_events::{EventManager, Event};
@@ -313,16 +348,16 @@ struct Subscriber {
 /// assert_eq!(hits.len(), 2);
 /// ```
 pub struct Dispatcher<T: Event> {
-    sender: UnboundedSender<T>,
+    sender: UnboundedSender<ProducerMessage<T>>,
     manager: EventManager,
 }
 
 impl<T: Event> Dispatcher<T> {
-    /// Queues `event` to be forwarded to all subscribers on the next call to
-    /// [`EventManager::dispatch_all`].
+    /// Queues `event` to be forwarded to all subscribers as soon as a worker
+    /// thread can route it.
     ///
     /// This method is non-blocking and returns immediately. The event is not
-    /// visible to consumers until `dispatch_all` is called.
+    /// routed on the caller thread.
     ///
     /// # Example
     ///
@@ -337,17 +372,14 @@ impl<T: Event> Dispatcher<T> {
     /// let dispatcher = mgr.register::<EnemySpawned>();
     /// let mut consumer   = mgr.subscribe::<EnemySpawned>();
     ///
-    /// // Queued — not yet visible.
+    /// // Routed asynchronously.
     /// dispatcher.dispatch(EnemySpawned { x: 10.0, y: 20.0 });
-    /// assert!(consumer.try_consume().is_none());
-    ///
-    /// // Now forwarded.
     /// mgr.dispatch_all();
     /// assert!(consumer.try_consume().is_some());
     /// ```
     pub fn dispatch(&self, event: T) {
         trace!("dispatching event {}", event.debug());
-        let _ = self.sender.send(event);
+        let _ = self.sender.send(ProducerMessage::Event(event));
     }
 }
 
@@ -365,7 +397,7 @@ impl<T: Event> std::fmt::Debug for Dispatcher<T> {
     }
 }
 
-/// Receives events forwarded by [`EventManager::dispatch_all`].
+/// Receives events routed by background worker tasks.
 ///
 /// Created by [`EventManager::subscribe`]. Each `Consumer` holds an independent
 /// subscription — it is **not** shared with other consumers of the same type.
@@ -374,7 +406,7 @@ impl<T: Event> std::fmt::Debug for Dispatcher<T> {
 ///
 /// Cloning a `Consumer` creates a **fresh subscription** backed by the same
 /// [`EventManager`]. The clone starts empty and receives events dispatched
-/// *after* it was created; it does **not** inherit any events already buffered
+/// *after* it was created; it does **not** inherit any events already queued
 /// in the original.
 ///
 /// ```rust
@@ -397,9 +429,9 @@ impl<T: Event> std::fmt::Debug for Dispatcher<T> {
 ///
 /// # Dropping
 ///
-/// When a `Consumer` is dropped its subscription is automatically removed on
-/// the next [`EventManager::dispatch_all`]. No explicit unsubscribe call is
-/// needed.
+/// When a `Consumer` is dropped its subscription is automatically removed the
+/// next time a worker attempts to route an event to it. No explicit
+/// unsubscribe call is needed.
 pub struct Consumer<T: Event> {
     receiver: UnboundedReceiver<T>,
     manager: EventManager,
@@ -410,7 +442,7 @@ impl<T: Event> Consumer<T> {
     /// empty.
     ///
     /// This is non-blocking. Use [`consume_all`] if you want to drain every
-    /// event that arrived this tick.
+    /// event that arrived so far.
     ///
     /// # Example
     ///
@@ -442,7 +474,25 @@ impl<T: Event> Consumer<T> {
         res
     }
 
-    // TODO: async consume function
+    /// Async consumption function. Returns a future that resolved to the next
+    /// event that is dispatched to this [`Consumer`].
+    pub async fn consume(&mut self) -> Option<T> {
+        let res = self.receiver.recv().await;
+        if let Some(event) = res.clone() {
+            trace!("consuming {}", event.debug());
+        }
+        res
+    }
+
+    /// Blocks the current thread until the next event arrives, or all
+    /// dispatchers for this subscription are dropped.
+    pub fn consume_blocking(&mut self) -> Option<T> {
+        let res = self.receiver.blocking_recv();
+        if let Some(event) = res.clone() {
+            trace!("consuming {}", event.debug());
+        }
+        res
+    }
 
     /// Returns a lazy iterator that **drains all currently pending events**.
     ///

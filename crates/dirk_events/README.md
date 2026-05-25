@@ -8,9 +8,9 @@ use inside a game-engine loop.
 | Term | Type | Role |
 |------|------|------|
 | **Event** | any `T: [events::Event]` | A value that travels through the bus |
-| **Dispatcher** | [`Dispatcher<T>`] | Queues events for the next tick |
-| **Consumer** | [`Consumer<T>`] | Reads events that were forwarded this tick |
-| **Event Manager** | [`EventManager`] | Wires everything together; call [`dispatch_all`] once per frame |
+| **Dispatcher** | [`Dispatcher<T>`] | Queues events for immediate background routing |
+| **Consumer** | [`Consumer<T>`] | Reads events that have already been routed |
+| **Event Manager** | [`EventManager`] | Wires everything together; [`dispatch_all`] waits for all pending to be distributed |
 
 ## Quick Start
 
@@ -32,7 +32,7 @@ let mut consumer   = mgr.subscribe::<PlayerScored>();
 // 4. Queue an event from anywhere that holds the dispatcher.
 dispatcher.dispatch(PlayerScored { points: 42 });
 
-// 5. Once per frame / tick: forward queued events to all subscribers.
+// 5. Optionally wait until everything dispatched so far has been routed.
 mgr.dispatch_all();
 
 // 6. Read events on the consumer side.
@@ -47,23 +47,25 @@ for event in consumer.consume_all() {
  dispatcher.dispatch(e)
        │
        ▼
- [internal channel buffer]   ← events accumulate here between ticks
+ [background worker queue]
        │
- mgr.dispatch_all()          ← call exactly once per frame
+ [worker thread routes event]
        │
        ├──▶ consumer A
        ├──▶ consumer B
        └──▶ consumer C       ← every live consumer receives a clone
 ```
 
-* **Buffered until `dispatch_all`** — events queued before `dispatch_all`
-  are invisible to consumers. Call `dispatch_all` once per frame.
+* **Immediate background routing** — events are forwarded as soon as a worker
+  thread can route them; the game thread does not perform the fan-out work.
+* **`dispatch_all` is a barrier** — call it when you need to wait until every
+  event dispatched so far has reached its subscribers.
 * **Fan-out** — every active [`Consumer`] for a given type receives its own
   independent clone of each event.
 * **Type-isolated** — consumers only receive events of the exact type they
   subscribed to; other event types are never delivered to them.
 * **Dropped-consumer pruning** — if a [`Consumer`] is dropped, its entry is
-  silently removed on the next `dispatch_all`; no panic, no leak.
+  silently removed on the next routing attempt; no panic, no leak.
 
 ## Using the `#[derive(Event)]` Macro
 

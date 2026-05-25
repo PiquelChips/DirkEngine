@@ -429,6 +429,7 @@ name = "dirk_events"
 version = "0.0.1"
 dependencies = [
  "dirk_proc",
+ "dirk_threads",
  "parking_lot",
  "tokio",
  "tracing",

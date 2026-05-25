@@ -15,6 +15,12 @@ fn collect_all<T: Event>(consumer: &mut Consumer<T>) -> Vec<T> {
     consumer.consume_all().collect()
 }
 
+fn wait_for<T: Event>(consumer: &mut Consumer<T>) -> T {
+    consumer
+        .consume_blocking()
+        .expect("dispatcher should still be alive")
+}
+
 // =============================================================================
 // Section A – Derive macro: Event types defined outside the crate
 //
@@ -317,16 +323,15 @@ fn mid_simulation_consumer_drop_is_handled() {
     assert_eq!(events, vec![1, 2]);
 }
 
-/// consume_all returns an empty iterator when called before dispatch_all.
+/// Events are routed without waiting for dispatch_all.
 #[test]
-fn consume_all_before_dispatch_all_is_empty() {
+fn events_are_visible_before_dispatch_all() {
     let mgr = EventManager::new();
     let dispatcher = mgr.register::<KeyPressed>();
     let mut consumer = mgr.subscribe::<KeyPressed>();
 
     dispatcher.dispatch(KeyPressed(42));
-    // Not yet dispatched.
-    assert!(collect_all(&mut consumer).is_empty());
+    assert_eq!(wait_for(&mut consumer).0, 42);
 }
 
 /// Verifies that an enum event (NetworkEvent) goes through the full pipeline.

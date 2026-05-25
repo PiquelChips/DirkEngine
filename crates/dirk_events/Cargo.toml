@@ -16,6 +16,7 @@ parking_lot.workspace = true
 tracing.workspace = true
 
 dirk_proc.workspace = true
+dirk_threads.workspace = true
 
 tokio.workspace = true
 

@@ -19,6 +19,12 @@ fn collect<T: Event>(consumer: &mut Consumer<T>) -> Vec<T> {
     consumer.consume_all().collect()
 }
 
+fn wait_for<T: Event>(consumer: &mut Consumer<T>) -> T {
+    consumer
+        .consume_blocking()
+        .expect("dispatcher should still be alive")
+}
+
 // =========================================================================
 // Section 1 – Derive-macro test types
 //
@@ -403,21 +409,16 @@ mod event_manager {
         assert_eq!(values, vec![0, 1, 2, 3, 4]);
     }
 
-    // ── 3.2  Buffering ────────────────────────────────────────────────────
+    // ── 3.2  Async routing ────────────────────────────────────────────────
 
     #[test]
-    fn events_are_buffered_until_dispatch_all() {
+    fn events_are_delivered_without_dispatch_all() {
         let mgr = EventManager::new();
         let dispatcher = mgr.register::<CounterEvent>();
         let mut consumer = mgr.subscribe::<CounterEvent>();
 
         dispatcher.dispatch(CounterEvent(42));
-
-        // Nothing delivered yet.
-        assert!(collect(&mut consumer).is_empty());
-
-        mgr.dispatch_all();
-        assert_eq!(collect(&mut consumer).len(), 1);
+        assert_eq!(wait_for(&mut consumer).0, 42);
     }
 
     #[test]
@@ -426,7 +427,7 @@ mod event_manager {
         let dispatcher = mgr.register::<CounterEvent>();
         let mut consumer = mgr.subscribe::<CounterEvent>();
 
-        // Each tick delivers one event.
+        // Each barrier waits for the event routed so far.
         dispatcher.dispatch(CounterEvent(1));
         mgr.dispatch_all();
 
