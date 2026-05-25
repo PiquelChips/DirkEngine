@@ -22,6 +22,7 @@ tracing-log.workspace = true
 glam.workspace = true
 
 dirk_logging.workspace = true
+dirk_threads.workspace = true
 dirk_utils.workspace = true
 dirk_events.workspace = true
 dirk_platform.workspace = true
@@ -83,6 +84,7 @@ cargo_metadata = "0.23"
 
 # Engine modules
 dirk_build    = { version = "0.0.1", path = "crates/dirk_build" }
+dirk_threads  = { version = "0.0.1", path = "crates/dirk_threads" }
 dirk_utils    = { version = "0.0.1", path = "crates/dirk_utils" }
 dirk_logging  = { version = "0.0.1", path = "crates/dirk_logging" }
 dirk_events   = { version = "0.0.1", path = "crates/dirk_events" }
