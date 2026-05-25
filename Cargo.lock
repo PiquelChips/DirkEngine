@@ -408,6 +408,7 @@ dependencies = [
  "anyhow",
  "dirk_build",
  "dirk_events",
+ "dirk_threads",
  "gltf",
  "parking_lot",
  "serde",

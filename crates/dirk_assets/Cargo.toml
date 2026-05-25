@@ -28,3 +28,4 @@ dirk_build.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+dirk_threads.workspace = true
