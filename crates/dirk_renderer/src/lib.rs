@@ -573,9 +573,7 @@ impl Renderer {
         for player in self.players.values() {
             let frame = &self.frames[self.current_frame()];
             let Some(window) = self.windows.get_mut(&player.window) else {
-                // TODO: return an error, this needs fixing.
-                // return Err(Error::WindowDoesNotExist(player.window));
-                return Ok(());
+                return Err(Error::WindowDoesNotExist(player.window));
             };
 
             let size = window.extent();
@@ -804,10 +802,6 @@ impl Drop for Renderer {
             self.render_device.device.device_wait_idle().ok();
         }
         info!("cleaning up renderer");
-
-        self.windows.clear();
-        self.frames.iter().for_each(utils::Frame::destroy);
-        self.render_device.flush_all();
     }
 }
 

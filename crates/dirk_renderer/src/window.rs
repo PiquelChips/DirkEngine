@@ -136,6 +136,7 @@ impl Drop for Window {
             self.device.destroy(Garbage::Semaphore(s1));
             self.device.destroy(Garbage::Semaphore(s2));
         });
+        self.images.clear();
         self.device.destroy(Garbage::Swapchain(self.swapchain));
         self.device.destroy(Garbage::Surface(self.surface));
     }
