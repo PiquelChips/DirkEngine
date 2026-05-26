@@ -123,7 +123,7 @@ pub enum InputEvent {
 }
 
 impl InputEvent {
-    #[must_use] 
+    #[must_use]
     pub fn id(&self) -> &WindowId {
         match self {
             Self::KeyPressed { id, .. } => id,
