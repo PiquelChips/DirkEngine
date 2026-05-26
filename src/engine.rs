@@ -1,13 +1,7 @@
 //! The engine module. The engine holds all the state & manages
 //! all the systems for the engine to run properly.
 
-use std::{
-    collections::HashMap,
-    ffi::CString,
-    str::FromStr,
-    sync::atomic::{AtomicU64, Ordering},
-    time::Instant,
-};
+use std::{collections::HashMap, ffi::CString, str::FromStr, time::Instant};
 
 use anyhow::Context;
 use dirk_universe::{Entity, Universe, World, WorldId};
@@ -16,13 +10,36 @@ use tracing::info;
 
 use dirk_logging::Logger;
 
+/// This state is returned by [`Engine::tick`].
+/// It holds why the engine is exiting.
+pub enum ExitState {
+    /// The engine is not exiting. The engine should never exit with this state.
+    Running,
+    /// The engine exit has been requested by a system.
+    Requested,
+    /// An error occured in the [`Engine`], it is exiting.
+    Error(anyhow::Error),
+}
+
+impl ExitState {
+    /// Returns if this exit state is exiting
+    #[must_use]
+    pub fn exiting(&self) -> bool {
+        match self {
+            Self::Running => false,
+            Self::Requested | Self::Error(_) => true,
+        }
+    }
+}
+
 /// This is the main struct that holds global engine state.
 pub struct Engine {
     exit_consumer: dirk_events::Consumer<dirk_events::AppExit>,
     frame_dispatcher: dirk_events::Dispatcher<dirk_events::BeginFrame>,
     event_manager: dirk_events::EventManager,
 
-    frame: AtomicU64,
+    frame: u64,
+    last_tick: Instant,
 
     #[allow(unused)]
     asset_registry: dirk_assets::AssetRegistry,
@@ -34,9 +51,7 @@ pub struct Engine {
     next_player_id: PlayerId,
     players: HashMap<PlayerId, Player>,
 
-    is_requesting_exit: bool,
-    exit_error: Option<anyhow::Error>,
-    last_tick: Instant,
+    exit_state: ExitState,
 
     #[allow(unused)]
     logger: Logger,
@@ -93,7 +108,8 @@ impl Engine {
             logger,
             asset_registry,
 
-            frame: AtomicU64::new(0),
+            frame: 0,
+            last_tick: Instant::now(),
 
             platform,
             renderer,
@@ -102,9 +118,7 @@ impl Engine {
             next_player_id: 0,
             players: HashMap::new(),
 
-            is_requesting_exit: false,
-            exit_error: None,
-            last_tick: Instant::now(),
+            exit_state: ExitState::Running,
         })
     }
     /// Will start the main game/editor. This should be called
@@ -120,46 +134,29 @@ impl Engine {
 
         self.spawn_player(world_id);
 
-        // we tick the engine a few times before entering proper
-        // game loop & rendering cycles. This allows the event manager
-        // to fire off its events & allows systems to process the first
-        // few volleys before rendering gets involved
-        for _ in 0..5 {
-            self.tick_inner().context("pre-start ticking")?;
-        }
-
         Ok(())
     }
     /// Ticks the engine. This is the master function that calls
     /// every other system's tick function.
     ///
-    /// # Errors
-    ///
-    /// Errors can occure if the various ticking systems have errors.
-    /// For now, only rendering can return an error.
-    pub fn tick(&mut self) -> bool {
-        if !match self.tick_inner() {
-            Ok(exit) => exit,
-            Err(err) => {
-                self.exit_error = Some(err.context("engine tick"));
-                false
-            }
-        } {
-            return false;
+    /// Returns the current exit state after advancing one frame, unless an
+    /// exit has already been requested.
+    pub fn tick(&mut self) -> &ExitState {
+        if self.is_requesting_exit() {
+            return &self.exit_state;
         }
-        match self.render() {
-            Ok(()) => true,
-            Err(err) => {
-                self.exit_error = Some(err.context("rendering"));
-                false
-            }
+
+        self.frame += 1;
+        if let Err(err) = self.tick_inner() {
+            self.exit(Some(err.context("engine tick")));
         }
+
+        &self.exit_state
     }
 
-    fn tick_inner(&mut self) -> anyhow::Result<bool> {
-        let frame = self.frame.fetch_add(1, Ordering::Relaxed);
+    fn tick_inner(&mut self) -> anyhow::Result<()> {
         self.frame_dispatcher
-            .dispatch(dirk_events::BeginFrame(frame));
+            .dispatch(dirk_events::BeginFrame(self.frame));
 
         let delta_time = self.capture_delta_time();
         self.event_manager.dispatch_all();
@@ -170,7 +167,7 @@ impl Engine {
 
         self.process_events();
         if self.is_requesting_exit() {
-            return Ok(false);
+            return Ok(());
         }
 
         self.platform.tick(delta_time);
@@ -178,14 +175,15 @@ impl Engine {
         self.asset_registry.tick();
 
         self.renderer
-            .tick(delta_time, self.platform.windows_mut())
+            .tick(delta_time, self.platform.windows())
             .context("renderer")?;
 
         self.players
             .values_mut()
             .for_each(|player| player.tick(&mut self.universe));
 
-        Ok(!self.is_requesting_exit())
+        self.render().context("rendering")?;
+        Ok(())
     }
 
     fn render(&mut self) -> anyhow::Result<()> {
@@ -201,16 +199,22 @@ impl Engine {
     /// Returns if the engine is planning to exit. i.e., if the engine
     /// will shutdown at the next tick.
     pub fn is_requesting_exit(&self) -> bool {
-        self.is_requesting_exit || self.exit_error.is_some()
+        self.exit_state.exiting()
     }
     /// Specify `err` to exit with an error.
     pub fn exit(&mut self, err: Option<anyhow::Error>) {
-        self.is_requesting_exit = true;
-        self.exit_error = err;
+        if matches!(self.exit_state, ExitState::Error(_)) {
+            return;
+        }
+
+        self.exit_state = match err {
+            Some(err) => ExitState::Error(err),
+            None => ExitState::Requested,
+        };
     }
     /// Returns the exit error
-    pub fn get_exit_error(&self) -> &Option<anyhow::Error> {
-        &self.exit_error
+    pub fn exit_state(&self) -> &ExitState {
+        &self.exit_state
     }
     /// Returns the time in seconds since last tick. This consumes the delta time.
     fn capture_delta_time(&mut self) -> f64 {
