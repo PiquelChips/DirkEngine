@@ -36,6 +36,7 @@ impl ExitState {
 /// This is the main struct that holds global engine state.
 pub struct Engine {
     exit_consumer: dirk_events::Consumer<dirk_events::AppExit>,
+    exit_dispatcher: dirk_events::Dispatcher<dirk_events::Exiting>,
     frame_dispatcher: dirk_events::Dispatcher<dirk_events::BeginFrame>,
     event_manager: dirk_events::EventManager,
 
@@ -108,6 +109,7 @@ impl Engine {
         info!("engine initialised");
         Ok(Self {
             exit_consumer: event_manager.subscribe(),
+            exit_dispatcher: event_manager.register(),
             frame_dispatcher: event_manager.register(),
             event_manager,
             logger,
@@ -212,6 +214,10 @@ impl Engine {
             Some(err) => ExitState::Error(err),
             None => ExitState::Requested,
         };
+
+        if self.exit_state.exiting() {
+            self.exit_dispatcher.dispatch(dirk_events::Exiting);
+        }
     }
     /// Returns the exit error
     pub fn exit_state(&self) -> &ExitState {
