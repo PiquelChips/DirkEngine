@@ -570,11 +570,12 @@ impl Renderer {
     ///
     /// Vulkan errors can occur during rendering
     pub fn render(&mut self) -> Result<()> {
-        // TODO: is engine is shutting down, window will no longer exist so engine stops with error
         for player in self.players.values() {
             let frame = &self.frames[self.current_frame()];
             let Some(window) = self.windows.get_mut(&player.window) else {
-                return Err(Error::WindowDoesNotExist(player.window));
+                // TODO: return an error, this needs fixing.
+                // return Err(Error::WindowDoesNotExist(player.window));
+                return Ok(());
             };
 
             let size = window.extent();
