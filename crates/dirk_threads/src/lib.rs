@@ -33,7 +33,7 @@ struct Inner {
 }
 
 impl WorkerPool {
-    /// Creates a pool with the specified thread name prefix.
+    /// Creates a pool with the specified thread name.
     ///
     /// # Panics
     ///
