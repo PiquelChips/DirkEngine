@@ -1,7 +1,7 @@
 //! The engine module. The engine holds all the state & manages
 //! all the systems for the engine to run properly.
 
-use std::{collections::HashMap, ffi::CString, path::PathBuf, str::FromStr, time::Instant};
+use std::{ffi::CString, path::PathBuf, str::FromStr, time::Instant};
 
 use anyhow::Context;
 use dirk_threads::WorkerPool;
@@ -35,6 +35,7 @@ pub struct Engine {
     exit_consumer: dirk_events::Consumer<dirk_events::AppExit>,
     exit_dispatcher: dirk_events::Dispatcher<dirk_events::Exiting>,
     frame_dispatcher: dirk_events::Dispatcher<dirk_events::BeginFrame>,
+    #[allow(unused)]
     event_manager: dirk_events::EventManager,
 
     /// This is a thread pool use by various engine systems for async tasks.
