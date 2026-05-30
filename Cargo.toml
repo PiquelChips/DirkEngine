@@ -18,10 +18,9 @@ documentation.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
-tracing-log.workspace = true
 glam.workspace = true
+piquel-log.workspace = true
 
-dirk_logging.workspace = true
 dirk_threads.workspace = true
 dirk_utils.workspace = true
 dirk_events.workspace = true
@@ -44,7 +43,7 @@ rustdoc-args = ["-Zunstable-options", "--cfg", "docsrs"]
 [features]
 default = ["editor"]
 
-editor = ["dirk_logging/editor"]
+editor = []
 
 # WORKSPACE CONFIGURATION
 
@@ -72,8 +71,7 @@ categories = ["game-engines", "graphics", "rendering", "vulkan"]
 # Basic stuff
 time = { version = "0.3", features = ["formatting", "macros"] }
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", default-features = false, features = ["registry", "std"] }
-tracing-log = "0.2"
+piquel-log = { version = "0.0.5", features = ["log", "file"] }
 parking_lot = "0.12"
 tempfile = "3"
 slotmap = "1"
@@ -86,7 +84,6 @@ cargo_metadata = "0.23"
 dirk_build    = { version = "0.0.1", path = "crates/dirk_build" }
 dirk_threads  = { version = "0.0.1", path = "crates/dirk_threads" }
 dirk_utils    = { version = "0.0.1", path = "crates/dirk_utils" }
-dirk_logging  = { version = "0.0.1", path = "crates/dirk_logging" }
 dirk_events   = { version = "0.0.1", path = "crates/dirk_events" }
 dirk_proc     = { version = "0.0.1", path = "crates/dirk_proc" }
 dirk_platform = { version = "0.0.1", path = "crates/dirk_platform" }

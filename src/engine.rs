@@ -1,15 +1,13 @@
 //! The engine module. The engine holds all the state & manages
 //! all the systems for the engine to run properly.
 
-use std::{collections::HashMap, ffi::CString, str::FromStr, time::Instant};
+use std::{collections::HashMap, ffi::CString, path::PathBuf, str::FromStr, time::Instant};
 
 use anyhow::Context;
 use dirk_threads::WorkerPool;
 use dirk_universe::{Entity, Universe, World, WorldId};
 use dirk_world::player::{Player, PlayerId};
 use tracing::info;
-
-use dirk_logging::Logger;
 
 /// This state is returned by [`Engine::tick`].
 /// It holds why the engine is exiting.
@@ -44,7 +42,7 @@ pub struct Engine {
     #[allow(unused)]
     workers: WorkerPool,
     #[allow(unused)]
-    logger: Logger,
+    logger: piquel_log::Logger,
 
     frame: u64,
     last_tick: Instant,
@@ -73,11 +71,14 @@ impl Engine {
 
         info!("initialising engine");
 
-        let logger = dirk_logging::Logger::new()
-            .write_fs(true)
-            .max_level(dirk_logging::LogLevel::Debug)
-            .init()
-            .context("initialising logger")?;
+        let logger = piquel_log::Logger::new()
+            .with_max_level(piquel_log::LogLevel::Debug)
+            .with_log_bridge(true)
+            .with_file(piquel_log::FileConfig::new(
+                PathBuf::from(std::env!("SAVED_PATH")).join("logs"),
+            ));
+
+        logger.init().context("init logger")?;
 
         let workers = WorkerPool::new("dirk-workers");
 
