@@ -1,4 +1,4 @@
-# `dirkengine` PACKAGE DOCUMENTATION
+# `dirkengine` PACKAGE
 
 [package]
 name = "dirkengine"
@@ -63,7 +63,7 @@ rust-version = "1.94.0"
 version = "0.0.1"
 
 homepage = "https://piquel.fr" # TODO: should piquel.fr/dirk of dirkengine.fr
-authors = ["Piquel Chips <contact@piquel.fr>"]
+authors = ["Piquel <contact@piquel.fr>"]
 documentation = "https://docs.rs/dirkengine"
 keywords = ["game", "engine", "gamedev", "graphics", "vulkan"]
 categories = ["game-engines", "graphics", "rendering", "vulkan"]
