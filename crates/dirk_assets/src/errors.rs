@@ -43,7 +43,8 @@ pub enum Error {
     /// ```rust
     /// # use dirk_assets::{Model, AssetType, AssetHandle};
     /// # fn test() -> anyhow::Result<()> {
-    /// # let events = dirk_events::EventManager::new();
+    /// # let workers = dirk_threads::WorkerPool::new("test");
+    /// # let events = dirk_events::EventManager::new(workers);
     /// # let mut registry = dirk_assets::AssetRegistry::init(&events)?;
     /// # let asset_handle = AssetHandle::from_raw("", AssetType::Model);
     /// // release build only

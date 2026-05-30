@@ -186,6 +186,7 @@ impl Image {
         image.generate_mipmaps(&cmd, tex.width, tex.height, mip_levels)?;
         cmd.end_and_submit()?;
 
+        let old_view = image.view;
         image.view = Self::create_image_view(
             device,
             image.image(),
@@ -193,6 +194,9 @@ impl Image {
             vk::ImageAspectFlags::COLOR,
             mip_levels,
         )?;
+        unsafe {
+            device.device.destroy_image_view(old_view, None);
+        }
         let sampler = Renderer::create_sampler(device, mip_levels)?;
 
         Ok(Texture {
