@@ -130,11 +130,12 @@ impl SceneManager {
 
             // TODO: proper viewport & camera system
             let proj = {
+                let aspect = size.width as f32 / size.height.max(1) as f32;
                 let mut proj = glam::Mat4::perspective_rh(
-                    45_f32.to_radians(),               // FOV
-                    (size.width / size.height) as f32, // Aspect Ratio
-                    0.1,                               // near clip
-                    100_000.0,                         // far clip
+                    45_f32.to_radians(), // FOV
+                    aspect,              // Aspect Ratio
+                    0.1,                 // near clip
+                    100_000.0,           // far clip
                 );
                 // Vulkan NDC has Y pointing down; flip the projection accordingly.
                 proj.y_axis.y *= -1.0;
