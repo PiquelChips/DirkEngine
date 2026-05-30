@@ -13,7 +13,6 @@ use dirk_universe::components::Component;
 mod events;
 pub use events::{PlayerDespawned, PlayerSpawned};
 
-
 // PlayerId
 
 /// A lightweight, copyable identifier for a player.
@@ -145,13 +144,7 @@ impl PlayerManager {
     /// The [`PlayerId`] of the new player.
     pub fn new_player(&mut self, window: WindowId) -> PlayerId {
         let id = self.allocate_id();
-        self.players.insert(
-            id,
-            PlayerHandle {
-                id,
-                window,
-            },
-        );
+        self.players.insert(id, PlayerHandle { id, window });
         self.spawned_dispatcher
             .dispatch(PlayerSpawned { id, window });
         id
