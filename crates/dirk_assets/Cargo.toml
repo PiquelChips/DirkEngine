@@ -18,8 +18,10 @@ tracing.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 parking_lot.workspace = true
+tokio.workspace = true
 
 dirk_events.workspace = true
+dirk_threads.workspace = true
 
 gltf.workspace = true
 
@@ -28,4 +30,3 @@ dirk_build.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
-dirk_threads.workspace = true
