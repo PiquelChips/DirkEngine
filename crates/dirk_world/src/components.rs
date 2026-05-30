@@ -29,8 +29,8 @@ use tracing::warn;
 pub struct Renderable {
     /// Asset-registry key for the mesh to render (e.g. `"meshes/cube.glb"`).
     pub model: dirk_assets::AssetHandle,
-    /// This is a tokio JoinHandle under the hood. This keeps the `Handle<T>`
-    /// alive while the JoinHandle is alive. This means that this field
+    /// This is a tokio `JoinHandle` under the hood. This keeps the `Handle<T>`
+    /// alive while the `JoinHandle` is alive. This means that this field
     /// is stopping the asset form being unloaded by the renderer.
     ///
     /// Please do not try to await/poll this future, this would drop the handle
