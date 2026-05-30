@@ -13,9 +13,9 @@ use crate::PlayerId;
 /// # Example
 ///
 /// ```rust
-/// # use dirk_player::events::PlayerSpawned;
+/// # use dirk_player::PlayerSpawned;
 /// # use dirk_events::Consumer;
-/// # fn example(consumer: Consumer<PlayerSpawned>) {
+/// # fn example(mut consumer: Consumer<PlayerSpawned>) {
 /// for event in consumer.consume_all() {
 ///     // Spawn an entity and attach event.id as a component.
 /// }

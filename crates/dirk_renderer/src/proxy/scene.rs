@@ -130,6 +130,8 @@ impl SceneManager {
 
             // TODO: proper viewport & camera system
             let proj = {
+                // `width` & `height` aren't large enough for this to matter
+                #[allow(clippy::cast_precision_loss)]
                 let aspect = size.width as f32 / size.height.max(1) as f32;
                 let mut proj = glam::Mat4::perspective_rh(
                     45_f32.to_radians(), // FOV

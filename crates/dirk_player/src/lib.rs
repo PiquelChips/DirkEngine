@@ -13,9 +13,6 @@ use dirk_universe::components::Component;
 mod events;
 pub use events::{PlayerDespawned, PlayerSpawned};
 
-pub mod input;
-use input::InputContext;
-
 // PlayerId
 
 /// A lightweight, copyable identifier for a player.
@@ -70,7 +67,6 @@ impl AddAssign<u32> for PlayerId {
 pub struct PlayerHandle {
     id: PlayerId,
     window: WindowId,
-    input: InputContext,
 }
 
 impl PlayerHandle {
@@ -80,9 +76,7 @@ impl PlayerHandle {
         self.id
     }
 
-    /// Returns the [`WindowId`] of this player's [`Window`].
-    ///
-    /// Use [`PlayerManager::set_viewport`] to change it.
+    /// Returns the [`WindowId`] this player is associated with.
     ///
     /// [`Window`]: dirk_platform::Window
     #[must_use]
@@ -103,15 +97,11 @@ impl PlayerHandle {
 /// ```text
 /// new_player(window)   ──► PlayerSpawned      — game code spawns ECS entity
 /// remove_player(id)    ──► PlayerDespawned    — game code despawns ECS entity
-/// tick()               ──► PlayerWindowResized — game code updates camera
 /// ```
 ///
-/// # Split-screen
-///
-/// Assign non-overlapping [`Viewport`]s via [`PlayerManager::set_viewport`].
-/// The renderer queries [`PlayerManager::players_on_window`] to discover which
-/// players to render for a given window, and reads each player's viewport to
-/// set up the scissor / render region.
+/// This crate currently tracks only player IDs and their associated windows.
+/// Input routing, viewport management, and camera updates are handled outside
+/// of `dirk_player`.
 pub struct PlayerManager {
     // TODO: setup generation based player allocation
     next_id: PlayerId,
@@ -141,21 +131,12 @@ impl PlayerManager {
     /// component (and whatever other components are appropriate — `Transform`,
     /// `Camera`, etc.).
     ///
-    /// The player starts with a full-screen [`Viewport`].
-    ///
     /// # Returns
     ///
     /// The [`PlayerId`] of the new player.
     pub fn new_player(&mut self, window: WindowId) -> PlayerId {
         let id = self.allocate_id();
-        self.players.insert(
-            id,
-            PlayerHandle {
-                id,
-                window,
-                input: InputContext::default(),
-            },
-        );
+        self.players.insert(id, PlayerHandle { id, window });
         self.spawned_dispatcher
             .dispatch(PlayerSpawned { id, window });
         id
@@ -190,9 +171,10 @@ impl PlayerManager {
         self.players.values()
     }
 
-    /// Processes pending platform events.
+    /// Ticks internal player state.
     ///
-    /// Call once per tick.
+    /// This is currently a no-op placeholder for future player systems such as
+    /// input handling.
     pub fn tick(&mut self) {
         // TODO: input
     }
