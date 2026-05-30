@@ -9,17 +9,14 @@ use std::{
 use dirk_platform::WindowId;
 use dirk_universe::components::Component;
 
-pub mod region;
-use region::PlayerRegion;
-
 pub mod events;
 
-/// A light identifier for [`DirkPlayer`]s.
-///
-/// [`PlayerId`] implements [`trait@Component`]. It is also used as the
-/// [`Universe`] representation of the [`DirkPlayer`].
-///
-/// [`Universe`]: dirk_universe::Universe
+pub mod viewport;
+use viewport::Viewport;
+
+// PLAYER ID
+
+/// A light identifier for [`PlayerHandle`]s.
 #[derive(Component, Clone, Copy, Debug, Default, Hash, Eq, PartialEq)]
 pub struct PlayerId(u32);
 
@@ -42,40 +39,33 @@ impl AddAssign<u32> for PlayerId {
     }
 }
 
+// PLAYER HANDLE
+
 /// This is the internal engine representation of a player.
 ///
-/// It receives input, owns its region of the screen, ...
+/// It receives input, owns its viewport of the screen, ...
 /// [`PlayerId`] is used as a handle.
-pub struct DirkPlayer {
+pub struct PlayerHandle {
     id: PlayerId,
-    window: WindowId,
-    region: PlayerRegion,
 }
 
-impl DirkPlayer {
+impl PlayerHandle {
     /// Returns the [`PlayerId`] of `self`.
     #[must_use]
     pub fn id(&self) -> PlayerId {
         self.id
     }
-    /// Returns the [`WindowId`] of the window the player is rendered to.
-    #[must_use]
-    pub fn window(&self) -> WindowId {
-        self.window
-    }
-    /// Returns the [`PlayerId`] of `self`.
-    #[must_use]
-    pub fn region(&self) -> &PlayerRegion {
-        &self.region
-    }
 }
+
+// PLAYER MANAGER
 
 /// This manages all the players in the game.
 #[derive(Default)]
 pub struct PlayerManager {
     // TODO: setup generation based player allocation
     next_player_id: PlayerId,
-    players: HashMap<PlayerId, DirkPlayer>,
+    players: HashMap<PlayerId, PlayerHandle>,
+    viewports: HashMap<PlayerId, Viewport>,
 }
 
 impl PlayerManager {
@@ -87,9 +77,9 @@ impl PlayerManager {
     /// Create a new player.
     ///
     /// This does not spawn the player in the world.
-    pub fn new_player(&mut self, window: WindowId, region: PlayerRegion) -> PlayerId {
+    pub fn new_player(&mut self, window: WindowId, viewport: Viewport) -> PlayerId {
         let id = self.allocate_new_player();
-        self.players.insert(id, DirkPlayer { id, window, region });
+        self.players.insert(id, PlayerHandle { id });
         id
     }
 
@@ -97,7 +87,7 @@ impl PlayerManager {
     ///
     /// Returns `None` if the player does note exist.
     #[must_use]
-    pub fn get_player(&self, id: PlayerId) -> Option<&DirkPlayer> {
+    pub fn get_player(&self, id: PlayerId) -> Option<&PlayerHandle> {
         self.players.get(&id)
     }
 

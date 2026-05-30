@@ -1,5 +1,5 @@
-//! The [`PlayerRegion`] is the region of the screen that the local players
-//! are rendered to.
+//! This module has the [`Viewport`], the link between the internal
+//! engine player & what is rendered to the screen.
 
 /// A player's rectangular slice of a window, expressed in normalised
 /// `[0, 1] × [0, 1]` window coordinates.
@@ -17,9 +17,9 @@
 /// # Examples
 ///
 /// ```rust
-/// # use dirk_player::region::PlayerRegion;
+/// # use dirk_player::region::Viewport;
 /// // Left half of the screen (Player 1 in a horizontal split-screen).
-/// let p1 = PlayerRegion {
+/// let p1 = Viewport {
 ///     offset: glam::vec2(0.0, 0.0),
 ///     size:   glam::vec2(0.5, 1.0),
 /// };
@@ -27,14 +27,14 @@
 /// assert!(!p1.contains(glam::vec2(0.75, 0.5)));
 /// ```
 #[derive(Debug, Clone)]
-pub struct PlayerRegion {
+pub struct Viewport {
     /// Top-left corner in normalised window space.
     pub offset: glam::Vec2,
     /// Width and height in normalised window space.
     pub size: glam::Vec2,
 }
 
-impl Default for PlayerRegion {
+impl Default for Viewport {
     /// Returns the full-screen region: `offset = (0,0)`, `size = (1,1)`.
     fn default() -> Self {
         Self {
@@ -44,7 +44,7 @@ impl Default for PlayerRegion {
     }
 }
 
-impl PlayerRegion {
+impl Viewport {
     /// Returns `true` if `norm_pos` (in `[0,1]²` window space) lies **inside**
     /// this region.
     ///
@@ -60,8 +60,8 @@ impl PlayerRegion {
     /// # Examples
     ///
     /// ```rust
-    /// # use dirk_player::region::PlayerRegion;
-    /// let region = PlayerRegion {
+    /// # use dirk_player::region::Viewport;
+    /// let region = Viewport {
     ///     offset: glam::vec2(0.25, 0.25),
     ///     size:   glam::vec2(0.5,  0.5),
     /// };
@@ -92,9 +92,9 @@ impl PlayerRegion {
     /// # Examples
     ///
     /// ```rust
-    /// # use dirk_player::region::PlayerRegion;
+    /// # use dirk_player::region::Viewport;
     /// // Right half of the screen.
-    /// let region = PlayerRegion {
+    /// let region = Viewport {
     ///     offset: glam::vec2(0.5, 0.0),
     ///     size:   glam::vec2(0.5, 1.0),
     /// };
