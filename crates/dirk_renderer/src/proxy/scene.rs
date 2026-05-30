@@ -208,6 +208,10 @@ impl SceneManager {
     pub fn get_proxy_mut(&mut self, entity: Entity) -> Option<&mut SceneProxy> {
         self.proxies.get_mut(&entity)
     }
+    #[must_use]
+    pub fn entity_world(&self, entity: Entity) -> Option<WorldId> {
+        self.entities.get(&entity).copied()
+    }
     pub fn send_proxy(&mut self, entity: Entity, to: WorldId) -> Result<()> {
         let world = self
             .entities

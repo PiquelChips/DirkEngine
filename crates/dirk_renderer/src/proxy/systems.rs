@@ -1,5 +1,6 @@
 //! ECS systems for proxy creation and synchrnozation
 
+use dirk_player::PlayerId;
 use dirk_universe::{
     CommandBuffer,
     systems::{ComponentSystem, System, UniverseSystem},
@@ -252,6 +253,73 @@ impl ComponentSystem for RendererCameraSystem {
 }
 
 impl RendererCameraSystem {
+    pub fn new(sender: RenderCommandSender) -> Self {
+        Self { sender }
+    }
+}
+
+#[derive(System)]
+pub struct RendererPlayerSystem {
+    sender: RenderCommandSender,
+}
+
+impl ComponentSystem for RendererPlayerSystem {
+    type Component = PlayerId;
+
+    fn added(
+        &self,
+        _: &mut CommandBuffer,
+        entity: dirk_universe::Entity,
+        component: &Self::Component,
+    ) {
+        let id = *component;
+        self.sender.enqueue_command(move |renderer| {
+            let Some(player) = renderer.players.get_mut(&id) else {
+                return Ok(());
+            };
+            player.entity = Some(entity);
+            Ok(())
+        });
+    }
+
+    fn updated(
+        &self,
+        _: &mut CommandBuffer,
+        entity: dirk_universe::Entity,
+        old: &Self::Component,
+        new: &Self::Component,
+    ) {
+        let old_id = *old;
+        let new_id = *new;
+        self.sender.enqueue_command(move |renderer| {
+            if let Some(old) = renderer.players.get_mut(&old_id) {
+                old.entity = None;
+            }
+
+            if let Some(new) = renderer.players.get_mut(&new_id) {
+                new.entity = Some(entity);
+            }
+            Ok(())
+        });
+    }
+
+    fn removed(
+        &self,
+        _: &mut CommandBuffer,
+        _entity: dirk_universe::Entity,
+        component: &Self::Component,
+    ) {
+        let player_id = *component;
+        self.sender.enqueue_command(move |renderer| {
+            if let Some(player) = renderer.players.get_mut(&player_id) {
+                player.entity = None;
+            }
+            Ok(())
+        });
+    }
+}
+
+impl RendererPlayerSystem {
     pub fn new(sender: RenderCommandSender) -> Self {
         Self { sender }
     }

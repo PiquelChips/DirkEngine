@@ -487,6 +487,7 @@ dependencies = [
  "dirk_build",
  "dirk_events",
  "dirk_platform",
+ "dirk_player",
  "dirk_shaders",
  "dirk_universe",
  "dirk_utils",

@@ -20,6 +20,7 @@ use ash::{
     khr::{surface, swapchain},
     vk,
 };
+use dirk_player::PlayerId;
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use tracing::{debug, info};
 #[cfg(validation)]
@@ -27,7 +28,6 @@ use tracing::{error, trace, warn};
 
 use dirk_platform::{PlatformEvent, WindowEvent, WindowId};
 use dirk_universe::{Universe, UniverseBuilder};
-use dirk_world::player::{PlayerId, PlayerUpdateType};
 
 mod utils;
 use dirk_utils::Version;
@@ -44,15 +44,17 @@ use resources::{command_pool::CommandPool, device::RenderDevice, image::Swapchai
 
 mod proxy;
 use proxy::{
-    PlayerProxy,
     scene::SceneManager,
     systems::{
-        RendererCameraSystem, RendererMeshSystem, RendererTransformSystem, RendererUniverseSystem,
+        RendererCameraSystem, RendererMeshSystem, RendererPlayerSystem, RendererTransformSystem,
+        RendererUniverseSystem,
     },
 };
 
 mod render_commands;
 use render_commands::RenderCommandReceiver;
+
+use crate::proxy::PlayerProxy;
 
 mod models;
 mod physical_device;
@@ -95,8 +97,7 @@ pub struct Renderer {
     scene_manager: SceneManager,
     /// The management for all the models.
     models: models::ModelRegistry,
-    /// All the players currently being managed by the engine.
-    /// The proxies are synchronised using [`world::events::PlayerUpdateEvent`].
+    /// Maps each live [`PlayerId`] to its proxy.
     players: HashMap<PlayerId, PlayerProxy>,
 
     frames: [Frame; MAX_FRAMES_IN_FLIGHT],
@@ -105,7 +106,8 @@ pub struct Renderer {
     // Events
     window_consumer: dirk_events::Consumer<dirk_platform::WindowEvent>,
     platform_consumer: dirk_events::Consumer<dirk_platform::PlatformEvent>,
-    player_consumer: dirk_events::Consumer<dirk_world::player::PlayerUpdateEvent>,
+    player_spawn_consumer: dirk_events::Consumer<dirk_player::PlayerSpawned>,
+    player_despawn_consumer: dirk_events::Consumer<dirk_player::PlayerDespawned>,
 
     /// These receive all the commands from the game thread.
     receivers: Vec<RenderCommandReceiver>,
@@ -455,7 +457,8 @@ impl Renderer {
 
             window_consumer: event_manager.subscribe(),
             platform_consumer: event_manager.subscribe(),
-            player_consumer: event_manager.subscribe(),
+            player_spawn_consumer: event_manager.subscribe(),
+            player_despawn_consumer: event_manager.subscribe(),
             receivers: Vec::new(),
         })
     }
@@ -466,17 +469,20 @@ impl Renderer {
         let (mesh_sender, mesh_receiver) = render_commands::channel();
         let (trans_sender, trans_receiver) = render_commands::channel();
         let (cam_sender, cam_receiver) = render_commands::channel();
+        let (player_sender, player_receiver) = render_commands::channel();
 
         self.receivers.push(uni_receiver);
         self.receivers.push(mesh_receiver);
         self.receivers.push(trans_receiver);
         self.receivers.push(cam_receiver);
+        self.receivers.push(player_receiver);
 
         Universe::builder()
             .with_universe_system(RendererUniverseSystem::new(uni_sender))
             .with_component_system(RendererMeshSystem::new(mesh_sender))
             .with_component_system(RendererTransformSystem::new(trans_sender))
             .with_component_system(RendererCameraSystem::new(cam_sender))
+            .with_component_system(RendererPlayerSystem::new(player_sender))
     }
 
     /// Ticks the renderer. Used to improve the various internal representations
@@ -572,13 +578,12 @@ impl Renderer {
             }
         }
 
-        for event in self.player_consumer.consume_all() {
-            if let PlayerUpdateType::Despawned = event.update_type {
-                self.players.remove(&event.id);
-                continue;
-            }
-
+        for event in self.player_spawn_consumer.consume_all() {
             self.players.insert(event.id, event.into());
+        }
+
+        for event in self.player_despawn_consumer.consume_all() {
+            self.players.remove(&event.id);
         }
 
         self.models.tick()?;
@@ -594,9 +599,17 @@ impl Renderer {
     /// Vulkan errors can occur during rendering
     pub fn render(&mut self) -> Result<()> {
         for player in self.players.values() {
+            let Some(entity) = player.entity else {
+                continue;
+            };
+            let Some(world) = self.scene_manager.entity_world(entity) else {
+                continue;
+            };
+
             let frame = &self.frames[self.current_frame()];
-            let Some(window) = self.windows.get_mut(&player.window) else {
-                return Err(Error::WindowDoesNotExist(player.window));
+            let window_id = player.window;
+            let Some(window) = self.windows.get_mut(&window_id) else {
+                return Err(Error::WindowDoesNotExist(window_id));
             };
 
             let size = window.extent();
@@ -631,10 +644,10 @@ impl Renderer {
             self.scene_manager.render(
                 &self.models,
                 &cmd,
-                player.world,
+                world,
                 size,
                 render_image.image.view(),
-                player.entity,
+                entity,
             )?;
 
             render_image.image.transition_image_layout(
