@@ -215,5 +215,6 @@ thread::spawn(move || {
     dispatcher.dispatch(WorkDone(2));
 }).join().unwrap();
 
+# std::thread::sleep(std::time::Duration::from_millis(10));
 assert_eq!(consumer.consume_all().count(), 2);
 ```
