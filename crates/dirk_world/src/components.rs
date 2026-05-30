@@ -2,8 +2,9 @@
 //!
 //! [`Component`]: universe::components::Component
 
-use dirk_assets::{Handle, LoadAsset, Model};
-use dirk_events::Dispatcher;
+use std::sync::Arc;
+
+use dirk_assets::{AssetLoad, AssetRegistry, Model};
 use dirk_universe::{
     CommandBuffer, Entity,
     components::Component,
@@ -28,7 +29,7 @@ use tracing::warn;
 pub struct Renderable {
     /// Asset-registry key for the mesh to render (e.g. `"meshes/cube.glb"`).
     pub model: dirk_assets::AssetHandle,
-    handle: Option<Handle<Model>>,
+    handle: Option<Arc<AssetLoad<Model>>>,
 }
 
 impl Renderable {
@@ -48,31 +49,32 @@ impl Renderable {
 /// when a [`Renderable`] is added to an [`universe::Entity`].
 #[derive(System)]
 pub struct ModelUploadSystem {
-    dispatcher: Dispatcher<LoadAsset>,
+    assets: AssetRegistry,
 }
 
 impl ModelUploadSystem {
-    /// Creates a new [`ModelUploadSystem`] creating a [`Dispatcher`] with
-    /// the provided [`EventManager`].
-    ///
-    /// [`EventManager`]: events::EventManager
+    /// Creates a new [`ModelUploadSystem`] using the provided [`AssetRegistry`].
     #[must_use]
-    pub fn new(event_manager: &dirk_events::EventManager) -> Self {
-        Self {
-            dispatcher: event_manager.register(),
-        }
+    pub fn new(assets: AssetRegistry) -> Self {
+        Self { assets }
     }
 }
 
 impl ComponentSystem for ModelUploadSystem {
     type Component = Renderable;
-    fn added(&self, _cmd: &mut CommandBuffer, _: Entity, component: &Self::Component) {
+    fn added(&self, cmd: &mut CommandBuffer, entity: Entity, component: &Self::Component) {
         if component.handle.is_some() {
             return;
         }
 
-        // TODO: load asset from registry & set handle
-        self.dispatcher.dispatch(LoadAsset(component.model.clone()));
+        let handle = self.assets.load_asset::<Model>(&component.model);
+        cmd.set_component(
+            entity,
+            Renderable {
+                handle: Some(Arc::new(handle)),
+                ..component.clone()
+            },
+        );
     }
     fn updated(
         &self,
