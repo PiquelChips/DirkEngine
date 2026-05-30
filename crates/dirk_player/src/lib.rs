@@ -13,6 +13,8 @@ use dirk_universe::components::Component;
 mod events;
 pub use events::{PlayerDespawned, PlayerSpawned};
 
+pub mod input;
+use input::InputContext;
 
 // PlayerId
 
@@ -68,6 +70,7 @@ impl AddAssign<u32> for PlayerId {
 pub struct PlayerHandle {
     id: PlayerId,
     window: WindowId,
+    input: InputContext,
 }
 
 impl PlayerHandle {
@@ -150,6 +153,7 @@ impl PlayerManager {
             PlayerHandle {
                 id,
                 window,
+                input: InputContext::default(),
             },
         );
         self.spawned_dispatcher
