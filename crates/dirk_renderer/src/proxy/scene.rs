@@ -127,7 +127,20 @@ impl SceneManager {
                 .ok_or(Error::CameraDoesNotExist(camera))?;
 
             let view = proxy.view.ok_or(Error::CameraDoesNotExist(camera))?;
-            let proj = proxy.proj.ok_or(Error::CameraDoesNotExist(camera))?;
+
+            // TODO: proper viewport & camera system
+            let proj = {
+                let aspect = size.width as f32 / size.height.max(1) as f32;
+                let mut proj = glam::Mat4::perspective_rh(
+                    45_f32.to_radians(), // FOV
+                    aspect,              // Aspect Ratio
+                    0.1,                 // near clip
+                    100_000.0,           // far clip
+                );
+                // Vulkan NDC has Y pointing down; flip the projection accordingly.
+                proj.y_axis.y *= -1.0;
+                proj
+            };
 
             let scene_ubo = SceneUbo { view, proj };
             unsafe { scene.ubo[frame].write(&scene_ubo) };
@@ -207,6 +220,10 @@ impl SceneManager {
     }
     pub fn get_proxy_mut(&mut self, entity: Entity) -> Option<&mut SceneProxy> {
         self.proxies.get_mut(&entity)
+    }
+    #[must_use]
+    pub fn entity_world(&self, entity: Entity) -> Option<WorldId> {
+        self.entities.get(&entity).copied()
     }
     pub fn send_proxy(&mut self, entity: Entity, to: WorldId) -> Result<()> {
         let world = self
@@ -347,8 +364,6 @@ pub struct SceneProxy {
     model_matrix: Option<glam::Mat4>,
     /// The view matrix used for rendering as camera
     view: Option<glam::Mat4>,
-    /// The projection matrix used for rendering as camera
-    proj: Option<glam::Mat4>,
     /// The name of the model. Used to request a [`crate::model::Model`] from the
     /// renderer at render time.
     model: Option<dirk_assets::AssetHandle>,
@@ -407,7 +422,6 @@ impl SceneProxy {
             model: None,
             model_matrix: None,
             view: None,
-            proj: None,
             ubo,
             sets,
         })
@@ -427,9 +441,6 @@ impl SceneProxy {
     }
     pub fn set_view(&mut self, view: Option<glam::Mat4>) {
         self.view = view;
-    }
-    pub fn set_proj(&mut self, proj: Option<glam::Mat4>) {
-        self.proj = proj;
     }
     pub fn write_ubo(&self, frame: usize) {
         let Some(model) = self.model_matrix else {

@@ -10,6 +10,8 @@ pub use dirk_events as events;
 #[doc(inline)]
 pub use dirk_platform as platform;
 #[doc(inline)]
+pub use dirk_player as player;
+#[doc(inline)]
 pub use dirk_renderer as renderer;
 #[doc(inline)]
 pub use dirk_threads as threads;

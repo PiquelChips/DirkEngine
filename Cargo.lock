@@ -450,6 +450,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "dirk_player"
+version = "0.0.1"
+dependencies = [
+ "dirk_events",
+ "dirk_platform",
+ "dirk_universe",
+ "glam",
+]
+
+[[package]]
 name = "dirk_proc"
 version = "0.0.1"
 dependencies = [
@@ -469,6 +479,7 @@ dependencies = [
  "dirk_build",
  "dirk_events",
  "dirk_platform",
+ "dirk_player",
  "dirk_shaders",
  "dirk_universe",
  "dirk_utils",
@@ -539,6 +550,7 @@ dependencies = [
  "dirk_build",
  "dirk_events",
  "dirk_platform",
+ "dirk_player",
  "dirk_renderer",
  "dirk_threads",
  "dirk_universe",
