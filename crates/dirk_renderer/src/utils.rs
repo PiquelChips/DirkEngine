@@ -64,8 +64,8 @@ pub struct Frame {
     // there is a change in scene count. If not reallocated, reset.
 }
 
-impl Frame {
-    pub fn destroy(&self) {
+impl Drop for Frame {
+    fn drop(&mut self) {
         self.command_pool.destroy();
         unsafe {
             self.device.destroy_fence(self.fence, None);

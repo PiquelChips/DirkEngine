@@ -12,6 +12,8 @@ pub use dirk_platform as platform;
 #[doc(inline)]
 pub use dirk_renderer as renderer;
 #[doc(inline)]
+pub use dirk_threads as threads;
+#[doc(inline)]
 pub use dirk_universe as universe;
 #[doc(inline)]
 pub use dirk_utils as utils;

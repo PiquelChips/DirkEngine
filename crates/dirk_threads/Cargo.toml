@@ -1,6 +1,6 @@
 [package]
-name = "dirk_events"
-description = "Event system for DirkEngine"
+name = "dirk_threads"
+description = "DirkEngine multithreading primitives"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -12,13 +12,8 @@ authors.workspace = true
 documentation.workspace = true
 
 [dependencies]
-parking_lot.workspace = true
-tracing.workspace = true
-
-dirk_proc.workspace = true
-dirk_threads.workspace = true
-
 tokio.workspace = true
+tracing.workspace = true
 
 [lints]
 workspace = true
