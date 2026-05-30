@@ -1,7 +1,7 @@
 //! The engine module. The engine holds all the state & manages
 //! all the systems for the engine to run properly.
 
-use std::{ffi::CString, path::PathBuf, str::FromStr, time::Instant};
+use std::{f32::consts::PI, ffi::CString, path::PathBuf, str::FromStr, time::Instant};
 
 use anyhow::Context;
 use dirk_threads::WorkerPool;
@@ -141,8 +141,16 @@ impl Engine {
         let world_id = self.create_test_world();
 
         let player = self.players.new_player(self.platform.main_window().id());
-        self.universe
-            .spawn_entity(world_id, Entity::builder().with_component(player));
+        self.universe.spawn_entity(
+            world_id,
+            Entity::builder().with_component(player).with_component(
+                dirk_world::components::Transform {
+                    location: glam::vec3(0.0, 500.0, 500.0),
+                    rotation: glam::vec3(-PI / 4.0, 0.0, 0.0),
+                    scale: glam::Vec3::ONE,
+                },
+            ),
+        );
 
         Ok(())
     }

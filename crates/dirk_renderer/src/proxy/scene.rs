@@ -15,7 +15,6 @@ use crate::{
         device::{Garbage, RenderDevice},
         image::{Image, ImageCreateInfo},
     },
-    window::Window,
 };
 
 /// This is the renderer proxy for the [`Universe`]. It also has
@@ -134,8 +133,8 @@ impl SceneManager {
                 let mut proj = glam::Mat4::perspective_rh(
                     45_f32.to_radians(),               // FOV
                     (size.width / size.height) as f32, // Aspect Ratio
-                    1.0,                               // near clip
-                    100.0,                             // far clip
+                    0.1,                               // near clip
+                    100_000.0,                         // far clip
                 );
                 // Vulkan NDC has Y pointing down; flip the projection accordingly.
                 proj.y_axis.y *= -1.0;
