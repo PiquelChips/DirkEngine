@@ -190,7 +190,7 @@ pub enum AssetType {
 ///     }
 /// }
 /// ```
-pub trait AssetConfig: Serialize + DeserializeOwned {
+pub trait AssetConfig: Serialize + DeserializeOwned + Send + 'static {
     /// Validates the configuration for the asset.
     fn validate(&self, meta: &Metadata) -> bool;
 }

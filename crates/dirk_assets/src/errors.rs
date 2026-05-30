@@ -42,13 +42,13 @@ pub enum Error {
     ///
     /// ```rust
     /// # use dirk_assets::{Model, AssetType, AssetHandle};
-    /// # fn test() -> anyhow::Result<()> {
+    /// # async fn test() -> anyhow::Result<()> {
     /// # let workers = dirk_threads::WorkerPool::new("test");
-    /// # let events = dirk_events::EventManager::new(workers);
-    /// # let mut registry = dirk_assets::AssetRegistry::init(&events)?;
+    /// # let events = dirk_events::EventManager::new(workers.clone());
+    /// # let registry = dirk_assets::AssetRegistry::init(&events, workers)?;
     /// # let asset_handle = AssetHandle::from_raw("", AssetType::Model);
     /// // release build only
-    /// let handle = registry.load_asset::<Model>(&asset_handle)?;
+    /// let handle = registry.load_asset::<Model>(&asset_handle).await?;
     /// let _data = handle.take()?;              // OK — data moved out
     /// let err = handle.get().unwrap_err(); // AlreadyConsumed
     /// # Ok(()) }

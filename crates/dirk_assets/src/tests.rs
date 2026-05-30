@@ -51,6 +51,7 @@ use super::{
     Asset,
     AssetConfig,
     AssetHandle,
+    AssetLoad,
     AssetLoaded,
     AssetRegistry,
     AssetType,
@@ -69,7 +70,6 @@ use super::{
 
 use dirk_events::EventManager;
 use dirk_threads::WorkerPool;
-use serde_json;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -106,6 +106,18 @@ fn write_model_fixture(dir: &Path, name: &str) -> PathBuf {
     dirkasset
 }
 
+fn wait_for_load<T: Asset>(mut load: AssetLoad<T>) -> Result<Handle<T>> {
+    for _ in 0..100 {
+        if let Some(result) = load.try_poll() {
+            return result;
+        }
+
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+
+    panic!("asset load did not complete");
+}
+
 /// A minimal `Asset` implementation used only in tests that need a typed
 /// `Handle<T>` without going through the full registry/filesystem machinery.
 #[derive(Clone, Debug, PartialEq)]
@@ -138,7 +150,7 @@ impl Asset for FakeAsset {
 /// Builds a `Handle<FakeAsset>` containing `value`, bypassing the registry.
 fn fake_handle(value: u32, raw_path: &str) -> Handle<FakeAsset> {
     let workers = WorkerPool::new("test");
-    let events = EventManager::new(workers);
+    let events = EventManager::new(workers.clone());
     let dispatcher = events.register::<InternalAssetUnloaded>();
     let asset_ref = AssetRef::new(
         AssetHandle::from_raw(raw_path, AssetType::Unknown),
@@ -607,7 +619,7 @@ mod handle {
     #[test]
     fn drop_of_sole_handle_fires_internal_unloaded_event() {
         let workers = WorkerPool::new("test");
-        let events = EventManager::new(workers);
+        let events = EventManager::new(workers.clone());
         let mut consumer = events.subscribe::<InternalAssetUnloaded>();
         let dispatcher = events.register::<InternalAssetUnloaded>();
 
@@ -631,7 +643,7 @@ mod handle {
     #[test]
     fn drop_does_not_fire_while_clones_still_live() {
         let workers = WorkerPool::new("test");
-        let events = EventManager::new(workers);
+        let events = EventManager::new(workers.clone());
         let mut consumer = events.subscribe::<InternalAssetUnloaded>();
         let dispatcher = events.register::<InternalAssetUnloaded>();
 
@@ -663,7 +675,7 @@ mod handle {
     #[test]
     fn drop_event_carries_correct_asset_handle() {
         let workers = WorkerPool::new("test");
-        let events = EventManager::new(workers);
+        let events = EventManager::new(workers.clone());
         let mut consumer = events.subscribe::<InternalAssetUnloaded>();
         let dispatcher = events.register::<InternalAssetUnloaded>();
 
@@ -809,9 +821,12 @@ mod registry {
             return; // skip — this machine has a real asset tree
         }
         let workers = WorkerPool::new("test");
-        let events = EventManager::new(workers);
+        let events = EventManager::new(workers.clone());
         assert!(
-            matches!(AssetRegistry::init(&events), Err(Error::IoError(_))),
+            matches!(
+                AssetRegistry::init(&events, workers),
+                Err(Error::IoError(_))
+            ),
             "Missing ASSETS_PATH should produce IoError"
         );
     }
@@ -822,9 +837,9 @@ mod registry {
             return;
         }
         let workers = WorkerPool::new("test");
-        let events = EventManager::new(workers);
+        let events = EventManager::new(workers.clone());
         assert!(
-            AssetRegistry::init(&events).is_ok(),
+            AssetRegistry::init(&events, workers).is_ok(),
             "init should succeed with a valid ASSETS_PATH"
         );
     }
@@ -837,12 +852,12 @@ mod registry {
             return;
         }
         let workers = WorkerPool::new("test");
-        let events = EventManager::new(workers);
-        let mut registry = AssetRegistry::init(&events).unwrap();
+        let events = EventManager::new(workers.clone());
+        let registry = AssetRegistry::init(&events, workers).unwrap();
 
         // Pass a handle whose AssetType is Unknown but request Model — must be TypeMismatch.
         let bad_handle = AssetHandle::from_raw("anything.dirkasset", AssetType::Unknown);
-        let result = registry.load_asset::<Model>(&bad_handle);
+        let result = wait_for_load(registry.load_asset::<Model>(&bad_handle));
         assert!(
             matches!(result, Err(Error::TypeMismatch(_))),
             "Wrong type tag must produce TypeMismatch"
@@ -855,8 +870,8 @@ mod registry {
             return;
         }
         let workers = WorkerPool::new("test");
-        let events = EventManager::new(workers);
-        let mut registry = AssetRegistry::init(&events).unwrap();
+        let events = EventManager::new(workers.clone());
+        let registry = AssetRegistry::init(&events, workers).unwrap();
 
         let ghost = AssetHandle::from_raw(
             "nonexistent/ghost_that_will_never_exist.dirkasset",
@@ -864,7 +879,7 @@ mod registry {
         );
         assert!(
             matches!(
-                registry.load_asset::<Model>(&ghost),
+                wait_for_load(registry.load_asset::<Model>(&ghost)),
                 Err(Error::NotFound(_))
             ),
             "Unknown handle must produce NotFound"
@@ -877,12 +892,12 @@ mod registry {
             return;
         }
         let workers = WorkerPool::new("test");
-        let events = EventManager::new(workers);
-        let mut registry = AssetRegistry::init(&events).unwrap();
+        let events = EventManager::new(workers.clone());
+        let registry = AssetRegistry::init(&events, workers).unwrap();
 
         let path = "specific/path.dirkasset";
         let bad = AssetHandle::from_raw(path, AssetType::Unknown);
-        match registry.load_asset::<Model>(&bad) {
+        match wait_for_load(registry.load_asset::<Model>(&bad)) {
             Err(Error::TypeMismatch(p)) => assert_eq!(p, path),
             other => panic!("expected TypeMismatch, got {other:?}"),
         }
@@ -894,12 +909,12 @@ mod registry {
             return;
         }
         let workers = WorkerPool::new("test");
-        let events = EventManager::new(workers);
-        let mut registry = AssetRegistry::init(&events).unwrap();
+        let events = EventManager::new(workers.clone());
+        let registry = AssetRegistry::init(&events, workers).unwrap();
 
         let path = "no/such/asset.dirkasset";
         let ghost = AssetHandle::from_raw(path, AssetType::Model);
-        match registry.load_asset::<Model>(&ghost) {
+        match wait_for_load(registry.load_asset::<Model>(&ghost)) {
             Err(Error::NotFound(p)) => assert_eq!(p, path),
             other => panic!("expected NotFound, got {other:?}"),
         }
@@ -923,8 +938,8 @@ mod registry {
         fs::create_dir_all(&dir).expect("failed to create test fixture dir");
 
         let workers = WorkerPool::new("test");
-        let events = EventManager::new(workers);
-        let mut registry = AssetRegistry::init(&events).expect("init failed");
+        let events = EventManager::new(workers.clone());
+        let mut registry = AssetRegistry::init(&events, workers).expect("init failed");
 
         f(&mut registry, &events, &sub);
 
@@ -940,16 +955,49 @@ mod registry {
 
             // Re-init so the registry picks up the freshly written fixture.
             let workers = WorkerPool::new("test");
-            let events2 = EventManager::new(workers);
-            let mut r2 = AssetRegistry::init(&events2).unwrap();
+            let events2 = EventManager::new(workers.clone());
+            let r2 = AssetRegistry::init(&events2, workers).unwrap();
 
             let raw = format!("{sub}/hero.dirkasset");
             let handle = AssetHandle::from_raw(raw, AssetType::Model);
             assert!(
-                r2.load_asset::<Model>(&handle).is_ok(),
+                wait_for_load(r2.load_asset::<Model>(&handle)).is_ok(),
                 "Valid model asset must load without error"
             );
         });
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn load_asset_async_returns_handle_inside_tokio_runtime() {
+        if !assets_path_exists() {
+            return;
+        }
+
+        let sub = "__test_async_load__";
+        let dir = PathBuf::from(ASSETS_PATH).join(sub);
+        fs::create_dir_all(&dir).expect("failed to create test fixture dir");
+        write_model_fixture(&dir, "runtime");
+
+        let workers = WorkerPool::new("test");
+        let events = EventManager::new(workers.clone());
+        let registry = AssetRegistry::init(&events, workers).expect("init failed");
+
+        let raw = format!("{sub}/runtime.dirkasset");
+        let handle = registry
+            .load_asset::<Model>(&AssetHandle::from_raw(raw, AssetType::Model))
+            .await
+            .expect("async load should succeed");
+
+        assert_eq!(
+            handle
+                .get()
+                .expect("model data should be readable")
+                .buffers
+                .len(),
+            0
+        );
+
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -959,13 +1007,13 @@ mod registry {
             write_model_fixture(&dir, "ship");
 
             let workers = WorkerPool::new("test");
-            let events2 = EventManager::new(workers);
+            let events2 = EventManager::new(workers.clone());
             let mut loaded_consumer = events2.subscribe::<AssetLoaded<Model>>();
-            let mut r2 = AssetRegistry::init(&events2).unwrap();
+            let r2 = AssetRegistry::init(&events2, workers).unwrap();
 
             let raw = format!("{sub}/ship.dirkasset");
             let handle_id = AssetHandle::from_raw(raw, AssetType::Model);
-            let _handle = r2.load_asset::<Model>(&handle_id).unwrap();
+            let _handle = wait_for_load(r2.load_asset::<Model>(&handle_id)).unwrap();
 
             // wait for the event to be dispatched
             std::thread::sleep(std::time::Duration::from_millis(5));
@@ -981,14 +1029,15 @@ mod registry {
             write_model_fixture(&dir, "tank");
 
             let workers = WorkerPool::new("test");
-            let events2 = EventManager::new(workers);
+            let events2 = EventManager::new(workers.clone());
             let mut loaded_consumer = events2.subscribe::<AssetLoaded<Model>>();
-            let mut r2 = AssetRegistry::init(&events2).unwrap();
+            let r2 = AssetRegistry::init(&events2, workers).unwrap();
 
             let raw = format!("{sub}/tank.dirkasset");
-            let _handle = r2
-                .load_asset::<Model>(&AssetHandle::from_raw(raw, AssetType::Model))
-                .unwrap();
+            let _handle = wait_for_load(
+                r2.load_asset::<Model>(&AssetHandle::from_raw(raw, AssetType::Model)),
+            )
+            .unwrap();
 
             // wait for the event to be dispatched
             std::thread::sleep(std::time::Duration::from_millis(5));
@@ -1006,14 +1055,15 @@ mod registry {
             write_model_fixture(&dir, "barrel");
 
             let workers = WorkerPool::new("test");
-            let events2 = EventManager::new(workers);
+            let events2 = EventManager::new(workers.clone());
             let mut unloaded_consumer = events2.subscribe::<AssetUnloaded>();
-            let mut r2 = AssetRegistry::init(&events2).unwrap();
+            let r2 = AssetRegistry::init(&events2, workers).unwrap();
 
             let raw = format!("{sub}/barrel.dirkasset");
-            let handle = r2
-                .load_asset::<Model>(&AssetHandle::from_raw(raw, AssetType::Model))
-                .unwrap();
+            let handle = wait_for_load(
+                r2.load_asset::<Model>(&AssetHandle::from_raw(raw, AssetType::Model)),
+            )
+            .unwrap();
 
             // Drop all references → InternalAssetUnloaded is queued.
             drop(handle);
@@ -1039,14 +1089,15 @@ mod registry {
             write_model_fixture(&dir, "plane");
 
             let workers = WorkerPool::new("test");
-            let events2 = EventManager::new(workers);
+            let events2 = EventManager::new(workers.clone());
             let mut unloaded_consumer = events2.subscribe::<AssetUnloaded>();
-            let mut r2 = AssetRegistry::init(&events2).unwrap();
+            let r2 = AssetRegistry::init(&events2, workers).unwrap();
 
             let raw = format!("{sub}/plane.dirkasset");
-            let handle = r2
-                .load_asset::<Model>(&AssetHandle::from_raw(raw, AssetType::Model))
-                .unwrap();
+            let handle = wait_for_load(
+                r2.load_asset::<Model>(&AssetHandle::from_raw(raw, AssetType::Model)),
+            )
+            .unwrap();
 
             // wait for the event to be dispatched
             std::thread::sleep(std::time::Duration::from_millis(5));
@@ -1071,14 +1122,15 @@ mod registry {
             write_model_fixture(&dir, "crate_mesh");
 
             let workers = WorkerPool::new("test");
-            let events2 = EventManager::new(workers);
+            let events2 = EventManager::new(workers.clone());
             let mut unloaded_consumer = events2.subscribe::<AssetUnloaded>();
-            let mut r2 = AssetRegistry::init(&events2).unwrap();
+            let r2 = AssetRegistry::init(&events2, workers).unwrap();
 
             let raw = format!("{sub}/crate_mesh.dirkasset");
-            let h1 = r2
-                .load_asset::<Model>(&AssetHandle::from_raw(raw, AssetType::Model))
-                .unwrap();
+            let h1 = wait_for_load(
+                r2.load_asset::<Model>(&AssetHandle::from_raw(raw, AssetType::Model)),
+            )
+            .unwrap();
             let h2 = h1.clone();
             let h3 = h1.clone();
 
@@ -1119,13 +1171,14 @@ mod registry {
             write_model_fixture(&dir, "sphere");
 
             let workers = WorkerPool::new("test");
-            let events2 = EventManager::new(workers);
-            let mut r2 = AssetRegistry::init(&events2).unwrap();
+            let events2 = EventManager::new(workers.clone());
+            let r2 = AssetRegistry::init(&events2, workers).unwrap();
 
             let raw = format!("{sub}/sphere.dirkasset");
-            let handle = r2
-                .load_asset::<Model>(&AssetHandle::from_raw(raw, AssetType::Model))
-                .unwrap();
+            let handle = wait_for_load(
+                r2.load_asset::<Model>(&AssetHandle::from_raw(raw, AssetType::Model)),
+            )
+            .unwrap();
 
             let model = handle.take().expect("take must succeed on first call");
             // Minimal glTF has 0 meshes.
@@ -1145,16 +1198,18 @@ mod registry {
             write_model_fixture(&dir, "rock");
 
             let workers = WorkerPool::new("test");
-            let events2 = EventManager::new(workers);
-            let mut r2 = AssetRegistry::init(&events2).unwrap();
+            let events2 = EventManager::new(workers.clone());
+            let r2 = AssetRegistry::init(&events2, workers).unwrap();
 
             let raw = format!("{sub}/rock.dirkasset");
-            let h1 = r2
-                .load_asset::<Model>(&AssetHandle::from_raw(raw.clone(), AssetType::Model))
-                .unwrap();
-            let h2 = r2
-                .load_asset::<Model>(&AssetHandle::from_raw(raw, AssetType::Model))
-                .unwrap();
+            let h1 = wait_for_load(
+                r2.load_asset::<Model>(&AssetHandle::from_raw(raw.clone(), AssetType::Model)),
+            )
+            .unwrap();
+            let h2 = wait_for_load(
+                r2.load_asset::<Model>(&AssetHandle::from_raw(raw, AssetType::Model)),
+            )
+            .unwrap();
 
             // Both handles are independent; taking from one must not affect the other.
             h1.take().unwrap();
