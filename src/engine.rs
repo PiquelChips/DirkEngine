@@ -1,12 +1,11 @@
 //! The engine module. The engine holds all the state & manages
 //! all the systems for the engine to run properly.
 
-use std::{collections::HashMap, ffi::CString, path::PathBuf, str::FromStr, time::Instant};
+use std::{f32::consts::PI, ffi::CString, path::PathBuf, str::FromStr, time::Instant};
 
 use anyhow::Context;
 use dirk_threads::WorkerPool;
 use dirk_universe::{Entity, Universe, World, WorldId};
-use dirk_world::player::{Player, PlayerId};
 use tracing::info;
 
 /// This state is returned by [`Engine::tick`].
@@ -36,6 +35,7 @@ pub struct Engine {
     exit_consumer: dirk_events::Consumer<dirk_events::AppExit>,
     exit_dispatcher: dirk_events::Dispatcher<dirk_events::Exiting>,
     frame_dispatcher: dirk_events::Dispatcher<dirk_events::BeginFrame>,
+    #[allow(unused)]
     event_manager: dirk_events::EventManager,
 
     /// This is a thread pool use by various engine systems for async tasks.
@@ -50,11 +50,9 @@ pub struct Engine {
     renderer: dirk_renderer::Renderer,
     platform: dirk_platform::Platform,
     universe: dirk_universe::Universe,
+    players: dirk_player::PlayerManager,
     #[allow(unused)]
     asset_registry: dirk_assets::AssetRegistry,
-
-    next_player_id: PlayerId,
-    players: HashMap<PlayerId, Player>,
 
     exit_state: ExitState,
 }
@@ -107,6 +105,8 @@ impl Engine {
             .with_other(renderer.universe_builder())
             .build();
 
+        let players = dirk_player::PlayerManager::new(&event_manager);
+
         info!("engine initialised");
         Ok(Self {
             exit_consumer: event_manager.subscribe(),
@@ -124,8 +124,7 @@ impl Engine {
             renderer,
             universe,
 
-            next_player_id: 0,
-            players: HashMap::new(),
+            players,
 
             exit_state: ExitState::Running,
         })
@@ -141,7 +140,17 @@ impl Engine {
         info!("starting engine");
         let world_id = self.create_test_world();
 
-        self.spawn_player(world_id);
+        let player = self.players.new_player(self.platform.main_window().id());
+        self.universe.spawn_entity(
+            world_id,
+            Entity::builder().with_component(player).with_component(
+                dirk_world::components::Transform {
+                    location: glam::vec3(0.0, 500.0, 500.0),
+                    rotation: glam::vec3(-PI / 4.0, 0.0, 0.0),
+                    scale: glam::Vec3::ONE,
+                },
+            ),
+        );
 
         Ok(())
     }
@@ -189,16 +198,14 @@ impl Engine {
             return Ok(());
         }
 
+        self.players.tick();
+
         self.universe.tick(delta_time);
         self.asset_registry.tick();
 
         self.renderer
             .tick(delta_time, self.platform.windows())
             .context("renderer")?;
-
-        self.players
-            .values_mut()
-            .for_each(|player| player.tick(&mut self.universe));
 
         self.renderer.render().context("rendering")?;
         Ok(())
@@ -240,29 +247,6 @@ impl Engine {
         let delta = current_time.duration_since(self.last_tick).as_secs_f64();
         self.last_tick = current_time;
         delta
-    }
-
-    fn spawn_player(&mut self, world: WorldId) -> PlayerId {
-        let id = self.next_player_id;
-        self.next_player_id += 1;
-
-        let player = Player::spawn(
-            id,
-            &mut self.universe,
-            world,
-            self.platform.main_window().id(),
-            &self.event_manager,
-        );
-
-        self.players.insert(id, player);
-        id
-    }
-    #[allow(unused)]
-    fn kill_player(&mut self, id: PlayerId) {
-        let Some(player) = self.players.remove(&id) else {
-            return;
-        };
-        player.despawn(&mut self.universe);
     }
 
     fn create_test_world(&mut self) -> WorldId {

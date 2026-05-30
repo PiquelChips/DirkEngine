@@ -1,10 +1,11 @@
 //! ECS systems for proxy creation and synchrnozation
 
+use dirk_player::PlayerId;
 use dirk_universe::{
     CommandBuffer,
     systems::{ComponentSystem, System, UniverseSystem},
 };
-use dirk_world::components::{Camera, Renderable, Transform};
+use dirk_world::components::{Renderable, Transform};
 
 use crate::{Error, render_commands::RenderCommandSender};
 
@@ -205,12 +206,12 @@ impl RendererTransformSystem {
 }
 
 #[derive(System)]
-pub struct RendererCameraSystem {
+pub struct RendererPlayerSystem {
     sender: RenderCommandSender,
 }
 
-impl ComponentSystem for RendererCameraSystem {
-    type Component = Camera;
+impl ComponentSystem for RendererPlayerSystem {
+    type Component = PlayerId;
 
     fn added(
         &self,
@@ -218,40 +219,54 @@ impl ComponentSystem for RendererCameraSystem {
         entity: dirk_universe::Entity,
         component: &Self::Component,
     ) {
-        let proj = component.projection();
+        let id = *component;
         self.sender.enqueue_command(move |renderer| {
-            let proxy = renderer
-                .scene_manager
-                .get_proxy_mut(entity)
-                .ok_or(Error::EntityDoesNotExist(entity))?;
-            proxy.set_proj(Some(proj));
+            let Some(player) = renderer.players.get_mut(&id) else {
+                return Ok(());
+            };
+            player.entity = Some(entity);
             Ok(())
         });
     }
 
     fn updated(
         &self,
-        cmd: &mut CommandBuffer,
+        _: &mut CommandBuffer,
         entity: dirk_universe::Entity,
-        _: &Self::Component,
+        old: &Self::Component,
         new: &Self::Component,
     ) {
-        self.added(cmd, entity, new);
+        let old_id = *old;
+        let new_id = *new;
+        self.sender.enqueue_command(move |renderer| {
+            if let Some(old) = renderer.players.get_mut(&old_id) {
+                old.entity = None;
+            }
+
+            if let Some(new) = renderer.players.get_mut(&new_id) {
+                new.entity = Some(entity);
+            }
+            Ok(())
+        });
     }
 
-    fn removed(&self, _: &mut CommandBuffer, entity: dirk_universe::Entity, _: &Self::Component) {
+    fn removed(
+        &self,
+        _: &mut CommandBuffer,
+        _entity: dirk_universe::Entity,
+        component: &Self::Component,
+    ) {
+        let player_id = *component;
         self.sender.enqueue_command(move |renderer| {
-            let proxy = renderer
-                .scene_manager
-                .get_proxy_mut(entity)
-                .ok_or(Error::EntityDoesNotExist(entity))?;
-            proxy.set_proj(None);
+            if let Some(player) = renderer.players.get_mut(&player_id) {
+                player.entity = None;
+            }
             Ok(())
         });
     }
 }
 
-impl RendererCameraSystem {
+impl RendererPlayerSystem {
     pub fn new(sender: RenderCommandSender) -> Self {
         Self { sender }
     }
