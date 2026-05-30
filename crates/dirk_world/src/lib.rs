@@ -6,8 +6,6 @@ use dirk_universe::{Universe, UniverseBuilder};
 pub mod components;
 use components::ModelUploadSystem;
 
-pub mod player;
-
 /// Creates a [`UniverseBuilder`] with all the systems used by the various
 /// utilities & types in this crate.
 #[must_use]
