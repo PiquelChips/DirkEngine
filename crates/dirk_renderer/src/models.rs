@@ -346,6 +346,10 @@ impl ModelRegistry {
 
 impl Drop for ModelRegistry {
     fn drop(&mut self) {
+        self.textures.clear();
+        self.meshes.clear();
+        self.materials.clear();
+        self.models.clear();
         unsafe {
             self.device
                 .device

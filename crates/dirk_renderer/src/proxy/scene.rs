@@ -253,6 +253,9 @@ impl SceneManager {
 
 impl Drop for SceneManager {
     fn drop(&mut self) {
+        self.scenes.clear();
+        self.entities.clear();
+        self.proxies.clear();
         self.device
             .destroy(Garbage::DescriptorPool(self.descriptor_pool));
     }

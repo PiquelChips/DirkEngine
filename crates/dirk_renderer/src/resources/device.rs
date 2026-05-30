@@ -40,6 +40,7 @@ pub struct RenderDeviceInner {
     pub swapchain_loader: swapchain::Device,
 
     pub instance: ash::Instance,
+    pub entry: ash::Entry,
     pub physical_device: vk::PhysicalDevice,
     pub queues: Queues,
     /// For single use buffers.
@@ -57,14 +58,14 @@ pub struct RenderDeviceInner {
     #[cfg(validation)]
     debug_messenger: vk::DebugUtilsMessengerEXT,
 
-    allocator: Mutex<Allocator>,
+    allocator: Option<Mutex<Allocator>>,
     deletion_queue: Mutex<DeletionQueue>,
     current_frame: Arc<AtomicUsize>,
 }
 
 impl RenderDevice {
     pub fn new(
-        entry: &ash::Entry,
+        entry: ash::Entry,
         instance: ash::Instance,
         device: ash::Device,
         physical_device: vk::PhysicalDevice,
@@ -152,7 +153,7 @@ impl RenderDevice {
 
         Ok(Self(Arc::new(RenderDeviceInner {
             device,
-            surface_loader: surface::Instance::new(entry, &instance),
+            surface_loader: surface::Instance::new(&entry, &instance),
             swapchain_loader,
             physical_device,
             queues,
@@ -160,7 +161,7 @@ impl RenderDevice {
             graphics_pool,
             layouts,
             properties,
-            allocator: Mutex::new(allocator),
+            allocator: Some(Mutex::new(allocator)),
             deletion_queue: Mutex::new(DeletionQueue::new(
                 current_frame.clone(),
                 MAX_FRAMES_IN_FLIGHT,
@@ -168,19 +169,22 @@ impl RenderDevice {
             current_frame,
 
             #[cfg(validation)]
-            debug_utils_loader: debug_utils::Instance::new(entry, &instance),
+            debug_utils_loader: debug_utils::Instance::new(&entry, &instance),
             #[cfg(validation)]
             debug_messenger,
 
             instance,
+            entry,
         })))
     }
 
     pub fn allocate(&self, desc: &AllocationCreateDesc<'_>) -> Result<Allocation> {
-        Ok(self.allocator.lock().allocate(desc)?)
-    }
-    pub fn free(&self, allocation: Allocation) -> Result<()> {
-        Ok(self.allocator.lock().free(allocation)?)
+        Ok(self
+            .allocator
+            .as_ref()
+            .expect("allocator should exist")
+            .lock()
+            .allocate(desc)?)
     }
 
     pub fn destroy(&mut self, garbage: Garbage) {
@@ -193,30 +197,36 @@ impl RenderDevice {
         queue.flush(self, self.current_frame());
     }
 
-    /// Call once before shutdown to flush the entire queue
-    pub fn flush_all(&self) {
-        let mut queue = self.deletion_queue.lock();
-        queue.flush_all(self);
-    }
-
     pub fn current_frame(&self) -> usize {
         self.current_frame.load(Ordering::Relaxed)
     }
 }
 
+impl RenderDeviceInner {
+    fn free(&self, allocation: Allocation) -> Result<()> {
+        Ok(self
+            .allocator
+            .as_ref()
+            .expect("allocator should exist")
+            .lock()
+            .free(allocation)?)
+    }
+}
+
 impl Drop for RenderDeviceInner {
     fn drop(&mut self) {
-        // TODO: find a way to flush all here
         self.layouts.destroy(&self.device);
         self.graphics_pool.destroy();
         self.transfer_pool.destroy();
+
+        self.deletion_queue.lock().flush_all(self);
+        drop(self.allocator.take());
+
         unsafe {
-            // TODO: this causes a segfault (idk)
             self.device.destroy_device(None);
             #[cfg(validation)]
             self.debug_utils_loader
                 .destroy_debug_utils_messenger(self.debug_messenger, None);
-
             self.instance.destroy_instance(None);
         }
     }
@@ -244,14 +254,14 @@ struct PendingDeletion {
     death_frame: usize, // frame index after which it's safe to delete
 }
 
-pub struct DeletionQueue {
+struct DeletionQueue {
     pending: Vec<PendingDeletion>,
     current_frame: Arc<AtomicUsize>,
     frames_in_flight: usize,
 }
 
 impl DeletionQueue {
-    pub fn new(current_frame: Arc<AtomicUsize>, frames_in_flight: usize) -> Self {
+    fn new(current_frame: Arc<AtomicUsize>, frames_in_flight: usize) -> Self {
         Self {
             pending: Vec::new(),
             current_frame,
@@ -260,7 +270,7 @@ impl DeletionQueue {
     }
 
     /// Call this when you're done with a resource.
-    pub fn enqueue(&mut self, garbage: Garbage) {
+    fn enqueue(&mut self, garbage: Garbage) {
         self.pending.push(PendingDeletion {
             garbage: Some(garbage),
             death_frame: self.current_frame.load(Ordering::Relaxed) + 2 * self.frames_in_flight, // wait two frames before destroying
@@ -268,7 +278,7 @@ impl DeletionQueue {
     }
 
     /// Call once per frame. Destroys anything safe to destroy.
-    pub fn flush(&mut self, device: &RenderDevice, current_frame: usize) {
+    fn flush(&mut self, device: &RenderDevice, current_frame: usize) {
         self.pending.retain_mut(|item| {
             if current_frame >= item.death_frame {
                 if let Some(garbage) = item.garbage.take() {
@@ -282,7 +292,7 @@ impl DeletionQueue {
     }
 
     /// Call on shutdown — destroys everything regardless of frame.
-    pub fn flush_all(&mut self, device: &RenderDevice) {
+    fn flush_all(&mut self, device: &RenderDeviceInner) {
         for mut item in self.pending.drain(..) {
             if let Some(garbage) = item.garbage.take() {
                 garbage.destroy(device);
@@ -292,7 +302,7 @@ impl DeletionQueue {
 }
 
 impl Garbage {
-    fn destroy(self, render_device: &RenderDevice) {
+    fn destroy(self, render_device: &RenderDeviceInner) {
         let device = &render_device.device;
         unsafe {
             match self {

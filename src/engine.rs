@@ -4,6 +4,7 @@
 use std::{collections::HashMap, ffi::CString, str::FromStr, time::Instant};
 
 use anyhow::Context;
+use dirk_threads::WorkerPool;
 use dirk_universe::{Entity, Universe, World, WorldId};
 use dirk_world::player::{Player, PlayerId};
 use tracing::info;
@@ -35,26 +36,29 @@ impl ExitState {
 /// This is the main struct that holds global engine state.
 pub struct Engine {
     exit_consumer: dirk_events::Consumer<dirk_events::AppExit>,
+    exit_dispatcher: dirk_events::Dispatcher<dirk_events::Exiting>,
     frame_dispatcher: dirk_events::Dispatcher<dirk_events::BeginFrame>,
     event_manager: dirk_events::EventManager,
+
+    /// This is a thread pool use by various engine systems for async tasks.
+    #[allow(unused)]
+    workers: WorkerPool,
+    #[allow(unused)]
+    logger: Logger,
 
     frame: u64,
     last_tick: Instant,
 
-    #[allow(unused)]
-    asset_registry: dirk_assets::AssetRegistry,
-
     renderer: dirk_renderer::Renderer,
     platform: dirk_platform::Platform,
     universe: dirk_universe::Universe,
+    #[allow(unused)]
+    asset_registry: dirk_assets::AssetRegistry,
 
     next_player_id: PlayerId,
     players: HashMap<PlayerId, Player>,
 
     exit_state: ExitState,
-
-    #[allow(unused)]
-    logger: Logger,
 }
 
 impl Engine {
@@ -75,7 +79,9 @@ impl Engine {
             .init()
             .context("initialising logger")?;
 
-        let event_manager = dirk_events::EventManager::new();
+        let workers = WorkerPool::new("dirk-workers");
+
+        let event_manager = dirk_events::EventManager::new(workers.clone());
         let asset_registry = dirk_assets::AssetRegistry::init(&event_manager)
             .context("initialising asset registry")?;
 
@@ -103,10 +109,12 @@ impl Engine {
         info!("engine initialised");
         Ok(Self {
             exit_consumer: event_manager.subscribe(),
+            exit_dispatcher: event_manager.register(),
             frame_dispatcher: event_manager.register(),
             event_manager,
             logger,
             asset_registry,
+            workers,
 
             frame: 0,
             last_tick: Instant::now(),
@@ -159,7 +167,6 @@ impl Engine {
             .dispatch(dirk_events::BeginFrame(self.frame));
 
         let delta_time = self.capture_delta_time();
-        self.event_manager.dispatch_all();
 
         // TODO: renders too fast and semaphores have problem.
         // remove when rendering takes longer
@@ -171,6 +178,16 @@ impl Engine {
         }
 
         self.platform.tick(delta_time);
+        if self.platform.windows().is_empty() {
+            self.exit(None);
+            return Ok(());
+        }
+
+        self.process_events();
+        if self.is_requesting_exit() {
+            return Ok(());
+        }
+
         self.universe.tick(delta_time);
         self.asset_registry.tick();
 
@@ -182,12 +199,8 @@ impl Engine {
             .values_mut()
             .for_each(|player| player.tick(&mut self.universe));
 
-        self.render().context("rendering")?;
+        self.renderer.render().context("rendering")?;
         Ok(())
-    }
-
-    fn render(&mut self) -> anyhow::Result<()> {
-        Ok(self.renderer.render()?)
     }
 
     fn process_events(&mut self) {
@@ -211,6 +224,10 @@ impl Engine {
             Some(err) => ExitState::Error(err),
             None => ExitState::Requested,
         };
+
+        if self.exit_state.exiting() {
+            self.exit_dispatcher.dispatch(dirk_events::Exiting);
+        }
     }
     /// Returns the exit error
     pub fn exit_state(&self) -> &ExitState {
