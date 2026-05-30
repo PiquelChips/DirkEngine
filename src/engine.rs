@@ -83,7 +83,7 @@ impl Engine {
         let workers = WorkerPool::new("dirk-workers");
 
         let event_manager = dirk_events::EventManager::new(workers.clone());
-        let asset_registry = dirk_assets::AssetRegistry::init(&event_manager)
+        let asset_registry = dirk_assets::AssetRegistry::init(&event_manager, workers.clone())
             .context("initialising asset registry")?;
 
         let version = dirk_utils::Version::from_str(env!("CARGO_PKG_VERSION"))?;

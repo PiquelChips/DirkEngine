@@ -7,7 +7,7 @@ mod errors;
 pub use errors::{Error, Result};
 
 mod events;
-pub use events::{AssetLoaded, AssetUnloaded, LoadAsset};
+pub use events::{AssetLoaded, AssetUnloaded};
 
 mod assets;
 pub use assets::*;
@@ -17,11 +17,14 @@ use handle::AssetRef;
 pub use handle::Handle;
 
 use ::dirk_events::{Consumer, Dispatcher, EventManager};
+use dirk_threads::WorkerPool;
+use parking_lot::{Mutex, RwLock};
 use std::{
     any::{Any, TypeId},
     collections::HashMap,
     fmt::Display,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 use tracing::warn;
 
@@ -241,16 +244,17 @@ impl DirkAsset {
 /// It validates all the `.dirkasset` configurations & stores them in
 /// memory (pruning invalid ones with a [`tracing::warn`].
 ///
-/// Systems can then call [`load_asset`] to have asset data be loaded from
-/// disk. This returns a [`Handle<T>`] and fires an [`AssetLoaded<T>`] event.
+/// Systems can then call [`load_asset`] to schedule asset IO on the engine's
+/// worker pool. Awaiting it returns a [`Handle<T>`] and fires an
+/// [`AssetLoaded<T>`] event.
 ///
 /// Finally, [`AssetRegistry`] handles unloading assets when [`Handle<T>`] is
 /// no longer referenced.
 ///
 /// # Thread safety
 ///
-/// [`AssetRegistry`] is not [`Sync`]. It is intended to be owned and driven from
-/// the main game loop thread.
+/// [`AssetRegistry`] is cheaply cloneable. Every clone shares the same
+/// descriptor cache, event consumers, and worker-pool-backed load path.
 ///
 /// # Initialisation
 ///
@@ -259,8 +263,8 @@ impl DirkAsset {
 ///
 /// # fn test() -> anyhow::Result<()> {
 /// # let workers = dirk_threads::WorkerPool::new("test");
-/// # let events = dirk_events::EventManager::new(workers);
-/// let mut registry = AssetRegistry::init(&events)?;
+/// # let events = dirk_events::EventManager::new(workers.clone());
+/// let registry = AssetRegistry::init(&events, workers)?;
 /// # Ok(()) }
 /// ```
 ///
@@ -269,8 +273,8 @@ impl DirkAsset {
 /// ```rust
 /// # fn test() -> anyhow::Result<()> {
 /// # let workers = dirk_threads::WorkerPool::new("test");
-/// # let events = dirk_events::EventManager::new(workers);
-/// # let mut registry = dirk_assets::AssetRegistry::init(&events).unwrap();
+/// # let events = dirk_events::EventManager::new(workers.clone());
+/// # let registry = dirk_assets::AssetRegistry::init(&events, workers).unwrap();
 /// // Must be called once per frame, *after* EventManager::dispatch_all.
 /// registry.tick();
 /// # Ok(()) }
@@ -279,19 +283,24 @@ impl DirkAsset {
 /// [`load_asset`]: AssetRegistry::load_asset
 /// [`tick`]: AssetRegistry::tick
 /// [`AssetLoaded<T>`]: events::AssetLoaded
+#[derive(Clone)]
 pub struct AssetRegistry {
+    inner: Arc<AssetRegistryInner>,
+}
+
+struct AssetRegistryInner {
     /// All validated asset descriptors, keyed by their handle.
     assets: HashMap<AssetHandle, DirkAsset>,
 
     /// Shared event bus used to clone dispatchers for new asset types.
     event_manager: EventManager,
 
+    /// Worker pool used for blocking asset IO and decoding work.
+    workers: WorkerPool,
+
     /// Receives [`InternalAssetUnloaded`] from every live `AssetRef` when its
     /// ref-count reaches zero.
-    internal_unload_consumer: Consumer<InternalAssetUnloaded>,
-
-    /// Receives [`LoadAsset`] events.
-    load_consumer: Consumer<LoadAsset>,
+    internal_unload_consumer: Mutex<Consumer<InternalAssetUnloaded>>,
 
     /// Emits the public [`AssetUnloaded`] event consumed by e.g. the renderer.
     unload_dispatcher: Dispatcher<AssetUnloaded>,
@@ -302,7 +311,7 @@ pub struct AssetRegistry {
     /// Lazily populated on the first [`load_asset::<T>`] call for each `T`.
     ///
     /// [`load_asset::<T>`]: AssetRegistry::load_asset
-    load_dispatchers: HashMap<TypeId, Box<dyn Any>>,
+    load_dispatchers: RwLock<HashMap<TypeId, Box<dyn Any + Send + Sync>>>,
 }
 
 impl AssetRegistry {
@@ -325,23 +334,25 @@ impl AssetRegistry {
     ///
     /// [`Error::IoError`]: crate::Error::IoError
     /// [`Error::SerialisationError`]: crate::Error::SerialisationError
-    pub fn init(event_manager: &EventManager) -> Result<Self> {
-        let mut registry = Self {
+    pub fn init(event_manager: &EventManager, workers: WorkerPool) -> Result<Self> {
+        let mut inner = AssetRegistryInner {
             assets: HashMap::new(),
 
-            load_consumer: event_manager.subscribe(),
             unload_dispatcher: event_manager.register(),
-            internal_unload_consumer: event_manager.subscribe(),
+            internal_unload_consumer: Mutex::new(event_manager.subscribe()),
             event_manager: event_manager.clone(),
+            workers,
 
-            load_dispatchers: HashMap::new(),
+            load_dispatchers: RwLock::new(HashMap::new()),
         };
 
         let assets_path = PathBuf::from(ASSETS_PATH).canonicalize()?;
-        registry.load(&assets_path, &assets_path)?;
-        registry.validate();
+        inner.load(&assets_path, &assets_path)?;
+        inner.validate();
 
-        Ok(registry)
+        Ok(Self {
+            inner: Arc::new(inner),
+        })
     }
 
     /// Processes deferred asset-unload notifications and emits public events.
@@ -350,32 +361,143 @@ impl AssetRegistry {
     /// [`EventManager::dispatch_all`]. Skipping this call means
     /// [`AssetUnloaded`] events are never delivered, causing potential
     /// memory leaks (e.g. the renderer cannot free GPU resources).
-    pub fn tick(&mut self) {
-        for InternalAssetUnloaded(handle) in self.internal_unload_consumer.consume_all() {
-            self.unload_dispatcher.dispatch(AssetUnloaded { handle });
-        }
-
-        let pending: Vec<AssetHandle> = self
-            .load_consumer
+    pub fn tick(&self) {
+        let unloaded: Vec<_> = self
+            .inner
+            .internal_unload_consumer
+            .lock()
             .consume_all()
-            .map(|LoadAsset(h)| h)
             .collect();
 
-        for asset in pending {
-            match asset.asset_type() {
-                AssetType::Model => {
-                    let _ = self.load_asset::<Model>(&asset);
-                }
-                AssetType::Unknown => {
-                    warn!(
-                        "LoadAsset event received for asset {} with Unknown type, ignoring",
-                        asset.raw()
-                    );
-                }
-            }
+        for InternalAssetUnloaded(handle) in unloaded {
+            self.inner
+                .unload_dispatcher
+                .dispatch(AssetUnloaded { handle });
         }
     }
 
+    /// Loads an asset of type `T` on the engine worker pool.
+    ///
+    /// Await this method from a Tokio runtime. Use [`load_asset_blocking`] when
+    /// calling from synchronous code that does not have a runtime.
+    ///
+    /// # Errors
+    ///
+    /// | Condition | Error |
+    /// |-----------|-------|
+    /// | `handle.asset_type() != T::asset_type()` | [`Error::TypeMismatch`] |
+    /// | Handle not found in registry | [`Error::NotFound`] |
+    /// | Asset-type-specific load failure | [`Error::AssetLoadError`] |
+    /// | Worker task cancellation or panic | [`Error::AssetLoadError`] |
+    ///
+    /// [`load_asset_blocking`]: AssetRegistry::load_asset_blocking
+    pub async fn load_asset<T: Asset>(&self, handle: &AssetHandle) -> Result<Handle<T>> {
+        let registry = self.clone();
+        let handle = handle.clone();
+        let task = self
+            .inner
+            .workers
+            .spawn_blocking(move || registry.load_asset_immediate::<T>(handle));
+
+        task.await
+            .map_err(|err| Error::AssetLoadError(anyhow::Error::new(err)))?
+    }
+
+    /// Loads an asset of type `T` on the engine worker pool and blocks until
+    /// it completes.
+    ///
+    /// This is intended for synchronous callers outside a Tokio runtime, such
+    /// as tests, tools, or startup code. Runtime-aware callers should prefer
+    /// [`load_asset`].
+    ///
+    /// # Errors
+    ///
+    /// Returns the same errors as [`load_asset`].
+    pub fn load_asset_blocking<T: Asset>(&self, handle: &AssetHandle) -> Result<Handle<T>> {
+        // TODO: should not have this function
+        let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+        let registry = self.clone();
+        let handle = handle.clone();
+
+        let _task = self.inner.workers.spawn_blocking(move || {
+            let _ = sender.send(registry.load_asset_immediate::<T>(handle));
+        });
+
+        receiver.recv().map_err(|err| {
+            Error::AssetLoadError(anyhow::anyhow!(
+                "asset worker task ended before returning result: {err}"
+            ))
+        })?
+    }
+
+    fn load_asset_immediate<T: Asset>(&self, handle: AssetHandle) -> Result<Handle<T>> {
+        if handle.asset_type() != T::asset_type() {
+            return Err(Error::TypeMismatch(handle.raw().to_owned()));
+        }
+
+        let config = self
+            .asset_config::<T>(&handle)
+            .ok_or_else(|| Error::NotFound(handle.raw().to_owned()))?;
+
+        let typed_handle = Handle::new(AssetRef::new(
+            handle.clone(),
+            T::load(&config, &handle)?,
+            self.inner.event_manager.register(),
+        ));
+
+        self.dispatch_loaded(typed_handle.clone());
+        Ok(typed_handle)
+    }
+
+    fn dispatch_loaded<T: Asset>(&self, handle: Handle<T>) {
+        let type_id = TypeId::of::<T>();
+        let mut dispatchers = self.inner.load_dispatchers.write();
+        let dispatcher = dispatchers
+            .entry(type_id)
+            .or_insert_with(|| Box::new(self.inner.event_manager.register::<AssetLoaded<T>>()))
+            .downcast_ref::<Dispatcher<AssetLoaded<T>>>()
+            .expect("dispatcher type invariant violated: TypeId key must match Dispatcher<T>");
+
+        dispatcher.dispatch(AssetLoaded { handle });
+    }
+
+    /// Resolves and deserialises the typed config for a given handle.
+    ///
+    /// Returns `None` if the handle is not in the registry or if the required
+    /// config section is absent on the [`DirkAsset`].
+    ///
+    /// # Implementation note — the serde round-trip
+    ///
+    /// Because `DirkAsset` stores each config type as a concrete `Option<T>`
+    /// (e.g. `Option<ModelConfig>`), but this method must return a generic
+    /// `T::Config`, it uses a two-step serde conversion:
+    ///
+    /// 1. Serialise the concrete `Option<ModelConfig>` → `serde_json::Value`.
+    /// 2. Deserialise the `Value` → `T::Config`.
+    ///
+    /// Both steps are guaranteed to succeed for any well-formed config because
+    /// [`AssetConfig`] bounds `Serialize + DeserializeOwned`. The conversion
+    /// happens once per [`load_asset`] call (not per frame), so the overhead
+    /// is negligible.
+    ///
+    /// **TODO**: A future refactor could replace this with a type-erased config
+    /// map to avoid the round-trip entirely.
+    ///
+    /// [`load_asset`]: AssetRegistry::load_asset
+    /// [`AssetConfig`]: assets::AssetConfig
+    fn asset_config<T: Asset>(&self, handle: &AssetHandle) -> Option<T::Config> {
+        let asset = self.inner.assets.get(handle)?;
+
+        let raw = match T::asset_type() {
+            AssetType::Unknown => return None,
+            AssetType::Model => serde_json::to_value(asset.model.as_ref()?).ok()?,
+        };
+
+        serde_json::from_value(raw).ok()
+    }
+}
+
+impl AssetRegistryInner {
     /// Recursively scans `dir` for `.dirkasset` files and deserialises them.
     ///
     /// `base` is the `ASSETS_PATH` root, used to compute relative paths for
@@ -428,98 +550,5 @@ impl AssetRegistry {
     /// `validate` so this method produces no output of its own.
     fn validate(&mut self) {
         self.assets.retain(|_, conf| conf.validate());
-    }
-
-    /// Resolves and deserialises the typed config for a given handle.
-    ///
-    /// Returns `None` if the handle is not in the registry or if the required
-    /// config section is absent on the [`DirkAsset`].
-    ///
-    /// # Implementation note — the serde round-trip
-    ///
-    /// Because `DirkAsset` stores each config type as a concrete `Option<T>`
-    /// (e.g. `Option<ModelConfig>`), but this method must return a generic
-    /// `T::Config`, it uses a two-step serde conversion:
-    ///
-    /// 1. Serialise the concrete `Option<ModelConfig>` → `serde_json::Value`.
-    /// 2. Deserialise the `Value` → `T::Config`.
-    ///
-    /// Both steps are guaranteed to succeed for any well-formed config because
-    /// [`AssetConfig`] bounds `Serialize + DeserializeOwned`. The conversion
-    /// happens once per [`load_asset`] call (not per frame), so the overhead
-    /// is negligible.
-    ///
-    /// **TODO**: A future refactor could replace this with a type-erased config
-    /// map to avoid the round-trip entirely.
-    ///
-    /// [`load_asset`]: AssetRegistry::load_asset
-    /// [`AssetConfig`]: assets::AssetConfig
-    fn asset_config<T: Asset>(&self, handle: &AssetHandle) -> Option<T::Config> {
-        let asset = self.assets.get(handle)?;
-
-        let raw = match T::asset_type() {
-            AssetType::Unknown => return None,
-            AssetType::Model => serde_json::to_value(asset.model.as_ref()?).ok()?,
-        };
-
-        serde_json::from_value(raw).ok()
-    }
-
-    /// Loads an asset of type `T` and returns a reference-counted [`Handle<T>`].
-    ///
-    /// # Errors
-    ///
-    /// | Condition | Error |
-    /// |-----------|-------|
-    /// | `handle.asset_type() != T::asset_type()` | [`Error::TypeMismatch`] |
-    /// | Handle not found in registry | [`Error::NotFound`] |
-    /// | Asset-type-specific load failure | [`Error::AssetLoadError`] |
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// # fn test() -> anyhow::Result<()> {
-    /// # let workers = dirk_threads::WorkerPool::new("test");
-    /// # let events = dirk_events::EventManager::new(workers);
-    /// # let mut registry = dirk_assets::AssetRegistry::init(&events).unwrap();
-    /// use dirk_assets::{AssetHandle, AssetRegistry, AssetType};
-    /// use dirk_assets::Model;
-    ///
-    /// let handle = AssetHandle::from_raw("models/hero.dirkasset", AssetType::Model);
-    /// let typed_handle = registry.load_asset::<Model>(&handle)?;
-    /// # Ok(()) }
-    /// ```
-    pub fn load_asset<T: Asset>(&mut self, handle: &AssetHandle) -> Result<Handle<T>> {
-        let type_id = TypeId::of::<T>();
-        if handle.asset_type() != T::asset_type() {
-            return Err(Error::TypeMismatch(handle.raw().to_owned()));
-        }
-
-        let config = self
-            .asset_config::<T>(handle)
-            .ok_or_else(|| Error::NotFound(handle.raw().to_owned()))?;
-
-        // Give this AssetRef its own dispatcher clone so it can fire
-        // InternalAssetUnloaded from inside its Drop impl, independent of the
-        // registry's own lifetime.
-        let typed_handle = Handle::new(AssetRef::new(
-            handle.clone(),
-            T::load(&config, handle)?,
-            self.event_manager.register(),
-        ));
-
-        // Lazily create and cache a Dispatcher<AssetLoaded<T>> for this type.
-        let dispatcher = self
-            .load_dispatchers
-            .entry(type_id)
-            .or_insert(Box::new(self.event_manager.register::<AssetLoaded<T>>()))
-            .downcast_ref::<Dispatcher<AssetLoaded<T>>>()
-            .expect("dispatcher type invariant violated: TypeId key must match Dispatcher<T>");
-
-        dispatcher.dispatch(AssetLoaded {
-            handle: typed_handle.clone(),
-        });
-
-        Ok(typed_handle)
     }
 }

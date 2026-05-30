@@ -110,8 +110,3 @@ pub struct AssetUnloaded {
     /// [`AssetLoaded`] event was received.
     pub handle: AssetHandle,
 }
-
-/// Any system can fire this event, the [`AssetRegistry`] will respond
-/// by loading the requested asset.
-#[derive(Event, Clone, Debug)]
-pub struct LoadAsset(pub AssetHandle);

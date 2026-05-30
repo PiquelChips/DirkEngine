@@ -38,11 +38,11 @@ use dirk_threads::WorkerPool;
 # fn test() -> anyhow::Result<()> {
 // 1. Initialise — scans ASSETS_PATH and validates all .dirkasset files.
 let workers = WorkerPool::new("test");
-let events = EventManager::new(workers);
-let mut registry = AssetRegistry::init(&events)?;
+let events = EventManager::new(workers.clone());
+let registry = AssetRegistry::init(&events, workers)?;
 
 // 2. Load an asset by its handle string (path relative to ASSETS_PATH).
-let handle = registry.load_asset::<Model>(
+let handle = registry.load_asset_blocking::<Model>(
     &AssetHandle::from_raw("models/hero.dirkasset", AssetType::Model))?;
 
 // 3. Subscribe to receive load events for future loads.
