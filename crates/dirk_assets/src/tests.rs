@@ -51,6 +51,7 @@ use super::{
     Asset,
     AssetConfig,
     AssetHandle,
+    AssetLoad,
     AssetLoaded,
     AssetRegistry,
     AssetType,
@@ -103,6 +104,18 @@ fn write_model_fixture(dir: &Path, name: &str) -> PathBuf {
     let dirkasset = dir.join(format!("{name}.dirkasset"));
     fs::write(&dirkasset, descriptor.to_string()).unwrap();
     dirkasset
+}
+
+fn wait_for_load<T: Asset>(mut load: AssetLoad<T>) -> Result<Handle<T>> {
+    for _ in 0..100 {
+        if let Some(result) = load.try_poll() {
+            return result;
+        }
+
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+
+    panic!("asset load did not complete");
 }
 
 /// A minimal `Asset` implementation used only in tests that need a typed
@@ -844,7 +857,7 @@ mod registry {
 
         // Pass a handle whose AssetType is Unknown but request Model — must be TypeMismatch.
         let bad_handle = AssetHandle::from_raw("anything.dirkasset", AssetType::Unknown);
-        let result = registry.load_asset_blocking::<Model>(&bad_handle);
+        let result = wait_for_load(registry.load_asset::<Model>(&bad_handle));
         assert!(
             matches!(result, Err(Error::TypeMismatch(_))),
             "Wrong type tag must produce TypeMismatch"
@@ -866,7 +879,7 @@ mod registry {
         );
         assert!(
             matches!(
-                registry.load_asset_blocking::<Model>(&ghost),
+                wait_for_load(registry.load_asset::<Model>(&ghost)),
                 Err(Error::NotFound(_))
             ),
             "Unknown handle must produce NotFound"
@@ -884,7 +897,7 @@ mod registry {
 
         let path = "specific/path.dirkasset";
         let bad = AssetHandle::from_raw(path, AssetType::Unknown);
-        match registry.load_asset_blocking::<Model>(&bad) {
+        match wait_for_load(registry.load_asset::<Model>(&bad)) {
             Err(Error::TypeMismatch(p)) => assert_eq!(p, path),
             other => panic!("expected TypeMismatch, got {other:?}"),
         }
@@ -901,7 +914,7 @@ mod registry {
 
         let path = "no/such/asset.dirkasset";
         let ghost = AssetHandle::from_raw(path, AssetType::Model);
-        match registry.load_asset_blocking::<Model>(&ghost) {
+        match wait_for_load(registry.load_asset::<Model>(&ghost)) {
             Err(Error::NotFound(p)) => assert_eq!(p, path),
             other => panic!("expected NotFound, got {other:?}"),
         }
@@ -948,7 +961,7 @@ mod registry {
             let raw = format!("{sub}/hero.dirkasset");
             let handle = AssetHandle::from_raw(raw, AssetType::Model);
             assert!(
-                r2.load_asset_blocking::<Model>(&handle).is_ok(),
+                wait_for_load(r2.load_asset::<Model>(&handle)).is_ok(),
                 "Valid model asset must load without error"
             );
         });
@@ -1000,7 +1013,7 @@ mod registry {
 
             let raw = format!("{sub}/ship.dirkasset");
             let handle_id = AssetHandle::from_raw(raw, AssetType::Model);
-            let _handle = r2.load_asset_blocking::<Model>(&handle_id).unwrap();
+            let _handle = wait_for_load(r2.load_asset::<Model>(&handle_id)).unwrap();
 
             // wait for the event to be dispatched
             std::thread::sleep(std::time::Duration::from_millis(5));
@@ -1021,9 +1034,10 @@ mod registry {
             let r2 = AssetRegistry::init(&events2, workers).unwrap();
 
             let raw = format!("{sub}/tank.dirkasset");
-            let _handle = r2
-                .load_asset_blocking::<Model>(&AssetHandle::from_raw(raw, AssetType::Model))
-                .unwrap();
+            let _handle = wait_for_load(
+                r2.load_asset::<Model>(&AssetHandle::from_raw(raw, AssetType::Model)),
+            )
+            .unwrap();
 
             // wait for the event to be dispatched
             std::thread::sleep(std::time::Duration::from_millis(5));
@@ -1046,9 +1060,10 @@ mod registry {
             let r2 = AssetRegistry::init(&events2, workers).unwrap();
 
             let raw = format!("{sub}/barrel.dirkasset");
-            let handle = r2
-                .load_asset_blocking::<Model>(&AssetHandle::from_raw(raw, AssetType::Model))
-                .unwrap();
+            let handle = wait_for_load(
+                r2.load_asset::<Model>(&AssetHandle::from_raw(raw, AssetType::Model)),
+            )
+            .unwrap();
 
             // Drop all references → InternalAssetUnloaded is queued.
             drop(handle);
@@ -1079,9 +1094,10 @@ mod registry {
             let r2 = AssetRegistry::init(&events2, workers).unwrap();
 
             let raw = format!("{sub}/plane.dirkasset");
-            let handle = r2
-                .load_asset_blocking::<Model>(&AssetHandle::from_raw(raw, AssetType::Model))
-                .unwrap();
+            let handle = wait_for_load(
+                r2.load_asset::<Model>(&AssetHandle::from_raw(raw, AssetType::Model)),
+            )
+            .unwrap();
 
             // wait for the event to be dispatched
             std::thread::sleep(std::time::Duration::from_millis(5));
@@ -1111,9 +1127,10 @@ mod registry {
             let r2 = AssetRegistry::init(&events2, workers).unwrap();
 
             let raw = format!("{sub}/crate_mesh.dirkasset");
-            let h1 = r2
-                .load_asset_blocking::<Model>(&AssetHandle::from_raw(raw, AssetType::Model))
-                .unwrap();
+            let h1 = wait_for_load(
+                r2.load_asset::<Model>(&AssetHandle::from_raw(raw, AssetType::Model)),
+            )
+            .unwrap();
             let h2 = h1.clone();
             let h3 = h1.clone();
 
@@ -1158,9 +1175,10 @@ mod registry {
             let r2 = AssetRegistry::init(&events2, workers).unwrap();
 
             let raw = format!("{sub}/sphere.dirkasset");
-            let handle = r2
-                .load_asset_blocking::<Model>(&AssetHandle::from_raw(raw, AssetType::Model))
-                .unwrap();
+            let handle = wait_for_load(
+                r2.load_asset::<Model>(&AssetHandle::from_raw(raw, AssetType::Model)),
+            )
+            .unwrap();
 
             let model = handle.take().expect("take must succeed on first call");
             // Minimal glTF has 0 meshes.
@@ -1184,12 +1202,14 @@ mod registry {
             let r2 = AssetRegistry::init(&events2, workers).unwrap();
 
             let raw = format!("{sub}/rock.dirkasset");
-            let h1 = r2
-                .load_asset_blocking::<Model>(&AssetHandle::from_raw(raw.clone(), AssetType::Model))
-                .unwrap();
-            let h2 = r2
-                .load_asset_blocking::<Model>(&AssetHandle::from_raw(raw, AssetType::Model))
-                .unwrap();
+            let h1 = wait_for_load(
+                r2.load_asset::<Model>(&AssetHandle::from_raw(raw.clone(), AssetType::Model)),
+            )
+            .unwrap();
+            let h2 = wait_for_load(
+                r2.load_asset::<Model>(&AssetHandle::from_raw(raw, AssetType::Model)),
+            )
+            .unwrap();
 
             // Both handles are independent; taking from one must not affect the other.
             h1.take().unwrap();

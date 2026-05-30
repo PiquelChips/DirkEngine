@@ -23,9 +23,13 @@ use std::{
     any::{Any, TypeId},
     collections::HashMap,
     fmt::Display,
+    future::Future,
     path::{Path, PathBuf},
+    pin::Pin,
     sync::Arc,
+    task::{Context, Poll},
 };
+use tokio::task::JoinHandle as TaskJoinHandle;
 use tracing::warn;
 
 use serde::{Deserialize, Serialize};
@@ -288,6 +292,75 @@ pub struct AssetRegistry {
     inner: Arc<AssetRegistryInner>,
 }
 
+/// A pending asset load running on the engine worker pool.
+///
+/// This is returned immediately by [`AssetRegistry::load_asset`]. In async code
+/// you can await it directly. In synchronous, frame-driven code, call
+/// [`try_poll`] periodically to check whether the worker task has completed
+/// without blocking the current thread.
+///
+/// [`try_poll`]: AssetLoad::try_poll
+pub struct AssetLoad<T: Asset> {
+    task: Option<TaskJoinHandle<Result<Handle<T>>>>,
+}
+
+impl<T: Asset> AssetLoad<T> {
+    fn new(task: TaskJoinHandle<Result<Handle<T>>>) -> Self {
+        Self { task: Some(task) }
+    }
+
+    /// Polls this load once with a no-op waker.
+    ///
+    /// Returns `None` while the worker task is still running. Returns `Some`
+    /// exactly once when the asset load completes; the result is consumed by
+    /// this call.
+    pub fn try_poll(&mut self) -> Option<Result<Handle<T>>> {
+        let waker = std::task::Waker::noop();
+        let mut context = Context::from_waker(waker);
+        match Pin::new(self).poll(&mut context) {
+            Poll::Ready(result) => Some(result),
+            Poll::Pending => None,
+        }
+    }
+
+    /// Returns `true` if this load has already yielded its result.
+    #[must_use]
+    pub fn is_consumed(&self) -> bool {
+        self.task.is_none()
+    }
+}
+
+impl<T: Asset> Unpin for AssetLoad<T> {}
+
+impl<T: Asset> Future for AssetLoad<T> {
+    type Output = Result<Handle<T>>;
+
+    fn poll(mut self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Self::Output> {
+        let Some(task) = self.task.as_mut() else {
+            panic!("AssetLoad polled after completion");
+        };
+
+        match Pin::new(task).poll(context) {
+            Poll::Ready(result) => {
+                self.task = None;
+                Poll::Ready(match result {
+                    Ok(result) => result,
+                    Err(err) => Err(Error::AssetLoadError(anyhow::Error::new(err))),
+                })
+            }
+            Poll::Pending => Poll::Pending,
+        }
+    }
+}
+
+impl<T: Asset> std::fmt::Debug for AssetLoad<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AssetLoad")
+            .field("pending", &self.task.is_some())
+            .finish()
+    }
+}
+
 struct AssetRegistryInner {
     /// All validated asset descriptors, keyed by their handle.
     assets: HashMap<AssetHandle, DirkAsset>,
@@ -378,8 +451,9 @@ impl AssetRegistry {
 
     /// Loads an asset of type `T` on the engine worker pool.
     ///
-    /// Await this method from a Tokio runtime. Use [`load_asset_blocking`] when
-    /// calling from synchronous code that does not have a runtime.
+    /// Await this method from a Tokio runtime, or keep the returned
+    /// [`AssetLoad`] and call [`AssetLoad::try_poll`] periodically from
+    /// synchronous code.
     ///
     /// # Errors
     ///
@@ -390,8 +464,7 @@ impl AssetRegistry {
     /// | Asset-type-specific load failure | [`Error::AssetLoadError`] |
     /// | Worker task cancellation or panic | [`Error::AssetLoadError`] |
     ///
-    /// [`load_asset_blocking`]: AssetRegistry::load_asset_blocking
-    pub async fn load_asset<T: Asset>(&self, handle: &AssetHandle) -> Result<Handle<T>> {
+    pub fn load_asset<T: Asset>(&self, handle: &AssetHandle) -> AssetLoad<T> {
         let registry = self.clone();
         let handle = handle.clone();
         let task = self
@@ -399,35 +472,7 @@ impl AssetRegistry {
             .workers
             .spawn_blocking(move || registry.load_asset_immediate::<T>(handle));
 
-        task.await
-            .map_err(|err| Error::AssetLoadError(anyhow::Error::new(err)))?
-    }
-
-    /// Loads an asset of type `T` on the engine worker pool and blocks until
-    /// it completes.
-    ///
-    /// This is intended for synchronous callers outside a Tokio runtime, such
-    /// as tests, tools, or startup code. Runtime-aware callers should prefer
-    /// [`load_asset`].
-    ///
-    /// # Errors
-    ///
-    /// Returns the same errors as [`load_asset`].
-    pub fn load_asset_blocking<T: Asset>(&self, handle: &AssetHandle) -> Result<Handle<T>> {
-        // TODO: should not have this function
-        let (sender, receiver) = std::sync::mpsc::sync_channel(1);
-        let registry = self.clone();
-        let handle = handle.clone();
-
-        let _task = self.inner.workers.spawn_blocking(move || {
-            let _ = sender.send(registry.load_asset_immediate::<T>(handle));
-        });
-
-        receiver.recv().map_err(|err| {
-            Error::AssetLoadError(anyhow::anyhow!(
-                "asset worker task ended before returning result: {err}"
-            ))
-        })?
+        AssetLoad::new(task)
     }
 
     fn load_asset_immediate<T: Asset>(&self, handle: AssetHandle) -> Result<Handle<T>> {

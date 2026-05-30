@@ -42,8 +42,8 @@ let events = EventManager::new(workers.clone());
 let registry = AssetRegistry::init(&events, workers)?;
 
 // 2. Load an asset by its handle string (path relative to ASSETS_PATH).
-let handle = registry.load_asset_blocking::<Model>(
-    &AssetHandle::from_raw("models/hero.dirkasset", AssetType::Model))?;
+let mut load = registry.load_asset::<Model>(
+    &AssetHandle::from_raw("models/hero.dirkasset", AssetType::Model));
 
 // 3. Subscribe to receive load events for future loads.
 let mut loaded_consumer = events.subscribe::<AssetLoaded<Model>>();
@@ -52,6 +52,10 @@ let mut unloaded_consumer = events.subscribe::<AssetUnloaded>();
 // 4. Game loop — call once per frame.
 loop {
     registry.tick();
+
+    if let Some(result) = load.try_poll() {
+        let _handle = result?;
+    }
 
     for event in loaded_consumer.consume_all() {
         let data = event.handle.take()?;

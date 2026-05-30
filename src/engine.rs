@@ -103,7 +103,7 @@ impl Engine {
         .context("renderer init")?;
 
         let universe = Universe::builder()
-            .with_other(dirk_world::universe_builder(&event_manager))
+            .with_other(dirk_world::universe_builder(asset_registry.clone()))
             .with_other(renderer.universe_builder())
             .build();
 
