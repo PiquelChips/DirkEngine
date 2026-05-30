@@ -8,9 +8,9 @@ use inside a game-engine loop.
 | Term | Type | Role |
 |------|------|------|
 | **Event** | any `T: [events::Event]` | A value that travels through the bus |
-| **Dispatcher** | [`Dispatcher<T>`] | Queues events for the next tick |
-| **Consumer** | [`Consumer<T>`] | Reads events that were forwarded this tick |
-| **Event Manager** | [`EventManager`] | Wires everything together; call [`dispatch_all`] once per frame |
+| **Dispatcher** | [`Dispatcher<T>`] | Queues events for immediate background routing |
+| **Consumer** | [`Consumer<T>`] | Reads events that have already been routed |
+| **Event Manager** | [`EventManager`] | Wires everything together |
 
 ## Quick Start
 
@@ -23,19 +23,17 @@ use dirk_events::{Event, EventManager};
 struct PlayerScored { points: u32 }
 
 // 2. Create the shared manager.
-let mgr = EventManager::new();
+let workers = dirk_threads::WorkerPool::new("pool");
+let mgr = EventManager::new(workers);
 
 // 3. Obtain a dispatcher (producer side) and a consumer (subscriber side).
 let dispatcher = mgr.register::<PlayerScored>();
-let consumer   = mgr.subscribe::<PlayerScored>();
+let mut consumer   = mgr.subscribe::<PlayerScored>();
 
 // 4. Queue an event from anywhere that holds the dispatcher.
 dispatcher.dispatch(PlayerScored { points: 42 });
 
-// 5. Once per frame / tick: forward queued events to all subscribers.
-mgr.dispatch_all();
-
-// 6. Read events on the consumer side.
+// 5. Read events on the consumer side.
 for event in consumer.consume_all() {
     println!("score update: {}", event.debug()); // "player scored 42 points"
 }
@@ -47,23 +45,23 @@ for event in consumer.consume_all() {
  dispatcher.dispatch(e)
        │
        ▼
- [internal channel buffer]   ← events accumulate here between ticks
+ [background worker queue]
        │
- mgr.dispatch_all()          ← call exactly once per frame
+ [worker thread routes event]
        │
        ├──▶ consumer A
        ├──▶ consumer B
        └──▶ consumer C       ← every live consumer receives a clone
 ```
 
-* **Buffered until `dispatch_all`** — events queued before `dispatch_all`
-  are invisible to consumers. Call `dispatch_all` once per frame.
+* **Immediate background routing** — events are forwarded as soon as a worker
+  thread can route them; the game thread does not perform the fan-out work.
 * **Fan-out** — every active [`Consumer`] for a given type receives its own
   independent clone of each event.
 * **Type-isolated** — consumers only receive events of the exact type they
   subscribed to; other event types are never delivered to them.
 * **Dropped-consumer pruning** — if a [`Consumer`] is dropped, its entry is
-  silently removed on the next `dispatch_all`; no panic, no leak.
+  silently removed on the next routing attempt; no panic, no leak.
 
 ## Using the `#[derive(Event)]` Macro
 
@@ -155,7 +153,8 @@ into as many systems as you like:
 ```rust
 use dirk_events::EventManager;
 
-let mgr = EventManager::new();
+let workers = dirk_threads::WorkerPool::new("pool");
+let mgr = EventManager::new(workers);
 
 let input_system_mgr  = mgr.clone();
 let render_system_mgr = mgr.clone();
@@ -166,7 +165,7 @@ let render_system_mgr = mgr.clone();
 ## Multiple Dispatchers for the Same Type
 
 Several systems can independently produce events of the same type. All of
-their events are delivered to all subscribers in the next `dispatch_all`.
+their events are delivered to all subscribers.
 
 ```rust
 use dirk_events::{EventManager, Event};
@@ -174,15 +173,16 @@ use dirk_events::{EventManager, Event};
 #[derive(Debug, Clone, Event)]
 struct DamageEvent(u32);
 
-let mgr = EventManager::new();
+let workers = dirk_threads::WorkerPool::new("pool");
+let mgr = EventManager::new(workers);
 let d1 = mgr.register::<DamageEvent>(); // melee system
 let d2 = mgr.register::<DamageEvent>(); // projectile system
-let consumer = mgr.subscribe::<DamageEvent>();
+let mut consumer = mgr.subscribe::<DamageEvent>();
 
 d1.dispatch(DamageEvent(10));
 d2.dispatch(DamageEvent(25));
-mgr.dispatch_all();
 
+# std::thread::sleep(std::time::Duration::from_millis(10));
 let total: u32 = consumer.consume_all().map(|e| e.0).sum();
 assert_eq!(total, 35);
 ```
@@ -193,31 +193,10 @@ Cloning a [`Dispatcher`] registers a **new, independent producer** with the
 same manager. Cloning a [`Consumer`] creates a **fresh, independent
 subscription** — it does not share the receiver of the original.
 
-```rust
-use dirk_events::{EventManager, Event};
-
-#[derive(Debug, Clone, Event)]
-struct Ping;
-
-let mgr  = EventManager::new();
-let d1   = mgr.register::<Ping>();
-let d2   = d1.clone(); // independent dispatcher
-let c1   = mgr.subscribe::<Ping>();
-let c2   = c1.clone(); // independent consumer — its own subscription
-
-d1.dispatch(Ping);
-d2.dispatch(Ping);
-mgr.dispatch_all();
-
-assert_eq!(c1.consume_all().count(), 2); // receives from both dispatchers
-assert_eq!(c2.consume_all().count(), 2);
-```
-
 ## Thread Safety
 
 [`Dispatcher`] is [`Send`], so it can be moved into background threads to
-produce events off the main thread. [`EventManager::dispatch_all`] is
-typically called from the main game-loop thread.
+produce events off the main thread.
 
 ```rust
 use dirk_events::{EventManager, Event};
@@ -226,17 +205,16 @@ use std::thread;
 #[derive(Debug, Clone, Event)]
 struct WorkDone(u32);
 
-let mgr = EventManager::new();
+let workers = dirk_threads::WorkerPool::new("pool");
+let mgr = EventManager::new(workers);
 let dispatcher = mgr.register::<WorkDone>();
-let consumer   = mgr.subscribe::<WorkDone>();
+let mut consumer   = mgr.subscribe::<WorkDone>();
 
 thread::spawn(move || {
     dispatcher.dispatch(WorkDone(1));
     dispatcher.dispatch(WorkDone(2));
 }).join().unwrap();
 
-mgr.dispatch_all();
+# std::thread::sleep(std::time::Duration::from_millis(10));
 assert_eq!(consumer.consume_all().count(), 2);
 ```
-
-[`dispatch_all`]: EventManager::dispatch_all

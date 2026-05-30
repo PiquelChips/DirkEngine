@@ -408,6 +408,7 @@ dependencies = [
  "anyhow",
  "dirk_build",
  "dirk_events",
+ "dirk_threads",
  "gltf",
  "parking_lot",
  "serde",
@@ -429,20 +430,10 @@ name = "dirk_events"
 version = "0.0.1"
 dependencies = [
  "dirk_proc",
+ "dirk_threads",
  "parking_lot",
+ "tokio",
  "tracing",
-]
-
-[[package]]
-name = "dirk_logging"
-version = "0.0.1"
-dependencies = [
- "dirk_build",
- "parking_lot",
- "thiserror 2.0.18",
- "time",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -501,6 +492,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "dirk_threads"
+version = "0.0.1"
+dependencies = [
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "dirk_universe"
 version = "0.0.1"
 dependencies = [
@@ -539,16 +538,16 @@ dependencies = [
  "dirk_assets",
  "dirk_build",
  "dirk_events",
- "dirk_logging",
  "dirk_platform",
  "dirk_renderer",
+ "dirk_threads",
  "dirk_universe",
  "dirk_utils",
  "dirk_world",
  "glam",
+ "piquel-log",
  "thiserror 2.0.18",
  "tracing",
- "tracing-log",
 ]
 
 [[package]]
@@ -997,6 +996,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "mio"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "50b7e5b27aa02a74bac8c3f23f448f8d87ff11f92d3aac1a6ed369ee08cc56c1"
+dependencies = [
+ "libc",
+ "wasi",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "moxcms"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1038,9 +1048,9 @@ dependencies = [
 
 [[package]]
 name = "num-conv"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6673768db2d862beb9b39a78fdcb1a69439615d5794a1be50caa9bc92c81967"
+checksum = "521739c6d2bac4aa25192232afe6841231376b2b26d4d9fae5ecf8ca5772e441"
 
 [[package]]
 name = "num-traits"
@@ -1252,6 +1262,21 @@ name = "pin-project-lite"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
+
+[[package]]
+name = "piquel-log"
+version = "0.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dcd401f64e488830955bf1e9fe4138de15fc42b1629439a981b14acab881e14b"
+dependencies = [
+ "log",
+ "parking_lot",
+ "thiserror 2.0.18",
+ "time",
+ "tracing",
+ "tracing-log",
+ "tracing-subscriber",
+]
 
 [[package]]
 name = "pkg-config"
@@ -1548,6 +1573,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
+name = "signal-hook-registry"
+version = "1.4.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c4db69cba1110affc0e9f7bcd48bbf87b3f4fc7c61fc9155afd4c469eb3d6c1b"
+dependencies = [
+ "errno",
+ "libc",
+]
+
+[[package]]
 name = "simd-adler32"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1625,6 +1660,16 @@ checksum = "4aaa7368fcf4852a4c2dd92df0cace6a71f2091ca0a23391ce7f3a31833f1523"
 dependencies = [
  "borsh",
  "serde_core",
+]
+
+[[package]]
+name = "socket2"
+version = "0.6.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3a766e1110788c36f4fa1c2b71b387a7815aa65f88ce0229841826633d93723e"
+dependencies = [
+ "libc",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1763,6 +1808,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokio"
+version = "1.52.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8fc7f01b389ac15039e4dc9531aa973a135d7a4135281b12d7c1bc79fd57fffe"
+dependencies = [
+ "bytes",
+ "libc",
+ "mio",
+ "parking_lot",
+ "pin-project-lite",
+ "signal-hook-registry",
+ "socket2",
+ "tokio-macros",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "tokio-macros"
+version = "2.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "385a6cb71ab9ab790c5fe8d67f1645e6c450a7ce006a33de03daa956cf70a496"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "toml_datetime"
 version = "1.1.1+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1892,6 +1965,12 @@ dependencies = [
  "same-file",
  "winapi-util",
 ]
+
+[[package]]
+name = "wasi"
+version = "0.11.1+wasi-snapshot-preview1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ccf3ec651a847eb01de73ccad15eb7d99f80485de043efb2f370cd654f4ea44b"
 
 [[package]]
 name = "wasip2"

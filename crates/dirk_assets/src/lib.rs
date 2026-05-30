@@ -256,10 +256,10 @@ impl DirkAsset {
 ///
 /// ```rust
 /// use dirk_assets::AssetRegistry;
-/// use dirk_events::EventManager;
 ///
 /// # fn test() -> anyhow::Result<()> {
-/// let events = EventManager::new();
+/// # let workers = dirk_threads::WorkerPool::new("test");
+/// # let events = dirk_events::EventManager::new(workers);
 /// let mut registry = AssetRegistry::init(&events)?;
 /// # Ok(()) }
 /// ```
@@ -268,7 +268,8 @@ impl DirkAsset {
 ///
 /// ```rust
 /// # fn test() -> anyhow::Result<()> {
-/// # let events = dirk_events::EventManager::new();
+/// # let workers = dirk_threads::WorkerPool::new("test");
+/// # let events = dirk_events::EventManager::new(workers);
 /// # let mut registry = dirk_assets::AssetRegistry::init(&events).unwrap();
 /// // Must be called once per frame, *after* EventManager::dispatch_all.
 /// registry.tick();
@@ -478,7 +479,8 @@ impl AssetRegistry {
     ///
     /// ```rust
     /// # fn test() -> anyhow::Result<()> {
-    /// # let events = dirk_events::EventManager::new();
+    /// # let workers = dirk_threads::WorkerPool::new("test");
+    /// # let events = dirk_events::EventManager::new(workers);
     /// # let mut registry = dirk_assets::AssetRegistry::init(&events).unwrap();
     /// use dirk_assets::{AssetHandle, AssetRegistry, AssetType};
     /// use dirk_assets::Model;

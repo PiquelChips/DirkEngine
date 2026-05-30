@@ -35,10 +35,11 @@ pub(crate) struct InternalAssetUnloaded(pub AssetHandle);
 ///
 /// ```rust
 /// use dirk_assets::{AssetLoaded, Handle, Model};
-/// use dirk_events::{Consumer, EventManager};
+/// use dirk_events::Consumer;
 ///
-/// # let events = EventManager::new();
-/// let consumer: Consumer<AssetLoaded<Model>> = events.subscribe();
+/// # let workers = dirk_threads::WorkerPool::new("test");
+/// # let events = dirk_events::EventManager::new(workers);
+/// let mut consumer: Consumer<AssetLoaded<Model>> = events.subscribe();
 ///
 /// // Once per frame:
 /// for event in consumer.consume_all() {
@@ -87,8 +88,9 @@ pub struct AssetLoaded<T: Asset> {
 /// use dirk_assets::AssetUnloaded;
 /// use dirk_events::Consumer;
 ///
-/// # let events = dirk_events::EventManager::new();
-/// let consumer: Consumer<AssetUnloaded> = events.subscribe();
+/// # let workers = dirk_threads::WorkerPool::new("test");
+/// # let events = dirk_events::EventManager::new(workers);
+/// let mut consumer: Consumer<AssetUnloaded> = events.subscribe();
 ///
 /// // Once per frame:
 /// for AssetUnloaded { handle } in consumer.consume_all() {
