@@ -18,10 +18,8 @@ documentation.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
-tracing-log.workspace = true
 glam.workspace = true
 
-dirk_logging.workspace = true
 dirk_utils.workspace = true
 dirk_events.workspace = true
 dirk_platform.workspace = true
@@ -43,7 +41,7 @@ rustdoc-args = ["-Zunstable-options", "--cfg", "docsrs"]
 [features]
 default = ["editor"]
 
-editor = ["dirk_logging/editor"]
+editor = []
 
 # WORKSPACE CONFIGURATION
 
@@ -84,7 +82,6 @@ cargo_metadata = "0.23"
 # Engine modules
 dirk_build    = { version = "0.0.1", path = "crates/dirk_build" }
 dirk_utils    = { version = "0.0.1", path = "crates/dirk_utils" }
-dirk_logging  = { version = "0.0.1", path = "crates/dirk_logging" }
 dirk_events   = { version = "0.0.1", path = "crates/dirk_events" }
 dirk_proc     = { version = "0.0.1", path = "crates/dirk_proc" }
 dirk_platform = { version = "0.0.1", path = "crates/dirk_platform" }
