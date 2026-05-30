@@ -15,6 +15,7 @@ use crate::{
         device::{Garbage, RenderDevice},
         image::{Image, ImageCreateInfo},
     },
+    window::Window,
 };
 
 /// This is the renderer proxy for the [`Universe`]. It also has
@@ -127,7 +128,19 @@ impl SceneManager {
                 .ok_or(Error::CameraDoesNotExist(camera))?;
 
             let view = proxy.view.ok_or(Error::CameraDoesNotExist(camera))?;
-            let proj = proxy.proj.ok_or(Error::CameraDoesNotExist(camera))?;
+
+            // TODO: proper viewport & camera system
+            let proj = {
+                let mut proj = glam::Mat4::perspective_rh(
+                    45_f32.to_radians(),               // FOV
+                    (size.width / size.height) as f32, // Aspect Ratio
+                    1.0,                               // near clip
+                    100.0,                             // far clip
+                );
+                // Vulkan NDC has Y pointing down; flip the projection accordingly.
+                proj.y_axis.y *= -1.0;
+                proj
+            };
 
             let scene_ubo = SceneUbo { view, proj };
             unsafe { scene.ubo[frame].write(&scene_ubo) };
@@ -348,8 +361,6 @@ pub struct SceneProxy {
     model_matrix: Option<glam::Mat4>,
     /// The view matrix used for rendering as camera
     view: Option<glam::Mat4>,
-    /// The projection matrix used for rendering as camera
-    proj: Option<glam::Mat4>,
     /// The name of the model. Used to request a [`crate::model::Model`] from the
     /// renderer at render time.
     model: Option<dirk_assets::AssetHandle>,
@@ -408,7 +419,6 @@ impl SceneProxy {
             model: None,
             model_matrix: None,
             view: None,
-            proj: None,
             ubo,
             sets,
         })
@@ -428,9 +438,6 @@ impl SceneProxy {
     }
     pub fn set_view(&mut self, view: Option<glam::Mat4>) {
         self.view = view;
-    }
-    pub fn set_proj(&mut self, proj: Option<glam::Mat4>) {
-        self.proj = proj;
     }
     pub fn write_ubo(&self, frame: usize) {
         let Some(model) = self.model_matrix else {

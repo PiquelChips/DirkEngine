@@ -46,8 +46,7 @@ mod proxy;
 use proxy::{
     scene::SceneManager,
     systems::{
-        RendererCameraSystem, RendererMeshSystem, RendererPlayerSystem, RendererTransformSystem,
-        RendererUniverseSystem,
+        RendererMeshSystem, RendererPlayerSystem, RendererTransformSystem, RendererUniverseSystem,
     },
 };
 
@@ -468,20 +467,17 @@ impl Renderer {
         let (uni_sender, uni_receiver) = render_commands::channel();
         let (mesh_sender, mesh_receiver) = render_commands::channel();
         let (trans_sender, trans_receiver) = render_commands::channel();
-        let (cam_sender, cam_receiver) = render_commands::channel();
         let (player_sender, player_receiver) = render_commands::channel();
 
         self.receivers.push(uni_receiver);
         self.receivers.push(mesh_receiver);
         self.receivers.push(trans_receiver);
-        self.receivers.push(cam_receiver);
         self.receivers.push(player_receiver);
 
         Universe::builder()
             .with_universe_system(RendererUniverseSystem::new(uni_sender))
             .with_component_system(RendererMeshSystem::new(mesh_sender))
             .with_component_system(RendererTransformSystem::new(trans_sender))
-            .with_component_system(RendererCameraSystem::new(cam_sender))
             .with_component_system(RendererPlayerSystem::new(player_sender))
     }
 

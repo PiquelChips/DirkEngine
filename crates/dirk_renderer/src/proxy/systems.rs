@@ -5,7 +5,7 @@ use dirk_universe::{
     CommandBuffer,
     systems::{ComponentSystem, System, UniverseSystem},
 };
-use dirk_world::components::{Camera, Renderable, Transform};
+use dirk_world::components::{Renderable, Transform};
 
 use crate::{Error, render_commands::RenderCommandSender};
 
@@ -200,59 +200,6 @@ impl ComponentSystem for RendererTransformSystem {
 }
 
 impl RendererTransformSystem {
-    pub fn new(sender: RenderCommandSender) -> Self {
-        Self { sender }
-    }
-}
-
-#[derive(System)]
-pub struct RendererCameraSystem {
-    sender: RenderCommandSender,
-}
-
-impl ComponentSystem for RendererCameraSystem {
-    type Component = Camera;
-
-    fn added(
-        &self,
-        _: &mut CommandBuffer,
-        entity: dirk_universe::Entity,
-        component: &Self::Component,
-    ) {
-        let proj = component.projection();
-        self.sender.enqueue_command(move |renderer| {
-            let proxy = renderer
-                .scene_manager
-                .get_proxy_mut(entity)
-                .ok_or(Error::EntityDoesNotExist(entity))?;
-            proxy.set_proj(Some(proj));
-            Ok(())
-        });
-    }
-
-    fn updated(
-        &self,
-        cmd: &mut CommandBuffer,
-        entity: dirk_universe::Entity,
-        _: &Self::Component,
-        new: &Self::Component,
-    ) {
-        self.added(cmd, entity, new);
-    }
-
-    fn removed(&self, _: &mut CommandBuffer, entity: dirk_universe::Entity, _: &Self::Component) {
-        self.sender.enqueue_command(move |renderer| {
-            let proxy = renderer
-                .scene_manager
-                .get_proxy_mut(entity)
-                .ok_or(Error::EntityDoesNotExist(entity))?;
-            proxy.set_proj(None);
-            Ok(())
-        });
-    }
-}
-
-impl RendererCameraSystem {
     pub fn new(sender: RenderCommandSender) -> Self {
         Self { sender }
     }
