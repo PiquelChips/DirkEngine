@@ -6,15 +6,13 @@ use std::{
     ops::{Add, AddAssign},
 };
 
-use dirk_events::{Consumer, Dispatcher, EventManager};
-use dirk_platform::{WindowEvent, WindowId};
+use dirk_events::{Dispatcher, EventManager};
+use dirk_platform::WindowId;
 use dirk_universe::components::Component;
 
-pub mod events;
-use events::{PlayerDespawned, PlayerSpawned, PlayerWindowResized};
+mod events;
+pub use events::{PlayerDespawned, PlayerSpawned};
 
-pub mod viewport;
-use viewport::Viewport;
 
 // PlayerId
 
@@ -69,7 +67,7 @@ impl AddAssign<u32> for PlayerId {
 /// [`PlayerManager::get_player_mut`].
 pub struct PlayerHandle {
     id: PlayerId,
-    viewport: Viewport,
+    window: WindowId,
 }
 
 impl PlayerHandle {
@@ -79,12 +77,14 @@ impl PlayerHandle {
         self.id
     }
 
-    /// Returns a reference to this player's [`Viewport`].
+    /// Returns the [`WindowId`] of this player's [`Window`].
     ///
     /// Use [`PlayerManager::set_viewport`] to change it.
+    ///
+    /// [`Window`]: dirk_platform::Window
     #[must_use]
-    pub fn viewport(&self) -> &Viewport {
-        &self.viewport
+    pub fn window(&self) -> WindowId {
+        self.window
     }
 }
 
@@ -116,9 +116,6 @@ pub struct PlayerManager {
 
     spawned_dispatcher: Dispatcher<PlayerSpawned>,
     despawned_dispatcher: Dispatcher<PlayerDespawned>,
-    resized_dispatcher: Dispatcher<PlayerWindowResized>,
-
-    window_consumer: Consumer<WindowEvent>,
 }
 
 impl PlayerManager {
@@ -131,8 +128,6 @@ impl PlayerManager {
             players: HashMap::new(),
             spawned_dispatcher: events.register(),
             despawned_dispatcher: events.register(),
-            resized_dispatcher: events.register(),
-            window_consumer: events.subscribe(),
         }
     }
 
@@ -154,10 +149,11 @@ impl PlayerManager {
             id,
             PlayerHandle {
                 id,
-                viewport: Viewport::new(window),
+                window,
             },
         );
-        self.spawned_dispatcher.dispatch(PlayerSpawned { id });
+        self.spawned_dispatcher
+            .dispatch(PlayerSpawned { id, window });
         id
     }
 
@@ -170,19 +166,6 @@ impl PlayerManager {
     pub fn remove_player(&mut self, id: PlayerId) {
         if self.players.remove(&id).is_some() {
             self.despawned_dispatcher.dispatch(PlayerDespawned { id });
-        }
-    }
-
-    /// Replaces the [`Viewport`] for player `id`.
-    ///
-    /// Returns `false` if the player does not exist.
-    pub fn set_viewport(&mut self, id: PlayerId, viewport: Viewport) -> bool {
-        match self.players.get_mut(&id) {
-            Some(player) => {
-                player.viewport = viewport;
-                true
-            }
-            None => false,
         }
     }
 
@@ -203,49 +186,11 @@ impl PlayerManager {
         self.players.values()
     }
 
-    /// Returns an iterator over all players whose window matches `window`.
-    ///
-    /// The renderer uses this to determine which players to render when
-    /// presenting a given window, and to retrieve each player's [`Viewport`].
-    pub fn players_on_window(&self, window: WindowId) -> impl Iterator<Item = &PlayerHandle> {
-        self.players
-            .values()
-            .filter(move |p| p.viewport.window == window)
-    }
-
     /// Processes pending platform events.
     ///
     /// Call once per tick.
-    ///
-    /// Translates [`WindowEvent::Resized`] into [`PlayerWindowResized`] events
-    /// scoped to the affected players. Systems that manage player cameras should
-    /// subscribe to [`PlayerWindowResized`] and update the camera's width and
-    /// height in response.
     pub fn tick(&mut self) {
-        // Collect first to avoid holding the consumer borrow while dispatching.
-        let window_events: Vec<WindowEvent> = self.window_consumer.consume_all().collect();
-
-        for event in window_events {
-            if let WindowEvent::Resized {
-                id: window_id,
-                width,
-                height,
-            } = event
-            {
-                // Collect affected IDs before borrowing the dispatcher.
-                let affected: Vec<PlayerId> = self
-                    .players
-                    .values()
-                    .filter(|p| p.viewport.window == window_id)
-                    .map(|p| p.id)
-                    .collect();
-
-                for id in affected {
-                    self.resized_dispatcher
-                        .dispatch(PlayerWindowResized { id, width, height });
-                }
-            }
-        }
+        // TODO: input
     }
 
     fn allocate_id(&mut self) -> PlayerId {

@@ -1,6 +1,7 @@
 //! All player-related events.
 
 use dirk_events::Event;
+use dirk_platform::WindowId;
 
 use crate::PlayerId;
 
@@ -25,6 +26,8 @@ use crate::PlayerId;
 pub struct PlayerSpawned {
     /// The ID of the newly created player.
     pub id: PlayerId,
+    /// The Window the player is rendered too.
+    pub window: WindowId,
 }
 
 /// Fired when a player is removed via [`PlayerManager::remove_player`].
@@ -36,20 +39,4 @@ pub struct PlayerSpawned {
 pub struct PlayerDespawned {
     /// The ID of the removed player.
     pub id: PlayerId,
-}
-
-/// Fired by [`PlayerManager::tick`] when the window a player renders to
-/// is resized.
-///
-/// Systems that manage cameras should subscribe to this event and update
-/// the camera component's width and height accordingly.
-#[derive(Event, Debug, Clone)]
-#[event("player {id} window resized to {width}x{height}")]
-pub struct PlayerWindowResized {
-    /// The affected player.
-    pub id: PlayerId,
-    /// New window width in pixels.
-    pub width: u32,
-    /// New window height in pixels.
-    pub height: u32,
 }
