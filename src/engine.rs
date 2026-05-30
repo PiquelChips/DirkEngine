@@ -190,14 +190,14 @@ impl Engine {
             return Ok(());
         }
 
+        self.players.tick();
+
         self.universe.tick(delta_time);
         self.asset_registry.tick();
 
         self.renderer
             .tick(delta_time, self.platform.windows())
             .context("renderer")?;
-
-        self.players.tick();
 
         self.renderer.render().context("rendering")?;
         Ok(())
