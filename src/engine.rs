@@ -1,14 +1,12 @@
 //! The engine module. The engine holds all the state & manages
 //! all the systems for the engine to run properly.
 
-use std::{collections::HashMap, ffi::CString, str::FromStr, time::Instant};
+use std::{collections::HashMap, ffi::CString, path::PathBuf, str::FromStr, time::Instant};
 
 use anyhow::Context;
 use dirk_universe::{Entity, Universe, World, WorldId};
 use dirk_world::player::{Player, PlayerId};
 use tracing::info;
-
-use dirk_logging::Logger;
 
 /// This state is returned by [`Engine::tick`].
 /// It holds why the engine is exiting.
@@ -54,7 +52,7 @@ pub struct Engine {
     exit_state: ExitState,
 
     #[allow(unused)]
-    logger: Logger,
+    logger: piquel_log::Logger,
 }
 
 impl Engine {
@@ -69,11 +67,14 @@ impl Engine {
 
         info!("initialising engine");
 
-        let logger = dirk_logging::Logger::new()
-            .write_fs(true)
-            .max_level(dirk_logging::LogLevel::Debug)
-            .init()
-            .context("initialising logger")?;
+        let logger = piquel_log::Logger::new()
+            .with_max_level(piquel_log::LogLevel::Debug)
+            .with_log_bridge(true)
+            .with_file(piquel_log::FileConfig::new(
+                PathBuf::from(std::env!("SAVED_PATH")).join("logs"),
+            ));
+
+        logger.init().context("init logger")?;
 
         let event_manager = dirk_events::EventManager::new();
         let asset_registry = dirk_assets::AssetRegistry::init(&event_manager)
