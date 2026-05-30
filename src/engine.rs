@@ -178,6 +178,16 @@ impl Engine {
         }
 
         self.platform.tick(delta_time);
+        if self.platform.windows().is_empty() {
+            self.exit(None);
+            return Ok(());
+        }
+
+        self.process_events();
+        if self.is_requesting_exit() {
+            return Ok(());
+        }
+
         self.universe.tick(delta_time);
         self.asset_registry.tick();
 
