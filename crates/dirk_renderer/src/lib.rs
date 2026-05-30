@@ -501,6 +501,14 @@ impl Renderer {
         _delta_time: f64,
         windows: &HashMap<WindowId, dirk_platform::Window>,
     ) -> Result<()> {
+        for event in self.player_spawn_consumer.consume_all() {
+            self.players.insert(event.id, event.into());
+        }
+
+        for event in self.player_despawn_consumer.consume_all() {
+            self.players.remove(&event.id);
+        }
+
         // Temporarily move receivers out for the borrow checker
         let receivers = std::mem::take(&mut self.receivers);
         for receiver in &receivers {
@@ -549,14 +557,6 @@ impl Renderer {
                 // don't care about these
                 WindowEvent::FocusChanged { .. } | WindowEvent::ThemeChanged { .. } => {}
             }
-        }
-
-        for event in self.player_spawn_consumer.consume_all() {
-            self.players.insert(event.id, event.into());
-        }
-
-        for event in self.player_despawn_consumer.consume_all() {
-            self.players.remove(&event.id);
         }
 
         self.models.tick()?;
