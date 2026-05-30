@@ -6,7 +6,6 @@ use std::{
     ops::{Add, AddAssign},
 };
 
-use dirk_platform::WindowId;
 use dirk_universe::components::Component;
 
 pub mod events;
@@ -77,7 +76,7 @@ impl PlayerManager {
     /// Create a new player.
     ///
     /// This does not spawn the player in the world.
-    pub fn new_player(&mut self, window: WindowId, viewport: Viewport) -> PlayerId {
+    pub fn new_player(&mut self) -> PlayerId {
         let id = self.allocate_new_player();
         self.players.insert(id, PlayerHandle { id });
         id
