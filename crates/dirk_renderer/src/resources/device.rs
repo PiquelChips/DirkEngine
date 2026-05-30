@@ -58,7 +58,7 @@ pub struct RenderDeviceInner {
     #[cfg(validation)]
     debug_messenger: vk::DebugUtilsMessengerEXT,
 
-    allocator: Mutex<Allocator>,
+    allocator: Option<Mutex<Allocator>>,
     deletion_queue: Mutex<DeletionQueue>,
     current_frame: Arc<AtomicUsize>,
 }
@@ -161,7 +161,7 @@ impl RenderDevice {
             graphics_pool,
             layouts,
             properties,
-            allocator: Mutex::new(allocator),
+            allocator: Some(Mutex::new(allocator)),
             deletion_queue: Mutex::new(DeletionQueue::new(
                 current_frame.clone(),
                 MAX_FRAMES_IN_FLIGHT,
@@ -179,7 +179,12 @@ impl RenderDevice {
     }
 
     pub fn allocate(&self, desc: &AllocationCreateDesc<'_>) -> Result<Allocation> {
-        Ok(self.allocator.lock().allocate(desc)?)
+        Ok(self
+            .allocator
+            .as_ref()
+            .expect("allocator should exist")
+            .lock()
+            .allocate(desc)?)
     }
 
     pub fn destroy(&mut self, garbage: Garbage) {
@@ -199,7 +204,12 @@ impl RenderDevice {
 
 impl RenderDeviceInner {
     fn free(&self, allocation: Allocation) -> Result<()> {
-        Ok(self.allocator.lock().free(allocation)?)
+        Ok(self
+            .allocator
+            .as_ref()
+            .expect("allocator should exist")
+            .lock()
+            .free(allocation)?)
     }
 }
 
@@ -210,6 +220,7 @@ impl Drop for RenderDeviceInner {
         self.transfer_pool.destroy();
 
         self.deletion_queue.lock().flush_all(self);
+        drop(self.allocator.take());
 
         unsafe {
             self.device.destroy_device(None);
