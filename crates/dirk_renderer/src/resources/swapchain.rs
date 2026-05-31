@@ -6,7 +6,7 @@ use crate::{
     Error, Result,
     resources::{
         device::{Garbage, RenderDevice},
-        image::SwapchainImage,
+        image::Image,
     },
 };
 
@@ -298,5 +298,44 @@ impl Swapchain {
 impl Drop for Swapchain {
     fn drop(&mut self) {
         self.destroy();
+    }
+}
+
+pub struct SwapchainImage {
+    device: RenderDevice,
+    image: vk::Image,
+    view: vk::ImageView,
+}
+
+impl SwapchainImage {
+    pub fn new(device: &RenderDevice, image: vk::Image, format: vk::Format) -> Result<Self> {
+        let create_info = vk::ImageViewCreateInfo::default()
+            .image(image)
+            .view_type(vk::ImageViewType::TYPE_2D)
+            .format(format)
+            .subresource_range(vk::ImageSubresourceRange {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                base_mip_level: 0,
+                level_count: 1,
+                base_array_layer: 0,
+                layer_count: 1,
+            });
+        Ok(Self {
+            device: device.clone(),
+            image,
+            view: unsafe { device.device.create_image_view(&create_info, None)? },
+        })
+    }
+    pub fn view(&self) -> vk::ImageView {
+        self.view
+    }
+    pub fn image(&self) -> vk::Image {
+        self.image
+    }
+}
+
+impl Drop for SwapchainImage {
+    fn drop(&mut self) {
+        self.device.destroy(Garbage::ImageView(self.view));
     }
 }

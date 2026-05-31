@@ -14,7 +14,6 @@ use crate::{
     models::Texture,
     resources::{
         buffer::CustomBuffer,
-        command_pool::CommandBuffer,
         device::{Garbage, RenderDevice},
     },
 };
@@ -24,10 +23,6 @@ pub struct Image {
     device: RenderDevice,
     raw: vk::Image,
     view: vk::ImageView,
-    /// Wether to destroy the image on [Drop]. This is only
-    /// disabled for [`SwapchainImage`].
-    destroy: bool,
-    #[allow(unused)]
     allocation: Option<Allocation>,
     aspect_flags: vk::ImageAspectFlags,
 }
@@ -88,7 +83,6 @@ impl Image {
                 info.aspect_flags,
                 info.mip_levels,
             )?,
-            destroy: true,
             allocation: Some(allocation),
             aspect_flags: info.aspect_flags,
         })
@@ -228,49 +222,10 @@ impl Image {
 
 impl Drop for Image {
     fn drop(&mut self) {
-        if self.destroy {
-            self.device.destroy(Garbage::Image(self.raw));
-        }
+        self.device.destroy(Garbage::Image(self.raw));
         self.device.destroy(Garbage::ImageView(self.view));
         if let Some(alloc) = self.allocation.take() {
             self.device.destroy(Garbage::Allocation(alloc));
         }
-    }
-}
-
-pub struct SwapchainImage {
-    image: Image,
-}
-
-impl SwapchainImage {
-    pub fn new(device: &RenderDevice, image: vk::Image, format: vk::Format) -> Result<Self> {
-        Ok(Self {
-            image: Image {
-                device: device.clone(),
-                raw: image,
-                view: Image::create_image_view(
-                    device,
-                    image,
-                    format,
-                    vk::ImageAspectFlags::COLOR,
-                    1,
-                )?,
-                destroy: false,
-                allocation: None,
-                aspect_flags: vk::ImageAspectFlags::COLOR,
-            },
-        })
-    }
-    pub fn view(&self) -> vk::ImageView {
-        self.image.view()
-    }
-    pub fn transition_image_layout(
-        &self,
-        cmd: &CommandBuffer,
-        old_layout: vk::ImageLayout,
-        new_layout: vk::ImageLayout,
-    ) -> Result<()> {
-        self.image
-            .transition_image_layout(cmd, old_layout, new_layout, 1, 0)
     }
 }
