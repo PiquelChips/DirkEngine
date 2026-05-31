@@ -1,10 +1,10 @@
 #![doc = include_str!("../README.md")]
 
+use std::ffi::CStr;
 #[cfg(validation)]
-use std::os::raw::c_void;
 use std::{
-    collections::{HashMap, HashSet},
-    ffi::{CStr, CString},
+    collections::HashMap,
+    ffi::CString,
     sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
@@ -20,11 +20,9 @@ use ash::{
     khr::{surface, swapchain},
     vk,
 };
+
 use dirk_player::PlayerId;
-use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use tracing::{debug, info};
-#[cfg(validation)]
-use tracing::{error, trace, warn};
 
 use dirk_platform::{PlatformEvent, WindowEvent, WindowId};
 use dirk_universe::{Universe, UniverseBuilder};
@@ -41,10 +39,11 @@ mod window;
 use window::Window;
 
 mod resources;
-use resources::{command_pool::CommandPool, device::RenderDevice};
+use resources::{device::RenderDevice, queues::QueueType};
 
 mod proxy;
 use proxy::{
+    PlayerProxy,
     scene::SceneManager,
     systems::{
         RendererMeshSystem, RendererPlayerSystem, RendererTransformSystem, RendererUniverseSystem,
@@ -54,12 +53,14 @@ use proxy::{
 mod render_commands;
 use render_commands::RenderCommandReceiver;
 
-use crate::{proxy::PlayerProxy, resources::queues::QueueType};
-
+mod init;
 mod models;
 mod physical_device;
 mod pipeline;
 mod render_pass;
+
+#[cfg(validation)]
+mod debug;
 
 const MAX_FRAMES_IN_FLIGHT: usize = 2;
 const DEVICE_EXTENSIONS: &[&str] =
@@ -115,9 +116,6 @@ impl Renderer {
     /// # Errors
     ///
     /// Plenty of Vulkan & platform errors can occur during renderer intializing
-    // TODO: shorten this function by dividing into smaller functions. maybe
-    // even create a separate init module with all the init functions in it
-    #[allow(clippy::too_many_lines)]
     pub fn init(
         create_info: &RendererCreateInfo,
         window: &dirk_platform::Window,
@@ -134,259 +132,38 @@ impl Renderer {
             .engine_version(make_version(create_info.engine_version))
             .api_version(vk::API_VERSION_1_3);
 
-        // Collect extensions
-        let mut extensions: Vec<*const i8> = vec![surface::NAME.as_ptr()];
-
-        #[cfg(platform_linux)]
-        extensions.push(wayland_surface::NAME.as_ptr());
-
+        let mut extensions = Self::required_instance_extensions();
         let mut instance_create_info =
             vk::InstanceCreateInfo::default().application_info(&app_info);
 
         #[cfg(validation)]
-        let mut debug_create_info: vk::DebugUtilsMessengerCreateInfoEXT;
+        let mut debug_create_info = debug::debug_create_info();
+
         #[cfg(validation)]
         {
             info!(target: "vulkan::validation", "using validation layers");
             extensions.push(debug_utils::NAME.as_ptr());
-
-            let severity_flags = vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE
-                | vk::DebugUtilsMessageSeverityFlagsEXT::INFO
-                | vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
-                | vk::DebugUtilsMessageSeverityFlagsEXT::ERROR;
-
-            let message_type_flags = vk::DebugUtilsMessageTypeFlagsEXT::GENERAL
-                | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE
-                | vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION;
-
-            debug_create_info = vk::DebugUtilsMessengerCreateInfoEXT::default()
-                .message_severity(severity_flags)
-                .message_type(message_type_flags)
-                .pfn_user_callback(Some(debug_callback));
-
-            let validation_layers = VALIDATION_LAYERS;
-
-            // check validation layer support
-            {
-                let available = unsafe {
-                    entry
-                        .enumerate_instance_layer_properties()
-                        .unwrap_or_default()
-                };
-                for &required in validation_layers {
-                    let required = unsafe { CStr::from_ptr(required) };
-                    let found = available
-                        .iter()
-                        .any(|ext| unsafe { CStr::from_ptr(ext.layer_name.as_ptr()) } == required);
-
-                    if !found {
-                        return Err(Error::ValidationLayerNotFound(
-                            required.to_string_lossy().into_owned(),
-                        ));
-                    }
-                }
-            }
+            debug::validate_instance_layers(&entry, VALIDATION_LAYERS)?;
 
             instance_create_info = instance_create_info
                 .enabled_layer_names(VALIDATION_LAYERS)
                 .push_next(&mut debug_create_info);
         }
 
-        // check required instance extensions
-        {
-            let available = unsafe {
-                entry
-                    .enumerate_instance_extension_properties(None)
-                    .unwrap_or_default()
-            };
-            for &required in &extensions {
-                let required = unsafe { CStr::from_ptr(required) };
-                let found = available
-                    .iter()
-                    .any(|ext| unsafe { CStr::from_ptr(ext.extension_name.as_ptr()) } == required);
-
-                if !found {
-                    return Err(Error::ExtensionNotFound(
-                        required.to_string_lossy().into_owned(),
-                    ));
-                }
-            }
-        }
-
+        Self::validate_instance_extensions(&entry, &extensions)?;
         instance_create_info = instance_create_info.enabled_extension_names(&extensions);
 
         let instance = unsafe { entry.create_instance(&instance_create_info, None)? };
 
         #[cfg(validation)]
-        let debug_messenger = {
-            let loader = debug_utils::Instance::new(&entry, &instance);
-            unsafe { loader.create_debug_utils_messenger(&debug_create_info, None)? }
-        };
+        let debug_messenger = debug::create_debug_messenger(&entry, &instance, &debug_create_info)?;
 
-        // this is a temporary surface, it is destroyed very soon
-        let (surface_loader, surface) = {
-            let surface = unsafe {
-                ash_window::create_surface(
-                    &entry,
-                    &instance,
-                    window.display_handle()?.as_raw(),
-                    window.window_handle()?.as_raw(),
-                    None,
-                )?
-            };
-            let loader = surface::Instance::new(&entry, &instance);
-
-            (loader, surface)
-        };
-
-        // PHYSICAL DEVICE
-        let (physical_device, properties) = {
-            let (device_info, queues) = physical_device::PhysicalDeviceSelector::new()
-                .require_extensions(DEVICE_EXTENSIONS)
-                .require(|info| info.features.geometry_shader == vk::TRUE)
-                .select(&instance, &surface_loader, surface)
-                .ok_or(Error::NoDeviceFound)?;
-
-            info!(
-                "Physical device selected: {:#?} (vendor: {}, id: {}, api: {}, driver: {})",
-                device_info
-                    .properties
-                    .device_name_as_c_str()
-                    .unwrap_or_default(),
-                device_info.properties.vendor_id,
-                device_info.properties.device_id,
-                device_info.properties.api_version,
-                device_info.properties.driver_version
-            );
-
-            let formats = unsafe {
-                surface_loader.get_physical_device_surface_formats(device_info.handle, surface)?
-            };
-
-            let surface_format = formats
-                .iter()
-                .find(|format| {
-                    format.format == vk::Format::B8G8R8A8_SRGB
-                        && format.color_space == vk::ColorSpaceKHR::SRGB_NONLINEAR
-                })
-                .copied()
-                .unwrap_or(formats[0]);
-
-            let depth_format = *{
-                let candidates = &[
-                    vk::Format::D32_SFLOAT,
-                    vk::Format::D32_SFLOAT_S8_UINT,
-                    vk::Format::D24_UNORM_S8_UINT,
-                ];
-                let features = vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT;
-
-                candidates
-                    .iter()
-                    .find(|&f| {
-                        let properties = unsafe {
-                            instance.get_physical_device_format_properties(device_info.handle, *f)
-                        };
-                        properties.optimal_tiling_features.contains(features)
-                    })
-                    .ok_or(Error::NoSupportedFormat)
-            }?;
-
-            let msaa_samples = *{
-                let counts = device_info
-                    .properties
-                    .limits
-                    .framebuffer_color_sample_counts
-                    & device_info
-                        .properties
-                        .limits
-                        .framebuffer_depth_sample_counts;
-                [
-                    vk::SampleCountFlags::TYPE_64,
-                    vk::SampleCountFlags::TYPE_32,
-                    vk::SampleCountFlags::TYPE_16,
-                    vk::SampleCountFlags::TYPE_8,
-                    vk::SampleCountFlags::TYPE_4,
-                    vk::SampleCountFlags::TYPE_2,
-                ]
-                .iter()
-                .find(|&flag| counts.contains(*flag))
-                .unwrap_or(&vk::SampleCountFlags::TYPE_1)
-            };
-
-            let present_mode = {
-                let modes = unsafe {
-                    surface_loader
-                        .get_physical_device_surface_present_modes(device_info.handle, surface)?
-                };
-
-                *modes
-                    .iter()
-                    .find(|&mode| *mode == vk::PresentModeKHR::MAILBOX)
-                    .unwrap_or(&vk::PresentModeKHR::FIFO)
-            };
-
-            let properties = RendererProperties {
-                msaa_samples,
-                anisotropy: device_info.features.sampler_anisotropy == vk::TRUE,
-                surface_format,
-                queue_family_indices: queues,
-                depth_format,
-                present_mode,
-            };
-
-            (device_info.handle, properties)
-        };
-
-        // destroy the surface as it is no longer needed.
-        unsafe { surface_loader.destroy_surface(surface, None) };
-
-        // DEVICE
-        let device = {
-            let unique_families: HashSet<u32> = [
-                properties.queue_family_indices.graphics,
-                properties.queue_family_indices.present,
-                properties.queue_family_indices.compute,
-                properties.queue_family_indices.transfer,
-            ]
-            .iter()
-            .copied()
-            .collect();
-
-            // only one queue per family, so all 1.0 priority
-            let queue_priorities = vec![1.0_f32];
-            let queue_create_infos: Vec<vk::DeviceQueueCreateInfo> = unique_families
-                .iter()
-                .map(|&family| {
-                    vk::DeviceQueueCreateInfo::default()
-                        .queue_family_index(family)
-                        .queue_priorities(&queue_priorities)
-                })
-                .collect();
-
-            let physical_device_features =
-                vk::PhysicalDeviceFeatures::default().sampler_anisotropy(true);
-            let mut vulkan12_features =
-                vk::PhysicalDeviceVulkan12Features::default().buffer_device_address(true);
-            let mut vulkan13_features =
-                vk::PhysicalDeviceVulkan13Features::default().dynamic_rendering(true);
-
-            let extensions: Vec<*const i8> = DEVICE_EXTENSIONS
-                .iter()
-                .map(|name| name.as_ptr().cast())
-                .collect();
-            let device_create_info = vk::DeviceCreateInfo::default()
-                .queue_create_infos(&queue_create_infos)
-                .enabled_features(&physical_device_features)
-                .enabled_extension_names(&extensions)
-                .push_next(&mut vulkan12_features)
-                .push_next(&mut vulkan13_features);
-
-            unsafe { instance.create_device(physical_device, &device_create_info, None)? }
-        };
+        let (physical_device, properties) =
+            Self::select_physical_device(&entry, &instance, window)?;
+        let device = Self::create_device(&instance, physical_device, &properties)?;
 
         let current_frame = Arc::new(AtomicUsize::new(0));
 
-        // RENDER DEVICE
         let render_device = RenderDevice::new(
             entry.clone(),
             instance.clone(),
@@ -398,31 +175,7 @@ impl Renderer {
             debug_messenger,
         )?;
 
-        // IN FLIGHT FRAMES
-        let build_frame = || -> Result<Frame> {
-            let command_pool = CommandPool::build(
-                &device,
-                &render_device.properties.queue_family_indices,
-                vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
-            )?;
-            let fence = unsafe {
-                device.create_fence(
-                    &vk::FenceCreateInfo::default().flags(vk::FenceCreateFlags::SIGNALED),
-                    None,
-                )?
-            };
-            Ok(Frame {
-                device: device.clone(),
-                command_pool,
-                fence,
-            })
-        };
-        let frames = [build_frame()?, build_frame()?];
-        // nightly currently allows:
-        // let frames: [Frame; MAX_FRAMES_IN_FLIGHT] = std::array::try_from_fn(|_| build_frame())?;
-        // could be nice in the future
-
-        // TODO: should be removed once we get the frame graph to handle transient resources
+        // TODO: should be removed with frame graph
         let extent = {
             let size = window.size();
             vk::Extent2D {
@@ -431,14 +184,17 @@ impl Renderer {
             }
         };
 
-        let models = models::ModelRegistry::new(&render_device, event_manager)?;
+        let frames = Self::build_frames(&device, &render_device)?;
 
+        let models = models::ModelRegistry::new(&render_device, event_manager)?;
         let scene_manager = SceneManager::init(&render_device, extent)?;
 
-        // create the first window as we do not receive a create event for it
-        let window = window::Window::build(&render_device, window)?;
-        let mut windows = HashMap::new();
-        windows.insert(window.id(), window);
+        let windows = {
+            let window = Window::build(&render_device, window)?;
+            let mut windows = HashMap::new();
+            windows.insert(window.id(), window);
+            windows
+        };
 
         Ok(Self {
             render_device,
@@ -504,12 +260,14 @@ impl Renderer {
             self.players.remove(&event.id);
         }
 
-        // Temporarily move receivers out for the borrow checker
-        let receivers = std::mem::take(&mut self.receivers);
-        for receiver in &receivers {
-            receiver.flush(self)?;
+        let mut commands = Vec::new();
+        for receiver in &self.receivers {
+            commands.append(&mut receiver.collect());
         }
-        self.receivers = receivers;
+
+        for command in commands {
+            command(self)?;
+        }
 
         let platform_events: Vec<_> = self.platform_consumer.consume_all().collect();
         for event in platform_events {
@@ -648,7 +406,14 @@ impl Renderer {
         Ok(())
     }
 
+    #[inline]
+    fn current_frame(&self) -> usize {
+        self.current_frame
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
     // EXTRA UTILS
+
     fn create_sampler(device: &RenderDevice, mip_levels: u32) -> Result<vk::Sampler> {
         let props = unsafe {
             device
@@ -688,10 +453,37 @@ impl Renderer {
         let info = vk::ShaderModuleCreateInfo::default().code(code.as_slice());
         Ok(unsafe { device.create_shader_module(&info, None)? })
     }
-    #[inline]
-    fn current_frame(&self) -> usize {
-        self.current_frame
-            .load(std::sync::atomic::Ordering::Relaxed)
+
+    fn required_instance_extensions() -> Vec<*const i8> {
+        let mut extensions = vec![surface::NAME.as_ptr()];
+
+        #[cfg(platform_linux)]
+        extensions.push(wayland_surface::NAME.as_ptr());
+
+        extensions
+    }
+
+    fn validate_instance_extensions(entry: &Entry, extensions: &[*const i8]) -> Result<()> {
+        let available = unsafe {
+            entry
+                .enumerate_instance_extension_properties(None)
+                .unwrap_or_default()
+        };
+
+        for &required in extensions {
+            let required = unsafe { CStr::from_ptr(required) };
+            let found = available
+                .iter()
+                .any(|ext| unsafe { CStr::from_ptr(ext.extension_name.as_ptr()) } == required);
+
+            if !found {
+                return Err(Error::ExtensionNotFound(
+                    required.to_string_lossy().into_owned(),
+                ));
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -702,33 +494,4 @@ impl Drop for Renderer {
         }
         info!("cleaning up renderer");
     }
-}
-
-#[cfg(validation)]
-extern "system" fn debug_callback(
-    severity: vk::DebugUtilsMessageSeverityFlagsEXT,
-    _message_type: vk::DebugUtilsMessageTypeFlagsEXT,
-    callback_data: *const vk::DebugUtilsMessengerCallbackDataEXT,
-    _user_data: *mut c_void,
-) -> vk::Bool32 {
-    let message = unsafe { CStr::from_ptr((*callback_data).p_message).to_string_lossy() };
-
-    match severity {
-        vk::DebugUtilsMessageSeverityFlagsEXT::ERROR => {
-            error!(target: "vulkan::validation", "{}", message);
-        }
-
-        vk::DebugUtilsMessageSeverityFlagsEXT::WARNING => {
-            warn! (target: "vulkan::validation", "{}", message);
-        }
-        vk::DebugUtilsMessageSeverityFlagsEXT::INFO => {
-            info! (target: "vulkan::validation", "{}", message);
-        }
-        vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE => {
-            debug!(target: "vulkan::validation", "{}", message);
-        }
-        _ => trace!(target: "vulkan::validation", "{}", message),
-    }
-
-    vk::FALSE
 }
