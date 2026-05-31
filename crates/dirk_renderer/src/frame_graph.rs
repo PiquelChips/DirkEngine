@@ -44,6 +44,12 @@ use crate::{
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct TextureHandle(u32);
 
+impl TextureHandle {
+    pub fn index(self) -> usize {
+        self.0 as usize
+    }
+}
+
 /// Description used to create (or identify) a texture in the graph.
 pub struct TextureDesc {
     pub width: u32,
@@ -61,7 +67,9 @@ pub struct TextureDesc {
 /// Carries the physical `VkImage`/`VkImageView` for resources that live
 /// outside the graph (swapchain images being the canonical example).
 pub struct ImportedTexture {
-    pub image: Image,
+    pub image: vk::Image,
+    pub view: vk::ImageView,
+    pub aspect_flags: vk::ImageAspectFlags,
     /// Layout the image is in *before* the first pass touches it.
     pub initial_layout: vk::ImageLayout,
     /// Layout the image must be in *after* all passes have executed
@@ -145,24 +153,25 @@ struct TextureUsage {
 ///  - The `CommandBuffer` to record into (already inside `vkCmdBeginRendering`
 ///    if the pass has attachments).
 ///  - `ResolvedResources` to look up `VkImage`/`VkImageView` for any handle.
-pub type PassCallback = Box<dyn FnOnce(&RenderDevice, &CommandBuffer, &[Image]) -> Result<()>>;
+pub type PassCallback<'a> =
+    Box<dyn FnOnce(&RenderDevice, &CommandBuffer, &[ResolvedImage]) -> Result<()> + 'a>;
 
 /// Internal graph node representing a single render pass.
-struct PassNode {
+struct PassNode<'a> {
     name: String,
     reads: Vec<TextureUsage>,
     writes: Vec<TextureUsage>,
     color_resolves: Vec<(TextureHandle, TextureHandle)>,
-    callback: Option<PassCallback>,
+    callback: Option<PassCallback<'a>>,
 }
 
 /// Short-lived builder returned by `RenderGraph::add_pass`.
 /// Borrows the pass node mutably so it can't outlive the graph.
-pub struct PassBuilder<'a> {
-    pass: &'a mut PassNode,
+pub struct PassBuilder<'graph, 'a> {
+    pass: &'graph mut PassNode<'a>,
 }
 
-impl PassBuilder<'_> {
+impl<'a> PassBuilder<'_, 'a> {
     /// Declare `handle` as a colour attachment written by this pass.
     pub fn write_color_attachment(
         &mut self,
@@ -243,7 +252,7 @@ impl PassBuilder<'_> {
     }
 
     /// Provide the command-recording callback for this pass.
-    pub fn execute(&mut self, callback: PassCallback) {
+    pub fn execute(&mut self, callback: PassCallback<'a>) {
         self.pass.callback = Some(callback);
     }
 }
@@ -270,12 +279,12 @@ impl PassBuilder<'_> {
 ///
 /// let compiled = graph.compile();
 /// ```
-pub struct RenderGraph {
+pub struct RenderGraph<'a> {
     textures: Vec<TextureDesc>,
-    passes: Vec<PassNode>,
+    passes: Vec<PassNode<'a>>,
 }
 
-impl RenderGraph {
+impl<'a> RenderGraph<'a> {
     pub fn new() -> Self {
         Self {
             textures: Vec::new(),
@@ -309,7 +318,7 @@ impl RenderGraph {
 
     /// Begin building a new pass.  Returns a `PassBuilder` to declare
     /// resource usages and provide the callback.
-    pub fn add_pass(&mut self, name: impl Into<String>) -> PassBuilder<'_> {
+    pub fn add_pass(&mut self, name: impl Into<String>) -> PassBuilder<'_, 'a> {
         let pass_index = self.passes.len();
         self.passes.push(PassNode {
             name: name.into(),
@@ -325,12 +334,12 @@ impl RenderGraph {
 
     /// Compile the graph: derive barriers and collect attachment metadata.
     /// Consumes `self`.
-    pub fn compile(self) -> CompiledGraph {
+    pub fn compile(self) -> CompiledGraph<'a> {
         compile_graph(self)
     }
 }
 
-impl Default for RenderGraph {
+impl Default for RenderGraph<'_> {
     fn default() -> Self {
         Self::new()
     }
@@ -360,7 +369,7 @@ pub struct ImageBarrier {
 
 /// Compiled representation of a single pass: barriers to emit before it and
 /// the attachment metadata needed to call `vkCmdBeginRendering`.
-pub struct CompiledPass {
+pub struct CompiledPass<'a> {
     pub name: String,
     /// Barriers to record immediately before this pass.
     pub pre_barriers: Vec<ImageBarrier>,
@@ -371,7 +380,7 @@ pub struct CompiledPass {
     /// Render area derived from the first colour attachment (or depth if none).
     pub render_extent: Option<vk::Extent2D>,
     /// The user-provided recording callback.
-    pub callback: Option<PassCallback>,
+    pub callback: Option<PassCallback<'a>>,
 }
 
 pub struct ColorAttachment {
@@ -381,9 +390,9 @@ pub struct ColorAttachment {
 }
 
 /// Output of the compilation phase.
-pub struct CompiledGraph {
+pub struct CompiledGraph<'a> {
     pub textures: Vec<TextureDesc>,
-    pub passes: Vec<CompiledPass>,
+    pub passes: Vec<CompiledPass<'a>>,
     /// Barriers emitted *after* the last pass – primarily used to transition
     /// imported textures to their required `final_layout` (e.g.
     /// `PRESENT_SRC_KHR`).
@@ -391,7 +400,7 @@ pub struct CompiledGraph {
 }
 
 /// Core barrier-derivation logic.
-fn compile_graph(graph: RenderGraph) -> CompiledGraph {
+fn compile_graph(graph: RenderGraph<'_>) -> CompiledGraph<'_> {
     // Initialise per-resource state from the TextureDesc.
     let mut states: Vec<ResourceState> = graph
         .textures
@@ -545,17 +554,17 @@ fn barrier_needed(state: &ResourceState, usage: &TextureUsage) -> bool {
 /// A production implementation would replace the naive per-image allocations
 /// here with a proper transient allocator (e.g. VMA's
 /// `VMA_MEMORY_USAGE_GPU_ONLY` with aliasing hints from the compiled graph).
-pub struct GraphExecutor {
+pub struct GraphExecutor<'a> {
     device: RenderDevice,
     /// One entry per `TextureHandle` index.
     images: Vec<Image>,
-    passes: Vec<CompiledPass>,
+    passes: Vec<CompiledPass<'a>>,
     final_barriers: Vec<ImageBarrier>,
 }
 
-impl GraphExecutor {
+impl<'a> GraphExecutor<'a> {
     /// Allocate all transient resources and bind imported ones.
-    pub fn new(device: &RenderDevice, graph: CompiledGraph) -> Result<Self> {
+    pub fn new(device: &RenderDevice, graph: CompiledGraph<'a>) -> Result<Self> {
         let mut images = Vec::with_capacity(graph.textures.len());
 
         for desc in graph.textures {
