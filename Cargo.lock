@@ -457,7 +457,10 @@ dependencies = [
  "dirk_events",
  "dirk_platform",
  "dirk_universe",
+ "dirk_utils",
+ "dirk_world",
  "glam",
+ "parking_lot",
 ]
 
 [[package]]

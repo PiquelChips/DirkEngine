@@ -4,14 +4,21 @@ use std::{
     collections::HashMap,
     fmt::Display,
     ops::{Add, AddAssign},
+    sync::Arc,
 };
 
 use dirk_events::{Dispatcher, EventManager};
-use dirk_platform::WindowId;
-use dirk_universe::components::Component;
+use dirk_platform::{InputEvent, WindowId};
+use dirk_universe::{UniverseBuilder, components::Component};
+use input::InputContext;
+use movement::PlayerMovementSystem;
+use parking_lot::RwLock;
 
 mod events;
+pub mod input;
+mod movement;
 pub use events::{PlayerDespawned, PlayerSpawned};
+pub use movement::DEFAULT_PLAYER_MOVE_SPEED;
 
 // PlayerId
 
@@ -67,6 +74,7 @@ impl AddAssign<u32> for PlayerId {
 pub struct PlayerHandle {
     id: PlayerId,
     window: WindowId,
+    input: InputContext,
 }
 
 impl PlayerHandle {
@@ -82,6 +90,15 @@ impl PlayerHandle {
     #[must_use]
     pub fn window(&self) -> WindowId {
         self.window
+    }
+
+    /// Returns the current hard-coded movement input for this player.
+    ///
+    /// The vector is in local camera movement space: `x` is right/left, `y` is
+    /// up/down, and `z` is forward/back.
+    #[must_use]
+    pub fn movement_input(&self) -> glam::Vec3 {
+        self.input.movement_input()
     }
 }
 
@@ -106,6 +123,8 @@ pub struct PlayerManager {
     // TODO: setup generation based player allocation
     next_id: PlayerId,
     players: HashMap<PlayerId, PlayerHandle>,
+    input_state: PlayerInputState,
+    input_consumer: dirk_events::Consumer<InputEvent>,
 
     spawned_dispatcher: Dispatcher<PlayerSpawned>,
     despawned_dispatcher: Dispatcher<PlayerDespawned>,
@@ -119,9 +138,24 @@ impl PlayerManager {
         Self {
             next_id: PlayerId::default(),
             players: HashMap::new(),
+            input_state: PlayerInputState::default(),
+            input_consumer: events.subscribe(),
             spawned_dispatcher: events.register(),
             despawned_dispatcher: events.register(),
         }
+    }
+
+    /// Returns a [`UniverseBuilder`] with player-related ECS systems.
+    #[must_use]
+    pub fn universe_builder(&self) -> UniverseBuilder {
+        dirk_universe::Universe::builder()
+            .with_ticking_system(PlayerMovementSystem::new(self.input_state.clone()))
+    }
+
+    /// Returns a shared read handle for systems that consume player input.
+    #[must_use]
+    pub fn input_state(&self) -> PlayerInputState {
+        self.input_state.clone()
     }
 
     /// Creates a new player assigned to `window` and fires [`PlayerSpawned`].
@@ -136,7 +170,15 @@ impl PlayerManager {
     /// The [`PlayerId`] of the new player.
     pub fn new_player(&mut self, window: WindowId) -> PlayerId {
         let id = self.allocate_id();
-        self.players.insert(id, PlayerHandle { id, window });
+        self.players.insert(
+            id,
+            PlayerHandle {
+                id,
+                window,
+                input: InputContext::new(),
+            },
+        );
+        self.input_state.set_movement(id, glam::Vec3::ZERO);
         self.spawned_dispatcher
             .dispatch(PlayerSpawned { id, window });
         id
@@ -150,6 +192,7 @@ impl PlayerManager {
     /// in response to [`PlayerDespawned`].
     pub fn remove_player(&mut self, id: PlayerId) {
         if self.players.remove(&id).is_some() {
+            self.input_state.remove_player(id);
             self.despawned_dispatcher.dispatch(PlayerDespawned { id });
         }
     }
@@ -172,16 +215,48 @@ impl PlayerManager {
     }
 
     /// Ticks internal player state.
-    ///
-    /// This is currently a no-op placeholder for future player systems such as
-    /// input handling.
     pub fn tick(&mut self) {
-        // TODO: input
+        let events = self.input_consumer.consume_all().collect::<Vec<_>>();
+        for event in events {
+            self.players
+                .values_mut()
+                .filter(|p| p.window != *event.id())
+                .for_each(|p| p.input.handle_event(&event));
+        }
+        for player in self.players.values() {
+            self.input_state
+                .set_movement(player.id, player.movement_input());
+        }
     }
 
     fn allocate_id(&mut self) -> PlayerId {
         let id = self.next_id;
         self.next_id += 1;
         id
+    }
+}
+
+/// Shared per-player input values consumed by universe systems.
+#[derive(Clone, Default)]
+pub struct PlayerInputState {
+    // TODO: see about slotmap or generational arena?
+    movement: Arc<RwLock<HashMap<PlayerId, glam::Vec3>>>,
+}
+
+impl PlayerInputState {
+    pub(crate) fn movement(&self, player: PlayerId) -> glam::Vec3 {
+        self.movement
+            .read()
+            .get(&player)
+            .copied()
+            .unwrap_or(glam::Vec3::ZERO)
+    }
+
+    fn set_movement(&self, player: PlayerId, movement: glam::Vec3) {
+        self.movement.write().insert(player, movement);
+    }
+
+    fn remove_player(&self, player: PlayerId) {
+        self.movement.write().remove(&player);
     }
 }

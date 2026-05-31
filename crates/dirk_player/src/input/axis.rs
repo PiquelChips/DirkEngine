@@ -1,14 +1,35 @@
 //! Analog input axes.
 
-/// A named analog input producing a scalar or 2-D value each frame.
-///
-/// Covers sticks, triggers, scroll wheels, and mouse deltas.
-///
-/// # Status
-///
-/// Stub — not yet implemented.
+use super::{InputAction, InputSnapshot};
+
+/// A named scalar axis composed from two digital actions.
+#[derive(Debug, Clone)]
 pub struct InputAxis {
-    // TODO: name: &'static str
-    // TODO: value: f32 (or Vec2 for 2-D axes)
-    // TODO: dead_zone: f32
+    name: &'static str,
+    negative: InputAction,
+    positive: InputAction,
+}
+
+impl InputAxis {
+    /// Creates a digital axis.
+    #[must_use]
+    pub fn digital(name: &'static str, negative: InputAction, positive: InputAction) -> Self {
+        Self {
+            name,
+            negative,
+            positive,
+        }
+    }
+
+    /// Returns this axis' stable name.
+    #[must_use]
+    pub fn name(&self) -> &'static str {
+        self.name
+    }
+
+    pub(crate) fn value(&self, input: &InputSnapshot) -> f32 {
+        let positive = f32::from(u8::from(self.positive.is_active(input)));
+        let negative = f32::from(u8::from(self.negative.is_active(input)));
+        positive - negative
+    }
 }

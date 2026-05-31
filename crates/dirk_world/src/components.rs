@@ -120,6 +120,7 @@ pub struct Transform {
     /// World-space position.
     pub location: Vec3,
     /// Euler angles **in radians**, applied in YXZ order (yaw, pitch, roll).
+    /// TODO: move to quat
     pub rotation: Vec3,
     /// Per-axis scale factor. `Vec3::ONE` is the identity scale.
     pub scale: Vec3,
@@ -172,6 +173,26 @@ impl Transform {
         self.rotation_quat() * dirk_utils::FORWARD_DIRECTION
     }
 
+    /// Returns the horizontal forward direction of the transform.
+    #[must_use]
+    pub fn horizontal_forward(&self) -> Vec3 {
+        let mut forward = self.forward();
+        forward.y = 0.0;
+        if forward.length_squared() < f32::EPSILON {
+            return dirk_utils::FORWARD_DIRECTION;
+        }
+        forward.normalize()
+    }
+
+    /// Returns the movement direction when an `input` is applied to `self`.
+    #[must_use]
+    pub fn movement_direction(&self, input: glam::Vec3) -> glam::Vec3 {
+        let forward = self.horizontal_forward();
+        let right = dirk_utils::UP_DIRECTION.cross(forward).normalize_or_zero();
+        ((right * input.x) + (dirk_utils::UP_DIRECTION * input.y) - (forward * input.z))
+            .normalize_or_zero()
+    }
+
     /// Builds a **left-handed** view matrix for a camera placed at this
     /// transform, looking in the [`forward`](Self::forward) direction.
     pub fn view(&self) -> Mat4 {
@@ -194,5 +215,17 @@ impl From<Transform> for Mat4 {
     /// Converts the transform to its model matrix via [`Transform::matrix`].
     fn from(transform: Transform) -> Self {
         transform.matrix()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn forward_input_moves_against_transform_forward() {
+        let movement = Transform::default().movement_direction(Vec3::Z);
+
+        assert_eq!(movement, -dirk_utils::FORWARD_DIRECTION);
     }
 }

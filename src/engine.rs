@@ -100,12 +100,13 @@ impl Engine {
         )
         .context("renderer init")?;
 
+        let players = dirk_player::PlayerManager::new(&event_manager);
+
         let universe = Universe::builder()
+            .with_other(players.universe_builder())
             .with_other(dirk_world::universe_builder(asset_registry.clone()))
             .with_other(renderer.universe_builder())
             .build();
-
-        let players = dirk_player::PlayerManager::new(&event_manager);
 
         info!("engine initialised");
         Ok(Self {
