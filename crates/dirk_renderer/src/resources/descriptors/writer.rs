@@ -1,0 +1,147 @@
+//! Batched descriptor set writes.
+
+use ash::vk;
+
+use super::{
+    layout_types::{CombinedImageSamplerLayout, UniformBufferLayout},
+    set::DescriptorSet,
+};
+
+enum WriteOp {
+    UniformBuffer {
+        set: vk::DescriptorSet,
+        binding: u32,
+        buffer: vk::Buffer,
+        offset: vk::DeviceSize,
+        range: vk::DeviceSize,
+    },
+    CombinedImageSampler {
+        set: vk::DescriptorSet,
+        binding: u32,
+        view: vk::ImageView,
+        sampler: vk::Sampler,
+        image_layout: vk::ImageLayout,
+    },
+}
+
+/// Collects descriptor writes and submits them in one Vulkan call.
+pub struct DescriptorWriter<'dev> {
+    device: &'dev ash::Device,
+    ops: Vec<WriteOp>,
+}
+
+impl<'dev> DescriptorWriter<'dev> {
+    /// Creates an empty writer.
+    pub fn new(device: &'dev ash::Device) -> Self {
+        Self {
+            device,
+            ops: Vec::new(),
+        }
+    }
+
+    /// Adds a uniform-buffer descriptor write.
+    pub fn uniform_buffer<L: UniformBufferLayout>(
+        mut self,
+        set: &DescriptorSet<L>,
+        buffer: vk::Buffer,
+        range: vk::DeviceSize,
+    ) -> Self {
+        self.ops.push(WriteOp::UniformBuffer {
+            set: set.raw(),
+            binding: L::BINDING,
+            buffer,
+            offset: 0,
+            range,
+        });
+        self
+    }
+
+    /// Adds a combined image sampler descriptor write.
+    pub fn combined_image_sampler<L: CombinedImageSamplerLayout>(
+        mut self,
+        set: &DescriptorSet<L>,
+        view: vk::ImageView,
+        sampler: vk::Sampler,
+    ) -> Self {
+        self.ops.push(WriteOp::CombinedImageSampler {
+            set: set.raw(),
+            binding: L::BINDING,
+            view,
+            sampler,
+            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+        });
+        self
+    }
+
+    /// Submits all pending writes.
+    pub fn flush(self) {
+        if self.ops.is_empty() {
+            return;
+        }
+
+        let mut buffer_infos = Vec::new();
+        let mut image_infos = Vec::new();
+
+        for op in &self.ops {
+            match op {
+                WriteOp::UniformBuffer {
+                    buffer,
+                    offset,
+                    range,
+                    ..
+                } => {
+                    buffer_infos.push(
+                        vk::DescriptorBufferInfo::default()
+                            .buffer(*buffer)
+                            .offset(*offset)
+                            .range(*range),
+                    );
+                }
+                WriteOp::CombinedImageSampler {
+                    view,
+                    sampler,
+                    image_layout,
+                    ..
+                } => {
+                    image_infos.push(
+                        vk::DescriptorImageInfo::default()
+                            .image_layout(*image_layout)
+                            .image_view(*view)
+                            .sampler(*sampler),
+                    );
+                }
+            }
+        }
+
+        let mut buffer_index = 0usize;
+        let mut image_index = 0usize;
+        let writes = self
+            .ops
+            .iter()
+            .map(|op| match op {
+                WriteOp::UniformBuffer { set, binding, .. } => {
+                    let write = vk::WriteDescriptorSet::default()
+                        .dst_set(*set)
+                        .dst_binding(*binding)
+                        .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                        .buffer_info(&buffer_infos[buffer_index..=buffer_index]);
+                    buffer_index += 1;
+                    write
+                }
+                WriteOp::CombinedImageSampler { set, binding, .. } => {
+                    let write = vk::WriteDescriptorSet::default()
+                        .dst_set(*set)
+                        .dst_binding(*binding)
+                        .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                        .image_info(&image_infos[image_index..=image_index]);
+                    image_index += 1;
+                    write
+                }
+            })
+            .collect::<Vec<_>>();
+
+        unsafe {
+            self.device.update_descriptor_sets(&writes, &[]);
+        }
+    }
+}

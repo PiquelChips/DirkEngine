@@ -21,7 +21,7 @@ impl GraphicsPipeline {
         layouts: &DescriptorLayouts,
         properties: &RendererProperties,
     ) -> Result<Self> {
-        let set_layouts = [layouts.scene, layouts.object, layouts.material];
+        let set_layouts = layouts.pipeline_layouts();
         let layout_info = vk::PipelineLayoutCreateInfo::default().set_layouts(&set_layouts);
         let pipeline_layout = unsafe { device.device.create_pipeline_layout(&layout_info, None)? };
 
