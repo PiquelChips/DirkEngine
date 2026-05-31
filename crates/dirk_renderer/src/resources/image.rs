@@ -29,11 +29,9 @@ pub struct Image {
     destroy: bool,
     #[allow(unused)]
     allocation: Option<Allocation>,
-    // TODO: store current queue?
-    // TODO: store current layout?
+    aspect_flags: vk::ImageAspectFlags,
 }
 
-// TODO: default
 pub struct ImageCreateInfo {
     pub size: vk::Extent2D,
     pub format: vk::Format,
@@ -92,6 +90,7 @@ impl Image {
             )?,
             destroy: true,
             allocation: Some(allocation),
+            aspect_flags: info.aspect_flags,
         })
     }
     pub fn image(&self) -> vk::Image {
@@ -180,7 +179,6 @@ impl Image {
             &[region],
         );
 
-        // TODO: start in transfer queue, swap to graphics and then go back
         image.generate_mipmaps(&cmd, tex.width, tex.height, mip_levels)?;
         cmd.end_and_submit(&device.queues)?;
 
@@ -259,6 +257,7 @@ impl SwapchainImage {
                 )?,
                 destroy: false,
                 allocation: None,
+                aspect_flags: vk::ImageAspectFlags::COLOR,
             },
         })
     }

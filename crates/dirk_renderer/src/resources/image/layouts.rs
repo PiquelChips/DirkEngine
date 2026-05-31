@@ -26,7 +26,7 @@ impl Image {
             .dst_access_mask(dst_access)
             .image(self.raw)
             .subresource_range(vk::ImageSubresourceRange {
-                aspect_mask: vk::ImageAspectFlags::COLOR,
+                aspect_mask: self.aspect_flags,
                 base_mip_level: base_mip,
                 level_count: mip_levels,
                 base_array_layer: 0,
