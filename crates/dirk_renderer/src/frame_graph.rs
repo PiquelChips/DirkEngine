@@ -27,8 +27,6 @@
 //! Requires: ash 0.38, Vulkan 1.3 (`VK_KHR_dynamic_rendering` promoted to core,
 //!           `VK_KHR_synchronization2` promoted to core).
 
-#![allow(unused)]
-
 use ash::vk;
 
 use crate::{
@@ -147,13 +145,14 @@ struct TextureUsage {
 ///  - The `CommandBuffer` to record into (already inside `vkCmdBeginRendering`
 ///    if the pass has attachments).
 ///  - `ResolvedResources` to look up `VkImage`/`VkImageView` for any handle.
-pub type PassCallback = Box<dyn FnOnce(&RenderDevice, &CommandBuffer, &[Image]) + Send>;
+pub type PassCallback = Box<dyn FnOnce(&RenderDevice, &CommandBuffer, &[Image]) -> Result<()>>;
 
 /// Internal graph node representing a single render pass.
 struct PassNode {
     name: String,
     reads: Vec<TextureUsage>,
     writes: Vec<TextureUsage>,
+    color_resolves: Vec<(TextureHandle, TextureHandle)>,
     callback: Option<PassCallback>,
 }
 
@@ -177,6 +176,26 @@ impl PassBuilder<'_> {
             access: vk::AccessFlags2::COLOR_ATTACHMENT_WRITE,
             attachment: Some(info),
         });
+        self
+    }
+
+    /// Declare `handle` as a multisampled colour attachment which resolves into
+    /// `resolve_handle` at the end of the pass.
+    pub fn write_color_attachment_with_resolve(
+        &mut self,
+        handle: TextureHandle,
+        resolve_handle: TextureHandle,
+        info: AttachmentInfo,
+    ) -> &mut Self {
+        self.write_color_attachment(handle, info);
+        self.pass.writes.push(TextureUsage {
+            handle: resolve_handle,
+            layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+            stage: vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT,
+            access: vk::AccessFlags2::COLOR_ATTACHMENT_WRITE,
+            attachment: None,
+        });
+        self.pass.color_resolves.push((handle, resolve_handle));
         self
     }
 
@@ -271,7 +290,7 @@ impl RenderGraph {
             desc.imported.is_none(),
             "use import_texture for external images"
         );
-        let handle = TextureHandle(self.textures.len() as u32);
+        let handle = texture_handle(self.textures.len());
         self.textures.push(desc);
         handle
     }
@@ -283,7 +302,7 @@ impl RenderGraph {
             desc.imported.is_some(),
             "import_texture requires an ImportedTexture"
         );
-        let handle = TextureHandle(self.textures.len() as u32);
+        let handle = texture_handle(self.textures.len());
         self.textures.push(desc);
         handle
     }
@@ -291,14 +310,16 @@ impl RenderGraph {
     /// Begin building a new pass.  Returns a `PassBuilder` to declare
     /// resource usages and provide the callback.
     pub fn add_pass(&mut self, name: impl Into<String>) -> PassBuilder<'_> {
+        let pass_index = self.passes.len();
         self.passes.push(PassNode {
             name: name.into(),
             reads: Vec::new(),
             writes: Vec::new(),
+            color_resolves: Vec::new(),
             callback: None,
         });
         PassBuilder {
-            pass: self.passes.last_mut().unwrap(),
+            pass: &mut self.passes[pass_index],
         }
     }
 
@@ -344,13 +365,19 @@ pub struct CompiledPass {
     /// Barriers to record immediately before this pass.
     pub pre_barriers: Vec<ImageBarrier>,
     /// Ordered list of colour attachments (in the order written to the pass).
-    pub color_attachments: Vec<(TextureHandle, AttachmentInfo)>,
+    pub color_attachments: Vec<ColorAttachment>,
     /// Optional depth attachment.
     pub depth_attachment: Option<(TextureHandle, AttachmentInfo)>,
     /// Render area derived from the first colour attachment (or depth if none).
     pub render_extent: Option<vk::Extent2D>,
     /// The user-provided recording callback.
     pub callback: Option<PassCallback>,
+}
+
+pub struct ColorAttachment {
+    pub handle: TextureHandle,
+    pub info: AttachmentInfo,
+    pub resolve: Option<TextureHandle>,
 }
 
 /// Output of the compilation phase.
@@ -415,7 +442,7 @@ fn compile_graph(graph: RenderGraph) -> CompiledGraph {
         }
 
         // ── Attachment collection ─────────────────────────────────────────────
-        let mut color_attachments: Vec<(TextureHandle, AttachmentInfo)> = Vec::new();
+        let mut color_attachments: Vec<ColorAttachment> = Vec::new();
         let mut depth_attachment: Option<(TextureHandle, AttachmentInfo)> = None;
         let mut render_extent: Option<vk::Extent2D> = None;
         for usage in &pass.writes {
@@ -427,7 +454,15 @@ fn compile_graph(graph: RenderGraph) -> CompiledGraph {
                             width: desc.width,
                             height: desc.height,
                         });
-                        color_attachments.push((usage.handle, att.clone()));
+                        let resolve = pass
+                            .color_resolves
+                            .iter()
+                            .find_map(|(src, dst)| (*src == usage.handle).then_some(*dst));
+                        color_attachments.push(ColorAttachment {
+                            handle: usage.handle,
+                            info: att.clone(),
+                            resolve,
+                        });
                     }
                     vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL
                     | vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL => {
@@ -462,7 +497,7 @@ fn compile_graph(graph: RenderGraph) -> CompiledGraph {
             let state = &states[idx];
             if state.layout != imported.final_layout {
                 final_barriers.push(ImageBarrier {
-                    handle: TextureHandle(idx as u32),
+                    handle: texture_handle(idx),
                     old_layout: state.layout,
                     new_layout: imported.final_layout,
                     src_stage: state.stage,
@@ -514,23 +549,16 @@ pub struct GraphExecutor {
     device: RenderDevice,
     /// One entry per `TextureHandle` index.
     images: Vec<Image>,
-    /// Indices into `images`/`views` that are transient (so we can destroy
-    /// them without accidentally touching imported resources).
-    transient_indices: Vec<usize>,
+    passes: Vec<CompiledPass>,
+    final_barriers: Vec<ImageBarrier>,
 }
 
 impl GraphExecutor {
     /// Allocate all transient resources and bind imported ones.
-    pub fn new(
-        device: &RenderDevice,
-        instance: &ash::Instance,
-        physical_device: vk::PhysicalDevice,
-        graph: CompiledGraph,
-    ) -> Result<Self> {
+    pub fn new(device: &RenderDevice, graph: CompiledGraph) -> Result<Self> {
         let mut images = Vec::with_capacity(graph.textures.len());
-        let mut transient_indices = Vec::new();
 
-        for (idx, desc) in graph.textures.into_iter().enumerate() {
+        for desc in graph.textures {
             if let Some(imported) = desc.imported {
                 images.push(imported.image);
             } else {
@@ -564,14 +592,14 @@ impl GraphExecutor {
                 let image = Image::create_image(device, &info)?;
 
                 images.push(image);
-                transient_indices.push(idx);
             }
         }
 
         Ok(Self {
             device: device.clone(),
             images,
-            transient_indices,
+            passes: graph.passes,
+            final_barriers: graph.final_barriers,
         })
     }
 
@@ -579,8 +607,8 @@ impl GraphExecutor {
     ///
     /// `cmd` must be in the recording state and must *not* already be inside
     /// a render pass or dynamic rendering scope.
-    pub fn execute(&mut self, cmd: &CommandBuffer, mut graph: CompiledGraph) {
-        for pass in &mut graph.passes {
+    pub fn execute(&mut self, cmd: &CommandBuffer) -> Result<()> {
+        for pass in &mut self.passes {
             // ── Pre-pass barriers ─────────────────────────────────────────────
             if !pass.pre_barriers.is_empty() {
                 let image_barriers: Vec<vk::ImageMemoryBarrier2> = pass
@@ -620,13 +648,20 @@ impl GraphExecutor {
                 let color_infos: Vec<vk::RenderingAttachmentInfo> = pass
                     .color_attachments
                     .iter()
-                    .map(|(h, att)| {
-                        vk::RenderingAttachmentInfo::default()
-                            .image_view(self.images[h.0 as usize].view())
+                    .map(|att| {
+                        let mut info = vk::RenderingAttachmentInfo::default()
+                            .image_view(self.images[att.handle.0 as usize].view())
                             .image_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
-                            .load_op(att.load_op)
-                            .store_op(att.store_op)
-                            .clear_value(att.clear_value)
+                            .load_op(att.info.load_op)
+                            .store_op(att.info.store_op)
+                            .clear_value(att.info.clear_value);
+                        if let Some(resolve) = att.resolve {
+                            info = info
+                                .resolve_mode(vk::ResolveModeFlags::AVERAGE)
+                                .resolve_image_view(self.images[resolve.0 as usize].view())
+                                .resolve_image_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
+                        }
+                        info
                     })
                     .collect();
 
@@ -655,7 +690,7 @@ impl GraphExecutor {
 
             // ── User callback ─────────────────────────────────────────────────
             if let Some(callback) = pass.callback.take() {
-                callback(&self.device, cmd, &self.images);
+                callback(&self.device, cmd, &self.images)?;
             }
 
             if has_rendering {
@@ -664,8 +699,8 @@ impl GraphExecutor {
         }
 
         // ── Final barriers ────────────────────────────────────────────────────
-        if !graph.final_barriers.is_empty() {
-            let image_barriers: Vec<vk::ImageMemoryBarrier2> = graph
+        if !self.final_barriers.is_empty() {
+            let image_barriers: Vec<vk::ImageMemoryBarrier2> = self
                 .final_barriers
                 .iter()
                 .map(|b| {
@@ -685,6 +720,8 @@ impl GraphExecutor {
                 &vk::DependencyInfo::default().image_memory_barriers(&image_barriers),
             );
         }
+
+        Ok(())
     }
 }
 
@@ -705,4 +742,10 @@ fn subresource_range_for(layout: vk::ImageLayout) -> vk::ImageSubresourceRange {
         base_array_layer: 0,
         layer_count: vk::REMAINING_ARRAY_LAYERS,
     }
+}
+
+#[allow(clippy::cast_possible_truncation)]
+fn texture_handle(index: usize) -> TextureHandle {
+    assert!(u32::try_from(index).is_ok());
+    TextureHandle(index as u32)
 }
