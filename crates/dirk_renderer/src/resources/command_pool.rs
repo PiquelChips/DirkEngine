@@ -277,6 +277,25 @@ impl CommandBuffer {
             );
         }
     }
+    pub fn copy_image(
+        &self,
+        src_image: vk::Image,
+        src_image_layout: vk::ImageLayout,
+        dst_image: vk::Image,
+        dst_image_layout: vk::ImageLayout,
+        regions: &[vk::ImageCopy],
+    ) {
+        unsafe {
+            self.device.cmd_copy_image(
+                self.buff,
+                src_image,
+                src_image_layout,
+                dst_image,
+                dst_image_layout,
+                regions,
+            );
+        }
+    }
     pub fn copy_buffer(
         &self,
         src_buffer: vk::Buffer,
