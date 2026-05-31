@@ -6,25 +6,53 @@
 //! is call [`ModelRegistry::render`] with their asset handle & a command buffer.
 //! We handle the rest.
 
-use std::{collections::HashMap, marker::PhantomData, ops::Deref};
+use std::{
+    collections::{HashMap, HashSet},
+    hash::{Hash, Hasher},
+    marker::PhantomData,
+    ops::Deref,
+};
 
 use ash::vk;
 
 use crate::{
-    Result,
+    Error, Result,
     resources::{
         buffer::{IndexBuffer, VertexBuffer},
         command_pool::CommandBuffer,
+        descriptors::{
+            DescriptorAllocator, DescriptorSet, DescriptorWriter, MaterialLayout, ObjectLayout,
+            SceneLayout,
+        },
         device::{Garbage, RenderDevice},
         image::Image,
     },
     utils::Vertex,
 };
 
-#[derive(Debug, PartialEq, Eq, Hash)]
 struct Handle<T> {
     key: slotmap::DefaultKey,
     _marker: PhantomData<T>,
+}
+
+impl<T> std::fmt::Debug for Handle<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.key.fmt(f)
+    }
+}
+
+impl<T> PartialEq for Handle<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.key == other.key
+    }
+}
+
+impl<T> Eq for Handle<T> {}
+
+impl<T> Hash for Handle<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.key.hash(state);
+    }
 }
 
 impl<T> Handle<T> {
@@ -76,7 +104,7 @@ struct Mesh {
 struct Material {
     #[allow(unused)]
     pub base_color: Handle<Texture>,
-    pub descriptor_set: vk::DescriptorSet,
+    pub set: DescriptorSet<MaterialLayout>,
 }
 
 struct Model {
@@ -92,28 +120,15 @@ pub struct ModelRegistry {
     materials: slotmap::SlotMap<slotmap::DefaultKey, Material>,
     models: HashMap<dirk_assets::AssetHandle, Model>,
 
-    material_pool: vk::DescriptorPool,
+    material_alloc: DescriptorAllocator<MaterialLayout>,
 
     asset_load_consumer: dirk_events::Consumer<::dirk_assets::AssetLoaded<::dirk_assets::Model>>,
     asset_unload_consumer: dirk_events::Consumer<::dirk_assets::AssetUnloaded>,
 }
 
-/// TODO: descriptor pool
-const MAX_MATERIAL_DESCRIPTOR_SET: u32 = 256;
-
 impl ModelRegistry {
     pub fn new(device: &RenderDevice, events: &dirk_events::EventManager) -> Result<Self> {
-        let material_pool = {
-            let pool_size = vk::DescriptorPoolSize {
-                ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-                descriptor_count: MAX_MATERIAL_DESCRIPTOR_SET,
-            };
-            let pool_info = vk::DescriptorPoolCreateInfo::default()
-                .pool_sizes(std::slice::from_ref(&pool_size))
-                .max_sets(MAX_MATERIAL_DESCRIPTOR_SET);
-
-            unsafe { device.device.create_descriptor_pool(&pool_info, None)? }
-        };
+        let material_alloc = DescriptorAllocator::<MaterialLayout>::new(device, 64)?;
 
         Ok(Self {
             device: device.clone(),
@@ -121,7 +136,7 @@ impl ModelRegistry {
             meshes: slotmap::SlotMap::new(),
             materials: slotmap::SlotMap::new(),
             models: HashMap::new(),
-            material_pool,
+            material_alloc,
 
             asset_load_consumer: events.subscribe(),
             asset_unload_consumer: events.subscribe(),
@@ -135,7 +150,7 @@ impl ModelRegistry {
 
         let events = self.asset_unload_consumer.consume_all().collect::<Vec<_>>();
         for event in events {
-            self.models.remove(&event.handle);
+            self.unload_model(&event.handle);
         }
         Ok(())
     }
@@ -143,12 +158,10 @@ impl ModelRegistry {
         &self,
         handle: &dirk_assets::AssetHandle,
         cmd: &CommandBuffer,
-        scene_set: vk::DescriptorSet,
-        proxy_set: vk::DescriptorSet,
+        scene_set: &DescriptorSet<SceneLayout>,
+        proxy_set: &DescriptorSet<ObjectLayout>,
         pipeline_layout: vk::PipelineLayout,
     ) -> dirk_assets::Result<()> {
-        let mut descriptor_sets = [scene_set, proxy_set, vk::DescriptorSet::null()];
-
         if handle.asset_type() != dirk_assets::AssetType::Model {
             return Err(dirk_assets::Error::TypeMismatch(handle.to_string()));
         }
@@ -167,10 +180,9 @@ impl ModelRegistry {
             let mat_set = prim
                 .material_handle
                 .map_or(vk::DescriptorSet::null(), |mat| {
-                    self.materials[*mat].descriptor_set
+                    self.materials[*mat].set.raw()
                 });
-
-            descriptor_sets[2] = mat_set;
+            let descriptor_sets = [scene_set.raw(), proxy_set.raw(), mat_set];
 
             cmd.bind_descriptor_sets(
                 vk::PipelineBindPoint::GRAPHICS,
@@ -192,31 +204,49 @@ impl ModelRegistry {
             buffers,
             images,
         } = handle.get()?;
+        let asset_handle = handle.handle();
 
-        let texture_handles = images
-            .iter()
-            .map(|image| {
-                let tex = Image::upload_texture(&self.device, image)?;
-                Ok(Handle::new(self.textures.insert(tex)))
-            })
-            .collect::<Result<Vec<_>>>()?;
+        let mut texture_handles = Vec::with_capacity(images.len());
+        for image in &images {
+            match Image::upload_texture(&self.device, image) {
+                Ok(tex) => texture_handles.push(Handle::new(self.textures.insert(tex))),
+                Err(error) => {
+                    self.remove_model_parts(&[], &[], &texture_handles);
+                    return Err(error);
+                }
+            }
+        }
 
-        let material_handles =
-            self.create_materials(gltf.materials().collect(), &texture_handles)?;
+        let mut material_handles = Vec::new();
+        let mut mesh_handles = Vec::new();
 
-        let meshes = gltf
-            .meshes()
-            .map(|mesh| {
+        let result = (|| -> Result<()> {
+            material_handles =
+                self.create_materials(gltf.materials().collect(), &texture_handles)?;
+
+            for mesh in gltf.meshes() {
                 let primitives = mesh
                     .primitives()
                     .map(|prim| self.upload_primitive(&prim, &buffers, &material_handles))
                     .collect::<Result<Vec<_>>>()?;
-                Ok(Handle::new(self.meshes.insert(Mesh { primitives })))
-            })
-            .collect::<Result<Vec<_>>>()?;
+                mesh_handles.push(Handle::new(self.meshes.insert(Mesh { primitives })));
+            }
 
-        self.models.insert(handle.handle(), Model { meshes });
-        Ok(())
+            self.unload_model(&asset_handle);
+            self.models.insert(
+                asset_handle,
+                Model {
+                    meshes: mesh_handles.clone(),
+                },
+            );
+            Ok(())
+        })();
+
+        if result.is_err() {
+            self.remove_model_parts(&mesh_handles, &material_handles, &texture_handles);
+        }
+
+        result
     }
 
     fn create_materials(
@@ -224,47 +254,37 @@ impl ModelRegistry {
         materials: Vec<gltf::Material>,
         texture_refs: &[Handle<Texture>],
     ) -> Result<Vec<Handle<Material>>> {
-        let material_count = materials.len();
-        // Allocate one set per material
-        let layouts: Vec<vk::DescriptorSetLayout> =
-            vec![self.device.layouts.material; material_count];
+        let mut pending = Vec::with_capacity(materials.len());
 
-        let material_sets: Vec<vk::DescriptorSet> = if material_count > 0 {
-            let alloc_info = vk::DescriptorSetAllocateInfo::default()
-                .descriptor_pool(self.material_pool)
-                .set_layouts(&layouts);
+        for (material_index, mat) in materials.into_iter().enumerate() {
+            let set = self.material_alloc.allocate()?;
+            let tex_index = mat
+                .pbr_metallic_roughness()
+                .base_color_texture()
+                .ok_or(Error::MissingBaseColorTexture(material_index))?
+                .texture()
+                .source()
+                .index();
+            let tex_handle = texture_refs
+                .get(tex_index)
+                .copied()
+                .ok_or(Error::TextureIndexOutOfRange(tex_index))?;
+            let tex = &self.textures[*tex_handle];
+            pending.push((tex_handle, set, tex.image.view(), tex.sampler));
+        }
 
-            unsafe { self.device.device.allocate_descriptor_sets(&alloc_info)? }
-        } else {
-            Vec::new()
-        };
+        let mut writer = DescriptorWriter::new(&self.device.device);
+        for (_, set, view, sampler) in &pending {
+            writer = writer.combined_image_sampler(set, *view, *sampler);
+        }
+        writer.flush();
 
-        Ok(materials
+        Ok(pending
             .into_iter()
-            .enumerate()
-            .map(|(i, mat)| {
-                let pbr = mat.pbr_metallic_roughness();
-                // TODO: actually PBR materials
-                #[allow(clippy::unwrap_used)]
-                let tex = pbr.base_color_texture().unwrap().texture().source().index();
-
-                let tex_handle = texture_refs[tex];
-                let tex = &self.textures[*tex_handle];
-                let image_info = vk::DescriptorImageInfo::default()
-                    .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                    .image_view(tex.image.view())
-                    .sampler(tex.sampler);
-
-                let write = vk::WriteDescriptorSet::default()
-                    .dst_set(material_sets[i])
-                    .dst_binding(2) // matches layouts.material
-                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                    .image_info(std::slice::from_ref(&image_info));
-
-                unsafe { self.device.device.update_descriptor_sets(&[write], &[]) };
+            .map(|(tex_handle, set, _, _)| {
                 Handle::new(self.materials.insert(Material {
                     base_color: tex_handle,
-                    descriptor_set: material_sets[i],
+                    set,
                 }))
             })
             .collect())
@@ -317,18 +337,60 @@ impl ModelRegistry {
             material_handle: primitive.material().index().map(|idx| mat_refs[idx]),
         })
     }
+
+    fn unload_model(&mut self, handle: &dirk_assets::AssetHandle) {
+        let Some(model) = self.models.remove(handle) else {
+            return;
+        };
+
+        let mut material_handles = HashSet::new();
+        for mesh_handle in model.meshes {
+            if let Some(mesh) = self.meshes.remove(*mesh_handle) {
+                material_handles.extend(
+                    mesh.primitives
+                        .into_iter()
+                        .filter_map(|primitive| primitive.material_handle),
+                );
+            }
+        }
+
+        let mut texture_handles = HashSet::new();
+        for material_handle in material_handles {
+            if let Some(material) = self.materials.remove(*material_handle) {
+                texture_handles.insert(material.base_color);
+            }
+        }
+
+        for texture_handle in texture_handles {
+            self.textures.remove(*texture_handle);
+        }
+    }
+
+    fn remove_model_parts(
+        &mut self,
+        mesh_handles: &[Handle<Mesh>],
+        material_handles: &[Handle<Material>],
+        texture_handles: &[Handle<Texture>],
+    ) {
+        for mesh_handle in mesh_handles {
+            self.meshes.remove(**mesh_handle);
+        }
+        for material_handle in material_handles {
+            self.materials.remove(**material_handle);
+        }
+        for texture_handle in texture_handles {
+            self.textures.remove(**texture_handle);
+        }
+    }
 }
 
 impl Drop for ModelRegistry {
     fn drop(&mut self) {
+        // Materials hold DescriptorSet values; clear them before the allocator
+        // enqueues descriptor pool destruction.
+        self.materials.clear();
         self.textures.clear();
         self.meshes.clear();
-        self.materials.clear();
         self.models.clear();
-        unsafe {
-            self.device
-                .device
-                .destroy_descriptor_pool(self.material_pool, None);
-        };
     }
 }

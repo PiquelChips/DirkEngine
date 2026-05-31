@@ -73,32 +73,6 @@ impl Drop for Frame {
     }
 }
 
-/// This struct is owned by [Renderer] and stores
-/// all the different descriptor set layouts used by
-/// the renderer.
-/// Every field should be a descriptor set layout with a
-/// propper comment explain what the layout is and where
-/// it is used.
-pub struct DescriptorLayouts {
-    // TODO: much better comments for descriptor set layouts
-    /// Per scene layout. Holds view & proj matrices for rendering.
-    pub scene: vk::DescriptorSetLayout,
-    /// Per object layout. For model matrix.
-    pub object: vk::DescriptorSetLayout,
-    /// Per material layout. For texture descriptor.
-    pub material: vk::DescriptorSetLayout,
-}
-
-impl DescriptorLayouts {
-    pub fn destroy(&self, device: &Device) {
-        unsafe {
-            device.destroy_descriptor_set_layout(self.scene, None);
-            device.destroy_descriptor_set_layout(self.object, None);
-            device.destroy_descriptor_set_layout(self.material, None);
-        }
-    }
-}
-
 pub struct RendererProperties {
     pub msaa_samples: vk::SampleCountFlags,
     #[allow(unused)]

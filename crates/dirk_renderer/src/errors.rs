@@ -53,6 +53,15 @@ pub enum Error {
     /// The Vulkan surface is suboptimal
     #[error("suboptimal surface")]
     SuboptimalSurface,
+    /// The requested descriptor set allocation is too large for Vulkan.
+    #[error("descriptor set allocation count {0} exceeds u32::MAX")]
+    DescriptorSetCountTooLarge(usize),
+    /// A glTF material has no base color texture, which is not yet supported.
+    #[error("glTF material at index {0} has no base color texture")]
+    MissingBaseColorTexture(usize),
+    /// A glTF material references an image index that does not exist.
+    #[error("glTF image index {0} is out of range")]
+    TextureIndexOutOfRange(usize),
 
     /// If there is no camera in the scene
     #[error("camera {0:?} does not exist")]
