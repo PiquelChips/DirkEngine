@@ -143,7 +143,7 @@ mod tests {
     // ── rewrite_unnamed_placeholders ──────────────────────────────────────────
 
     fn unnamed_fields_from(src: &str) -> FieldsUnnamed {
-        let input: DeriveInput = parse_str(src).unwrap();
+        let input: DeriveInput = parse_str(src).expect("test input should parse");
         match input.data {
             syn::Data::Struct(s) => match s.fields {
                 Fields::Unnamed(u) => u,
@@ -189,28 +189,34 @@ mod tests {
 
     #[test]
     fn format_falls_back_to_debug_repr_when_no_attr() {
-        let input: DeriveInput = parse_str("struct Foo;").unwrap();
-        let result = get_message_format_from_attrs(&input.attrs).unwrap();
+        let input: DeriveInput = parse_str("struct Foo;").expect("test input should parse");
+        let result =
+            get_message_format_from_attrs(&input.attrs).expect("default format should parse");
         assert_eq!(result, "{self:?}");
     }
 
     #[test]
     fn format_extracts_literal_from_event_attr() {
-        let input: DeriveInput = parse_str(r#"#[event("hello world")] struct Foo;"#).unwrap();
-        let result = get_message_format_from_attrs(&input.attrs).unwrap();
+        let input: DeriveInput =
+            parse_str(r#"#[event("hello world")] struct Foo;"#).expect("test input should parse");
+        let result =
+            get_message_format_from_attrs(&input.attrs).expect("event format should parse");
         assert_eq!(result, "hello world");
     }
 
     #[test]
     fn format_returns_error_for_non_string_arg() {
-        let input: DeriveInput = parse_str(r#"#[event(42)] struct Foo;"#).unwrap();
+        let input: DeriveInput =
+            parse_str(r"#[event(42)] struct Foo;").expect("test input should parse");
         assert!(get_message_format_from_attrs(&input.attrs).is_err());
     }
 
     #[test]
     fn format_ignores_unrelated_attributes() {
-        let input: DeriveInput = parse_str(r#"#[derive(Debug)] struct Foo;"#).unwrap();
-        let result = get_message_format_from_attrs(&input.attrs).unwrap();
+        let input: DeriveInput =
+            parse_str(r"#[derive(Debug)] struct Foo;").expect("test input should parse");
+        let result =
+            get_message_format_from_attrs(&input.attrs).expect("default format should parse");
         assert_eq!(result, "{self:?}");
     }
 }
