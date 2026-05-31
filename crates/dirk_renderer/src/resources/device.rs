@@ -19,8 +19,11 @@ use gpu_allocator::{
 use parking_lot::Mutex;
 
 use crate::{
-    DescriptorLayouts, MAX_FRAMES_IN_FLIGHT, Queues, RendererProperties, Result,
-    resources::command_pool::{CommandPool, Graphics, Transfer},
+    DescriptorLayouts, MAX_FRAMES_IN_FLIGHT, RendererProperties, Result,
+    resources::{
+        command_pool::{CommandPool, Graphics, Transfer},
+        queues::Queues,
+    },
 };
 
 /// The device that stores all vulkan objects.
@@ -127,26 +130,16 @@ impl RenderDevice {
         };
 
         // QUEUES
-        let queues = {
-            let indices = &properties.queue_family_indices;
-            Queues {
-                graphics: unsafe { device.get_device_queue(indices.graphics, 0) },
-                present: unsafe { device.get_device_queue(indices.present, 0) },
-                compute: unsafe { device.get_device_queue(indices.compute, 0) },
-                transfer: unsafe { device.get_device_queue(indices.transfer, 0) },
-            }
-        };
+        let queues = Queues::new(&instance, &device, &properties.queue_family_indices);
 
         // COMMAND POOLS
         let transfer_pool = CommandPool::build(
             &device,
-            &queues,
             &properties.queue_family_indices,
             vk::CommandPoolCreateFlags::TRANSIENT,
         )?;
         let graphics_pool = CommandPool::build(
             &device,
-            &queues,
             &properties.queue_family_indices,
             vk::CommandPoolCreateFlags::TRANSIENT,
         )?;

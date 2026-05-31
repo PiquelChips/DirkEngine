@@ -31,7 +31,7 @@ use dirk_universe::{Universe, UniverseBuilder};
 
 mod utils;
 use dirk_utils::Version;
-use utils::{DescriptorLayouts, Frame, Queues, RendererProperties, Vertex, make_version};
+use utils::{DescriptorLayouts, Frame, RendererProperties, Vertex, make_version};
 
 mod errors;
 pub use errors::{Error, Result};
@@ -53,7 +53,7 @@ use proxy::{
 mod render_commands;
 use render_commands::RenderCommandReceiver;
 
-use crate::proxy::PlayerProxy;
+use crate::{proxy::PlayerProxy, resources::queues::QueueType};
 
 mod models;
 mod physical_device;
@@ -406,7 +406,6 @@ impl Renderer {
         let build_frame = || -> Result<Frame> {
             let command_pool = CommandPool::build(
                 &device,
-                &render_device.queues,
                 &render_device.properties.queue_family_indices,
                 vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
             )?;
@@ -639,13 +638,11 @@ impl Renderer {
                     &render_image.render_finished_semaphore,
                 ));
 
-            unsafe {
-                self.render_device.device.queue_submit(
-                    self.render_device.queues.graphics,
-                    std::slice::from_ref(&submit_info),
-                    frame.fence,
-                )?;
-            }
+            self.render_device.queues.submit(
+                QueueType::Graphics,
+                std::slice::from_ref(&submit_info),
+                frame.fence,
+            )?;
 
             let present_info = vk::PresentInfoKHR::default()
                 .wait_semaphores(std::slice::from_ref(
@@ -654,11 +651,7 @@ impl Renderer {
                 .swapchains(std::slice::from_ref(&render_image.swapchain))
                 .image_indices(std::slice::from_ref(&render_image.image_index));
 
-            unsafe {
-                self.render_device
-                    .swapchain_loader
-                    .queue_present(self.render_device.queues.present, &present_info)?
-            };
+            self.render_device.queues.present(&present_info)?;
 
             self.current_frame.store(
                 (self.current_frame() + 1) % MAX_FRAMES_IN_FLIGHT,

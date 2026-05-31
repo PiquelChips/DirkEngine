@@ -181,7 +181,7 @@ impl Image {
 
         // TODO: start in transfer queue, swap to graphics and then go back
         image.generate_mipmaps(&cmd, tex.width, tex.height, mip_levels)?;
-        cmd.end_and_submit()?;
+        cmd.end_and_submit(&device.queues)?;
 
         let old_view = image.view;
         image.view = Self::create_image_view(
