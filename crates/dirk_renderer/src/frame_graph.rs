@@ -812,3 +812,123 @@ fn texture_handle(index: usize) -> TextureHandle {
     assert!(u32::try_from(index).is_ok());
     TextureHandle(index as u32)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn color_desc(usage: vk::ImageUsageFlags, samples: vk::SampleCountFlags) -> TextureDesc {
+        TextureDesc {
+            width: 64,
+            height: 64,
+            format: vk::Format::B8G8R8A8_UNORM,
+            usage,
+            samples,
+            imported: None,
+        }
+    }
+
+    #[test]
+    fn compile_transitions_color_attachment_to_transfer_src() {
+        let mut graph = RenderGraph::new();
+        let scene_color = graph.create_texture(color_desc(
+            vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_SRC,
+            vk::SampleCountFlags::TYPE_1,
+        ));
+
+        graph
+            .add_pass("scene")
+            .write_color_attachment(scene_color, AttachmentInfo::clear_color(0., 0., 0., 1.));
+        graph.add_pass("copy").read_transfer_src(scene_color);
+
+        let compiled = graph.compile();
+        let copy_pass = &compiled.passes[1];
+        let barrier = copy_pass
+            .pre_barriers
+            .iter()
+            .find(|barrier| barrier.handle == scene_color)
+            .expect("copy pass should transition scene color");
+
+        assert_eq!(
+            barrier.old_layout,
+            vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL
+        );
+        assert_eq!(barrier.new_layout, vk::ImageLayout::TRANSFER_SRC_OPTIMAL);
+        assert_eq!(barrier.dst_stage, vk::PipelineStageFlags2::TRANSFER);
+        assert_eq!(barrier.dst_access, vk::AccessFlags2::TRANSFER_READ);
+    }
+
+    #[test]
+    fn compile_transitions_imported_swapchain_to_transfer_dst_then_present() {
+        let mut graph = RenderGraph::new();
+        let swapchain = graph.import_texture(TextureDesc {
+            width: 64,
+            height: 64,
+            format: vk::Format::B8G8R8A8_UNORM,
+            usage: vk::ImageUsageFlags::TRANSFER_DST,
+            samples: vk::SampleCountFlags::TYPE_1,
+            imported: Some(ImportedTexture {
+                image: vk::Image::null(),
+                view: vk::ImageView::null(),
+                aspect_flags: vk::ImageAspectFlags::COLOR,
+                initial_layout: vk::ImageLayout::UNDEFINED,
+                final_layout: vk::ImageLayout::PRESENT_SRC_KHR,
+            }),
+        });
+
+        graph.add_pass("copy").write_transfer_dst(swapchain);
+
+        let compiled = graph.compile();
+        let copy_barrier = compiled.passes[0]
+            .pre_barriers
+            .iter()
+            .find(|barrier| barrier.handle == swapchain)
+            .expect("copy pass should transition swapchain");
+        assert_eq!(copy_barrier.old_layout, vk::ImageLayout::UNDEFINED);
+        assert_eq!(
+            copy_barrier.new_layout,
+            vk::ImageLayout::TRANSFER_DST_OPTIMAL
+        );
+        assert_eq!(copy_barrier.dst_stage, vk::PipelineStageFlags2::TRANSFER);
+        assert_eq!(copy_barrier.dst_access, vk::AccessFlags2::TRANSFER_WRITE);
+
+        let final_barrier = compiled
+            .final_barriers
+            .iter()
+            .find(|barrier| barrier.handle == swapchain)
+            .expect("final barrier should transition swapchain for present");
+        assert_eq!(
+            final_barrier.old_layout,
+            vk::ImageLayout::TRANSFER_DST_OPTIMAL
+        );
+        assert_eq!(final_barrier.new_layout, vk::ImageLayout::PRESENT_SRC_KHR);
+    }
+
+    #[test]
+    fn compile_msaa_scene_resolves_to_regular_scene_image() {
+        let mut graph = RenderGraph::new();
+        let msaa_color = graph.create_texture(color_desc(
+            vk::ImageUsageFlags::TRANSIENT_ATTACHMENT | vk::ImageUsageFlags::COLOR_ATTACHMENT,
+            vk::SampleCountFlags::TYPE_4,
+        ));
+        let scene_color = graph.create_texture(color_desc(
+            vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_SRC,
+            vk::SampleCountFlags::TYPE_1,
+        ));
+
+        graph.add_pass("scene").write_color_attachment_with_resolve(
+            msaa_color,
+            scene_color,
+            AttachmentInfo::clear_color(0., 0., 0., 1.),
+        );
+
+        let compiled = graph.compile();
+        let attachment = compiled.passes[0]
+            .color_attachments
+            .iter()
+            .find(|attachment| attachment.handle == msaa_color)
+            .expect("scene pass should contain the MSAA color attachment");
+
+        assert_eq!(attachment.resolve, Some(scene_color));
+    }
+}
