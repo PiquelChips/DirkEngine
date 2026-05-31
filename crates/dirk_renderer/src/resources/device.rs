@@ -198,6 +198,10 @@ pub enum Garbage {
     Sampler(vk::Sampler),
     Pipeline(vk::Pipeline),
     PipelineLayout(vk::PipelineLayout),
+    DescriptorSet {
+        pool: vk::DescriptorPool,
+        set: vk::DescriptorSet,
+    },
     DescriptorPool(vk::DescriptorPool),
     Semaphore(vk::Semaphore),
 
@@ -271,6 +275,9 @@ impl Garbage {
                 Self::Sampler(s) => device.destroy_sampler(s, None),
                 Self::Pipeline(p) => device.destroy_pipeline(p, None),
                 Self::PipelineLayout(l) => device.destroy_pipeline_layout(l, None),
+                Self::DescriptorSet { pool, set } => {
+                    let _ = device.free_descriptor_sets(pool, &[set]);
+                }
                 Self::DescriptorPool(pool) => device.destroy_descriptor_pool(pool, None),
                 Self::Semaphore(semaphore) => device.destroy_semaphore(semaphore, None),
                 Self::Surface(surface) => {

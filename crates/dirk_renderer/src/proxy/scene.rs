@@ -5,14 +5,16 @@ use dirk_universe::{Entity, WorldId};
 use gpu_allocator::MemoryLocation;
 
 use crate::{
-    BASE_DESCRIPTOR_POOL_SIZE, Error, MAX_FRAMES_IN_FLIGHT, Result,
+    Error, MAX_FRAMES_IN_FLIGHT, Result,
     models::ModelRegistry,
     pipeline::GraphicsPipeline,
     render_pass::RenderPass,
     resources::{
         buffer::UniformBuffer,
         command_pool::CommandBuffer,
-        descriptors::{DescriptorAllocator, DescriptorPoolSize, DescriptorSet},
+        descriptors::{
+            DescriptorAllocator, DescriptorSet, DescriptorWriter, ObjectLayout, SceneLayout,
+        },
         device::RenderDevice,
         image::{Image, ImageCreateInfo},
     },
@@ -22,7 +24,6 @@ use crate::{
 /// most of the rendering state needed to render each scene.
 pub struct SceneManager {
     device: RenderDevice,
-    descriptor_allocator: DescriptorAllocator,
 
     scenes: HashMap<WorldId, Scene>,
     entities: HashMap<Entity, WorldId>,
@@ -33,18 +34,15 @@ pub struct SceneManager {
     depth: Image,
     // render graph should fix this
     graphics_pipeline: GraphicsPipeline,
+
+    scene_alloc: DescriptorAllocator<SceneLayout>,
+    proxy_alloc: DescriptorAllocator<ObjectLayout>,
 }
 
 impl SceneManager {
     pub fn init(device: &RenderDevice, size: vk::Extent2D) -> Result<Self> {
-        let descriptor_allocator = DescriptorAllocator::new(
-            device,
-            &[DescriptorPoolSize::new(
-                vk::DescriptorType::UNIFORM_BUFFER,
-                1,
-            )],
-            BASE_DESCRIPTOR_POOL_SIZE,
-        )?;
+        let scene_alloc = DescriptorAllocator::<SceneLayout>::new(device, 16)?;
+        let proxy_alloc = DescriptorAllocator::<ObjectLayout>::new(device, 256)?;
 
         // TEMP
         let color_info = ImageCreateInfo {
@@ -76,13 +74,14 @@ impl SceneManager {
 
         Ok(Self {
             device: device.clone(),
-            descriptor_allocator,
             entities: HashMap::new(),
             scenes: HashMap::new(),
             proxies: HashMap::new(),
             color,
             depth,
             graphics_pipeline,
+            scene_alloc,
+            proxy_alloc,
         })
     }
     pub fn render(
@@ -164,8 +163,8 @@ impl SceneManager {
             match models.render_model(
                 model,
                 cmd,
-                scene.descriptor_sets[frame],
-                proxy.sets[frame],
+                &scene.sets[frame],
+                &proxy.sets[frame],
                 self.graphics_pipeline.layout(),
             ) {
                 Ok(()) | Err(dirk_assets::Error::NotFound(_)) => (),
@@ -248,6 +247,9 @@ impl SceneManager {
 
 impl Drop for SceneManager {
     fn drop(&mut self) {
+        // Clear collections before allocators are dropped. Scene and
+        // SceneProxy hold DescriptorSet values whose Drop impls enqueue descriptor
+        // set frees; the allocators enqueue descriptor pool destroys.
         self.scenes.clear();
         self.entities.clear();
         self.proxies.clear();
@@ -274,7 +276,7 @@ struct Scene {
     entities: HashSet<Entity>,
 
     ubo: [UniformBuffer; MAX_FRAMES_IN_FLIGHT],
-    descriptor_sets: [DescriptorSet; MAX_FRAMES_IN_FLIGHT],
+    sets: [DescriptorSet<SceneLayout>; MAX_FRAMES_IN_FLIGHT],
 }
 
 impl Scene {
@@ -283,25 +285,25 @@ impl Scene {
     /// the [Renderer].
     pub fn build(manager: &mut SceneManager) -> Result<Self> {
         // Allocate scene-level sets (one per frame)
-        let scene_desc_sets = manager
-            .descriptor_allocator
-            .allocate_array::<MAX_FRAMES_IN_FLIGHT>(manager.device.layouts.scene)?;
+        let sets = manager
+            .scene_alloc
+            .allocate_array::<MAX_FRAMES_IN_FLIGHT>()?;
 
         let ubo_size = size_of::<SceneUbo>() as u64;
         let build_ubo =
             || UniformBuffer::create(&manager.device, ubo_size, MemoryLocation::CpuToGpu);
         let ubo = [build_ubo()?, build_ubo()?];
 
-        for (set, ubo) in scene_desc_sets.iter().zip(&ubo) {
-            manager
-                .descriptor_allocator
-                .write_uniform_buffer(*set, 0, ubo.buffer(), ubo_size);
+        let mut writer = DescriptorWriter::new(&manager.device.device);
+        for (set, ubo) in sets.iter().zip(&ubo) {
+            writer = writer.uniform_buffer(set, ubo.buffer(), ubo_size);
         }
+        writer.flush();
 
         Ok(Self {
             entities: HashSet::new(),
             ubo,
-            descriptor_sets: scene_desc_sets,
+            sets,
         })
     }
 }
@@ -318,7 +320,7 @@ pub struct SceneProxy {
 
     // Per frame render stuff
     ubo: [UniformBuffer; MAX_FRAMES_IN_FLIGHT],
-    sets: [DescriptorSet; MAX_FRAMES_IN_FLIGHT],
+    sets: [DescriptorSet<ObjectLayout>; MAX_FRAMES_IN_FLIGHT],
 }
 
 impl SceneProxy {
@@ -329,14 +331,14 @@ impl SceneProxy {
 
         // Allocate scene-level sets (one per frame)
         let sets = manager
-            .descriptor_allocator
-            .allocate_array::<MAX_FRAMES_IN_FLIGHT>(manager.device.layouts.object)?;
+            .proxy_alloc
+            .allocate_array::<MAX_FRAMES_IN_FLIGHT>()?;
 
+        let mut writer = DescriptorWriter::new(&manager.device.device);
         for (set, ubo) in sets.iter().zip(&ubo) {
-            manager
-                .descriptor_allocator
-                .write_uniform_buffer(*set, 1, ubo.buffer(), size);
+            writer = writer.uniform_buffer(set, ubo.buffer(), size);
         }
+        writer.flush();
 
         Ok(Self {
             model: None,

@@ -61,7 +61,6 @@ mod physical_device;
 mod pipeline;
 mod render_pass;
 
-const BASE_DESCRIPTOR_POOL_SIZE: u32 = 64;
 const MAX_FRAMES_IN_FLIGHT: usize = 2;
 const DEVICE_EXTENSIONS: &[&str] =
     &[unsafe { std::str::from_utf8_unchecked(swapchain::NAME.to_bytes()) }];
