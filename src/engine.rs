@@ -180,7 +180,7 @@ impl Engine {
 
         // TODO: renders too fast and semaphores have problem.
         // remove when rendering takes longer
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        std::thread::sleep(std::time::Duration::from_millis(10));
 
         self.process_events();
         if self.is_requesting_exit() {
