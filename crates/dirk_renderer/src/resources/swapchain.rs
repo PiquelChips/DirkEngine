@@ -198,7 +198,7 @@ impl Swapchain {
             .image_color_space(device.properties.surface_format.color_space)
             .image_extent(extent)
             .image_array_layers(1)
-            .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)
+            .image_usage(vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::COLOR_ATTACHMENT)
             .image_sharing_mode(sharing_mode)
             .queue_family_indices(indices_slice)
             .pre_transform(capabilities.current_transform)
