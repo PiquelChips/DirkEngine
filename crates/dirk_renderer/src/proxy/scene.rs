@@ -152,14 +152,7 @@ impl SceneManager {
             proxy.write_ubo(frame);
         }
 
-        RenderPass::begin(
-            &self.device.device,
-            cmd,
-            size,
-            view,
-            &self.color,
-            &self.depth,
-        );
+        RenderPass::begin(cmd, size, view, &self.color, &self.depth);
         self.graphics_pipeline.bind(cmd);
 
         // the window size never gets anywhere near 2^23
@@ -169,16 +162,12 @@ impl SceneManager {
             .height(size.height as f32)
             .min_depth(0.)
             .max_depth(1.);
-        unsafe {
-            self.device
-                .device
-                .cmd_set_viewport(cmd.raw(), 0, &[viewport]);
-        };
+        cmd.set_viewport(0, &[viewport]);
 
         let scissor = vk::Rect2D::default()
             .offset(vk::Offset2D::default())
             .extent(size);
-        unsafe { self.device.device.cmd_set_scissor(cmd.raw(), 0, &[scissor]) };
+        cmd.set_scissor(0, &[scissor]);
 
         for proxy in &proxies {
             let Some(ref model) = proxy.model else {
@@ -197,7 +186,7 @@ impl SceneManager {
             }
         }
 
-        RenderPass::end(&self.device.device, cmd);
+        RenderPass::end(cmd);
         Ok(())
     }
     pub fn create_scene(&mut self, world: WorldId) -> Result<()> {

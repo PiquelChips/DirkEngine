@@ -33,17 +33,14 @@ impl Image {
                 layer_count: 1,
             });
 
-        unsafe {
-            self.device.device.cmd_pipeline_barrier(
-                cmd.raw(),
-                src_stage,
-                dst_stage,
-                vk::DependencyFlags::empty(),
-                &[],
-                &[],
-                &[barrier],
-            );
-        };
+        cmd.pipeline_barrier(
+            src_stage,
+            dst_stage,
+            vk::DependencyFlags::empty(),
+            &[],
+            &[],
+            &[barrier],
+        );
         Ok(())
     }
 

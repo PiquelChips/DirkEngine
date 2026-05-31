@@ -67,17 +67,14 @@ impl Image {
                     },
                 ]);
 
-            unsafe {
-                self.device.device.cmd_blit_image(
-                    cmd.raw(),
-                    self.image(),
-                    vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-                    self.image(),
-                    vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                    &[blit],
-                    vk::Filter::LINEAR,
-                );
-            }
+            cmd.blit_image(
+                self.image(),
+                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                self.image(),
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                &[blit],
+                vk::Filter::LINEAR,
+            );
 
             // Previous level is fully consumed — transition to shader-readable
             self.transition_image_layout(
