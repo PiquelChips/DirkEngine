@@ -140,7 +140,7 @@ impl<Type: BuffType> Buffer<Type> {
         };
         cmd.copy_buffer(src.buffer(), self.buffer(), &[region]);
 
-        cmd.end_and_submit()?;
+        cmd.end_and_submit(&self.device.queues)?;
         Ok(())
     }
 }

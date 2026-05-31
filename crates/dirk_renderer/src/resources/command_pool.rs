@@ -2,7 +2,11 @@ use std::{marker::PhantomData, ops::Deref};
 
 use ash::{Device, prelude::VkResult, vk};
 
-use crate::{Queues, Result, physical_device::QueueFamilyIndices};
+use crate::{
+    Result,
+    physical_device::QueueFamilyIndices,
+    resources::queues::{QueueType, Queues},
+};
 
 #[derive(Debug)]
 pub struct Graphics;
@@ -17,22 +21,22 @@ pub struct CommandPool<Type: Pool> {
     device: Device,
     /// The command pool
     pool: vk::CommandPool,
-    /// The queue commands will be submitted to
-    queue: vk::Queue,
+    /// The type of queue commands will be submitted to
+    queue_type: QueueType,
     pool_type: PhantomData<Type>,
 }
 
 pub trait Pool {
     fn get_index(families: &QueueFamilyIndices) -> u32;
-    fn get_queue(queues: &Queues) -> vk::Queue;
+    fn get_queue_type() -> QueueType;
 }
 
 impl Pool for Compute {
     fn get_index(families: &QueueFamilyIndices) -> u32 {
         families.compute
     }
-    fn get_queue(queues: &Queues) -> vk::Queue {
-        queues.compute
+    fn get_queue_type() -> QueueType {
+        QueueType::Compute
     }
 }
 
@@ -40,8 +44,8 @@ impl Pool for Transfer {
     fn get_index(families: &QueueFamilyIndices) -> u32 {
         families.transfer
     }
-    fn get_queue(queues: &Queues) -> vk::Queue {
-        queues.transfer
+    fn get_queue_type() -> QueueType {
+        QueueType::Transfer
     }
 }
 
@@ -49,8 +53,8 @@ impl Pool for Graphics {
     fn get_index(families: &QueueFamilyIndices) -> u32 {
         families.graphics
     }
-    fn get_queue(queues: &Queues) -> vk::Queue {
-        queues.graphics
+    fn get_queue_type() -> QueueType {
+        QueueType::Graphics
     }
 }
 
@@ -58,12 +62,11 @@ impl<Type: Pool> CommandPool<Type> {
     /// Will build a command pool with the specified settings.
     pub fn build(
         device: &Device,
-        queues: &Queues,
         families: &QueueFamilyIndices,
         flags: vk::CommandPoolCreateFlags,
     ) -> Result<Self> {
         let index = Type::get_index(families);
-        let queue = Type::get_queue(queues);
+        let queue_type = Type::get_queue_type();
 
         let info = vk::CommandPoolCreateInfo::default()
             .flags(flags)
@@ -74,7 +77,7 @@ impl<Type: Pool> CommandPool<Type> {
         Ok(Self {
             device: device.clone(),
             pool,
-            queue,
+            queue_type,
             pool_type: PhantomData,
         })
     }
@@ -93,7 +96,7 @@ impl<Type: Pool> CommandPool<Type> {
         Ok(CommandBuffer {
             device: self.device.clone(),
             buff,
-            queue: self.queue,
+            queue_type: self.queue_type,
         })
     }
 
@@ -113,8 +116,8 @@ pub struct CommandBuffer {
     device: Device,
     /// The buffer
     buff: vk::CommandBuffer,
-    /// The queue to submit to
-    queue: vk::Queue,
+    /// The type of queue to submit to
+    queue_type: QueueType,
 }
 
 impl CommandBuffer {
@@ -286,18 +289,20 @@ impl CommandBuffer {
         }
     }
 
-    pub fn submit(&self, submit_info: vk::SubmitInfo, fence: vk::Fence) -> VkResult<()> {
-        unsafe {
-            self.device
-                .queue_submit(self.queue, std::slice::from_ref(&submit_info), fence)
-        }
+    pub fn submit(
+        &self,
+        queues: &Queues,
+        submit_info: vk::SubmitInfo,
+        fence: vk::Fence,
+    ) -> VkResult<()> {
+        queues.submit(self.queue_type, std::slice::from_ref(&submit_info), fence)
     }
-    pub fn end_and_submit(&self) -> VkResult<()> {
+    pub fn end_and_submit(&self, queues: &Queues) -> VkResult<()> {
         let info = vk::SubmitInfo::default().command_buffers(std::slice::from_ref(&self.buff));
         unsafe {
             self.device.end_command_buffer(self.buff)?;
         };
-        self.submit(info, vk::Fence::null())
+        self.submit(queues, info, vk::Fence::null())
     }
 }
 

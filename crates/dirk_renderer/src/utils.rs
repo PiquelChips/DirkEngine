@@ -99,13 +99,6 @@ impl DescriptorLayouts {
     }
 }
 
-pub struct Queues {
-    pub graphics: vk::Queue,
-    pub compute: vk::Queue,
-    pub transfer: vk::Queue,
-    pub present: vk::Queue,
-}
-
 pub struct RendererProperties {
     pub msaa_samples: vk::SampleCountFlags,
     #[allow(unused)]
