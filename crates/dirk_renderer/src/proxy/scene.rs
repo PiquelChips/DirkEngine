@@ -5,14 +5,15 @@ use dirk_universe::{Entity, WorldId};
 use gpu_allocator::MemoryLocation;
 
 use crate::{
-    Error, MAX_FRAMES_IN_FLIGHT, MAX_RENDERABLES, Result,
+    BASE_DESCRIPTOR_POOL_SIZE, Error, MAX_FRAMES_IN_FLIGHT, Result,
     models::ModelRegistry,
     pipeline::GraphicsPipeline,
     render_pass::RenderPass,
     resources::{
         buffer::UniformBuffer,
         command_pool::CommandBuffer,
-        device::{Garbage, RenderDevice},
+        descriptors::{DescriptorAllocator, DescriptorPoolSize, DescriptorSet},
+        device::RenderDevice,
         image::{Image, ImageCreateInfo},
     },
 };
@@ -21,7 +22,7 @@ use crate::{
 /// most of the rendering state needed to render each scene.
 pub struct SceneManager {
     device: RenderDevice,
-    descriptor_pool: vk::DescriptorPool,
+    descriptor_allocator: DescriptorAllocator,
 
     scenes: HashMap<WorldId, Scene>,
     entities: HashMap<Entity, WorldId>,
@@ -36,28 +37,14 @@ pub struct SceneManager {
 
 impl SceneManager {
     pub fn init(device: &RenderDevice, size: vk::Extent2D) -> Result<Self> {
-        // MAX_FRAMES_IN_FLIGHT never gets anywhere near u32::MAX
-        #[allow(clippy::cast_possible_truncation)]
-        let pool_sizes = [
-            vk::DescriptorPoolSize {
-                ty: vk::DescriptorType::UNIFORM_BUFFER,
-                // scene UBOs + object UBOs, all × frames in flight
-                descriptor_count: (1 + MAX_RENDERABLES) * MAX_FRAMES_IN_FLIGHT as u32,
-            },
-            vk::DescriptorPoolSize {
-                ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-                // rough upper bound on material textures
-                descriptor_count: MAX_RENDERABLES * MAX_FRAMES_IN_FLIGHT as u32,
-            },
-        ];
-
-        // MAX_FRAMES_IN_FLIGHT never gets anywhere near u32::MAX
-        #[allow(clippy::cast_possible_truncation)]
-        let pool_info = vk::DescriptorPoolCreateInfo::default()
-            .pool_sizes(&pool_sizes)
-            .max_sets((1 + MAX_RENDERABLES * 2) * MAX_FRAMES_IN_FLIGHT as u32);
-
-        let descriptor_pool = unsafe { device.device.create_descriptor_pool(&pool_info, None)? };
+        let descriptor_allocator = DescriptorAllocator::new(
+            device,
+            &[DescriptorPoolSize::new(
+                vk::DescriptorType::UNIFORM_BUFFER,
+                1,
+            )],
+            BASE_DESCRIPTOR_POOL_SIZE,
+        )?;
 
         // TEMP
         let color_info = ImageCreateInfo {
@@ -89,7 +76,7 @@ impl SceneManager {
 
         Ok(Self {
             device: device.clone(),
-            descriptor_pool,
+            descriptor_allocator,
             entities: HashMap::new(),
             scenes: HashMap::new(),
             proxies: HashMap::new(),
@@ -264,8 +251,6 @@ impl Drop for SceneManager {
         self.scenes.clear();
         self.entities.clear();
         self.proxies.clear();
-        self.device
-            .destroy(Garbage::DescriptorPool(self.descriptor_pool));
     }
 }
 
@@ -289,57 +274,29 @@ struct Scene {
     entities: HashSet<Entity>,
 
     ubo: [UniformBuffer; MAX_FRAMES_IN_FLIGHT],
-    descriptor_sets: [vk::DescriptorSet; MAX_FRAMES_IN_FLIGHT],
+    descriptor_sets: [DescriptorSet; MAX_FRAMES_IN_FLIGHT],
 }
 
 impl Scene {
     /// Builds a [Scene].
     /// Constructs the renderer stuff like command pools, descriptor sets, ... from
     /// the [Renderer].
-    pub fn build(manager: &SceneManager) -> Result<Self> {
+    pub fn build(manager: &mut SceneManager) -> Result<Self> {
         // Allocate scene-level sets (one per frame)
-        let layouts = [manager.device.layouts.scene; MAX_FRAMES_IN_FLIGHT];
-        let alloc_info = vk::DescriptorSetAllocateInfo::default()
-            .descriptor_pool(manager.descriptor_pool)
-            .set_layouts(&layouts);
-
-        let scene_desc_sets: [vk::DescriptorSet; MAX_FRAMES_IN_FLIGHT] = unsafe {
-            manager
-                .device
-                .device
-                .allocate_descriptor_sets(&alloc_info)?
-                .try_into()
-                .expect("should be able to convert desc_sets to array")
-        };
+        let scene_desc_sets = manager
+            .descriptor_allocator
+            .allocate_array::<MAX_FRAMES_IN_FLIGHT>(manager.device.layouts.scene)?;
 
         let ubo_size = size_of::<SceneUbo>() as u64;
         let build_ubo =
             || UniformBuffer::create(&manager.device, ubo_size, MemoryLocation::CpuToGpu);
         let ubo = [build_ubo()?, build_ubo()?];
 
-        let buffer_infos: [vk::DescriptorBufferInfo; MAX_FRAMES_IN_FLIGHT] =
-            std::array::from_fn(|i| {
-                vk::DescriptorBufferInfo::default()
-                    .buffer(ubo[i].buffer())
-                    .range(size_of::<SceneUbo>() as u64)
-                    .offset(0)
-            });
-
-        let descriptor_writes: [vk::WriteDescriptorSet; MAX_FRAMES_IN_FLIGHT] =
-            std::array::from_fn(|i| {
-                vk::WriteDescriptorSet::default()
-                    .dst_set(scene_desc_sets[i])
-                    .dst_binding(0)
-                    .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
-                    .buffer_info(std::slice::from_ref(&buffer_infos[i]))
-            });
-
-        unsafe {
+        for (set, ubo) in scene_desc_sets.iter().zip(&ubo) {
             manager
-                .device
-                .device
-                .update_descriptor_sets(&descriptor_writes, &[]);
-        };
+                .descriptor_allocator
+                .write_uniform_buffer(*set, 0, ubo.buffer(), ubo_size);
+        }
 
         Ok(Self {
             entities: HashSet::new(),
@@ -361,53 +318,25 @@ pub struct SceneProxy {
 
     // Per frame render stuff
     ubo: [UniformBuffer; MAX_FRAMES_IN_FLIGHT],
-    sets: [vk::DescriptorSet; MAX_FRAMES_IN_FLIGHT],
+    sets: [DescriptorSet; MAX_FRAMES_IN_FLIGHT],
 }
 
 impl SceneProxy {
-    pub fn build(manager: &SceneManager) -> Result<Self> {
+    pub fn build(manager: &mut SceneManager) -> Result<Self> {
         let size = size_of::<ProxyUbo>() as u64;
         let build_ubo = || UniformBuffer::create(&manager.device, size, MemoryLocation::CpuToGpu);
         let ubo = [build_ubo()?, build_ubo()?];
 
         // Allocate scene-level sets (one per frame)
-        let layouts = [manager.device.layouts.object; MAX_FRAMES_IN_FLIGHT];
-        let alloc_info = vk::DescriptorSetAllocateInfo::default()
-            .descriptor_pool(manager.descriptor_pool)
-            .set_layouts(&layouts);
+        let sets = manager
+            .descriptor_allocator
+            .allocate_array::<MAX_FRAMES_IN_FLIGHT>(manager.device.layouts.object)?;
 
-        let sets: [vk::DescriptorSet; MAX_FRAMES_IN_FLIGHT] = unsafe {
+        for (set, ubo) in sets.iter().zip(&ubo) {
             manager
-                .device
-                .device
-                .allocate_descriptor_sets(&alloc_info)?
-                .try_into()
-                .expect("vec should be MAX_FRAMES_IN_FLIGHT large so Into shouldn't fail")
-        };
-
-        let buffer_infos: [vk::DescriptorBufferInfo; MAX_FRAMES_IN_FLIGHT] =
-            std::array::from_fn(|i| {
-                vk::DescriptorBufferInfo::default()
-                    .buffer(ubo[i].buffer())
-                    .range(size)
-                    .offset(0)
-            });
-
-        let descriptor_writes: [vk::WriteDescriptorSet; MAX_FRAMES_IN_FLIGHT] =
-            std::array::from_fn(|i| {
-                vk::WriteDescriptorSet::default()
-                    .dst_set(sets[i])
-                    .dst_binding(1)
-                    .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
-                    .buffer_info(std::slice::from_ref(&buffer_infos[i]))
-            });
-
-        unsafe {
-            manager
-                .device
-                .device
-                .update_descriptor_sets(&descriptor_writes, &[]);
-        };
+                .descriptor_allocator
+                .write_uniform_buffer(*set, 1, ubo.buffer(), size);
+        }
 
         Ok(Self {
             model: None,

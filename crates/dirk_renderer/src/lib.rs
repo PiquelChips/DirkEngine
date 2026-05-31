@@ -31,7 +31,8 @@ use dirk_universe::{Universe, UniverseBuilder};
 
 mod utils;
 use dirk_utils::Version;
-use utils::{DescriptorLayouts, Frame, RendererProperties, Vertex, make_version};
+use resources::descriptors::DescriptorLayouts;
+use utils::{Frame, RendererProperties, Vertex, make_version};
 
 mod errors;
 pub use errors::{Error, Result};
@@ -60,11 +61,7 @@ mod physical_device;
 mod pipeline;
 mod render_pass;
 
-/// The maximum numer of renderables in a scene.
-/// Used to construct Ubo samples.
-/// TODO: find a way to set this limit dynamically or have a error when the limit is reached.
-const MAX_RENDERABLES: u32 = 100;
-
+const BASE_DESCRIPTOR_POOL_SIZE: u32 = 64;
 const MAX_FRAMES_IN_FLIGHT: usize = 2;
 const DEVICE_EXTENSIONS: &[&str] =
     &[unsafe { std::str::from_utf8_unchecked(swapchain::NAME.to_bytes()) }];

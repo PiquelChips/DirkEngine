@@ -53,6 +53,9 @@ pub enum Error {
     /// The Vulkan surface is suboptimal
     #[error("suboptimal surface")]
     SuboptimalSurface,
+    /// The requested descriptor set allocation is too large for Vulkan.
+    #[error("descriptor set allocation count {0} exceeds u32::MAX")]
+    DescriptorSetCountTooLarge(usize),
 
     /// If there is no camera in the scene
     #[error("camera {0:?} does not exist")]

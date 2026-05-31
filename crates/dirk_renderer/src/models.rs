@@ -11,10 +11,11 @@ use std::{collections::HashMap, marker::PhantomData, ops::Deref};
 use ash::vk;
 
 use crate::{
-    Result,
+    BASE_DESCRIPTOR_POOL_SIZE, Result,
     resources::{
         buffer::{IndexBuffer, VertexBuffer},
         command_pool::CommandBuffer,
+        descriptors::{DescriptorAllocator, DescriptorPoolSize, DescriptorSet},
         device::{Garbage, RenderDevice},
         image::Image,
     },
@@ -76,7 +77,7 @@ struct Mesh {
 struct Material {
     #[allow(unused)]
     pub base_color: Handle<Texture>,
-    pub descriptor_set: vk::DescriptorSet,
+    pub descriptor_set: DescriptorSet,
 }
 
 struct Model {
@@ -92,28 +93,22 @@ pub struct ModelRegistry {
     materials: slotmap::SlotMap<slotmap::DefaultKey, Material>,
     models: HashMap<dirk_assets::AssetHandle, Model>,
 
-    material_pool: vk::DescriptorPool,
+    material_descriptors: DescriptorAllocator,
 
     asset_load_consumer: dirk_events::Consumer<::dirk_assets::AssetLoaded<::dirk_assets::Model>>,
     asset_unload_consumer: dirk_events::Consumer<::dirk_assets::AssetUnloaded>,
 }
 
-/// TODO: descriptor pool
-const MAX_MATERIAL_DESCRIPTOR_SET: u32 = 256;
-
 impl ModelRegistry {
     pub fn new(device: &RenderDevice, events: &dirk_events::EventManager) -> Result<Self> {
-        let material_pool = {
-            let pool_size = vk::DescriptorPoolSize {
-                ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-                descriptor_count: MAX_MATERIAL_DESCRIPTOR_SET,
-            };
-            let pool_info = vk::DescriptorPoolCreateInfo::default()
-                .pool_sizes(std::slice::from_ref(&pool_size))
-                .max_sets(MAX_MATERIAL_DESCRIPTOR_SET);
-
-            unsafe { device.device.create_descriptor_pool(&pool_info, None)? }
-        };
+        let material_descriptors = DescriptorAllocator::new(
+            device,
+            &[DescriptorPoolSize::new(
+                vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+                1,
+            )],
+            BASE_DESCRIPTOR_POOL_SIZE,
+        )?;
 
         Ok(Self {
             device: device.clone(),
@@ -121,7 +116,7 @@ impl ModelRegistry {
             meshes: slotmap::SlotMap::new(),
             materials: slotmap::SlotMap::new(),
             models: HashMap::new(),
-            material_pool,
+            material_descriptors,
 
             asset_load_consumer: events.subscribe(),
             asset_unload_consumer: events.subscribe(),
@@ -143,11 +138,15 @@ impl ModelRegistry {
         &self,
         handle: &dirk_assets::AssetHandle,
         cmd: &CommandBuffer,
-        scene_set: vk::DescriptorSet,
-        proxy_set: vk::DescriptorSet,
+        scene_set: DescriptorSet,
+        proxy_set: DescriptorSet,
         pipeline_layout: vk::PipelineLayout,
     ) -> dirk_assets::Result<()> {
-        let mut descriptor_sets = [scene_set, proxy_set, vk::DescriptorSet::null()];
+        let mut descriptor_sets = [
+            scene_set.raw(),
+            proxy_set.raw(),
+            DescriptorSet::null().raw(),
+        ];
 
         if handle.asset_type() != dirk_assets::AssetType::Model {
             return Err(dirk_assets::Error::TypeMismatch(handle.to_string()));
@@ -167,7 +166,7 @@ impl ModelRegistry {
             let mat_set = prim
                 .material_handle
                 .map_or(vk::DescriptorSet::null(), |mat| {
-                    self.materials[*mat].descriptor_set
+                    self.materials[*mat].descriptor_set.raw()
                 });
 
             descriptor_sets[2] = mat_set;
@@ -225,19 +224,9 @@ impl ModelRegistry {
         texture_refs: &[Handle<Texture>],
     ) -> Result<Vec<Handle<Material>>> {
         let material_count = materials.len();
-        // Allocate one set per material
-        let layouts: Vec<vk::DescriptorSetLayout> =
-            vec![self.device.layouts.material; material_count];
-
-        let material_sets: Vec<vk::DescriptorSet> = if material_count > 0 {
-            let alloc_info = vk::DescriptorSetAllocateInfo::default()
-                .descriptor_pool(self.material_pool)
-                .set_layouts(&layouts);
-
-            unsafe { self.device.device.allocate_descriptor_sets(&alloc_info)? }
-        } else {
-            Vec::new()
-        };
+        let material_sets = self
+            .material_descriptors
+            .allocate_many(self.device.layouts.material, material_count)?;
 
         Ok(materials
             .into_iter()
@@ -250,18 +239,12 @@ impl ModelRegistry {
 
                 let tex_handle = texture_refs[tex];
                 let tex = &self.textures[*tex_handle];
-                let image_info = vk::DescriptorImageInfo::default()
-                    .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                    .image_view(tex.image.view())
-                    .sampler(tex.sampler);
-
-                let write = vk::WriteDescriptorSet::default()
-                    .dst_set(material_sets[i])
-                    .dst_binding(2) // matches layouts.material
-                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                    .image_info(std::slice::from_ref(&image_info));
-
-                unsafe { self.device.device.update_descriptor_sets(&[write], &[]) };
+                self.material_descriptors.write_combined_image_sampler(
+                    material_sets[i],
+                    2, // matches layouts.material
+                    tex.image.view(),
+                    tex.sampler,
+                );
                 Handle::new(self.materials.insert(Material {
                     base_color: tex_handle,
                     descriptor_set: material_sets[i],
@@ -325,10 +308,5 @@ impl Drop for ModelRegistry {
         self.meshes.clear();
         self.materials.clear();
         self.models.clear();
-        unsafe {
-            self.device
-                .device
-                .destroy_descriptor_pool(self.material_pool, None);
-        };
     }
 }
