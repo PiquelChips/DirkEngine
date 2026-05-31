@@ -685,10 +685,12 @@ impl<'a> GraphExecutor<'a> {
                             .dst_access_mask(b.dst_access)
                             .old_layout(b.old_layout)
                             .new_layout(b.new_layout)
-                            .subresource_range(subresource_range_for(b.new_layout))
                             .image(self.images[b.handle.index()].image)
                             .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
                             .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                            .subresource_range(subresource_range_for(
+                                self.images[b.handle.index()].aspect_flags,
+                            ))
                     })
                     .collect();
 
@@ -776,10 +778,12 @@ impl<'a> GraphExecutor<'a> {
                         .dst_access_mask(b.dst_access)
                         .old_layout(b.old_layout)
                         .new_layout(b.new_layout)
-                        .subresource_range(subresource_range_for(b.new_layout))
                         .image(self.images[b.handle.index()].image)
                         .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
                         .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                        .subresource_range(subresource_range_for(
+                            self.images[b.handle.index()].aspect_flags,
+                        ))
                 })
                 .collect();
 
@@ -793,15 +797,7 @@ impl<'a> GraphExecutor<'a> {
 }
 
 /// Build an `ImageSubresourceRange` that covers the whole image.
-/// The aspect is inferred from the destination layout.
-fn subresource_range_for(layout: vk::ImageLayout) -> vk::ImageSubresourceRange {
-    let aspect = match layout {
-        vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL
-        | vk::ImageLayout::DEPTH_READ_ONLY_OPTIMAL
-        | vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-        | vk::ImageLayout::DEPTH_STENCIL_READ_ONLY_OPTIMAL => vk::ImageAspectFlags::DEPTH,
-        _ => vk::ImageAspectFlags::COLOR,
-    };
+fn subresource_range_for(aspect: vk::ImageAspectFlags) -> vk::ImageSubresourceRange {
     vk::ImageSubresourceRange {
         aspect_mask: aspect,
         base_mip_level: 0,
