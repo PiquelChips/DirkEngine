@@ -189,7 +189,7 @@ mod tests {
     fn opposing_axis_bindings_cancel_out() {
         let mut input = InputSnapshot::default();
         input.press(InputBinding::MouseButton(MouseButton::Right));
-        input.press(InputBinding::Key(KeyCode::KeyA));
+        input.press(InputBinding::Key(KeyCode::KeyQ));
         input.press(InputBinding::Key(KeyCode::KeyD));
         input.press(InputBinding::Key(KeyCode::KeyC));
 
