@@ -8,7 +8,6 @@ use crate::{
     Error, MAX_FRAMES_IN_FLIGHT, Result,
     models::ModelRegistry,
     pipeline::GraphicsPipeline,
-    render_pass::RenderPass,
     resources::{
         buffer::UniformBuffer,
         command_pool::CommandBuffer,
@@ -60,7 +59,6 @@ impl SceneManager {
         cmd: &CommandBuffer,
         world: WorldId,
         size: vk::Extent2D,
-        view: vk::ImageView,
         camera: Entity,
     ) -> Result<()> {
         let frame = self.device.current_frame();
@@ -108,7 +106,6 @@ impl SceneManager {
             proxy.write_ubo(frame);
         }
 
-        RenderPass::begin(cmd, size, view, &self.color, &self.depth);
         self.graphics_pipeline.bind(cmd);
 
         // the window size never gets anywhere near 2^23
@@ -142,7 +139,6 @@ impl SceneManager {
             }
         }
 
-        RenderPass::end(cmd);
         Ok(())
     }
     pub fn create_scene(&mut self, world: WorldId) -> Result<()> {
