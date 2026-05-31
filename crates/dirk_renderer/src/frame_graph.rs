@@ -6,7 +6,7 @@
 //!
 //! Design sketch
 //! ─────────────
-//! The graph is built in three phases, mirroring the Frostbite FrameGraph talk
+//! The graph is built in three phases, mirroring the Frostbite `FrameGraph` talk
 //! and Arntzen's blog post:
 //!
 //!  1. **Setup**   – declare virtual texture resources and register passes with
@@ -24,8 +24,8 @@
 //! - Automatic culling of unreferenced passes
 //! - Semaphore / timeline synchronisation across frames
 //!
-//! Requires: ash 0.38, Vulkan 1.3 (VK_KHR_dynamic_rendering promoted to core,
-//!           VK_KHR_synchronization2 promoted to core).
+//! Requires: ash 0.38, Vulkan 1.3 (`VK_KHR_dynamic_rendering` promoted to core,
+//!           `VK_KHR_synchronization2` promoted to core).
 
 #![allow(unused)]
 
@@ -163,7 +163,7 @@ pub struct PassBuilder<'a> {
     pass: &'a mut PassNode,
 }
 
-impl<'a> PassBuilder<'a> {
+impl PassBuilder<'_> {
     /// Declare `handle` as a colour attachment written by this pass.
     pub fn write_color_attachment(
         &mut self,
@@ -373,8 +373,7 @@ fn compile_graph(graph: RenderGraph) -> CompiledGraph {
             layout: desc
                 .imported
                 .as_ref()
-                .map(|i| i.initial_layout)
-                .unwrap_or(vk::ImageLayout::UNDEFINED),
+                .map_or(vk::ImageLayout::UNDEFINED, |i| i.initial_layout),
             stage: vk::PipelineStageFlags2::TOP_OF_PIPE,
             access: vk::AccessFlags2::empty(),
         })
@@ -560,7 +559,7 @@ impl GraphExecutor {
                     location: gpu_allocator::MemoryLocation::GpuOnly,
                     mip_levels: 1,
                     num_samples: desc.samples,
-                    aspect_flags: aspect_flags,
+                    aspect_flags,
                 };
                 let image = Image::create_image(device, &info)?;
 

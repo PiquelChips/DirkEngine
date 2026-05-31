@@ -291,7 +291,7 @@ impl CommandBuffer {
     pub fn pipeline_barrier2(&self, dependency_info: &vk::DependencyInfo<'_>) {
         unsafe {
             self.device
-                .cmd_pipeline_barrier2(self.buff, dependency_info)
+                .cmd_pipeline_barrier2(self.buff, dependency_info);
         };
     }
 
