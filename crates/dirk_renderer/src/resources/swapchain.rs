@@ -4,10 +4,7 @@ use ash::vk;
 
 use crate::{
     Error, Result,
-    resources::{
-        device::{Garbage, RenderDevice},
-        image::Image,
-    },
+    resources::device::{Garbage, RenderDevice},
 };
 
 /// An acquired image from a [`Swapchain`].

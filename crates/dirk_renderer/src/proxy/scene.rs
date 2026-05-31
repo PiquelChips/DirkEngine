@@ -16,7 +16,6 @@ use crate::{
             DescriptorAllocator, DescriptorSet, DescriptorWriter, ObjectLayout, SceneLayout,
         },
         device::RenderDevice,
-        image::{Image, ImageCreateInfo},
     },
 };
 
@@ -29,10 +28,8 @@ pub struct SceneManager {
     entities: HashMap<Entity, WorldId>,
     proxies: HashMap<Entity, SceneProxy>,
 
-    // TODO: these need to be removed
-    color: Image,
-    depth: Image,
-    // render graph should fix this
+    // TODO: see about centralising the different pipelines (link with
+    // descriptor layouts, ...)
     graphics_pipeline: GraphicsPipeline,
 
     scene_alloc: DescriptorAllocator<SceneLayout>,
@@ -40,35 +37,10 @@ pub struct SceneManager {
 }
 
 impl SceneManager {
-    pub fn init(device: &RenderDevice, size: vk::Extent2D) -> Result<Self> {
+    pub fn init(device: &RenderDevice) -> Result<Self> {
         let scene_alloc = DescriptorAllocator::<SceneLayout>::new(device, 16)?;
         let proxy_alloc = DescriptorAllocator::<ObjectLayout>::new(device, 256)?;
 
-        // TEMP
-        let color_info = ImageCreateInfo {
-            size,
-            format: device.properties.surface_format.format,
-            tiling: vk::ImageTiling::OPTIMAL,
-            usage: vk::ImageUsageFlags::TRANSIENT_ATTACHMENT
-                | vk::ImageUsageFlags::COLOR_ATTACHMENT,
-            location: MemoryLocation::GpuOnly,
-            mip_levels: 1,
-            num_samples: device.properties.msaa_samples,
-            aspect_flags: vk::ImageAspectFlags::COLOR,
-        };
-        let color = Image::create_image(device, &color_info)?;
-
-        let depth_info = ImageCreateInfo {
-            size,
-            format: device.properties.depth_format,
-            tiling: vk::ImageTiling::OPTIMAL,
-            usage: vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
-            location: MemoryLocation::GpuOnly,
-            mip_levels: 1,
-            num_samples: device.properties.msaa_samples,
-            aspect_flags: vk::ImageAspectFlags::DEPTH,
-        };
-        let depth = Image::create_image(device, &depth_info)?;
         let graphics_pipeline =
             GraphicsPipeline::build(device, &device.layouts, &device.properties)?;
 
@@ -77,8 +49,6 @@ impl SceneManager {
             entities: HashMap::new(),
             scenes: HashMap::new(),
             proxies: HashMap::new(),
-            color,
-            depth,
             graphics_pipeline,
             scene_alloc,
             proxy_alloc,

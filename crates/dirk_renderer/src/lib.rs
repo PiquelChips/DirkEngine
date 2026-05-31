@@ -176,19 +176,10 @@ impl Renderer {
             debug_messenger,
         )?;
 
-        // TODO: should be removed with frame graph
-        let extent = {
-            let size = window.size();
-            vk::Extent2D {
-                width: size.width,
-                height: size.height,
-            }
-        };
-
         let frames = Self::build_frames(&device, &render_device)?;
 
         let models = models::ModelRegistry::new(&render_device, event_manager)?;
-        let scene_manager = SceneManager::init(&render_device, extent)?;
+        let scene_manager = SceneManager::init(&render_device)?;
 
         let windows = {
             let window = Window::build(&render_device, window)?;
