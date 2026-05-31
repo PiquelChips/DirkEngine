@@ -255,6 +255,30 @@ impl<'a> PassBuilder<'_, 'a> {
         self
     }
 
+    /// Declare `handle` as a transfer source.
+    pub fn read_transfer_src(&mut self, handle: TextureHandle) -> &mut Self {
+        self.pass.reads.push(TextureUsage {
+            handle,
+            layout: vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+            stage: vk::PipelineStageFlags2::TRANSFER,
+            access: vk::AccessFlags2::TRANSFER_READ,
+            attachment: None,
+        });
+        self
+    }
+
+    /// Declare `handle` as a transfer destination.
+    pub fn write_transfer_dst(&mut self, handle: TextureHandle) -> &mut Self {
+        self.pass.writes.push(TextureUsage {
+            handle,
+            layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            stage: vk::PipelineStageFlags2::TRANSFER,
+            access: vk::AccessFlags2::TRANSFER_WRITE,
+            attachment: None,
+        });
+        self
+    }
+
     /// Provide the command-recording callback for this pass.
     pub fn execute(&mut self, callback: PassCallback<'a>) {
         self.pass.callback = Some(callback);
