@@ -178,8 +178,13 @@ impl PlayerManager {
                 input: InputContext::new(),
             },
         );
-        self.input_state.set_movement(id, glam::Vec3::ZERO);
-        self.input_state.set_look(id, glam::DVec2::ZERO);
+        self.input_state.set(
+            id,
+            PlayerInputFrame {
+                movement: glam::Vec3::ZERO,
+                look: glam::DVec2::ZERO,
+            },
+        );
         self.spawned_dispatcher
             .dispatch(PlayerSpawned { id, window });
         id
@@ -225,10 +230,13 @@ impl PlayerManager {
                 .for_each(|p| p.input.handle_event(&event));
         }
         for player in self.players.values() {
-            self.input_state
-                .set_movement(player.id, player.movement_input());
-            self.input_state
-                .set_look(player.id, player.input.look_input());
+            self.input_state.set(
+                player.id,
+                PlayerInputFrame {
+                    movement: player.movement_input(),
+                    look: player.input.look_input(),
+                },
+            );
         }
         for player in self.players.values_mut() {
             player.input.clear_frame_state();
@@ -245,38 +253,28 @@ impl PlayerManager {
 /// Shared per-player input values consumed by universe systems.
 #[derive(Clone, Default)]
 pub struct PlayerInputState {
-    // TODO: see about slotmap or generational arena?
-    movement: Arc<RwLock<HashMap<PlayerId, glam::Vec3>>>,
-    look: Arc<RwLock<HashMap<PlayerId, glam::DVec2>>>,
+    frames: Arc<RwLock<HashMap<PlayerId, PlayerInputFrame>>>,
+}
+
+/// Per-frame input values for one player.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct PlayerInputFrame {
+    /// Movement intent in local player space.
+    pub movement: glam::Vec3,
+    /// Pointer-look delta in physical pixels.
+    pub look: glam::DVec2,
 }
 
 impl PlayerInputState {
-    pub(crate) fn movement(&self, player: PlayerId) -> glam::Vec3 {
-        self.movement
-            .read()
-            .get(&player)
-            .copied()
-            .unwrap_or(glam::Vec3::ZERO)
+    pub(crate) fn get(&self, player: PlayerId) -> PlayerInputFrame {
+        self.frames.read().get(&player).copied().unwrap_or_default()
     }
 
-    pub(crate) fn look(&self, player: PlayerId) -> glam::DVec2 {
-        self.look
-            .read()
-            .get(&player)
-            .copied()
-            .unwrap_or(glam::DVec2::ZERO)
-    }
-
-    fn set_movement(&self, player: PlayerId, movement: glam::Vec3) {
-        self.movement.write().insert(player, movement);
-    }
-
-    fn set_look(&self, player: PlayerId, look: glam::DVec2) {
-        self.look.write().insert(player, look);
+    fn set(&self, player: PlayerId, frame: PlayerInputFrame) {
+        self.frames.write().insert(player, frame);
     }
 
     fn remove_player(&self, player: PlayerId) {
-        self.movement.write().remove(&player);
-        self.look.write().remove(&player);
+        self.frames.write().remove(&player);
     }
 }

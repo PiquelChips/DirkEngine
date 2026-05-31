@@ -74,46 +74,54 @@ impl PlatformHandler {
         self.windows.clear();
         debug!("Closed {count} window(s) during platform shutdown");
     }
-}
 
-impl ApplicationHandler for PlatformHandler {
-    fn can_create_surfaces(&mut self, event_loop: &dyn ActiveEventLoop) {
-        let id = self
-            .create_window(event_loop)
-            .expect("failed to create main window");
-        self.main_window = Some(id);
-        self.can_create_surfaces = true;
-    }
-
-    fn window_event(&mut self, _loop: &dyn ActiveEventLoop, id: WindowId, event: WindowEvent) {
+    fn dispatch_platform_event(&mut self, id: WindowId, event: &WindowEvent) -> bool {
         match event {
             WindowEvent::CloseRequested => {
                 debug!("Close requested for Window={id:?}");
                 self.windows.remove(&id);
-                self.platform_dispatcher.dispatch(PlatformEvent::WindowCloseRequested { id });
+                self.platform_dispatcher
+                    .dispatch(PlatformEvent::WindowCloseRequested { id });
             }
             WindowEvent::Destroyed => {
                 debug!("Window {id:?} destroyed");
-                self.platform_dispatcher.dispatch(PlatformEvent::WindowDestroyed { id });
+                self.platform_dispatcher
+                    .dispatch(PlatformEvent::WindowDestroyed { id });
             }
             WindowEvent::SurfaceResized(size) => {
-                self.window_dispatcher.dispatch(PlatformWindowEvent::Resized {
-                    id,
-                    width: size.width,
-                    height: size.height,
-                });
+                self.window_dispatcher
+                    .dispatch(PlatformWindowEvent::Resized {
+                        id,
+                        width: size.width,
+                        height: size.height,
+                    });
             }
             WindowEvent::ThemeChanged(theme) => {
-                self.window_dispatcher.dispatch(PlatformWindowEvent::ThemeChanged { id, theme });
+                self.window_dispatcher
+                    .dispatch(PlatformWindowEvent::ThemeChanged { id, theme: *theme });
             }
             WindowEvent::Focused(focused) => {
-                self.window_dispatcher.dispatch(PlatformWindowEvent::FocusChanged { id, focused });
+                self.window_dispatcher
+                    .dispatch(PlatformWindowEvent::FocusChanged {
+                        id,
+                        focused: *focused,
+                    });
             }
             WindowEvent::Occluded(occluded) => {
-                self.window_dispatcher.dispatch(PlatformWindowEvent::Occluded { id, occluded });
+                self.window_dispatcher
+                    .dispatch(PlatformWindowEvent::Occluded {
+                        id,
+                        occluded: *occluded,
+                    });
             }
+            _ => return false,
+        }
 
-            // ── Input: keyboard ───────────────────────────────────────────────
+        true
+    }
+
+    fn dispatch_input_event(&mut self, id: WindowId, event: &WindowEvent) -> bool {
+        match event {
             WindowEvent::ModifiersChanged(new_modifiers) => {
                 self.modifiers = new_modifiers.state();
                 trace!("Modifiers changed to {:?}", self.modifiers);
@@ -126,44 +134,18 @@ impl ApplicationHandler for PlatformHandler {
                 event,
                 is_synthetic: false,
                 ..
-            } => {
-                let modifiers = self.modifiers;
-                match event.state {
-                    ElementState::Pressed => {
-                        trace!(
-                            "Key pressed: {:?} (repeat={})",
-                            event.logical_key,
-                            event.repeat
-                        );
-                        self.input_dispatch.dispatch(InputEvent::KeyPressed {
-                            id,
-                            key: event.logical_key,
-                            physical_key: event.physical_key,
-                            modifiers,
-                            repeat: event.repeat,
-                        });
-                    }
-                    ElementState::Released => {
-                        trace!("Key released: {:?}", event.logical_key);
-                        self.input_dispatch.dispatch(InputEvent::KeyReleased {
-                            id,
-                            key: event.logical_key,
-                            physical_key: event.physical_key,
-                            modifiers,
-                        });
-                    }
-                }
-            }
-
-            // ── Input: pointer ────────────────────────────────────────────────
+            } => self.dispatch_keyboard_input(id, event),
             WindowEvent::PointerMoved { position, .. } => {
                 trace!("Pointer moved to {position:?}");
-                self.input_dispatch
-                    .dispatch(InputEvent::PointerMoved { id, position: glam::dvec2(position.x, position.y) });
+                self.input_dispatch.dispatch(InputEvent::PointerMoved {
+                    id,
+                    position: glam::dvec2(position.x, position.y),
+                });
             }
             WindowEvent::PointerEntered { .. } => {
                 trace!("Pointer entered Window={id:?}");
-                self.input_dispatch.dispatch(InputEvent::PointerEntered { id });
+                self.input_dispatch
+                    .dispatch(InputEvent::PointerEntered { id });
             }
             WindowEvent::PointerLeft { .. } => {
                 trace!("Pointer left Window={id:?}");
@@ -176,49 +158,77 @@ impl ApplicationHandler for PlatformHandler {
                 ..
             } => {
                 trace!("Pointer button {button:?} {state:?} at {position:?}");
-                match state {
-                    ElementState::Pressed => {
-                        self.input_dispatch.dispatch(InputEvent::MouseButtonPressed {
-                            id,
-                            button,
-                            position: glam::dvec2(position.x, position.y),
-                        });
-                    }
-                    ElementState::Released => {
-                        self.input_dispatch.dispatch(InputEvent::MouseButtonReleased {
-                            id,
-                            button,
-                            position: glam::dvec2(position.x, position.y),
-                        });
-                    }
-                }
+                let position = glam::dvec2(position.x, position.y);
+                let event = match state {
+                    ElementState::Pressed => InputEvent::MouseButtonPressed {
+                        id,
+                        button: button.clone(),
+                        position,
+                    },
+                    ElementState::Released => InputEvent::MouseButtonReleased {
+                        id,
+                        button: button.clone(),
+                        position,
+                    },
+                };
+                self.input_dispatch.dispatch(event);
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 trace!("Mouse wheel {delta:?}");
-                self.input_dispatch.dispatch(InputEvent::MouseWheelScrolled {
+                self.input_dispatch
+                    .dispatch(InputEvent::MouseWheelScrolled {
+                        id,
+                        delta: (*delta).into(),
+                    });
+            }
+            _ => return false,
+        }
+
+        true
+    }
+
+    fn dispatch_keyboard_input(&self, id: WindowId, event: &winit::event::KeyEvent) {
+        let modifiers = self.modifiers;
+        match event.state {
+            ElementState::Pressed => {
+                trace!(
+                    "Key pressed: {:?} (repeat={})",
+                    event.logical_key, event.repeat
+                );
+                self.input_dispatch.dispatch(InputEvent::KeyPressed {
                     id,
-                    delta: delta.into(),
+                    key: event.logical_key.clone(),
+                    physical_key: event.physical_key,
+                    modifiers,
+                    repeat: event.repeat,
                 });
             }
-
-            // ── Ignored ───────────────────────────────────────────────────────
-            WindowEvent::PinchGesture { .. }
-            | WindowEvent::RotationGesture { .. }
-            | WindowEvent::PanGesture { .. }
-            | WindowEvent::DoubleTapGesture { .. }
-            | WindowEvent::TouchpadPressure { .. }
-            | WindowEvent::DragLeft { .. }
-            | WindowEvent::KeyboardInput { .. } // synthetic, filtered above
-            | WindowEvent::DragEntered { .. }
-            | WindowEvent::DragMoved { .. }
-            | WindowEvent::DragDropped { .. }
-            | WindowEvent::ScaleFactorChanged { .. }
-            // Drawing is handled by the main engine loop. Redraw requests
-            // are thus ignored.
-            | WindowEvent::RedrawRequested
-            | WindowEvent::ActivationTokenDone { .. }
-            | WindowEvent::Ime(_)
-            | WindowEvent::Moved(_) => {}
+            ElementState::Released => {
+                trace!("Key released: {:?}", event.logical_key);
+                self.input_dispatch.dispatch(InputEvent::KeyReleased {
+                    id,
+                    key: event.logical_key.clone(),
+                    physical_key: event.physical_key,
+                    modifiers,
+                });
+            }
         }
+    }
+}
+
+impl ApplicationHandler for PlatformHandler {
+    fn can_create_surfaces(&mut self, event_loop: &dyn ActiveEventLoop) {
+        let id = self
+            .create_window(event_loop)
+            .expect("failed to create main window");
+        self.main_window = Some(id);
+        self.can_create_surfaces = true;
+    }
+
+    fn window_event(&mut self, _loop: &dyn ActiveEventLoop, id: WindowId, event: WindowEvent) {
+        if self.dispatch_platform_event(id, &event) {
+            return;
+        }
+        self.dispatch_input_event(id, &event);
     }
 }
