@@ -10,7 +10,7 @@ use dirk_universe::{
     components::Component,
     systems::{ComponentSystem, System},
 };
-use glam::{Mat4, Vec3};
+use glam::{Mat4, Quat, Vec3};
 use tracing::warn;
 
 /// Marks an entity as having a renderable mesh.
@@ -98,16 +98,15 @@ impl ComponentSystem for ModelUploadSystem {
 
 /// Spatial transform for an entity: position, orientation, and scale.
 ///
-/// Rotation is stored as **Euler angles in radians** using the **YXZ** convention
-/// (yaw → pitch → roll), which matches a typical first-person camera setup.
+/// Rotation is stored as a unit quaternion.
 ///
 /// # Examples
 /// ```
 /// # use dirk_world::components::Transform;
-/// # use glam::Vec3;
+/// # use glam::{Quat, Vec3};
 /// let t = Transform {
 ///     location: Vec3::new(1.0, 0.0, 0.0),
-///     rotation: Vec3::ZERO,
+///     rotation: Quat::IDENTITY,
 ///     scale:    Vec3::ONE,
 /// };
 /// // The forward vector of an un-rotated transform points along the engine's
@@ -119,9 +118,8 @@ impl ComponentSystem for ModelUploadSystem {
 pub struct Transform {
     /// World-space position.
     pub location: Vec3,
-    /// Euler angles **in radians**, applied in YXZ order (yaw, pitch, roll).
-    /// TODO: move to quat
-    pub rotation: Vec3,
+    /// World-space orientation.
+    pub rotation: Quat,
     /// Per-axis scale factor. `Vec3::ONE` is the identity scale.
     pub scale: Vec3,
 }
@@ -131,37 +129,27 @@ impl Default for Transform {
     fn default() -> Self {
         Self {
             location: Vec3::ZERO,
-            rotation: Vec3::ZERO,
+            rotation: Quat::IDENTITY,
             scale: Vec3::ONE,
         }
     }
 }
 
 impl Transform {
-    /// Builds the full model matrix (`T × S × R`) for this transform.
-    ///
-    /// Rotation is applied in **YXZ** order (yaw around Y, then pitch around X,
-    /// then roll around Z).
+    /// Builds the full model matrix (`T × R × S`) for this transform.
     #[must_use]
     pub fn matrix(&self) -> Mat4 {
         let translation = Mat4::from_translation(self.location);
+        let rotation = Mat4::from_quat(self.rotation);
         let scale = Mat4::from_scale(self.scale);
-        let rot_x = Mat4::from_rotation_x(self.rotation.x);
-        let rot_y = Mat4::from_rotation_y(self.rotation.y);
-        let rot_z = Mat4::from_rotation_z(self.rotation.z);
 
-        translation * scale * rot_y * rot_x * rot_z
+        translation * rotation * scale
     }
 
-    /// Returns the orientation as a unit quaternion (YXZ Euler decomposition).
+    /// Returns the orientation as a unit quaternion.
     #[must_use]
     pub fn rotation_quat(&self) -> glam::Quat {
-        glam::Quat::from_euler(
-            glam::EulerRot::YXZ,
-            self.rotation.y,
-            self.rotation.x,
-            self.rotation.z,
-        )
+        self.rotation
     }
 
     /// Returns the unit vector pointing "forward" from this transform.
@@ -187,10 +175,29 @@ impl Transform {
     /// Returns the movement direction when an `input` is applied to `self`.
     #[must_use]
     pub fn movement_direction(&self, input: glam::Vec3) -> glam::Vec3 {
-        let forward = self.horizontal_forward();
+        let forward = self.forward();
         let right = dirk_utils::UP_DIRECTION.cross(forward).normalize_or_zero();
         ((right * input.x) + (dirk_utils::UP_DIRECTION * input.y) - (forward * input.z))
             .normalize_or_zero()
+    }
+
+    /// Rotates this transform by pointer movement in physical pixels.
+    pub fn rotate_by_pointer_delta(&mut self, delta: glam::DVec2, sensitivity: f32) {
+        if delta == glam::DVec2::ZERO {
+            return;
+        }
+
+        #[allow(clippy::cast_possible_truncation)]
+        let delta = delta.as_vec2();
+        let yaw = Quat::from_axis_angle(dirk_utils::UP_DIRECTION, -delta.x * sensitivity);
+        let yawed = yaw * self.rotation;
+        let right = (yawed * Vec3::X).normalize_or_zero();
+        if right == Vec3::ZERO {
+            return;
+        }
+
+        let pitch = Quat::from_axis_angle(right, -delta.y * sensitivity);
+        self.rotation = (pitch * yawed).normalize();
     }
 
     /// Builds a **left-handed** view matrix for a camera placed at this

@@ -10,6 +10,8 @@ use crate::{PlayerId, PlayerInputState};
 
 /// Default movement speed in world units per second.
 pub const DEFAULT_PLAYER_MOVE_SPEED: f64 = 350.0;
+/// Default pointer-look sensitivity, in radians per physical pixel.
+pub const DEFAULT_PLAYER_LOOK_SENSITIVITY: f32 = 0.0025;
 
 /// Applies player movement input to entities that have a [`PlayerId`] and
 /// [`dirk_world::components::Transform`].
@@ -17,6 +19,7 @@ pub const DEFAULT_PLAYER_MOVE_SPEED: f64 = 350.0;
 pub struct PlayerMovementSystem {
     input_state: PlayerInputState,
     speed: f64,
+    look_sensitivity: f32,
 }
 
 impl PlayerMovementSystem {
@@ -26,39 +29,8 @@ impl PlayerMovementSystem {
         Self {
             input_state,
             speed: DEFAULT_PLAYER_MOVE_SPEED,
+            look_sensitivity: DEFAULT_PLAYER_LOOK_SENSITIVITY,
         }
-    }
-
-    fn update_entity(
-        &self,
-        cmd: &mut CommandBuffer,
-        universe: &Universe,
-        delta_time: f64,
-        entity: Entity,
-    ) {
-        let Some(player) = universe.component::<PlayerId>(entity).copied() else {
-            return;
-        };
-        let input = self.input_state.movement(player);
-        if input == glam::Vec3::ZERO {
-            return;
-        }
-
-        let Some(transform) = universe.component::<dirk_world::components::Transform>(entity)
-        else {
-            return;
-        };
-
-        let mut transform = transform.clone();
-        let movement = transform.movement_direction(input);
-        if movement == glam::Vec3::ZERO {
-            return;
-        }
-
-        #[allow(clippy::cast_possible_truncation)]
-        let distance = (self.speed * delta_time) as f32;
-        transform.location += movement * distance;
-        cmd.set_component(entity, transform);
     }
 }
 
@@ -71,7 +43,35 @@ impl TickingSystem for PlayerMovementSystem {
         entities: &mut dyn Iterator<Item = Entity>,
     ) {
         for entity in entities {
-            self.update_entity(cmd, universe, delta_time, entity);
+            let Some(player) = universe.component::<PlayerId>(entity).copied() else {
+                return;
+            };
+            let movement_input = self.input_state.movement(player);
+            let look_input = self.input_state.look(player);
+            if movement_input == glam::Vec3::ZERO && look_input == glam::DVec2::ZERO {
+                return;
+            }
+
+            let Some(transform) = universe.component::<dirk_world::components::Transform>(entity)
+            else {
+                return;
+            };
+
+            let mut transform = transform.clone();
+            if look_input != glam::DVec2::ZERO {
+                transform.rotate_by_pointer_delta(look_input, self.look_sensitivity);
+            }
+
+            if movement_input != glam::Vec3::ZERO {
+                let movement = transform.movement_direction(movement_input);
+                if movement != glam::Vec3::ZERO {
+                    #[allow(clippy::cast_possible_truncation)]
+                    let distance = (self.speed * delta_time) as f32;
+                    transform.location += movement * distance;
+                }
+            }
+
+            cmd.set_component(entity, transform);
         }
     }
 

@@ -21,6 +21,8 @@ use dirk_platform::{ButtonSource, InputEvent, KeyCode, MouseButton, PhysicalKey}
 pub struct InputContext {
     snapshot: InputSnapshot,
     movement: MovementBindings,
+    last_pointer_position: Option<glam::DVec2>,
+    pointer_delta: glam::DVec2,
 }
 
 impl InputContext {
@@ -42,27 +44,49 @@ impl InputContext {
                     self.snapshot.release(InputBinding::Key(*key));
                 }
             }
-            InputEvent::MouseButtonPressed { button, .. } => {
+            InputEvent::MouseButtonPressed {
+                button, position, ..
+            } => {
                 if let ButtonSource::Mouse(button) = button {
                     self.snapshot.press(InputBinding::MouseButton(*button));
+                    self.last_pointer_position = Some(*position);
                 }
             }
-            InputEvent::MouseButtonReleased { button, .. } => {
+            InputEvent::MouseButtonReleased {
+                button, position, ..
+            } => {
                 if let ButtonSource::Mouse(button) = button {
                     self.snapshot.release(InputBinding::MouseButton(*button));
+                    self.last_pointer_position = Some(*position);
                 }
             }
-            InputEvent::ModifiersChanged { .. }
-            | InputEvent::PointerMoved { .. }
-            | InputEvent::PointerEntered { .. }
-            | InputEvent::PointerLeft { .. }
-            | InputEvent::MouseWheelScrolled { .. } => {}
+            InputEvent::PointerMoved { position, .. } => {
+                if let Some(previous) = self.last_pointer_position
+                    && self.movement.gate.is_active(&self.snapshot)
+                {
+                    self.pointer_delta += *position - previous;
+                }
+                self.last_pointer_position = Some(*position);
+            }
+            InputEvent::ModifiersChanged { .. } | InputEvent::MouseWheelScrolled { .. } => {}
+            InputEvent::PointerEntered { .. } | InputEvent::PointerLeft { .. } => {
+                self.last_pointer_position = None;
+            }
         }
     }
 
     #[must_use]
     pub(crate) fn movement_input(&self) -> glam::Vec3 {
         self.movement.value(&self.snapshot)
+    }
+
+    #[must_use]
+    pub(crate) fn look_input(&self) -> glam::DVec2 {
+        self.pointer_delta
+    }
+
+    pub(crate) fn clear_frame_state(&mut self) {
+        self.pointer_delta = glam::DVec2::ZERO;
     }
 }
 

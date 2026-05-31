@@ -18,7 +18,7 @@ mod events;
 pub mod input;
 mod movement;
 pub use events::{PlayerDespawned, PlayerSpawned};
-pub use movement::DEFAULT_PLAYER_MOVE_SPEED;
+pub use movement::{DEFAULT_PLAYER_LOOK_SENSITIVITY, DEFAULT_PLAYER_MOVE_SPEED};
 
 // PlayerId
 
@@ -179,6 +179,7 @@ impl PlayerManager {
             },
         );
         self.input_state.set_movement(id, glam::Vec3::ZERO);
+        self.input_state.set_look(id, glam::DVec2::ZERO);
         self.spawned_dispatcher
             .dispatch(PlayerSpawned { id, window });
         id
@@ -220,12 +221,17 @@ impl PlayerManager {
         for event in events {
             self.players
                 .values_mut()
-                .filter(|p| p.window != *event.id())
+                .filter(|p| p.window == *event.id())
                 .for_each(|p| p.input.handle_event(&event));
         }
         for player in self.players.values() {
             self.input_state
                 .set_movement(player.id, player.movement_input());
+            self.input_state
+                .set_look(player.id, player.input.look_input());
+        }
+        for player in self.players.values_mut() {
+            player.input.clear_frame_state();
         }
     }
 
@@ -241,6 +247,7 @@ impl PlayerManager {
 pub struct PlayerInputState {
     // TODO: see about slotmap or generational arena?
     movement: Arc<RwLock<HashMap<PlayerId, glam::Vec3>>>,
+    look: Arc<RwLock<HashMap<PlayerId, glam::DVec2>>>,
 }
 
 impl PlayerInputState {
@@ -252,11 +259,24 @@ impl PlayerInputState {
             .unwrap_or(glam::Vec3::ZERO)
     }
 
+    pub(crate) fn look(&self, player: PlayerId) -> glam::DVec2 {
+        self.look
+            .read()
+            .get(&player)
+            .copied()
+            .unwrap_or(glam::DVec2::ZERO)
+    }
+
     fn set_movement(&self, player: PlayerId, movement: glam::Vec3) {
         self.movement.write().insert(player, movement);
     }
 
+    fn set_look(&self, player: PlayerId, look: glam::DVec2) {
+        self.look.write().insert(player, look);
+    }
+
     fn remove_player(&self, player: PlayerId) {
         self.movement.write().remove(&player);
+        self.look.write().remove(&player);
     }
 }

@@ -147,7 +147,7 @@ impl Engine {
             Entity::builder().with_component(player).with_component(
                 dirk_world::components::Transform {
                     location: glam::vec3(0.0, 500.0, 500.0),
-                    rotation: glam::vec3(-PI / 4.0, 0.0, 0.0),
+                    rotation: glam::Quat::from_rotation_x(-PI / 4.0),
                     scale: glam::Vec3::ONE,
                 },
             ),
@@ -265,7 +265,7 @@ impl Engine {
         let shrek_builder = Entity::builder()
             .with_component(Transform {
                 location: glam::Vec3::ZERO,
-                rotation: glam::Vec3::ZERO,
+                rotation: glam::Quat::IDENTITY,
                 scale: glam::Vec3::splat(1.),
             })
             .with_component(Renderable::new(shrek_model));
@@ -273,7 +273,7 @@ impl Engine {
         let duck_builder = Entity::builder()
             .with_component(Transform {
                 location: glam::vec3(100., 0., 0.),
-                rotation: glam::Vec3::ZERO,
+                rotation: glam::Quat::IDENTITY,
                 scale: glam::Vec3::splat(1.),
             })
             .with_component(Renderable::new(duck_model));
