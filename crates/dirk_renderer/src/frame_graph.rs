@@ -77,6 +77,16 @@ pub struct ImportedTexture {
     pub final_layout: vk::ImageLayout,
 }
 
+/// Resolved Vulkan handles for a graph texture.
+///
+/// This is what is to create attachments during rendering.
+/// The `image` & `view` are **NOT** owned by this struct.
+pub struct ResolvedImage {
+    pub image: vk::Image,
+    pub view: vk::ImageView,
+    pub aspect_flags: vk::ImageAspectFlags,
+}
+
 /// Aggregates the load/store ops and clear value for a single attachment.
 #[derive(Clone)]
 pub struct AttachmentInfo {
@@ -586,8 +596,9 @@ fn barrier_needed(state: &ResourceState, usage: &TextureUsage) -> bool {
 /// `VMA_MEMORY_USAGE_GPU_ONLY` with aliasing hints from the compiled graph).
 pub struct GraphExecutor<'a> {
     device: RenderDevice,
+    transient_images: Vec<Image>,
     /// One entry per `TextureHandle` index.
-    images: Vec<Image>,
+    images: Vec<ResolvedImage>,
     passes: Vec<CompiledPass<'a>>,
     final_barriers: Vec<ImageBarrier>,
 }
@@ -595,11 +606,16 @@ pub struct GraphExecutor<'a> {
 impl<'a> GraphExecutor<'a> {
     /// Allocate all transient resources and bind imported ones.
     pub fn new(device: &RenderDevice, graph: CompiledGraph<'a>) -> Result<Self> {
+        let mut transient_images = Vec::new();
         let mut images = Vec::with_capacity(graph.textures.len());
 
         for desc in graph.textures {
             if let Some(imported) = desc.imported {
-                images.push(imported.image);
+                images.push(ResolvedImage {
+                    image: imported.image,
+                    view: imported.view,
+                    aspect_flags: imported.aspect_flags,
+                });
             } else {
                 // TODO: transient allocator
                 let aspect_flags = if matches!(
@@ -630,12 +646,18 @@ impl<'a> GraphExecutor<'a> {
                 };
                 let image = Image::create_image(device, &info)?;
 
-                images.push(image);
+                images.push(ResolvedImage {
+                    image: image.image(),
+                    view: image.view(),
+                    aspect_flags,
+                });
+                transient_images.push(image);
             }
         }
 
         Ok(Self {
             device: device.clone(),
+            transient_images,
             images,
             passes: graph.passes,
             final_barriers: graph.final_barriers,
@@ -647,6 +669,8 @@ impl<'a> GraphExecutor<'a> {
     /// `cmd` must be in the recording state and must *not* already be inside
     /// a render pass or dynamic rendering scope.
     pub fn execute(&mut self, cmd: &CommandBuffer) -> Result<()> {
+        debug_assert!(self.transient_images.len() <= self.images.len());
+
         for pass in &mut self.passes {
             // ── Pre-pass barriers ─────────────────────────────────────────────
             if !pass.pre_barriers.is_empty() {
@@ -661,8 +685,10 @@ impl<'a> GraphExecutor<'a> {
                             .dst_access_mask(b.dst_access)
                             .old_layout(b.old_layout)
                             .new_layout(b.new_layout)
-                            .image(self.images[b.handle.0 as usize].image())
                             .subresource_range(subresource_range_for(b.new_layout))
+                            .image(self.images[b.handle.index()].image)
+                            .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                            .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
                     })
                     .collect();
 
@@ -689,7 +715,7 @@ impl<'a> GraphExecutor<'a> {
                     .iter()
                     .map(|att| {
                         let mut info = vk::RenderingAttachmentInfo::default()
-                            .image_view(self.images[att.handle.0 as usize].view())
+                            .image_view(self.images[att.handle.index()].view)
                             .image_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
                             .load_op(att.info.load_op)
                             .store_op(att.info.store_op)
@@ -697,7 +723,7 @@ impl<'a> GraphExecutor<'a> {
                         if let Some(resolve) = att.resolve {
                             info = info
                                 .resolve_mode(vk::ResolveModeFlags::AVERAGE)
-                                .resolve_image_view(self.images[resolve.0 as usize].view())
+                                .resolve_image_view(self.images[resolve.index()].view)
                                 .resolve_image_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
                         }
                         info
@@ -716,7 +742,7 @@ impl<'a> GraphExecutor<'a> {
                 let depth_info_storage;
                 if let Some((h, att)) = &pass.depth_attachment {
                     depth_info_storage = vk::RenderingAttachmentInfo::default()
-                        .image_view(self.images[h.0 as usize].view())
+                        .image_view(self.images[h.index()].view)
                         .image_layout(vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL)
                         .load_op(att.load_op)
                         .store_op(att.store_op)
@@ -750,8 +776,10 @@ impl<'a> GraphExecutor<'a> {
                         .dst_access_mask(b.dst_access)
                         .old_layout(b.old_layout)
                         .new_layout(b.new_layout)
-                        .image(self.images[b.handle.0 as usize].image())
                         .subresource_range(subresource_range_for(b.new_layout))
+                        .image(self.images[b.handle.index()].image)
+                        .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                        .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
                 })
                 .collect();
 
