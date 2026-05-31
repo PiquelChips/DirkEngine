@@ -142,7 +142,7 @@ impl Default for MovementBindings {
             gate: InputAction::new("move_gate", [InputBinding::MouseButton(MouseButton::Right)]),
             right: InputAxis::digital(
                 "move_right",
-                InputAction::new("move_left", [InputBinding::Key(KeyCode::KeyA)]),
+                InputAction::new("move_left", [InputBinding::Key(KeyCode::KeyQ)]),
                 InputAction::new("move_right", [InputBinding::Key(KeyCode::KeyD)]),
             ),
             up: InputAxis::digital(
