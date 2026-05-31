@@ -19,6 +19,8 @@ winit.workspace = true
 
 dirk_events.workspace = true
 
+glam.workspace = true
+
 [build-dependencies]
 dirk_build.workspace = true
 

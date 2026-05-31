@@ -18,13 +18,13 @@ fn builder_creates_worlds_and_initial_entities() {
 
     assert_eq!(universe.alive_count(), 2);
     assert_eq!(
-        universe.world(crate::WorldId::default()).map(|w| w.name()),
+        universe.world(crate::WorldId::default()).map(World::name),
         Some("alpha")
     );
     assert_eq!(
         universe
             .world(crate::WorldId::default() + 1)
-            .map(|w| w.name()),
+            .map(World::name),
         Some("beta")
     );
 }

@@ -191,13 +191,13 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected = "major version must fit in 10 bits")]
     fn test_major_overflow_panics() {
         let _ = Version::new(1024, 0, 0);
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected = "patch version must fit in 12 bits")]
     fn test_patch_overflow_panics() {
         let _ = Version::new(0, 0, 4096);
     }
@@ -264,13 +264,13 @@ mod tests {
 
     #[test]
     fn test_parse_plain() {
-        let v: Version = "1.2.3".parse().unwrap();
+        let v: Version = "1.2.3".parse().expect("valid version should parse");
         assert_eq!((v.major(), v.minor(), v.patch()), (1, 2, 3));
     }
 
     #[test]
     fn test_parse_with_v_prefix() {
-        let v: Version = "v2.0.0".parse().unwrap();
+        let v: Version = "v2.0.0".parse().expect("valid version should parse");
         assert_eq!(v.major(), 2);
     }
 
@@ -284,7 +284,10 @@ mod tests {
     #[test]
     fn test_parse_display_roundtrip() {
         let original = Version::new(3, 14, 42);
-        let roundtripped: Version = original.to_string().parse().unwrap();
+        let roundtripped: Version = original
+            .to_string()
+            .parse()
+            .expect("displayed version should parse");
         assert_eq!(original, roundtripped);
     }
 

@@ -3,13 +3,14 @@ use std::collections::HashMap;
 use tracing::{debug, trace};
 use winit::{
     application::ApplicationHandler,
-    event::WindowEvent,
+    event::{ElementState, WindowEvent},
     event_loop::ActiveEventLoop,
+    keyboard::ModifiersState,
     window::{WindowAttributes, WindowId},
 };
 
 use crate::{
-    Window,
+    InputEvent, Window,
     event::{PlatformEvent, WindowEvent as PlatformWindowEvent},
 };
 
@@ -18,10 +19,16 @@ pub struct PlatformHandler {
     pub windows: HashMap<WindowId, Window>,
     main_window: Option<WindowId>,
 
+    /// Current keyboard modifier state, updated on every `ModifiersChanged` event.
+    /// TODO: should only be tracked by input manager
+    modifiers: ModifiersState,
+
     /// Dispatch [`PlatformEvent`]
     platform_dispatcher: dirk_events::Dispatcher<PlatformEvent>,
     /// Dispatch [`PlatformWindowEvent`]
     window_dispatcher: dirk_events::Dispatcher<PlatformWindowEvent>,
+    /// Dispatch [`InputEvent`]
+    input_dispatch: dirk_events::Dispatcher<InputEvent>,
 }
 
 impl PlatformHandler {
@@ -30,13 +37,14 @@ impl PlatformHandler {
             can_create_surfaces: false,
             windows: HashMap::new(),
             main_window: None,
+            modifiers: ModifiersState::default(),
             platform_dispatcher: events.register(),
             window_dispatcher: events.register(),
+            input_dispatch: events.register(),
         }
     }
     fn create_window(&mut self, event_loop: &dyn ActiveEventLoop) -> anyhow::Result<WindowId> {
-        #[allow(unused_mut)]
-        let mut window_attributes = WindowAttributes::default()
+        let window_attributes = WindowAttributes::default()
             .with_title("DirkEngine")
             .with_transparent(true);
 
@@ -66,6 +74,146 @@ impl PlatformHandler {
         self.windows.clear();
         debug!("Closed {count} window(s) during platform shutdown");
     }
+
+    fn dispatch_platform_event(&mut self, id: WindowId, event: &WindowEvent) -> bool {
+        match event {
+            WindowEvent::CloseRequested => {
+                debug!("Close requested for Window={id:?}");
+                self.windows.remove(&id);
+                self.platform_dispatcher
+                    .dispatch(PlatformEvent::WindowCloseRequested { id });
+            }
+            WindowEvent::Destroyed => {
+                debug!("Window {id:?} destroyed");
+                self.platform_dispatcher
+                    .dispatch(PlatformEvent::WindowDestroyed { id });
+            }
+            WindowEvent::SurfaceResized(size) => {
+                self.window_dispatcher
+                    .dispatch(PlatformWindowEvent::Resized {
+                        id,
+                        width: size.width,
+                        height: size.height,
+                    });
+            }
+            WindowEvent::ThemeChanged(theme) => {
+                self.window_dispatcher
+                    .dispatch(PlatformWindowEvent::ThemeChanged { id, theme: *theme });
+            }
+            WindowEvent::Focused(focused) => {
+                self.window_dispatcher
+                    .dispatch(PlatformWindowEvent::FocusChanged {
+                        id,
+                        focused: *focused,
+                    });
+            }
+            WindowEvent::Occluded(occluded) => {
+                self.window_dispatcher
+                    .dispatch(PlatformWindowEvent::Occluded {
+                        id,
+                        occluded: *occluded,
+                    });
+            }
+            _ => return false,
+        }
+
+        true
+    }
+
+    fn dispatch_input_event(&mut self, id: WindowId, event: &WindowEvent) -> bool {
+        match event {
+            WindowEvent::ModifiersChanged(new_modifiers) => {
+                self.modifiers = new_modifiers.state();
+                trace!("Modifiers changed to {:?}", self.modifiers);
+                self.input_dispatch.dispatch(InputEvent::ModifiersChanged {
+                    id,
+                    modifiers: self.modifiers,
+                });
+            }
+            WindowEvent::KeyboardInput {
+                event,
+                is_synthetic: false,
+                ..
+            } => self.dispatch_keyboard_input(id, event),
+            WindowEvent::PointerMoved { position, .. } => {
+                trace!("Pointer moved to {position:?}");
+                self.input_dispatch.dispatch(InputEvent::PointerMoved {
+                    id,
+                    position: glam::dvec2(position.x, position.y),
+                });
+            }
+            WindowEvent::PointerEntered { .. } => {
+                trace!("Pointer entered Window={id:?}");
+                self.input_dispatch
+                    .dispatch(InputEvent::PointerEntered { id });
+            }
+            WindowEvent::PointerLeft { .. } => {
+                trace!("Pointer left Window={id:?}");
+                self.input_dispatch.dispatch(InputEvent::PointerLeft { id });
+            }
+            WindowEvent::PointerButton {
+                button,
+                state,
+                position,
+                ..
+            } => {
+                trace!("Pointer button {button:?} {state:?} at {position:?}");
+                let position = glam::dvec2(position.x, position.y);
+                let event = match state {
+                    ElementState::Pressed => InputEvent::MouseButtonPressed {
+                        id,
+                        button: button.clone(),
+                        position,
+                    },
+                    ElementState::Released => InputEvent::MouseButtonReleased {
+                        id,
+                        button: button.clone(),
+                        position,
+                    },
+                };
+                self.input_dispatch.dispatch(event);
+            }
+            WindowEvent::MouseWheel { delta, .. } => {
+                trace!("Mouse wheel {delta:?}");
+                self.input_dispatch
+                    .dispatch(InputEvent::MouseWheelScrolled {
+                        id,
+                        delta: (*delta).into(),
+                    });
+            }
+            _ => return false,
+        }
+
+        true
+    }
+
+    fn dispatch_keyboard_input(&self, id: WindowId, event: &winit::event::KeyEvent) {
+        let modifiers = self.modifiers;
+        match event.state {
+            ElementState::Pressed => {
+                trace!(
+                    "Key pressed: {:?} (repeat={})",
+                    event.logical_key, event.repeat
+                );
+                self.input_dispatch.dispatch(InputEvent::KeyPressed {
+                    id,
+                    key: event.logical_key.clone(),
+                    physical_key: event.physical_key,
+                    modifiers,
+                    repeat: event.repeat,
+                });
+            }
+            ElementState::Released => {
+                trace!("Key released: {:?}", event.logical_key);
+                self.input_dispatch.dispatch(InputEvent::KeyReleased {
+                    id,
+                    key: event.logical_key.clone(),
+                    physical_key: event.physical_key,
+                    modifiers,
+                });
+            }
+        }
+    }
 }
 
 impl ApplicationHandler for PlatformHandler {
@@ -78,123 +226,9 @@ impl ApplicationHandler for PlatformHandler {
     }
 
     fn window_event(&mut self, _loop: &dyn ActiveEventLoop, id: WindowId, event: WindowEvent) {
-        match event {
-            WindowEvent::CloseRequested => {
-                debug!("Close requested for Window={id:?}");
-                self.windows.remove(&id);
-                self.platform_dispatcher.dispatch(PlatformEvent::WindowCloseRequested { id });
-            }
-            WindowEvent::Destroyed => {
-                debug!("Window {id:?} destroyed");
-                self.platform_dispatcher .dispatch(PlatformEvent::WindowDestroyed { id });
-            }
-            WindowEvent::SurfaceResized(size) => {
-                self.window_dispatcher.dispatch(PlatformWindowEvent::Resized {
-                    id,
-                    width: size.width,
-                    height: size.height,
-                });
-            }
-            WindowEvent::ThemeChanged(theme) => {
-                self.window_dispatcher.dispatch(PlatformWindowEvent::ThemeChanged { id, theme });
-            }
-            WindowEvent::Focused(focused) => {
-                self.window_dispatcher.dispatch(PlatformWindowEvent::FocusChanged { id, focused });
-            }
-            WindowEvent::Occluded(occluded) => {
-                self.window_dispatcher.dispatch(PlatformWindowEvent::Occluded { id, occluded });
-                }
-            WindowEvent::ModifiersChanged(_modifiers) => {
-            /*
-                window.set_modifiers(modifiers.state());
-                trace!("Modifiers changed to {:?}", window.get_modifiers());
-            */
-            }
-            WindowEvent::MouseWheel { delta, .. } => {
-                trace!("Mouse wheel event: {delta:?}");
-            }
-            /* TODO: input events
-            match delta {
-                MouseScrollDelta::LineDelta(x, y) => {
-                    trace!("Mouse wheel Line Delta: ({x},{y})");
-                }
-                MouseScrollDelta::PixelDelta(px) => {
-                    trace!("Mouse wheel Pixel Delta: ({},{})", px.x, px.y);
-                }
-            },
-            */
-            WindowEvent::KeyboardInput {
-                event,
-                is_synthetic,
-                ..
-            } => {
-                trace!("Input Event: {:?} {:?}, {is_synthetic}", event.logical_key, event.state);
-                /* TODO: input events
-                let mods = window.modifiers;
-
-                // Dispatch actions only on press.
-                if event.state.is_pressed() {
-                    let action = if let Key::Character(ch) = event.key_without_modifiers.as_ref() {
-                        Self::process_key_binding(&ch.to_uppercase(), &mods)
-                    } else {
-                        None
-                    };
-
-                    if let Some(action) = action {
-                        self.handle_action_with_window(event_loop, window_id, action);
-                    }
-                }
-                */
-            }
-            WindowEvent::PointerButton { button, state, .. } => {
-                trace!("Pointer button {button:?} {state:?}");
-                /* TODO: input events
-                let mods = window.modifiers;
-                if let Some(action) = state
-                    .is_pressed()
-                    .then(|| button.mouse_button())
-                    .flatten()
-                    .and_then(|button| Self::process_mouse_binding(button, &mods))
-                {
-                    self.handle_action_with_window(event_loop, window_id, action);
-                }
-                */
-            }
-            WindowEvent::PointerLeft { .. } => {
-                trace!("Pointer left Window={id:?}");
-                // TODO: input events: window.cursor_left();
-            }
-            WindowEvent::PointerMoved { position, .. } => {
-                trace!("Moved pointer to {position:?}");
-                // TODO: input events: window.cursor_moved(position);
-            }
-            WindowEvent::ActivationTokenDone { token: _token, .. } => {
-                /* TODO: activation token (X11/Wayland)
-                #[cfg(any(x11_platform, wayland_platform))]
-                {
-                    startup_notify::set_activation_token_env(_token);
-                    if let Err(err) = self.create_window(event_loop, None) {
-                        error!("Error creating new window: {err}");
-                    }
-                }
-                */
-            }
-            WindowEvent::PinchGesture { .. }
-            | WindowEvent::RotationGesture { .. }
-            | WindowEvent::PanGesture { .. }
-            | WindowEvent::DoubleTapGesture { .. }
-            | WindowEvent::TouchpadPressure { .. }
-            | WindowEvent::DragLeft { .. }
-            | WindowEvent::PointerEntered { .. }
-            | WindowEvent::DragEntered { .. }
-            | WindowEvent::DragMoved { .. }
-            | WindowEvent::DragDropped { .. }
-            | WindowEvent::ScaleFactorChanged { .. }
-            // Drawing is handled by the main engine loop. Redraw requests
-            // are thus ignored.
-            | WindowEvent::RedrawRequested
-            | WindowEvent::Ime(_)
-            | WindowEvent::Moved(_) => {},
+        if self.dispatch_platform_event(id, &event) {
+            return;
         }
+        self.dispatch_input_event(id, &event);
     }
 }

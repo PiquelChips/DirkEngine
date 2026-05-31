@@ -110,8 +110,8 @@ fn key_pressed_debug_contains_code() {
 fn mouse_moved_debug_contains_coordinates() {
     let e = MouseMoved { x: 12.3, y: 45.6 };
     let dbg = e.debug();
-    assert!(dbg.contains("12.3"), "debug output: {}", dbg);
-    assert!(dbg.contains("45.6"), "debug output: {}", dbg);
+    assert!(dbg.contains("12.3"), "debug output: {dbg}");
+    assert!(dbg.contains("45.6"), "debug output: {dbg}");
 }
 
 #[test]
@@ -159,15 +159,15 @@ fn raw_enum_event_each_variant_falls_back_to_debug() {
         format!("{:?}", RawEnumEvent::B(7))
     );
     let v = RawEnumEvent::C { label: "hi".into() };
-    assert_eq!(v.debug(), format!("{:?}", v));
+    assert_eq!(v.debug(), format!("{v:?}"));
 }
 
 // =============================================================================
 // Section C – EventManager: realistic "engine loop" simulations
 // =============================================================================
 
-/// Simulates a two-system engine: an input system produces KeyPressed events,
-/// a UI system produces WindowResized events, and two unrelated consumers
+/// Simulates a two-system engine: an input system produces `KeyPressed` events,
+/// a UI system produces `WindowResized` events, and two unrelated consumers
 /// listen to each.
 #[test]
 fn realistic_multi_system_engine_loop() {
@@ -215,7 +215,7 @@ fn fan_out_to_many_consumers() {
 
     let mut consumers: Vec<Consumer<KeyPressed>> = (0..8).map(|_| mgr.subscribe()).collect();
 
-    for i in 0..N as u32 {
+    for i in 0..u32::try_from(N).expect("test count should fit in u32") {
         dispatcher.dispatch(KeyPressed(i));
     }
 
@@ -223,7 +223,10 @@ fn fan_out_to_many_consumers() {
         let events = collect_all(consumer);
         assert_eq!(events.len(), N, "consumer did not receive all events");
         for (i, event) in events.iter().enumerate() {
-            assert_eq!(event.0, i as u32);
+            assert_eq!(
+                event.0,
+                u32::try_from(i).expect("event index should fit in u32")
+            );
         }
     }
 }
@@ -269,7 +272,7 @@ fn unit_event_reaches_all_consumers() {
 // Section D – Edge cases on the public API
 // =============================================================================
 
-/// Registering but never subscribing: must not panic on dispatch_all.
+/// Registering but never subscribing: must not panic on `dispatch_all`.
 #[test]
 fn register_without_subscribe_is_safe() {
     let workers = WorkerPool::new("test");
@@ -311,7 +314,7 @@ fn mid_simulation_consumer_drop_is_handled() {
     assert_eq!(events, vec![1, 2]);
 }
 
-/// Events are routed without waiting for dispatch_all.
+/// Events are routed without waiting for `dispatch_all`.
 #[test]
 fn events_are_visible_before_dispatch_all() {
     let workers = WorkerPool::new("test");
@@ -323,7 +326,7 @@ fn events_are_visible_before_dispatch_all() {
     assert_eq!(wait_for(&mut consumer).0, 42);
 }
 
-/// Verifies that an enum event (NetworkEvent) goes through the full pipeline.
+/// Verifies that an enum event (`NetworkEvent`) goes through the full pipeline.
 #[test]
 fn enum_event_round_trips_through_manager() {
     let workers = WorkerPool::new("test");

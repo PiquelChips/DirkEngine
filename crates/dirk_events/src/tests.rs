@@ -1,7 +1,7 @@
 //! Unit tests for the `events` crate.
 //!
 //! Covers:
-//!   • `EventManager`: register, subscribe, dispatch_all, multi-type, multi-subscriber,
+//!   • `EventManager`: register, subscribe, `dispatch_all`, multi-type, multi-subscriber,
 //!     dropped-consumer pruning, buffering, zero-subscriber robustness.
 //!   • `#[derive(Event)]` macro: every combination of struct / enum × unit / named / unnamed
 //!     fields, with and without `#[event("…")]` format strings, partial field references,
@@ -194,7 +194,7 @@ mod macro_debug_output {
     fn unit_struct_default_uses_debug_repr() {
         let e = UnitStructDefault;
         // The default branch produces `format!("{self:?}")`.
-        assert_eq!(e.debug(), format!("{:?}", UnitStructDefault));
+        assert_eq!(e.debug(), format!("{UnitStructDefault:?}"));
     }
 
     #[test]
@@ -207,7 +207,7 @@ mod macro_debug_output {
     #[test]
     fn named_struct_default_uses_debug_repr() {
         let e = NamedStructDefault { x: 3, y: 7 };
-        assert_eq!(e.debug(), format!("{:?}", e));
+        assert_eq!(e.debug(), format!("{e:?}"));
     }
 
     #[test]
@@ -235,7 +235,7 @@ mod macro_debug_output {
     #[test]
     fn unnamed_struct_default_uses_debug_repr() {
         let e = UnnamedStructDefault(7, "hello".into());
-        assert_eq!(e.debug(), format!("{:?}", e));
+        assert_eq!(e.debug(), format!("{e:?}"));
     }
 
     #[test]
@@ -246,7 +246,7 @@ mod macro_debug_output {
 
     #[test]
     fn unnamed_struct_first_field_only() {
-        let e = UnnamedStructFirstOnly(1, "ignored".into(), 3.14);
+        let e = UnnamedStructFirstOnly(1, "ignored".into(), 3.5);
         assert_eq!(e.debug(), "first=1");
     }
 
@@ -338,7 +338,7 @@ mod macro_debug_output {
 
     #[test]
     fn mixed_enum_named_variant() {
-        let e = MixedEnum::Named { id: 1234567890 };
+        let e = MixedEnum::Named { id: 1_234_567_890 };
         assert_eq!(e.debug(), "named: id=1234567890");
     }
 
@@ -617,9 +617,15 @@ mod event_manager {
         // threre are a lot of events so we wait extra long
         std::thread::sleep(std::time::Duration::from_millis(100));
         let events = collect(&mut consumer);
-        assert_eq!(events.len() as u32, N);
+        assert_eq!(
+            u32::try_from(events.len()).expect("event count should fit in u32"),
+            N
+        );
         for (i, event) in events.iter().enumerate() {
-            assert_eq!(event.0, i as u32);
+            assert_eq!(
+                event.0,
+                u32::try_from(i).expect("event index should fit in u32")
+            );
         }
     }
 
@@ -674,8 +680,20 @@ mod event_manager {
         // wait for the event to be dispatched
         std::thread::sleep(std::time::Duration::from_millis(5));
 
-        assert_eq!(consumer.try_consume().unwrap().0, 1);
-        assert_eq!(consumer.try_consume().unwrap().0, 2);
+        assert_eq!(
+            consumer
+                .try_consume()
+                .expect("first event should be present")
+                .0,
+            1
+        );
+        assert_eq!(
+            consumer
+                .try_consume()
+                .expect("second event should be present")
+                .0,
+            2
+        );
         assert!(consumer.try_consume().is_none());
     }
 
@@ -693,7 +711,7 @@ mod event_manager {
         d2.dispatch(CounterEvent(2));
 
         let mut values: Vec<u32> = collect(&mut consumer).into_iter().map(|e| e.0).collect();
-        values.sort(); // Order across producers is not guaranteed.
+        values.sort_unstable(); // Order across producers is not guaranteed.
         assert_eq!(values, vec![1, 2]);
     }
 }

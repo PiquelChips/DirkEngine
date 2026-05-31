@@ -15,7 +15,11 @@ mod window;
 pub use errors::Error;
 pub use event::*;
 pub use window::Window;
-pub use winit::window::WindowId;
+pub use winit::{
+    event::{ButtonSource, MouseButton},
+    keyboard::{KeyCode, PhysicalKey},
+    window::WindowId,
+};
 
 use errors::Result;
 use handler::PlatformHandler;
