@@ -1,3 +1,5 @@
+#![allow(unsafe_code)]
+
 pub mod buffer;
 pub mod command_pool;
 pub mod descriptors;

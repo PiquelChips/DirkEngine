@@ -1,3 +1,5 @@
+#![allow(unsafe_code)]
+
 use ash::{Device, Entry, khr::surface, vk};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use std::collections::HashSet;
