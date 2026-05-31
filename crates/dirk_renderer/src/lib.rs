@@ -31,7 +31,7 @@ use dirk_universe::{Universe, UniverseBuilder};
 
 mod utils;
 use dirk_utils::Version;
-use utils::{DescriptorLayouts, Frame, Queues, RendererProperties, Vertex, make_version};
+use utils::{DescriptorLayouts, Frame, RendererProperties, Vertex, make_version};
 
 mod errors;
 pub use errors::{Error, Result};
@@ -40,7 +40,7 @@ mod window;
 use window::Window;
 
 mod resources;
-use resources::{command_pool::CommandPool, device::RenderDevice, image::SwapchainImage};
+use resources::{command_pool::CommandPool, device::RenderDevice};
 
 mod proxy;
 use proxy::{
@@ -53,7 +53,7 @@ use proxy::{
 mod render_commands;
 use render_commands::RenderCommandReceiver;
 
-use crate::proxy::PlayerProxy;
+use crate::{proxy::PlayerProxy, resources::queues::QueueType};
 
 mod models;
 mod physical_device;
@@ -406,7 +406,6 @@ impl Renderer {
         let build_frame = || -> Result<Frame> {
             let command_pool = CommandPool::build(
                 &device,
-                &render_device.queues,
                 &render_device.properties.queue_family_indices,
                 vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
             )?;
@@ -602,11 +601,7 @@ impl Renderer {
 
             let cmd = frame.command_pool.allocate_buffer()?;
 
-            unsafe {
-                self.render_device
-                    .device
-                    .begin_command_buffer(cmd.raw(), &vk::CommandBufferBeginInfo::default())?;
-            }
+            cmd.begin_command_buffer(&vk::CommandBufferBeginInfo::default())?;
 
             render_image.image.transition_image_layout(
                 &cmd,
@@ -629,40 +624,25 @@ impl Renderer {
                 vk::ImageLayout::PRESENT_SRC_KHR,
             )?;
 
-            unsafe { self.render_device.device.end_command_buffer(cmd.raw())? }
+            cmd.end_command_buffer()?;
 
+            let image_available_semaphore = render_image.image_available_semaphore;
+            let render_finished_semaphore = render_image.render_finished_semaphore;
             let submit_info = vk::SubmitInfo::default()
                 .wait_dst_stage_mask(std::slice::from_ref(
                     &vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
                 ))
                 .command_buffers(std::slice::from_ref(&cmd))
-                .wait_semaphores(std::slice::from_ref(
-                    &render_image.image_available_semaphore,
-                ))
-                .signal_semaphores(std::slice::from_ref(
-                    &render_image.render_finished_semaphore,
-                ));
+                .wait_semaphores(std::slice::from_ref(&image_available_semaphore))
+                .signal_semaphores(std::slice::from_ref(&render_finished_semaphore));
 
-            unsafe {
-                self.render_device.device.queue_submit(
-                    self.render_device.queues.graphics,
-                    std::slice::from_ref(&submit_info),
-                    frame.fence,
-                )?;
-            }
+            self.render_device.queues.submit(
+                QueueType::Graphics,
+                std::slice::from_ref(&submit_info),
+                frame.fence,
+            )?;
 
-            let present_info = vk::PresentInfoKHR::default()
-                .wait_semaphores(std::slice::from_ref(
-                    &render_image.render_finished_semaphore,
-                ))
-                .swapchains(std::slice::from_ref(&render_image.swapchain))
-                .image_indices(std::slice::from_ref(&render_image.image_index));
-
-            unsafe {
-                self.render_device
-                    .swapchain_loader
-                    .queue_present(self.render_device.queues.present, &present_info)?
-            };
+            render_image.present()?;
 
             self.current_frame.store(
                 (self.current_frame() + 1) % MAX_FRAMES_IN_FLIGHT,
@@ -670,92 +650,6 @@ impl Renderer {
             );
         }
         Ok(())
-    }
-
-    // WINDOW MANAGEMENT
-
-    fn create_swap_chain(
-        device: &RenderDevice,
-        surface: vk::SurfaceKHR,
-        window_size: vk::Extent2D,
-        old_swapchain: vk::SwapchainKHR,
-    ) -> Result<(vk::SwapchainKHR, vk::Extent2D, Vec<SwapchainImage>)> {
-        let capabilities = unsafe {
-            device
-                .surface_loader
-                .get_physical_device_surface_capabilities(device.physical_device, surface)?
-        };
-
-        let extent = if capabilities.current_extent.width == u32::MAX {
-            vk::Extent2D {
-                width: window_size.width.clamp(
-                    capabilities.min_image_extent.width,
-                    capabilities.max_image_extent.width,
-                ),
-                height: window_size.height.clamp(
-                    capabilities.min_image_extent.height,
-                    capabilities.max_image_extent.height,
-                ),
-            }
-        } else {
-            capabilities.current_extent
-        };
-
-        let mut image_count = capabilities.min_image_count + 1;
-        if capabilities.max_image_count > 0 && image_count > capabilities.max_image_count {
-            image_count = capabilities.max_image_count;
-        }
-
-        let indices = &device.properties.queue_family_indices;
-        // Deduplicate — concurrent mode requires unique family indices
-        let mut unique_indices: Vec<u32> =
-            vec![indices.graphics, indices.present, indices.transfer];
-        unique_indices.sort_unstable();
-        unique_indices.dedup();
-
-        let (sharing_mode, indices_slice): (vk::SharingMode, &[u32]) = if unique_indices.len() > 1 {
-            (vk::SharingMode::CONCURRENT, &unique_indices)
-        } else {
-            (vk::SharingMode::EXCLUSIVE, &[])
-        };
-
-        let create_info = vk::SwapchainCreateInfoKHR::default()
-            .surface(surface)
-            .min_image_count(image_count)
-            .image_format(device.properties.surface_format.format)
-            .image_color_space(device.properties.surface_format.color_space)
-            .image_extent(extent)
-            .image_array_layers(1)
-            .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)
-            .image_sharing_mode(sharing_mode)
-            .queue_family_indices(indices_slice)
-            .pre_transform(capabilities.current_transform)
-            .composite_alpha(vk::CompositeAlphaFlagsKHR::OPAQUE)
-            .present_mode(device.properties.present_mode)
-            .clipped(true)
-            .old_swapchain(old_swapchain);
-
-        let swapchain = unsafe {
-            device
-                .swapchain_loader
-                .create_swapchain(&create_info, None)?
-        };
-        let images = unsafe { device.swapchain_loader.get_swapchain_images(swapchain)? };
-
-        let swap_images = images
-            .into_iter()
-            .map(|image| {
-                SwapchainImage::new(device, image, device.properties.surface_format.format)
-            })
-            .collect::<Result<Vec<_>>>()?;
-
-        unsafe {
-            device
-                .swapchain_loader
-                .destroy_swapchain(old_swapchain, None);
-        };
-
-        Ok((swapchain, extent, swap_images))
     }
 
     // EXTRA UTILS

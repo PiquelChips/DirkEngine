@@ -1,4 +1,4 @@
-use ash::{Device, vk};
+use ash::vk;
 
 use crate::resources::{command_pool::CommandBuffer, image::Image};
 
@@ -9,7 +9,6 @@ pub struct RenderPass {}
 
 impl RenderPass {
     pub fn begin(
-        device: &Device,
         cmd: &CommandBuffer,
         size: vk::Extent2D,
         out: vk::ImageView,
@@ -51,9 +50,9 @@ impl RenderPass {
             .depth_attachment(&depth_info)
             .layer_count(1);
 
-        unsafe { device.cmd_begin_rendering(cmd.raw(), &rendering_info) };
+        cmd.begin_rendering(&rendering_info);
     }
-    pub fn end(device: &Device, cmd: &CommandBuffer) {
-        unsafe { device.cmd_end_rendering(cmd.raw()) }
+    pub fn end(cmd: &CommandBuffer) {
+        cmd.end_rendering();
     }
 }

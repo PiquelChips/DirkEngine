@@ -26,24 +26,21 @@ impl Image {
             .dst_access_mask(dst_access)
             .image(self.raw)
             .subresource_range(vk::ImageSubresourceRange {
-                aspect_mask: vk::ImageAspectFlags::COLOR,
+                aspect_mask: self.aspect_flags,
                 base_mip_level: base_mip,
                 level_count: mip_levels,
                 base_array_layer: 0,
                 layer_count: 1,
             });
 
-        unsafe {
-            self.device.device.cmd_pipeline_barrier(
-                cmd.raw(),
-                src_stage,
-                dst_stage,
-                vk::DependencyFlags::empty(),
-                &[],
-                &[],
-                &[barrier],
-            );
-        };
+        cmd.pipeline_barrier(
+            src_stage,
+            dst_stage,
+            vk::DependencyFlags::empty(),
+            &[],
+            &[],
+            &[barrier],
+        );
         Ok(())
     }
 

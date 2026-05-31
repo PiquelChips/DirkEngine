@@ -138,13 +138,9 @@ impl<Type: BuffType> Buffer<Type> {
             dst_offset: 0,
             size,
         };
-        unsafe {
-            self.device
-                .device
-                .cmd_copy_buffer(cmd.raw(), src.buffer(), self.buffer(), &[region]);
-        };
+        cmd.copy_buffer(src.buffer(), self.buffer(), &[region]);
 
-        cmd.end_and_submit()?;
+        cmd.end_and_submit(&self.device.queues)?;
         Ok(())
     }
 }
