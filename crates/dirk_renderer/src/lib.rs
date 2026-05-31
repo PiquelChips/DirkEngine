@@ -508,12 +508,14 @@ impl Renderer {
             self.players.remove(&event.id);
         }
 
-        // Temporarily move receivers out for the borrow checker
-        let receivers = std::mem::take(&mut self.receivers);
-        for receiver in &receivers {
-            receiver.flush(self)?;
+        let mut commands = Vec::new();
+        for receiver in &self.receivers {
+            commands.append(&mut receiver.collect());
         }
-        self.receivers = receivers;
+
+        for command in commands {
+            command(self)?;
+        }
 
         let platform_events: Vec<_> = self.platform_consumer.consume_all().collect();
         for event in platform_events {
