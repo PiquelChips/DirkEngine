@@ -90,44 +90,7 @@ impl RenderDevice {
         let swapchain_loader = swapchain::Device::new(&instance, &device);
 
         // LAYOUTS
-        let layouts = DescriptorLayouts {
-            scene: {
-                let binding = vk::DescriptorSetLayoutBinding::default()
-                    .binding(0)
-                    .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
-                    .descriptor_count(1)
-                    .stage_flags(vk::ShaderStageFlags::VERTEX);
-
-                let info = vk::DescriptorSetLayoutCreateInfo::default()
-                    .bindings(std::slice::from_ref(&binding));
-
-                unsafe { device.create_descriptor_set_layout(&info, None)? }
-            },
-            object: {
-                let binding = vk::DescriptorSetLayoutBinding::default()
-                    .binding(1)
-                    .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
-                    .descriptor_count(1)
-                    .stage_flags(vk::ShaderStageFlags::VERTEX);
-
-                let info = vk::DescriptorSetLayoutCreateInfo::default()
-                    .bindings(std::slice::from_ref(&binding));
-
-                unsafe { device.create_descriptor_set_layout(&info, None)? }
-            },
-            material: {
-                let binding = vk::DescriptorSetLayoutBinding::default()
-                    .binding(2)
-                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                    .descriptor_count(1)
-                    .stage_flags(vk::ShaderStageFlags::FRAGMENT);
-
-                let info = vk::DescriptorSetLayoutCreateInfo::default()
-                    .bindings(std::slice::from_ref(&binding));
-
-                unsafe { device.create_descriptor_set_layout(&info, None)? }
-            },
-        };
+        let layouts = DescriptorLayouts::create(&device)?;
 
         // QUEUES
         let queues = Queues::new(&instance, &device, &properties.queue_family_indices);
