@@ -288,6 +288,12 @@ impl CommandBuffer {
                 .cmd_copy_buffer(self.buff, src_buffer, dst_buffer, regions);
         }
     }
+    pub fn pipeline_barrier2(&self, dependency_info: &vk::DependencyInfo<'_>) {
+        unsafe {
+            self.device
+                .cmd_pipeline_barrier2(self.buff, dependency_info)
+        };
+    }
 
     pub fn submit(
         &self,
