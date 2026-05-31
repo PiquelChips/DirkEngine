@@ -44,7 +44,7 @@ use resources::{device::RenderDevice, queues::QueueType};
 mod proxy;
 use proxy::{
     PlayerProxy,
-    scene::SceneManager,
+    scene::{RenderTarget, SceneManager},
     systems::{
         RendererMeshSystem, RendererPlayerSystem, RendererTransformSystem, RendererUniverseSystem,
     },
@@ -349,35 +349,26 @@ impl Renderer {
 
             cmd.begin_command_buffer(&vk::CommandBufferBeginInfo::default())?;
 
-            render_image.image.transition_image_layout(
-                &cmd,
-                vk::ImageLayout::UNDEFINED,
-                vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-            )?;
-
             self.scene_manager.render(
                 &self.models,
                 &cmd,
                 world,
-                size,
-                render_image.image.view(),
+                &RenderTarget {
+                    size,
+                    image: render_image.image.image(),
+                    view: render_image.image.view(),
+                },
                 entity,
-            )?;
-
-            render_image.image.transition_image_layout(
-                &cmd,
-                vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                vk::ImageLayout::PRESENT_SRC_KHR,
             )?;
 
             cmd.end_command_buffer()?;
 
             let image_available_semaphore = render_image.image_available_semaphore;
             let render_finished_semaphore = render_image.render_finished_semaphore;
+            let wait_stage =
+                vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | vk::PipelineStageFlags::TRANSFER;
             let submit_info = vk::SubmitInfo::default()
-                .wait_dst_stage_mask(std::slice::from_ref(
-                    &vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
-                ))
+                .wait_dst_stage_mask(std::slice::from_ref(&wait_stage))
                 .command_buffers(std::slice::from_ref(&cmd))
                 .wait_semaphores(std::slice::from_ref(&image_available_semaphore))
                 .signal_semaphores(std::slice::from_ref(&render_finished_semaphore));
