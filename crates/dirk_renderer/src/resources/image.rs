@@ -30,6 +30,7 @@ pub struct Image {
     #[allow(unused)]
     allocation: Option<Allocation>,
     // TODO: store current queue?
+    // TODO: store current layout?
 }
 
 // TODO: default
