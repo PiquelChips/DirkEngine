@@ -29,6 +29,7 @@ pub struct Image {
     destroy: bool,
     #[allow(unused)]
     allocation: Option<Allocation>,
+    aspect_flags: vk::ImageAspectFlags,
 }
 
 pub struct ImageCreateInfo {
@@ -89,6 +90,7 @@ impl Image {
             )?,
             destroy: true,
             allocation: Some(allocation),
+            aspect_flags: info.aspect_flags,
         })
     }
     pub fn image(&self) -> vk::Image {
@@ -255,6 +257,7 @@ impl SwapchainImage {
                 )?,
                 destroy: false,
                 allocation: None,
+                aspect_flags: vk::ImageAspectFlags::COLOR,
             },
         })
     }
