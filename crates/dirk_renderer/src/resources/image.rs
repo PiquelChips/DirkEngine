@@ -29,10 +29,8 @@ pub struct Image {
     destroy: bool,
     #[allow(unused)]
     allocation: Option<Allocation>,
-    // TODO: store current queue?
 }
 
-// TODO: default
 pub struct ImageCreateInfo {
     pub size: vk::Extent2D,
     pub format: vk::Format,
@@ -179,7 +177,6 @@ impl Image {
             &[region],
         );
 
-        // TODO: start in transfer queue, swap to graphics and then go back
         image.generate_mipmaps(&cmd, tex.width, tex.height, mip_levels)?;
         cmd.end_and_submit(&device.queues)?;
 
