@@ -10,12 +10,12 @@
 //! and Arntzen's blog post:
 //!
 //!  1. **Setup**   – declare virtual texture resources and register passes with
-//!                   their read/write dependencies.
+//!     their read/write dependencies.
 //!  2. **Compile** – walk passes in order, diff each resource usage against its
-//!                   last known state, and emit `vkImageMemoryBarrier2` records.
+//!     last known state, and emit `vkImageMemoryBarrier2` records.
 //!  3. **Execute** – allocate transient resources, record barriers +
-//!                   `vkCmdBeginRendering` / `vkCmdEndRendering` into a command
-//!                   buffer, and invoke per-pass user callbacks.
+//!     `vkCmdBeginRendering` / `vkCmdEndRendering` into a command
+//!     buffer, and invoke per-pass user callbacks.
 //!
 //! What is intentionally left out to keep this self-contained:
 //! - Render target aliasing / memory transients (VMA or a slab allocator)
@@ -25,7 +25,7 @@
 //! - Semaphore / timeline synchronisation across frames
 //!
 //! Requires: ash 0.38, Vulkan 1.3 (`VK_KHR_dynamic_rendering` promoted to core,
-//!           `VK_KHR_synchronization2` promoted to core).
+//!     `VK_KHR_synchronization2` promoted to core).
 
 use ash::vk;
 
@@ -101,6 +101,7 @@ impl AttachmentInfo {
 
     /// Load the existing contents, then store the result (e.g. for additive
     /// blending passes after an initial clear pass).
+    #[allow(unused)]
     pub fn load_store() -> Self {
         Self {
             load_op: vk::AttachmentLoadOp::LOAD,
@@ -110,6 +111,7 @@ impl AttachmentInfo {
     }
 
     /// Clear depth (and stencil) to the given values, then store.
+    #[allow(unused)]
     pub fn clear_depth(depth: f32, stencil: u32) -> Self {
         Self {
             load_op: vk::AttachmentLoadOp::CLEAR,
@@ -228,6 +230,7 @@ impl<'a> PassBuilder<'_, 'a> {
     }
 
     /// Declare `handle` as sampled/read-only in a fragment shader.
+    #[allow(unused)]
     pub fn read_texture_fragment(&mut self, handle: TextureHandle) -> &mut Self {
         self.pass.reads.push(TextureUsage {
             handle,
@@ -240,6 +243,7 @@ impl<'a> PassBuilder<'_, 'a> {
     }
 
     /// Declare `handle` as sampled/read-only in a compute shader.
+    #[allow(unused)]
     pub fn read_texture_compute(&mut self, handle: TextureHandle) -> &mut Self {
         self.pass.reads.push(TextureUsage {
             handle,
@@ -370,6 +374,8 @@ pub struct ImageBarrier {
 /// Compiled representation of a single pass: barriers to emit before it and
 /// the attachment metadata needed to call `vkCmdBeginRendering`.
 pub struct CompiledPass<'a> {
+    // TODO: should be read when building graph metadata for renderer
+    #[allow(unused)]
     pub name: String,
     /// Barriers to record immediately before this pass.
     pub pre_barriers: Vec<ImageBarrier>,
