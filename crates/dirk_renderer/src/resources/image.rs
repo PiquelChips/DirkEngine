@@ -172,15 +172,12 @@ impl Image {
                 depth: 1,
             });
 
-        unsafe {
-            device.device.cmd_copy_buffer_to_image(
-                cmd.raw(),
-                staging_buf.buffer(),
-                image.image(),
-                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                &[region],
-            );
-        }
+        cmd.copy_buffer_to_image(
+            staging_buf.buffer(),
+            image.image(),
+            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            &[region],
+        );
 
         // TODO: start in transfer queue, swap to graphics and then go back
         image.generate_mipmaps(&cmd, tex.width, tex.height, mip_levels)?;

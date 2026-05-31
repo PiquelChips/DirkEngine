@@ -127,13 +127,7 @@ impl GraphicsPipeline {
         })
     }
     pub fn bind(&self, cmd: &CommandBuffer) {
-        unsafe {
-            self.device.device.cmd_bind_pipeline(
-                cmd.raw(),
-                vk::PipelineBindPoint::GRAPHICS,
-                self.pipeline,
-            );
-        }
+        cmd.bind_pipeline(vk::PipelineBindPoint::GRAPHICS, self.pipeline);
     }
     pub fn layout(&self) -> vk::PipelineLayout {
         self.pipeline_layout

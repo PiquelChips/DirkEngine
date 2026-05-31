@@ -172,31 +172,16 @@ impl ModelRegistry {
 
             descriptor_sets[2] = mat_set;
 
-            unsafe {
-                self.device.device.cmd_bind_descriptor_sets(
-                    cmd.raw(),
-                    vk::PipelineBindPoint::GRAPHICS,
-                    pipeline_layout,
-                    0,
-                    &descriptor_sets,
-                    &[],
-                );
-                self.device.device.cmd_bind_vertex_buffers(
-                    cmd.raw(),
-                    0,
-                    &[prim.vertex_buffer.buffer()],
-                    &[0],
-                );
-                self.device.device.cmd_bind_index_buffer(
-                    cmd.raw(),
-                    prim.index_buffer.buffer(),
-                    0,
-                    vk::IndexType::UINT32,
-                );
-                self.device
-                    .device
-                    .cmd_draw_indexed(cmd.raw(), prim.index_count, 1, 0, 0, 0);
-            }
+            cmd.bind_descriptor_sets(
+                vk::PipelineBindPoint::GRAPHICS,
+                pipeline_layout,
+                0,
+                &descriptor_sets,
+                &[],
+            );
+            cmd.bind_vertex_buffers(0, &[prim.vertex_buffer.buffer()], &[0]);
+            cmd.bind_index_buffer(prim.index_buffer.buffer(), 0, vk::IndexType::UINT32);
+            cmd.draw_indexed(prim.index_count, 1, 0, 0, 0);
         }
         Ok(())
     }

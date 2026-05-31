@@ -602,11 +602,7 @@ impl Renderer {
 
             let cmd = frame.command_pool.allocate_buffer()?;
 
-            unsafe {
-                self.render_device
-                    .device
-                    .begin_command_buffer(cmd.raw(), &vk::CommandBufferBeginInfo::default())?;
-            }
+            cmd.begin_command_buffer(&vk::CommandBufferBeginInfo::default())?;
 
             render_image.image.transition_image_layout(
                 &cmd,
@@ -629,7 +625,7 @@ impl Renderer {
                 vk::ImageLayout::PRESENT_SRC_KHR,
             )?;
 
-            unsafe { self.render_device.device.end_command_buffer(cmd.raw())? }
+            cmd.end_command_buffer()?;
 
             let submit_info = vk::SubmitInfo::default()
                 .wait_dst_stage_mask(std::slice::from_ref(
