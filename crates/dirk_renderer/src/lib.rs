@@ -59,6 +59,8 @@ mod physical_device;
 mod pipeline;
 mod render_pass;
 
+mod frame_graph;
+
 #[cfg(validation)]
 mod debug;
 
