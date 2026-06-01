@@ -53,6 +53,16 @@ pub enum Error {
     /// The Vulkan surface is suboptimal
     #[error("suboptimal surface")]
     SuboptimalSurface,
+    /// The surface does not support the image usages required by the renderer.
+    #[error(
+        "surface does not support required swapchain usage {required:?}; supported usage is {supported:?}"
+    )]
+    UnsupportedSwapchainUsage {
+        /// Required swapchain image usage flags.
+        required: vk::ImageUsageFlags,
+        /// Usage flags advertised by the surface capabilities.
+        supported: vk::ImageUsageFlags,
+    },
     /// The requested descriptor set allocation is too large for Vulkan.
     #[error("descriptor set allocation count {0} exceeds u32::MAX")]
     DescriptorSetCountTooLarge(usize),

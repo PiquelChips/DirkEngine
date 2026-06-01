@@ -191,8 +191,9 @@ impl Renderer {
             vk::PhysicalDeviceFeatures::default().sampler_anisotropy(true);
         let mut vulkan12_features =
             vk::PhysicalDeviceVulkan12Features::default().buffer_device_address(true);
-        let mut vulkan13_features =
-            vk::PhysicalDeviceVulkan13Features::default().dynamic_rendering(true);
+        let mut vulkan13_features = vk::PhysicalDeviceVulkan13Features::default()
+            .dynamic_rendering(true)
+            .synchronization2(true);
 
         let extensions: Vec<*const i8> = DEVICE_EXTENSIONS
             .iter()

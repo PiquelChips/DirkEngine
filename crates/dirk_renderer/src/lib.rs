@@ -39,12 +39,15 @@ mod window;
 use window::Window;
 
 mod resources;
-use resources::{device::RenderDevice, queues::QueueType};
+use resources::{
+    device::{FrameCounters, RenderDevice},
+    queues::QueueType,
+};
 
 mod proxy;
 use proxy::{
     PlayerProxy,
-    scene::SceneManager,
+    scene::{RenderTarget, SceneManager},
     systems::{
         RendererMeshSystem, RendererPlayerSystem, RendererTransformSystem, RendererUniverseSystem,
     },
@@ -57,7 +60,8 @@ mod init;
 mod models;
 mod physical_device;
 mod pipeline;
-mod render_pass;
+
+mod frame_graph;
 
 #[cfg(validation)]
 mod debug;
@@ -96,6 +100,7 @@ pub struct Renderer {
 
     frames: [Frame; MAX_FRAMES_IN_FLIGHT],
     current_frame: Arc<AtomicUsize>,
+    frame_count: Arc<AtomicUsize>,
 
     // Events
     window_consumer: dirk_events::Consumer<dirk_platform::WindowEvent>,
@@ -163,6 +168,7 @@ impl Renderer {
         let device = Self::create_device(&instance, physical_device, &properties)?;
 
         let current_frame = Arc::new(AtomicUsize::new(0));
+        let frame_count = Arc::new(AtomicUsize::new(0));
 
         let render_device = RenderDevice::new(
             entry.clone(),
@@ -170,24 +176,18 @@ impl Renderer {
             device.clone(),
             physical_device,
             properties,
-            current_frame.clone(),
+            FrameCounters {
+                current_frame: current_frame.clone(),
+                frame_count: frame_count.clone(),
+            },
             #[cfg(validation)]
             debug_messenger,
         )?;
 
-        // TODO: should be removed with frame graph
-        let extent = {
-            let size = window.size();
-            vk::Extent2D {
-                width: size.width,
-                height: size.height,
-            }
-        };
-
         let frames = Self::build_frames(&device, &render_device)?;
 
         let models = models::ModelRegistry::new(&render_device, event_manager)?;
-        let scene_manager = SceneManager::init(&render_device, extent)?;
+        let scene_manager = SceneManager::init(&render_device)?;
 
         let windows = {
             let window = Window::build(&render_device, window)?;
@@ -206,6 +206,7 @@ impl Renderer {
 
             frames,
             current_frame,
+            frame_count,
 
             window_consumer: event_manager.subscribe(),
             platform_consumer: event_manager.subscribe(),
@@ -357,35 +358,26 @@ impl Renderer {
 
             cmd.begin_command_buffer(&vk::CommandBufferBeginInfo::default())?;
 
-            render_image.image.transition_image_layout(
-                &cmd,
-                vk::ImageLayout::UNDEFINED,
-                vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-            )?;
-
             self.scene_manager.render(
                 &self.models,
                 &cmd,
                 world,
-                size,
-                render_image.image.view(),
+                &RenderTarget {
+                    size,
+                    image: render_image.image.image(),
+                    view: render_image.image.view(),
+                },
                 entity,
-            )?;
-
-            render_image.image.transition_image_layout(
-                &cmd,
-                vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                vk::ImageLayout::PRESENT_SRC_KHR,
             )?;
 
             cmd.end_command_buffer()?;
 
             let image_available_semaphore = render_image.image_available_semaphore;
             let render_finished_semaphore = render_image.render_finished_semaphore;
+            let wait_stage =
+                vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | vk::PipelineStageFlags::TRANSFER;
             let submit_info = vk::SubmitInfo::default()
-                .wait_dst_stage_mask(std::slice::from_ref(
-                    &vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
-                ))
+                .wait_dst_stage_mask(std::slice::from_ref(&wait_stage))
                 .command_buffers(std::slice::from_ref(&cmd))
                 .wait_semaphores(std::slice::from_ref(&image_available_semaphore))
                 .signal_semaphores(std::slice::from_ref(&render_finished_semaphore));
@@ -402,6 +394,7 @@ impl Renderer {
                 (self.current_frame() + 1) % MAX_FRAMES_IN_FLIGHT,
                 Ordering::Relaxed,
             );
+            self.frame_count.fetch_add(1, Ordering::Relaxed);
         }
         Ok(())
     }

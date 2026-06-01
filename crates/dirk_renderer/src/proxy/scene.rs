@@ -6,9 +6,9 @@ use gpu_allocator::MemoryLocation;
 
 use crate::{
     Error, MAX_FRAMES_IN_FLIGHT, Result,
+    frame_graph::{AttachmentInfo, ImportedTexture, RenderGraph, TextureDesc},
     models::ModelRegistry,
     pipeline::GraphicsPipeline,
-    render_pass::RenderPass,
     resources::{
         buffer::UniformBuffer,
         command_pool::CommandBuffer,
@@ -16,7 +16,6 @@ use crate::{
             DescriptorAllocator, DescriptorSet, DescriptorWriter, ObjectLayout, SceneLayout,
         },
         device::RenderDevice,
-        image::{Image, ImageCreateInfo},
     },
 };
 
@@ -29,46 +28,25 @@ pub struct SceneManager {
     entities: HashMap<Entity, WorldId>,
     proxies: HashMap<Entity, SceneProxy>,
 
-    // TODO: these need to be removed
-    color: Image,
-    depth: Image,
-    // render graph should fix this
+    // TODO: see about centralising the different pipelines (link with
+    // descriptor layouts, ...)
     graphics_pipeline: GraphicsPipeline,
 
     scene_alloc: DescriptorAllocator<SceneLayout>,
     proxy_alloc: DescriptorAllocator<ObjectLayout>,
 }
 
+pub(crate) struct RenderTarget {
+    pub size: vk::Extent2D,
+    pub image: vk::Image,
+    pub view: vk::ImageView,
+}
+
 impl SceneManager {
-    pub fn init(device: &RenderDevice, size: vk::Extent2D) -> Result<Self> {
+    pub fn init(device: &RenderDevice) -> Result<Self> {
         let scene_alloc = DescriptorAllocator::<SceneLayout>::new(device, 16)?;
         let proxy_alloc = DescriptorAllocator::<ObjectLayout>::new(device, 256)?;
 
-        // TEMP
-        let color_info = ImageCreateInfo {
-            size,
-            format: device.properties.surface_format.format,
-            tiling: vk::ImageTiling::OPTIMAL,
-            usage: vk::ImageUsageFlags::TRANSIENT_ATTACHMENT
-                | vk::ImageUsageFlags::COLOR_ATTACHMENT,
-            location: MemoryLocation::GpuOnly,
-            mip_levels: 1,
-            num_samples: device.properties.msaa_samples,
-            aspect_flags: vk::ImageAspectFlags::COLOR,
-        };
-        let color = Image::create_image(device, &color_info)?;
-
-        let depth_info = ImageCreateInfo {
-            size,
-            format: device.properties.depth_format,
-            tiling: vk::ImageTiling::OPTIMAL,
-            usage: vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
-            location: MemoryLocation::GpuOnly,
-            mip_levels: 1,
-            num_samples: device.properties.msaa_samples,
-            aspect_flags: vk::ImageAspectFlags::DEPTH,
-        };
-        let depth = Image::create_image(device, &depth_info)?;
         let graphics_pipeline =
             GraphicsPipeline::build(device, &device.layouts, &device.properties)?;
 
@@ -77,8 +55,6 @@ impl SceneManager {
             entities: HashMap::new(),
             scenes: HashMap::new(),
             proxies: HashMap::new(),
-            color,
-            depth,
             graphics_pipeline,
             scene_alloc,
             proxy_alloc,
@@ -89,8 +65,115 @@ impl SceneManager {
         models: &ModelRegistry,
         cmd: &CommandBuffer,
         world: WorldId,
+        target: &RenderTarget,
+        camera: Entity,
+    ) -> Result<()> {
+        let mut graph = RenderGraph::new();
+        let scene_color = graph.create_texture(TextureDesc {
+            width: target.size.width,
+            height: target.size.height,
+            format: self.device.properties.surface_format.format,
+            usage: vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_SRC,
+            samples: vk::SampleCountFlags::TYPE_1,
+            imported: None,
+        });
+
+        let depth = graph.create_texture(TextureDesc {
+            width: target.size.width,
+            height: target.size.height,
+            format: self.device.properties.depth_format,
+            usage: vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
+            samples: self.device.properties.msaa_samples,
+            imported: None,
+        });
+
+        let msaa_color = (self.device.properties.msaa_samples != vk::SampleCountFlags::TYPE_1)
+            .then(|| {
+                graph.create_texture(TextureDesc {
+                    width: target.size.width,
+                    height: target.size.height,
+                    format: self.device.properties.surface_format.format,
+                    usage: vk::ImageUsageFlags::TRANSIENT_ATTACHMENT
+                        | vk::ImageUsageFlags::COLOR_ATTACHMENT,
+                    samples: self.device.properties.msaa_samples,
+                    imported: None,
+                })
+            });
+
+        let swapchain = graph.import_texture(TextureDesc {
+            width: target.size.width,
+            height: target.size.height,
+            format: self.device.properties.surface_format.format,
+            usage: vk::ImageUsageFlags::TRANSFER_DST,
+            samples: vk::SampleCountFlags::TYPE_1,
+            imported: Some(ImportedTexture {
+                image: target.image,
+                view: target.view,
+                aspect_flags: vk::ImageAspectFlags::COLOR,
+                initial_layout: vk::ImageLayout::UNDEFINED,
+                final_layout: vk::ImageLayout::PRESENT_SRC_KHR,
+            }),
+        });
+
+        let size = target.size;
+        let mut pass = graph.add_pass("scene");
+        if let Some(msaa_color) = msaa_color {
+            pass.write_color_attachment_with_resolve(
+                msaa_color,
+                scene_color,
+                AttachmentInfo::clear_color(0., 0., 0., 1.),
+            );
+        } else {
+            pass.write_color_attachment(scene_color, AttachmentInfo::clear_color(0., 0., 0., 1.));
+        }
+        pass.write_depth_attachment(depth, AttachmentInfo::clear_discard_depth(1., 0));
+        pass.execute(Box::new(move |_, cmd, _| {
+            self.record_scene_draws(models, cmd, world, size, camera)
+        }));
+
+        // TODO: have copying occur in renderer
+        let mut copy_pass = graph.add_pass("copy scene to swapchain");
+        copy_pass
+            .read_transfer_src(scene_color)
+            .write_transfer_dst(swapchain);
+        copy_pass.execute(Box::new(move |_, cmd, images| {
+            let region = vk::ImageCopy::default()
+                .src_subresource(vk::ImageSubresourceLayers {
+                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                    mip_level: 0,
+                    base_array_layer: 0,
+                    layer_count: 1,
+                })
+                .dst_subresource(vk::ImageSubresourceLayers {
+                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                    mip_level: 0,
+                    base_array_layer: 0,
+                    layer_count: 1,
+                })
+                .extent(vk::Extent3D {
+                    width: size.width,
+                    height: size.height,
+                    depth: 1,
+                });
+
+            cmd.copy_image(
+                images[scene_color.index()].image,
+                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                images[swapchain.index()].image,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                &[region],
+            );
+            Ok(())
+        }));
+        graph.run(&self.device, cmd)
+    }
+
+    fn record_scene_draws(
+        &self,
+        models: &ModelRegistry,
+        cmd: &CommandBuffer,
+        world: WorldId,
         size: vk::Extent2D,
-        view: vk::ImageView,
         camera: Entity,
     ) -> Result<()> {
         let frame = self.device.current_frame();
@@ -138,7 +221,6 @@ impl SceneManager {
             proxy.write_ubo(frame);
         }
 
-        RenderPass::begin(cmd, size, view, &self.color, &self.depth);
         self.graphics_pipeline.bind(cmd);
 
         // the window size never gets anywhere near 2^23
@@ -172,7 +254,6 @@ impl SceneManager {
             }
         }
 
-        RenderPass::end(cmd);
         Ok(())
     }
     pub fn create_scene(&mut self, world: WorldId) -> Result<()> {
