@@ -359,18 +359,8 @@ impl<'a> RenderGraph<'a> {
     /// Consumes `self`.
     fn compile(self) -> CompiledGraph<'a> {
         // Initialise per-resource state from the TextureDesc.
-        let mut states: Vec<ResourceState> = self
-            .textures
-            .iter()
-            .map(|desc| ResourceState {
-                layout: desc
-                    .imported
-                    .as_ref()
-                    .map_or(vk::ImageLayout::UNDEFINED, |i| i.initial_layout),
-                stage: vk::PipelineStageFlags2::TOP_OF_PIPE,
-                access: vk::AccessFlags2::empty(),
-            })
-            .collect();
+        let mut states: Vec<ResourceState> =
+            self.textures.iter().map(ResourceState::from_desc).collect();
 
         let mut compiled_passes = Vec::with_capacity(self.passes.len());
 
@@ -492,6 +482,19 @@ struct ResourceState {
     layout: vk::ImageLayout,
     stage: vk::PipelineStageFlags2,
     access: vk::AccessFlags2,
+}
+
+impl ResourceState {
+    fn from_desc(desc: &TextureDesc) -> Self {
+        Self {
+            layout: desc
+                .imported
+                .as_ref()
+                .map_or(vk::ImageLayout::UNDEFINED, |i| i.initial_layout),
+            stage: vk::PipelineStageFlags2::TOP_OF_PIPE,
+            access: vk::AccessFlags2::empty(),
+        }
+    }
 }
 
 /// A fully-resolved image memory barrier, minus the physical `VkImage`
