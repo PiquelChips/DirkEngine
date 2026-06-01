@@ -51,6 +51,7 @@ impl Renderer {
         let (device_info, queues) = physical_device::PhysicalDeviceSelector::new()
             .require_extensions(DEVICE_EXTENSIONS)
             .require(|info| info.features.geometry_shader == vk::TRUE)
+            .require(|info| info.vulkan12_features.vulkan_memory_model == vk::TRUE)
             .select(instance, surface_loader, surface)
             .ok_or(Error::NoDeviceFound)?;
 
@@ -189,8 +190,9 @@ impl Renderer {
 
         let physical_device_features =
             vk::PhysicalDeviceFeatures::default().sampler_anisotropy(true);
-        let mut vulkan12_features =
-            vk::PhysicalDeviceVulkan12Features::default().buffer_device_address(true);
+        let mut vulkan12_features = vk::PhysicalDeviceVulkan12Features::default()
+            .buffer_device_address(true)
+            .vulkan_memory_model(true);
         let mut vulkan13_features = vk::PhysicalDeviceVulkan13Features::default()
             .dynamic_rendering(true)
             .synchronization2(true);
