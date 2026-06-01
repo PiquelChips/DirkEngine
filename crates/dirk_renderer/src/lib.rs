@@ -226,20 +226,14 @@ impl Renderer {
         })
     }
 
-    // TODO: refactor egui renderer API
-
-    /// Begins an egui frame and returns the context used to build UI.
+    /// Begins a frame.
     ///
-    /// Call [`Self::end_egui_frame`] after adding widgets to the returned context.
-    pub fn begin_egui_frame(&mut self) -> egui::Context {
+    /// Returns an [`egui::Context`] for rendering.
+    pub fn begin_frame(&mut self) -> egui::Context {
         self.egui.begin_frame(self.primary_extent())
     }
 
-    /// Ends the current egui frame and stores its paint data for the next
-    /// [`Self::render`] call.
-    pub fn end_egui_frame(&mut self) {
-        self.egui.end_frame();
-    }
+    // TODO: shouldn't be necessary
 
     fn primary_extent(&self) -> vk::Extent2D {
         self.players
@@ -363,7 +357,9 @@ impl Renderer {
     /// # Errors
     ///
     /// Vulkan errors can occur during rendering
-    pub fn render(&mut self) -> Result<()> {
+    pub fn end_frame(&mut self) -> Result<()> {
+        self.egui.end_frame();
+
         let frame_index = self.current_frame();
         let frame = &self.frames[frame_index];
 
