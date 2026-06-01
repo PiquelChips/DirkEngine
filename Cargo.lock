@@ -556,6 +556,7 @@ dependencies = [
  "anyhow",
  "dirk_assets",
  "dirk_build",
+ "dirk_engine",
  "dirk_events",
  "dirk_platform",
  "dirk_player",
