@@ -80,7 +80,7 @@ slotmap = "1"
 
 thiserror = "2"
 anyhow = "1"
-cargo_metadata = "0.23"
+cargo_metadata = "0.21"
 
 # Engine modules
 dirk_build    = { version = "0.1.0", path = "crates/dirk_build" }
