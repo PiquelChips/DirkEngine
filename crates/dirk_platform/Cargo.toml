@@ -18,6 +18,7 @@ thiserror.workspace = true
 winit.workspace = true
 
 dirk_events.workspace = true
+dirk_engine.workspace = true
 
 glam.workspace = true
 

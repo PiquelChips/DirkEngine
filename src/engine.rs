@@ -32,9 +32,9 @@ impl ExitState {
 
 /// This is the main struct that holds global engine state.
 pub struct Engine {
-    exit_consumer: dirk_events::Consumer<dirk_events::AppExit>,
-    exit_dispatcher: dirk_events::Dispatcher<dirk_events::Exiting>,
-    frame_dispatcher: dirk_events::Dispatcher<dirk_events::BeginFrame>,
+    exit_consumer: dirk_events::Consumer<dirk_engine::events::AppExit>,
+    exit_dispatcher: dirk_events::Dispatcher<dirk_engine::events::Exiting>,
+    frame_dispatcher: dirk_events::Dispatcher<dirk_engine::events::BeginFrame>,
     #[allow(unused)]
     event_manager: dirk_events::EventManager,
 
@@ -175,7 +175,7 @@ impl Engine {
 
     fn tick_inner(&mut self) -> anyhow::Result<()> {
         self.frame_dispatcher
-            .dispatch(dirk_events::BeginFrame(self.frame));
+            .dispatch(dirk_engine::events::BeginFrame(self.frame));
 
         let delta_time = self.capture_delta_time();
 
@@ -213,7 +213,7 @@ impl Engine {
     }
 
     fn process_events(&mut self) {
-        if let Some(dirk_events::AppExit(msg)) = self.exit_consumer.try_consume() {
+        if let Some(dirk_engine::events::AppExit(msg)) = self.exit_consumer.try_consume() {
             info!("App exit requested: {msg}");
             self.exit(None);
         }
@@ -235,7 +235,7 @@ impl Engine {
         };
 
         if self.exit_state.exiting() {
-            self.exit_dispatcher.dispatch(dirk_events::Exiting);
+            self.exit_dispatcher.dispatch(dirk_engine::events::Exiting);
         }
     }
     /// Returns the exit error

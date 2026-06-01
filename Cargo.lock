@@ -451,6 +451,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "dirk_build",
+ "dirk_engine",
  "dirk_events",
  "glam",
  "thiserror 2.0.18",

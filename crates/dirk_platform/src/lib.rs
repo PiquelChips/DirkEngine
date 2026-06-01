@@ -29,7 +29,7 @@ pub struct Platform {
     handler: PlatformHandler,
     event_loop: EventLoop,
 
-    exit_dispatcher: dirk_events::Dispatcher<dirk_events::AppExit>,
+    exit_dispatcher: dirk_events::Dispatcher<dirk_engine::events::AppExit>,
     window_consumer: dirk_events::Consumer<WindowEvent>,
 }
 
@@ -74,16 +74,17 @@ impl Platform {
         {
             PumpStatus::Exit(code) => {
                 // Treat a forced OS exit like a window close.
-                self.exit_dispatcher.dispatch(dirk_events::AppExit(format!(
-                    "Event loop exited with code {code}"
-                )));
+                self.exit_dispatcher
+                    .dispatch(dirk_engine::events::AppExit(format!(
+                        "Event loop exited with code {code}"
+                    )));
                 return;
             }
             PumpStatus::Continue => {}
         }
 
         if self.handler.windows.is_empty() {
-            self.exit_dispatcher.dispatch(dirk_events::AppExit(
+            self.exit_dispatcher.dispatch(dirk_engine::events::AppExit(
                 "all platform windows have been closed".into(),
             ));
         }
