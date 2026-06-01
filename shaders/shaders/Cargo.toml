@@ -18,7 +18,7 @@ crate-type = ["rlib", "cdylib"]
 spirv-std.workspace = true
 
 [target.'cfg(target_arch = "spirv")'.dependencies]
-glam = { version = ">=0.30.8", default-features = false, features = ["all-types", "libm"] }
+glam = { version = ">=0.30.8", default-features = false, features = ["libm"] }
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_arch, values("spirv"))'] }
