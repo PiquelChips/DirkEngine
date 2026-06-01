@@ -1,11 +1,4 @@
 //! A simple Vulkan render graph for ash + Vulkan 1.3 (dynamic rendering).
-//!
-//! TODOs:
-//! - transient resource allocation
-//!   Store `HashMap<TextureDesc, Image>` at first.
-//! - compute stuff
-//! - buffer resources
-//! - cull unreferenced passes
 
 use ash::vk;
 
