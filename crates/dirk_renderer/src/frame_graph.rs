@@ -370,10 +370,131 @@ impl<'a> RenderGraph<'a> {
         }
     }
 
+    /// Compiles & runs the Graph
+    pub fn run(self, device: &RenderDevice, cmd: &CommandBuffer) -> Result<()> {
+        GraphExecutor::new(device, self.compile())?.execute(cmd)
+    }
+
     /// Compile the graph: derive barriers and collect attachment metadata.
     /// Consumes `self`.
-    pub fn compile(self) -> CompiledGraph<'a> {
-        compile_graph(self)
+    fn compile(self) -> CompiledGraph<'a> {
+        // Initialise per-resource state from the TextureDesc.
+        let mut states: Vec<ResourceState> = self
+            .textures
+            .iter()
+            .map(|desc| ResourceState {
+                layout: desc
+                    .imported
+                    .as_ref()
+                    .map_or(vk::ImageLayout::UNDEFINED, |i| i.initial_layout),
+                stage: vk::PipelineStageFlags2::TOP_OF_PIPE,
+                access: vk::AccessFlags2::empty(),
+            })
+            .collect();
+
+        let mut compiled_passes = Vec::with_capacity(self.passes.len());
+
+        for pass in self.passes {
+            // Iterate reads then writes.  For each usage, compare the desired
+            // (layout, stage, access) against the current resource state and emit
+            // a barrier if any transition is required.
+            let mut pre_barriers = Vec::new();
+            for usage in pass.reads.iter().chain(pass.writes.iter()) {
+                let idx = usage.handle.0 as usize;
+                let state = &states[idx];
+
+                if barrier_needed(state, usage) {
+                    pre_barriers.push(ImageBarrier {
+                        handle: usage.handle,
+                        old_layout: state.layout,
+                        new_layout: usage.layout,
+                        src_stage: state.stage,
+                        dst_stage: usage.stage,
+                        src_access: state.access,
+                        dst_access: usage.access,
+                    });
+                }
+            }
+
+            // After the pass executes the resource is in its new state.
+            for usage in pass.reads.iter().chain(pass.writes.iter()) {
+                states[usage.handle.0 as usize] = ResourceState {
+                    layout: usage.layout,
+                    stage: usage.stage,
+                    access: usage.access,
+                };
+            }
+
+            let mut color_attachments: Vec<ColorAttachment> = Vec::new();
+            let mut depth_attachment: Option<(TextureHandle, AttachmentInfo)> = None;
+            let mut render_extent: Option<vk::Extent2D> = None;
+            for usage in &pass.writes {
+                if let Some(att) = &usage.attachment {
+                    let desc = &self.textures[usage.handle.0 as usize];
+                    match usage.layout {
+                        vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL => {
+                            render_extent.get_or_insert(vk::Extent2D {
+                                width: desc.width,
+                                height: desc.height,
+                            });
+                            let resolve = pass
+                                .color_resolves
+                                .iter()
+                                .find_map(|(src, dst)| (*src == usage.handle).then_some(*dst));
+                            color_attachments.push(ColorAttachment {
+                                handle: usage.handle,
+                                info: att.clone(),
+                                resolve,
+                            });
+                        }
+                        vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL
+                        | vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL => {
+                            depth_attachment = Some((usage.handle, att.clone()));
+                            // Use depth dimensions if there are no colour attachments.
+                            render_extent.get_or_insert(vk::Extent2D {
+                                width: desc.width,
+                                height: desc.height,
+                            });
+                            // TODO: why no add to depth_attachments?
+                        }
+                        _ => {}
+                    }
+                }
+            }
+
+            compiled_passes.push(CompiledPass {
+                name: pass.name,
+                pre_barriers,
+                color_attachments,
+                depth_attachment,
+                render_extent,
+                callback: pass.callback,
+            });
+        }
+
+        let mut final_barriers = Vec::new();
+        for (idx, desc) in self.textures.iter().enumerate() {
+            if let Some(imported) = &desc.imported {
+                let state = &states[idx];
+                if state.layout != imported.final_layout {
+                    final_barriers.push(ImageBarrier {
+                        handle: texture_handle(idx),
+                        old_layout: state.layout,
+                        new_layout: imported.final_layout,
+                        src_stage: state.stage,
+                        dst_stage: vk::PipelineStageFlags2::BOTTOM_OF_PIPE,
+                        src_access: state.access,
+                        dst_access: vk::AccessFlags2::empty(),
+                    });
+                }
+            }
+        }
+
+        CompiledGraph {
+            textures: self.textures,
+            passes: compiled_passes,
+            final_barriers,
+        }
     }
 }
 
@@ -430,139 +551,13 @@ pub struct ColorAttachment {
 }
 
 /// Output of the compilation phase.
-pub struct CompiledGraph<'a> {
-    pub textures: Vec<TextureDesc>,
-    pub passes: Vec<CompiledPass<'a>>,
+struct CompiledGraph<'a> {
+    textures: Vec<TextureDesc>,
+    passes: Vec<CompiledPass<'a>>,
     /// Barriers emitted *after* the last pass – primarily used to transition
     /// imported textures to their required `final_layout` (e.g.
     /// `PRESENT_SRC_KHR`).
-    pub final_barriers: Vec<ImageBarrier>,
-}
-
-/// Core barrier-derivation logic.
-fn compile_graph(graph: RenderGraph<'_>) -> CompiledGraph<'_> {
-    // Initialise per-resource state from the TextureDesc.
-    let mut states: Vec<ResourceState> = graph
-        .textures
-        .iter()
-        .map(|desc| ResourceState {
-            layout: desc
-                .imported
-                .as_ref()
-                .map_or(vk::ImageLayout::UNDEFINED, |i| i.initial_layout),
-            stage: vk::PipelineStageFlags2::TOP_OF_PIPE,
-            access: vk::AccessFlags2::empty(),
-        })
-        .collect();
-
-    let mut compiled_passes = Vec::with_capacity(graph.passes.len());
-
-    for pass in graph.passes {
-        // ── Barrier derivation ────────────────────────────────────────────────
-        // Iterate reads then writes.  For each usage, compare the desired
-        // (layout, stage, access) against the current resource state and emit
-        // a barrier if any transition is required.
-        let mut pre_barriers = Vec::new();
-        for usage in pass.reads.iter().chain(pass.writes.iter()) {
-            let idx = usage.handle.0 as usize;
-            let state = &states[idx];
-
-            if barrier_needed(state, usage) {
-                pre_barriers.push(ImageBarrier {
-                    handle: usage.handle,
-                    old_layout: state.layout,
-                    new_layout: usage.layout,
-                    src_stage: state.stage,
-                    dst_stage: usage.stage,
-                    src_access: state.access,
-                    dst_access: usage.access,
-                });
-            }
-        }
-
-        // ── State update ──────────────────────────────────────────────────────
-        // After the pass executes the resource is in its new state.
-        for usage in pass.reads.iter().chain(pass.writes.iter()) {
-            states[usage.handle.0 as usize] = ResourceState {
-                layout: usage.layout,
-                stage: usage.stage,
-                access: usage.access,
-            };
-        }
-
-        // ── Attachment collection ─────────────────────────────────────────────
-        let mut color_attachments: Vec<ColorAttachment> = Vec::new();
-        let mut depth_attachment: Option<(TextureHandle, AttachmentInfo)> = None;
-        let mut render_extent: Option<vk::Extent2D> = None;
-        for usage in &pass.writes {
-            if let Some(att) = &usage.attachment {
-                let desc = &graph.textures[usage.handle.0 as usize];
-                match usage.layout {
-                    vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL => {
-                        render_extent.get_or_insert(vk::Extent2D {
-                            width: desc.width,
-                            height: desc.height,
-                        });
-                        let resolve = pass
-                            .color_resolves
-                            .iter()
-                            .find_map(|(src, dst)| (*src == usage.handle).then_some(*dst));
-                        color_attachments.push(ColorAttachment {
-                            handle: usage.handle,
-                            info: att.clone(),
-                            resolve,
-                        });
-                    }
-                    vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL
-                    | vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL => {
-                        depth_attachment = Some((usage.handle, att.clone()));
-                        // Use depth dimensions if there are no colour attachments.
-                        render_extent.get_or_insert(vk::Extent2D {
-                            width: desc.width,
-                            height: desc.height,
-                        });
-                        // TODO: why no add to depth_attachments?
-                    }
-                    _ => {}
-                }
-            }
-        }
-
-        compiled_passes.push(CompiledPass {
-            name: pass.name,
-            pre_barriers,
-            color_attachments,
-            depth_attachment,
-            render_extent,
-            callback: pass.callback,
-        });
-    }
-
-    // ── Final barriers ────────────────────────────────────────────────────────
-    // Transition every imported texture to its declared `final_layout`.
-    let mut final_barriers = Vec::new();
-    for (idx, desc) in graph.textures.iter().enumerate() {
-        if let Some(imported) = &desc.imported {
-            let state = &states[idx];
-            if state.layout != imported.final_layout {
-                final_barriers.push(ImageBarrier {
-                    handle: texture_handle(idx),
-                    old_layout: state.layout,
-                    new_layout: imported.final_layout,
-                    src_stage: state.stage,
-                    dst_stage: vk::PipelineStageFlags2::BOTTOM_OF_PIPE,
-                    src_access: state.access,
-                    dst_access: vk::AccessFlags2::empty(),
-                });
-            }
-        }
-    }
-
-    CompiledGraph {
-        textures: graph.textures,
-        passes: compiled_passes,
-        final_barriers,
-    }
+    final_barriers: Vec<ImageBarrier>,
 }
 
 /// Returns `true` when a `VkImageMemoryBarrier2` is required.
@@ -594,7 +589,7 @@ fn barrier_needed(state: &ResourceState, usage: &TextureUsage) -> bool {
 /// A production implementation would replace the naive per-image allocations
 /// here with a proper transient allocator (e.g. VMA's
 /// `VMA_MEMORY_USAGE_GPU_ONLY` with aliasing hints from the compiled graph).
-pub struct GraphExecutor<'a> {
+struct GraphExecutor<'a> {
     device: RenderDevice,
     transient_images: Vec<Image>,
     /// One entry per `TextureHandle` index.
@@ -668,7 +663,7 @@ impl<'a> GraphExecutor<'a> {
     ///
     /// `cmd` must be in the recording state and must *not* already be inside
     /// a render pass or dynamic rendering scope.
-    pub fn execute(&mut self, cmd: &CommandBuffer) -> Result<()> {
+    fn execute(mut self, cmd: &CommandBuffer) -> Result<()> {
         debug_assert!(self.transient_images.len() <= self.images.len());
 
         for pass in &mut self.passes {

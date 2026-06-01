@@ -6,7 +6,7 @@ use gpu_allocator::MemoryLocation;
 
 use crate::{
     Error, MAX_FRAMES_IN_FLIGHT, Result,
-    frame_graph::{AttachmentInfo, GraphExecutor, ImportedTexture, RenderGraph, TextureDesc},
+    frame_graph::{AttachmentInfo, ImportedTexture, RenderGraph, TextureDesc},
     models::ModelRegistry,
     pipeline::GraphicsPipeline,
     resources::{
@@ -165,9 +165,7 @@ impl SceneManager {
             );
             Ok(())
         }));
-
-        let mut executor = GraphExecutor::new(&self.device, graph.compile())?;
-        executor.execute(cmd)
+        graph.run(&self.device, cmd)
     }
 
     fn record_scene_draws(
