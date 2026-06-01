@@ -5,5 +5,5 @@
 
 use crate::Shader;
 
-pub const VERT: Shader = shader!("shader.vert", c"main");
-pub const FRAG: Shader = shader!("shader.frag", c"main");
+pub const VERT: Shader = shader!("main_vs", c"main_vs");
+pub const FRAG: Shader = shader!("main_fs", c"main_fs");
