@@ -429,6 +429,10 @@ dependencies = [
 [[package]]
 name = "dirk_engine"
 version = "0.1.0"
+dependencies = [
+ "dirk_events",
+ "dirk_threads",
+]
 
 [[package]]
 name = "dirk_events"

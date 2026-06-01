@@ -1,6 +1,6 @@
-//! This module contains common event types used throughout the engine.
+//! This module contains all the main events that are used by the engine.
 
-use crate::Event;
+use dirk_events::Event;
 
 /// An event to request to the engine to exit.
 ///
