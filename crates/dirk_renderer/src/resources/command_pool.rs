@@ -96,6 +96,7 @@ impl<Type: Pool> CommandPool<Type> {
         Ok(CommandBuffer {
             device: self.device.clone(),
             buff,
+            pool: self.pool,
             queue_type: self.queue_type,
         })
     }
@@ -116,6 +117,8 @@ pub struct CommandBuffer {
     device: Device,
     /// The buffer
     buff: vk::CommandBuffer,
+    /// The pool this command buffer was allocated from.
+    pool: vk::CommandPool,
     /// The type of queue to submit to
     queue_type: QueueType,
 }
@@ -327,7 +330,34 @@ impl CommandBuffer {
         unsafe {
             self.device.end_command_buffer(self.buff)?;
         };
-        self.submit(queues, info, vk::Fence::null())
+        let fence = unsafe {
+            self.device
+                .create_fence(&vk::FenceCreateInfo::default(), None)?
+        };
+
+        let submit_result = self.submit(queues, info, fence);
+        if submit_result.is_ok() {
+            let wait_result = unsafe {
+                self.device
+                    .wait_for_fences(std::slice::from_ref(&fence), true, u64::MAX)
+            };
+            if wait_result.is_ok() {
+                unsafe {
+                    self.device
+                        .free_command_buffers(self.pool, std::slice::from_ref(&self.buff));
+                }
+            }
+            unsafe {
+                self.device.destroy_fence(fence, None);
+            }
+            wait_result
+        } else {
+            // TODO: RAII Fence wrapper to avoid having to do this weird deletion.
+            unsafe {
+                self.device.destroy_fence(fence, None);
+            }
+            submit_result
+        }
     }
 }
 
