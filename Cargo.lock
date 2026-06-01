@@ -427,6 +427,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "dirk_editor"
+version = "0.1.0"
+
+[[package]]
 name = "dirk_events"
 version = "0.1.0"
 dependencies = [
@@ -552,6 +556,7 @@ dependencies = [
  "anyhow",
  "dirk_assets",
  "dirk_build",
+ "dirk_editor",
  "dirk_events",
  "dirk_platform",
  "dirk_player",

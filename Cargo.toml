@@ -30,6 +30,7 @@ dirk_universe.workspace = true
 dirk_world.workspace = true
 dirk_assets.workspace = true
 dirk_player.workspace = true
+dirk_editor = { workspace = true, optional = true }
 
 [build-dependencies]
 dirk_build.workspace = true
@@ -44,7 +45,7 @@ rustdoc-args = ["-Zunstable-options", "--cfg", "docsrs"]
 [features]
 default = ["editor"]
 
-editor = []
+editor = ["dep:dirk_editor"]
 
 # WORKSPACE CONFIGURATION
 
@@ -93,6 +94,7 @@ dirk_assets   = { version = "0.1.0", path = "crates/dirk_assets" }
 dirk_world    = { version = "0.1.0", path = "crates/dirk_world" }
 dirk_universe = { version = "0.1.0", path = "crates/dirk_universe" }
 dirk_player   = { version = "0.1.0", path = "crates/dirk_player" }
+dirk_editor   = { version = "0.1.0", path = "crates/dirk_editor" }
 
 dirk_shaders  = { version = "0.1.0", path = "shaders" }
 
