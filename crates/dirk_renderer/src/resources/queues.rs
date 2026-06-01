@@ -47,6 +47,16 @@ impl Queues {
         unsafe { self.device.queue_submit(queue, submits, fence) }
     }
 
+    /// Returns the raw Vulkan queue for integrations that record their own
+    /// short-lived uploads.
+    pub fn raw(&self, queue_type: QueueType) -> vk::Queue {
+        match queue_type {
+            QueueType::Compute => self.compute,
+            QueueType::Graphics => self.graphics,
+            QueueType::Transfer => self.transfer,
+        }
+    }
+
     pub fn present(&self, info: &vk::PresentInfoKHR) -> VkResult<bool> {
         unsafe { self.swapchain_loader.queue_present(self.present, info) }
     }

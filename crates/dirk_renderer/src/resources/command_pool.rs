@@ -86,6 +86,9 @@ impl<Type: Pool> CommandPool<Type> {
             self.device.destroy_command_pool(self.pool, None);
         }
     }
+    pub fn raw(&self) -> vk::CommandPool {
+        self.pool
+    }
     pub fn allocate_buffer(&self) -> Result<CommandBuffer> {
         let allocate_info = vk::CommandBufferAllocateInfo::default()
             .command_pool(self.pool)
