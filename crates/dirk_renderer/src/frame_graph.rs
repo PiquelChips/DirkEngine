@@ -2,30 +2,10 @@
 //!
 //! TODOs:
 //! - transient resource allocation
+//!   Store `HashMap<TextureDesc, Image>` at first.
 //! - compute stuff
-//!
-//! Design sketch
-//! ─────────────
-//! The graph is built in three phases, mirroring the Frostbite `FrameGraph` talk
-//! and Arntzen's blog post:
-//!
-//!  1. **Setup**   – declare virtual texture resources and register passes with
-//!     their read/write dependencies.
-//!  2. **Compile** – walk passes in order, diff each resource usage against its
-//!     last known state, and emit `vkImageMemoryBarrier2` records.
-//!  3. **Execute** – allocate transient resources, record barriers +
-//!     `vkCmdBeginRendering` / `vkCmdEndRendering` into a command
-//!     buffer, and invoke per-pass user callbacks.
-//!
-//! What is intentionally left out to keep this self-contained:
-//! - Render target aliasing / memory transients (VMA or a slab allocator)
-//! - Buffer resources
-//! - Multi-queue / async compute
-//! - Automatic culling of unreferenced passes
-//! - Semaphore / timeline synchronisation across frames
-//!
-//! Requires: ash 0.38, Vulkan 1.3 (`VK_KHR_dynamic_rendering` promoted to core,
-//!     `VK_KHR_synchronization2` promoted to core).
+//! - buffer resources
+//! - cull unreferenced passes
 
 use ash::vk;
 
@@ -600,7 +580,7 @@ struct GraphExecutor<'a> {
 
 impl<'a> GraphExecutor<'a> {
     /// Allocate all transient resources and bind imported ones.
-    pub fn new(device: &RenderDevice, graph: CompiledGraph<'a>) -> Result<Self> {
+    fn new(device: &RenderDevice, graph: CompiledGraph<'a>) -> Result<Self> {
         let mut transient_images = Vec::new();
         let mut images = Vec::with_capacity(graph.textures.len());
 
@@ -667,7 +647,6 @@ impl<'a> GraphExecutor<'a> {
         debug_assert!(self.transient_images.len() <= self.images.len());
 
         for pass in &mut self.passes {
-            // ── Pre-pass barriers ─────────────────────────────────────────────
             if !pass.pre_barriers.is_empty() {
                 let image_barriers: Vec<vk::ImageMemoryBarrier2> = pass
                     .pre_barriers
@@ -681,8 +660,6 @@ impl<'a> GraphExecutor<'a> {
                             .old_layout(b.old_layout)
                             .new_layout(b.new_layout)
                             .image(self.images[b.handle.index()].image)
-                            .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
-                            .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
                             .subresource_range(subresource_range_for(
                                 self.images[b.handle.index()].aspect_flags,
                             ))
@@ -694,7 +671,6 @@ impl<'a> GraphExecutor<'a> {
                 );
             }
 
-            // ── Dynamic rendering scope ───────────────────────────────────────
             // Replaces vkBeginRenderPass/vkEndRenderPass entirely.
             // Attachments are specified inline – no VkRenderPass or
             // VkFramebuffer objects are needed.
@@ -735,7 +711,6 @@ impl<'a> GraphExecutor<'a> {
                     .layer_count(1)
                     .color_attachments(&color_infos);
 
-                // `depth_info_storage` must outlive `rendering_info`.
                 let depth_info_storage;
                 if let Some((h, att)) = &pass.depth_attachment {
                     depth_info_storage = vk::RenderingAttachmentInfo::default()
@@ -750,7 +725,6 @@ impl<'a> GraphExecutor<'a> {
                 cmd.begin_rendering(&rendering_info);
             }
 
-            // ── User callback ─────────────────────────────────────────────────
             if let Some(callback) = pass.callback.take() {
                 callback(&self.device, cmd, &self.images)?;
             }
@@ -760,7 +734,6 @@ impl<'a> GraphExecutor<'a> {
             }
         }
 
-        // ── Final barriers ────────────────────────────────────────────────────
         if !self.final_barriers.is_empty() {
             let image_barriers: Vec<vk::ImageMemoryBarrier2> = self
                 .final_barriers
@@ -774,8 +747,6 @@ impl<'a> GraphExecutor<'a> {
                         .old_layout(b.old_layout)
                         .new_layout(b.new_layout)
                         .image(self.images[b.handle.index()].image)
-                        .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
-                        .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
                         .subresource_range(subresource_range_for(
                             self.images[b.handle.index()].aspect_flags,
                         ))
