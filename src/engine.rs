@@ -64,11 +64,6 @@ impl Engine {
     ///
     /// Errors can be returned during platform & renderer initialisation
     pub fn init() -> anyhow::Result<Self> {
-        #[cfg(feature = "editor")]
-        info!("starting editor");
-
-        info!("initialising engine");
-
         let logger = piquel_log::Logger::new()
             .with_max_level(piquel_log::LogLevel::Debug)
             .with_log_bridge(true)
@@ -77,6 +72,11 @@ impl Engine {
             ));
 
         logger.init().context("init logger")?;
+
+        #[cfg(feature = "editor")]
+        info!("starting editor");
+
+        info!("initialising engine");
 
         let workers = WorkerPool::new("dirk-workers");
 

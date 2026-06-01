@@ -24,13 +24,13 @@ piquel-log.workspace = true
 dirk_threads.workspace = true
 dirk_utils.workspace = true
 dirk_events.workspace = true
-dirk_platform.workspace = true
-dirk_renderer.workspace = true
 dirk_universe.workspace = true
 dirk_world.workspace = true
-dirk_assets.workspace = true
 dirk_player.workspace = true
 dirk_engine.workspace = true
+dirk_platform = { workspace = true, optional = true }
+dirk_renderer = { workspace = true, optional = true }
+dirk_assets = { workspace = true, optional = true }
 
 [build-dependencies]
 dirk_build.workspace = true
@@ -45,7 +45,14 @@ rustdoc-args = ["-Zunstable-options", "--cfg", "docsrs"]
 [features]
 default = ["editor"]
 
-editor = []
+editor = ["dirk_engine/editor", "renderer", "assets"]
+
+# This feature should never be manually enabled. There is no point.
+# Having this alone brings new features.
+platform = ["dep:dirk_platform"]
+
+renderer = ["platform", "dep:dirk_renderer", "assets"]
+assets = ["dep:dirk_assets"]
 
 # WORKSPACE CONFIGURATION
 
