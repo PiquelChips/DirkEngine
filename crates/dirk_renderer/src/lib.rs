@@ -39,7 +39,10 @@ mod window;
 use window::Window;
 
 mod resources;
-use resources::{device::RenderDevice, queues::QueueType};
+use resources::{
+    device::{FrameCounters, RenderDevice},
+    queues::QueueType,
+};
 
 mod proxy;
 use proxy::{
@@ -97,6 +100,7 @@ pub struct Renderer {
 
     frames: [Frame; MAX_FRAMES_IN_FLIGHT],
     current_frame: Arc<AtomicUsize>,
+    frame_count: Arc<AtomicUsize>,
 
     // Events
     window_consumer: dirk_events::Consumer<dirk_platform::WindowEvent>,
@@ -164,6 +168,7 @@ impl Renderer {
         let device = Self::create_device(&instance, physical_device, &properties)?;
 
         let current_frame = Arc::new(AtomicUsize::new(0));
+        let frame_count = Arc::new(AtomicUsize::new(0));
 
         let render_device = RenderDevice::new(
             entry.clone(),
@@ -171,7 +176,10 @@ impl Renderer {
             device.clone(),
             physical_device,
             properties,
-            current_frame.clone(),
+            FrameCounters {
+                current_frame: current_frame.clone(),
+                frame_count: frame_count.clone(),
+            },
             #[cfg(validation)]
             debug_messenger,
         )?;
@@ -198,6 +206,7 @@ impl Renderer {
 
             frames,
             current_frame,
+            frame_count,
 
             window_consumer: event_manager.subscribe(),
             platform_consumer: event_manager.subscribe(),
@@ -385,6 +394,7 @@ impl Renderer {
                 (self.current_frame() + 1) % MAX_FRAMES_IN_FLIGHT,
                 Ordering::Relaxed,
             );
+            self.frame_count.fetch_add(1, Ordering::Relaxed);
         }
         Ok(())
     }

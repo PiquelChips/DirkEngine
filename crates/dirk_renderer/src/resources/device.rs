@@ -64,6 +64,12 @@ pub struct RenderDeviceInner {
     allocator: Option<Mutex<Allocator>>,
     deletion_queue: Mutex<DeletionQueue>,
     current_frame: Arc<AtomicUsize>,
+    frame_count: Arc<AtomicUsize>,
+}
+
+pub struct FrameCounters {
+    pub current_frame: Arc<AtomicUsize>,
+    pub frame_count: Arc<AtomicUsize>,
 }
 
 impl RenderDevice {
@@ -73,7 +79,7 @@ impl RenderDevice {
         device: ash::Device,
         physical_device: vk::PhysicalDevice,
         properties: RendererProperties,
-        current_frame: Arc<AtomicUsize>,
+        frame_counters: FrameCounters,
         #[cfg(validation)] debug_messenger: vk::DebugUtilsMessengerEXT,
     ) -> Result<Self> {
         // ALLOCATOR
@@ -119,10 +125,11 @@ impl RenderDevice {
             properties,
             allocator: Some(Mutex::new(allocator)),
             deletion_queue: Mutex::new(DeletionQueue::new(
-                current_frame.clone(),
+                frame_counters.frame_count.clone(),
                 MAX_FRAMES_IN_FLIGHT,
             )),
-            current_frame,
+            current_frame: frame_counters.current_frame,
+            frame_count: frame_counters.frame_count,
 
             #[cfg(validation)]
             debug_utils_loader: debug_utils::Instance::new(&entry, &instance),
@@ -150,7 +157,7 @@ impl RenderDevice {
     /// Call once per frame from your render loop.
     pub fn flush_deletions(&self) {
         let mut queue = self.deletion_queue.lock();
-        queue.flush(self, self.current_frame());
+        queue.flush(self, self.frame_count.load(Ordering::Relaxed));
     }
 
     pub fn current_frame(&self) -> usize {
@@ -211,20 +218,20 @@ pub enum Garbage {
 
 struct PendingDeletion {
     garbage: Option<Garbage>,
-    death_frame: usize, // frame index after which it's safe to delete
+    death_frame: usize, // monotonic frame count after which it's safe to delete
 }
 
 struct DeletionQueue {
     pending: Vec<PendingDeletion>,
-    current_frame: Arc<AtomicUsize>,
+    frame_count: Arc<AtomicUsize>,
     frames_in_flight: usize,
 }
 
 impl DeletionQueue {
-    fn new(current_frame: Arc<AtomicUsize>, frames_in_flight: usize) -> Self {
+    fn new(frame_count: Arc<AtomicUsize>, frames_in_flight: usize) -> Self {
         Self {
             pending: Vec::new(),
-            current_frame,
+            frame_count,
             frames_in_flight,
         }
     }
@@ -233,14 +240,14 @@ impl DeletionQueue {
     fn enqueue(&mut self, garbage: Garbage) {
         self.pending.push(PendingDeletion {
             garbage: Some(garbage),
-            death_frame: self.current_frame.load(Ordering::Relaxed) + 2 * self.frames_in_flight, // wait two frames before destroying
+            death_frame: self.frame_count.load(Ordering::Relaxed) + 2 * self.frames_in_flight, // wait two frames before destroying
         });
     }
 
     /// Call once per frame. Destroys anything safe to destroy.
-    fn flush(&mut self, device: &RenderDevice, current_frame: usize) {
+    fn flush(&mut self, device: &RenderDevice, frame_count: usize) {
         self.pending.retain_mut(|item| {
-            if current_frame >= item.death_frame {
+            if frame_count >= item.death_frame {
                 if let Some(garbage) = item.garbage.take() {
                     garbage.destroy(device);
                 }
