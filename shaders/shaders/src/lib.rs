@@ -1,4 +1,6 @@
 #![no_std]
+// shaders often have a lot of different inputs, we can't help it
+#![allow(clippy::too_many_arguments)]
 
 use spirv_std::{
     glam::{Mat4, Vec2, Vec3, Vec4},
