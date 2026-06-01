@@ -34,6 +34,8 @@ glam.workspace = true
 gpu-allocator.workspace = true
 gltf.workspace = true
 slotmap.workspace = true
+egui.workspace = true
+egui-ash-renderer.workspace = true
 
 [build-dependencies]
 dirk_build.workspace = true

@@ -24,6 +24,9 @@ pub enum Error {
     /// Error produced by the [`assets`] crate.
     #[error("assets error: {0}")]
     AssetError(#[from] dirk_assets::Error),
+    /// Error produced by the egui Vulkan renderer.
+    #[error("egui renderer error: {0}")]
+    EguiRenderer(#[from] egui_ash_renderer::RendererError),
 
     /// If no physical device is found
     #[error("no suitable graphics device found")]

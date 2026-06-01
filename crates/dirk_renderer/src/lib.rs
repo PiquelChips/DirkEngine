@@ -33,7 +33,11 @@ use resources::descriptors::DescriptorLayouts;
 use utils::{Frame, RendererProperties, Vertex, make_version};
 
 mod errors;
+pub use egui;
 pub use errors::{Error, Result};
+
+mod egui_integration;
+use egui_integration::EguiState;
 
 mod window;
 use window::Window;
@@ -47,7 +51,7 @@ use resources::{
 mod proxy;
 use proxy::{
     PlayerProxy,
-    scene::{RenderTarget, SceneManager},
+    scene::SceneManager,
     systems::{
         RendererMeshSystem, RendererPlayerSystem, RendererTransformSystem, RendererUniverseSystem,
     },
@@ -55,6 +59,8 @@ use proxy::{
 
 mod render_commands;
 use render_commands::RenderCommandReceiver;
+
+use crate::frame_graph::{ImportedTexture, RenderGraph, TextureDesc};
 
 mod init;
 mod models;
@@ -95,6 +101,8 @@ pub struct Renderer {
     scene_manager: SceneManager,
     /// The management for all the models.
     models: models::ModelRegistry,
+    /// Immediate-mode UI rendering state.
+    egui: EguiState,
     /// Maps each live [`PlayerId`] to its proxy.
     players: HashMap<PlayerId, PlayerProxy>,
 
@@ -188,6 +196,7 @@ impl Renderer {
 
         let models = models::ModelRegistry::new(&render_device, event_manager)?;
         let scene_manager = SceneManager::init(&render_device)?;
+        let egui = EguiState::new(&render_device)?;
 
         let windows = {
             let window = Window::build(&render_device, window)?;
@@ -203,6 +212,7 @@ impl Renderer {
             scene_manager,
             players: HashMap::new(),
             models,
+            egui,
 
             frames,
             current_frame,
@@ -214,6 +224,35 @@ impl Renderer {
             player_despawn_consumer: event_manager.subscribe(),
             receivers: Vec::new(),
         })
+    }
+
+    // TODO: refactor egui renderer API
+
+    /// Begins an egui frame and returns the context used to build UI.
+    ///
+    /// Call [`Self::end_egui_frame`] after adding widgets to the returned context.
+    pub fn begin_egui_frame(&mut self) -> egui::Context {
+        self.egui.begin_frame(self.primary_extent())
+    }
+
+    /// Ends the current egui frame and stores its paint data for the next
+    /// [`Self::render`] call.
+    pub fn end_egui_frame(&mut self) {
+        self.egui.end_frame();
+    }
+
+    fn primary_extent(&self) -> vk::Extent2D {
+        self.players
+            .values()
+            .find_map(|player| self.windows.get(&player.window))
+            .or_else(|| self.windows.values().next())
+            .map_or(
+                vk::Extent2D {
+                    width: 1,
+                    height: 1,
+                },
+                Window::extent,
+            )
     }
 
     /// Returns a [`UniverseBuilder`] that is populated with [`Renderer`] systems.
@@ -325,77 +364,151 @@ impl Renderer {
     ///
     /// Vulkan errors can occur during rendering
     pub fn render(&mut self) -> Result<()> {
-        for player in self.players.values() {
-            let Some(entity) = player.entity else {
-                continue;
-            };
-            let Some(world) = self.scene_manager.entity_world(entity) else {
-                continue;
-            };
+        let frame_index = self.current_frame();
+        let frame = &self.frames[frame_index];
 
-            let frame = &self.frames[self.current_frame()];
-            let window_id = player.window;
-            let Some(window) = self.windows.get_mut(&window_id) else {
-                return Err(Error::WindowDoesNotExist(window_id));
-            };
-
-            let size = window.extent();
-            let render_image = window.next_image()?;
-
-            unsafe {
-                self.render_device.device.wait_for_fences(
-                    std::slice::from_ref(&frame.fence),
-                    true,
-                    u64::MAX,
-                )?;
-                self.render_device
-                    .device
-                    .reset_fences(std::slice::from_ref(&frame.fence))?;
-            }
-            self.render_device.flush_deletions();
-
-            let cmd = frame.command_pool.allocate_buffer()?;
-
-            cmd.begin_command_buffer(&vk::CommandBufferBeginInfo::default())?;
-
-            self.scene_manager.render(
-                &self.models,
-                &cmd,
-                world,
-                &RenderTarget {
-                    size,
-                    image: render_image.image.image(),
-                    view: render_image.image.view(),
-                },
-                entity,
+        unsafe {
+            self.render_device.device.wait_for_fences(
+                std::slice::from_ref(&frame.fence),
+                true,
+                u64::MAX,
             )?;
-
-            cmd.end_command_buffer()?;
-
-            let image_available_semaphore = render_image.image_available_semaphore;
-            let render_finished_semaphore = render_image.render_finished_semaphore;
-            let wait_stage =
-                vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | vk::PipelineStageFlags::TRANSFER;
-            let submit_info = vk::SubmitInfo::default()
-                .wait_dst_stage_mask(std::slice::from_ref(&wait_stage))
-                .command_buffers(std::slice::from_ref(&cmd))
-                .wait_semaphores(std::slice::from_ref(&image_available_semaphore))
-                .signal_semaphores(std::slice::from_ref(&render_finished_semaphore));
-
-            self.render_device.queues.submit(
-                QueueType::Graphics,
-                std::slice::from_ref(&submit_info),
-                frame.fence,
-            )?;
-
-            render_image.present()?;
-
-            self.current_frame.store(
-                (self.current_frame() + 1) % MAX_FRAMES_IN_FLIGHT,
-                Ordering::Relaxed,
-            );
-            self.frame_count.fetch_add(1, Ordering::Relaxed);
+            self.render_device
+                .device
+                .reset_fences(std::slice::from_ref(&frame.fence))?;
         }
+        self.render_device.flush_deletions();
+        self.egui.free_textures_for_frame(frame_index)?;
+
+        let keys: Vec<_> = self.players.keys().copied().collect();
+        for player in keys {
+            self.render_player(frame_index, player)?;
+        }
+
+        self.current_frame.store(
+            (self.current_frame() + 1) % MAX_FRAMES_IN_FLIGHT,
+            Ordering::Relaxed,
+        );
+        self.frame_count.fetch_add(1, Ordering::Relaxed);
+        Ok(())
+    }
+
+    fn render_player(&mut self, frame_index: usize, player: PlayerId) -> Result<()> {
+        let frame = &self.frames[frame_index];
+
+        let Some(player) = self.players.get_mut(&player) else {
+            return Ok(());
+        };
+
+        let Some(entity) = player.entity else {
+            return Ok(());
+        };
+        let Some(world) = self.scene_manager.entity_world(entity) else {
+            return Ok(());
+        };
+
+        let window_id = player.window;
+        let Some(window) = self.windows.get_mut(&window_id) else {
+            return Err(Error::WindowDoesNotExist(window_id));
+        };
+
+        let size = window.extent();
+        let render_image = window.next_image()?;
+
+        let mut graph = RenderGraph::new();
+
+        let target = graph.create_texture(TextureDesc {
+            width: size.width,
+            height: size.height,
+            format: self.render_device.properties.surface_format.format,
+            usage: vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_SRC,
+            samples: vk::SampleCountFlags::TYPE_1,
+            imported: None,
+        });
+
+        self.scene_manager
+            .render(&mut graph, &self.models, world, entity, size, target);
+
+        let swapchain = graph.import_texture(TextureDesc {
+            width: size.width,
+            height: size.height,
+            format: self.render_device.properties.surface_format.format,
+            usage: vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::COLOR_ATTACHMENT,
+            samples: vk::SampleCountFlags::TYPE_1,
+            imported: Some(ImportedTexture {
+                image: render_image.image.image(),
+                view: render_image.image.view(),
+                aspect_flags: vk::ImageAspectFlags::COLOR,
+                initial_layout: vk::ImageLayout::UNDEFINED,
+                final_layout: vk::ImageLayout::PRESENT_SRC_KHR,
+            }),
+        });
+
+        let mut egui_pass = graph.add_pass("egui");
+        egui_pass.write_color_attachment(target, frame_graph::AttachmentInfo::load_store());
+        let egui = &mut self.egui;
+        egui_pass.execute(Box::new(move |device, cmd, _| {
+            egui.render(device, cmd, size, frame_index)
+        }));
+
+        let mut copy_pass = graph.add_pass("copy scene to swapchain");
+        copy_pass
+            .read_transfer_src(target)
+            .write_transfer_dst(swapchain);
+        copy_pass.execute(Box::new(move |_, cmd, images| {
+            let region = vk::ImageCopy::default()
+                .src_subresource(vk::ImageSubresourceLayers {
+                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                    mip_level: 0,
+                    base_array_layer: 0,
+                    layer_count: 1,
+                })
+                .dst_subresource(vk::ImageSubresourceLayers {
+                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                    mip_level: 0,
+                    base_array_layer: 0,
+                    layer_count: 1,
+                })
+                .extent(vk::Extent3D {
+                    width: size.width,
+                    height: size.height,
+                    depth: 1,
+                });
+
+            cmd.copy_image(
+                images[target.index()].image,
+                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                images[swapchain.index()].image,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                &[region],
+            );
+            Ok(())
+        }));
+
+        let cmd = frame.command_pool.allocate_buffer()?;
+        cmd.begin_command_buffer(&vk::CommandBufferBeginInfo::default())?;
+
+        graph.run(&self.render_device, &cmd)?;
+
+        cmd.end_command_buffer()?;
+
+        let image_available_semaphore = render_image.image_available_semaphore;
+        let render_finished_semaphore = render_image.render_finished_semaphore;
+        let wait_stage =
+            vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | vk::PipelineStageFlags::TRANSFER;
+        let submit_info = vk::SubmitInfo::default()
+            .wait_dst_stage_mask(std::slice::from_ref(&wait_stage))
+            .command_buffers(std::slice::from_ref(&cmd))
+            .wait_semaphores(std::slice::from_ref(&image_available_semaphore))
+            .signal_semaphores(std::slice::from_ref(&render_finished_semaphore));
+
+        self.render_device.queues.submit(
+            QueueType::Graphics,
+            std::slice::from_ref(&submit_info),
+            frame.fence,
+        )?;
+
+        render_image.present()?;
         Ok(())
     }
 
