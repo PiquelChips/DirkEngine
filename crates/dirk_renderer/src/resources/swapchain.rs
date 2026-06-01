@@ -188,6 +188,14 @@ impl Swapchain {
             (vk::SharingMode::EXCLUSIVE, &[])
         };
 
+        let image_usage = vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::COLOR_ATTACHMENT;
+        if !capabilities.supported_usage_flags.contains(image_usage) {
+            return Err(Error::UnsupportedSwapchainUsage {
+                required: image_usage,
+                supported: capabilities.supported_usage_flags,
+            });
+        }
+
         let create_info = vk::SwapchainCreateInfoKHR::default()
             .surface(surface)
             .min_image_count(image_count)
@@ -195,7 +203,7 @@ impl Swapchain {
             .image_color_space(device.properties.surface_format.color_space)
             .image_extent(extent)
             .image_array_layers(1)
-            .image_usage(vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::COLOR_ATTACHMENT)
+            .image_usage(image_usage)
             .image_sharing_mode(sharing_mode)
             .queue_family_indices(indices_slice)
             .pre_transform(capabilities.current_transform)
