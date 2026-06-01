@@ -1,5 +1,5 @@
 [package]
-name = "dirk_shader_gpu"
+name = "dirk_shaders_gpu"
 description = "DirkEngine's shaders"
 edition.workspace = true
 license.workspace = true
