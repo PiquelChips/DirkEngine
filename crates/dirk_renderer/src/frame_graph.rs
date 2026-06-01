@@ -25,6 +25,8 @@ use crate::{
 pub struct TextureHandle(u32);
 
 impl TextureHandle {
+    /// Returns the texture table index represented by this handle.
+    #[must_use]
     pub fn index(self) -> usize {
         self.0 as usize
     }
@@ -32,12 +34,16 @@ impl TextureHandle {
 
 /// Description used to create (or identify) a texture in the graph.
 pub struct TextureDesc {
+    /// Texture width in pixels.
     pub width: u32,
+    /// Texture height in pixels.
     pub height: u32,
+    /// Vulkan image format.
     pub format: vk::Format,
     /// `ImageUsageFlags` covers all ways the texture will be used across the
     /// whole graph – the compiler needs this to allocate it correctly.
     pub usage: vk::ImageUsageFlags,
+    /// Sample count used when creating the texture.
     pub samples: vk::SampleCountFlags,
     /// `Some` for externally-owned images such as swapchain images.
     /// `None` for transient images the graph creates and destroys itself.
@@ -47,8 +53,11 @@ pub struct TextureDesc {
 /// Carries the physical `VkImage`/`VkImageView` for resources that live
 /// outside the graph (swapchain images being the canonical example).
 pub struct ImportedTexture {
+    /// Externally-owned Vulkan image.
     pub image: vk::Image,
+    /// Image view for [`Self::image`].
     pub view: vk::ImageView,
+    /// Aspect mask covered by the imported image.
     pub aspect_flags: vk::ImageAspectFlags,
     /// Layout the image is in *before* the first pass touches it.
     pub initial_layout: vk::ImageLayout,
@@ -62,21 +71,28 @@ pub struct ImportedTexture {
 /// This is what is to create attachments during rendering.
 /// The `image` & `view` are **NOT** owned by this struct.
 pub struct ResolvedImage {
+    /// Vulkan image backing the graph texture.
     pub image: vk::Image,
+    /// Image view for [`Self::image`].
     pub view: vk::ImageView,
+    /// Aspect mask covered by the image.
     pub aspect_flags: vk::ImageAspectFlags,
 }
 
 /// Aggregates the load/store ops and clear value for a single attachment.
 #[derive(Clone)]
 pub struct AttachmentInfo {
+    /// Load operation used when rendering begins.
     pub load_op: vk::AttachmentLoadOp,
+    /// Store operation used when rendering ends.
     pub store_op: vk::AttachmentStoreOp,
+    /// Clear value used when [`Self::load_op`] is `CLEAR`.
     pub clear_value: vk::ClearValue,
 }
 
 impl AttachmentInfo {
     /// Clear to a solid colour, then store the result.
+    #[must_use]
     pub fn clear_color(r: f32, g: f32, b: f32, a: f32) -> Self {
         Self {
             load_op: vk::AttachmentLoadOp::CLEAR,
@@ -92,6 +108,7 @@ impl AttachmentInfo {
     /// Load the existing contents, then store the result (e.g. for additive
     /// blending passes after an initial clear pass).
     #[allow(unused)]
+    #[must_use]
     pub fn load_store() -> Self {
         Self {
             load_op: vk::AttachmentLoadOp::LOAD,
@@ -102,6 +119,7 @@ impl AttachmentInfo {
 
     /// Clear depth (and stencil) to the given values, then store.
     #[allow(unused)]
+    #[must_use]
     pub fn clear_depth(depth: f32, stencil: u32) -> Self {
         Self {
             load_op: vk::AttachmentLoadOp::CLEAR,
@@ -115,6 +133,7 @@ impl AttachmentInfo {
     /// Discard the attachment at the end of the pass – saves bandwidth when
     /// the data is not needed afterwards (e.g. a depth buffer only used
     /// within one pass).
+    #[must_use]
     pub fn clear_discard_depth(depth: f32, stencil: u32) -> Self {
         Self {
             load_op: vk::AttachmentLoadOp::CLEAR,
@@ -279,23 +298,69 @@ impl<'a> PassBuilder<'_, 'a> {
 /// (before any Vulkan resources are touched).
 ///
 /// ```rust
+/// # use ash::vk;
+/// # use dirk_renderer::Result;
+/// # use dirk_renderer::frame_graph::{
+/// #     AttachmentInfo, ImportedTexture, RenderGraph, TextureDesc,
+/// # };
+/// # fn texture_desc(
+/// #     format: vk::Format,
+/// #     usage: vk::ImageUsageFlags,
+/// #     samples: vk::SampleCountFlags,
+/// # ) -> TextureDesc {
+/// #     TextureDesc {
+/// #         width: 1280,
+/// #         height: 720,
+/// #         format,
+/// #         usage,
+/// #         samples,
+/// #         imported: None,
+/// #     }
+/// # }
+/// # fn imported_swapchain_desc() -> TextureDesc {
+/// #     TextureDesc {
+/// #         width: 1280,
+/// #         height: 720,
+/// #         format: vk::Format::B8G8R8A8_SRGB,
+/// #         usage: vk::ImageUsageFlags::TRANSFER_DST,
+/// #         samples: vk::SampleCountFlags::TYPE_1,
+/// #         imported: Some(ImportedTexture {
+/// #             image: vk::Image::null(),
+/// #             view: vk::ImageView::null(),
+/// #             aspect_flags: vk::ImageAspectFlags::COLOR,
+/// #             initial_layout: vk::ImageLayout::UNDEFINED,
+/// #             final_layout: vk::ImageLayout::PRESENT_SRC_KHR,
+/// #         }),
+/// #     }
+/// # }
+/// # fn build_graph() {
 /// let mut graph = RenderGraph::new();
 ///
-/// let gbuffer = graph.create_texture(TextureDesc { … });
-/// let depth   = graph.create_texture(TextureDesc { … });
-/// let sc      = graph.import_texture(TextureDesc { …, imported: Some(…) });
+/// let gbuffer = graph.create_texture(texture_desc(
+///     vk::Format::B8G8R8A8_SRGB,
+///     vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::SAMPLED,
+///     vk::SampleCountFlags::TYPE_1,
+/// ));
+/// let depth = graph.create_texture(texture_desc(
+///     vk::Format::D32_SFLOAT,
+///     vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
+///     vk::SampleCountFlags::TYPE_1,
+/// ));
+/// let swapchain = graph.import_texture(imported_swapchain_desc());
 ///
 /// graph.add_pass("GBuffer")
 ///     .write_color_attachment(gbuffer, AttachmentInfo::clear_color(0.0, 0.0, 0.0, 1.0))
-///     .write_depth_attachment(depth,   AttachmentInfo::clear_discard_depth(1.0, 0))
-///     .execute(Box::new(|dev, cmd, _res| { /* draw calls */ }));
+///     .write_depth_attachment(depth, AttachmentInfo::clear_discard_depth(1.0, 0))
+///     .execute(Box::new(|_, _, _| Ok(())));
 ///
 /// graph.add_pass("Lighting")
 ///     .read_texture_fragment(gbuffer)
-///     .write_color_attachment(sc, AttachmentInfo::clear_color(0.05, 0.05, 0.05, 1.0))
-///     .execute(Box::new(move |dev, cmd, res| { /* fullscreen pass */ }));
-///
-/// let compiled = graph.compile();
+///     .write_color_attachment(
+///         swapchain,
+///         AttachmentInfo::clear_color(0.05, 0.05, 0.05, 1.0),
+///     )
+///     .execute(Box::new(|_, _, _| Ok(())));
+/// # }
 /// ```
 pub struct RenderGraph<'a> {
     textures: Vec<TextureDesc>,
@@ -303,6 +368,8 @@ pub struct RenderGraph<'a> {
 }
 
 impl<'a> RenderGraph<'a> {
+    /// Creates an empty render graph.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             textures: Vec::new(),
@@ -312,6 +379,11 @@ impl<'a> RenderGraph<'a> {
 
     /// Register a *transient* texture that the graph owns and will
     /// allocate/destroy automatically.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `desc` contains an imported texture. Use [`Self::import_texture`]
+    /// for externally-owned images.
     pub fn create_texture(&mut self, desc: TextureDesc) -> TextureHandle {
         assert!(
             desc.imported.is_none(),
@@ -324,6 +396,11 @@ impl<'a> RenderGraph<'a> {
 
     /// Register an *imported* texture (e.g. a swapchain image).
     /// The caller retains ownership; the graph only borrows it.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `desc` does not contain an imported texture. Use
+    /// [`Self::create_texture`] for transient images.
     pub fn import_texture(&mut self, desc: TextureDesc) -> TextureHandle {
         assert!(
             desc.imported.is_some(),
@@ -351,6 +428,11 @@ impl<'a> RenderGraph<'a> {
     }
 
     /// Compiles & runs the Graph
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if transient image allocation fails or if a pass
+    /// callback returns an error.
     pub fn run(self, device: &RenderDevice, cmd: &CommandBuffer) -> Result<()> {
         GraphExecutor::new(device, self.compile())?.execute(cmd)
     }
@@ -499,38 +581,38 @@ impl ResourceState {
 
 /// A fully-resolved image memory barrier, minus the physical `VkImage`
 /// (that is substituted at execution time once physical resources exist).
-pub struct ImageBarrier {
-    pub handle: TextureHandle,
-    pub old_layout: vk::ImageLayout,
-    pub new_layout: vk::ImageLayout,
-    pub src_stage: vk::PipelineStageFlags2,
-    pub dst_stage: vk::PipelineStageFlags2,
-    pub src_access: vk::AccessFlags2,
-    pub dst_access: vk::AccessFlags2,
+struct ImageBarrier {
+    handle: TextureHandle,
+    old_layout: vk::ImageLayout,
+    new_layout: vk::ImageLayout,
+    src_stage: vk::PipelineStageFlags2,
+    dst_stage: vk::PipelineStageFlags2,
+    src_access: vk::AccessFlags2,
+    dst_access: vk::AccessFlags2,
 }
 
 /// Compiled representation of a single pass: barriers to emit before it and
 /// the attachment metadata needed to call `vkCmdBeginRendering`.
-pub struct CompiledPass<'a> {
+struct CompiledPass<'a> {
     // TODO: should be read when building graph metadata for renderer
     #[allow(unused)]
-    pub name: String,
+    name: String,
     /// Barriers to record immediately before this pass.
-    pub pre_barriers: Vec<ImageBarrier>,
+    pre_barriers: Vec<ImageBarrier>,
     /// Ordered list of colour attachments (in the order written to the pass).
-    pub color_attachments: Vec<ColorAttachment>,
+    color_attachments: Vec<ColorAttachment>,
     /// Optional depth attachment.
-    pub depth_attachment: Option<(TextureHandle, AttachmentInfo)>,
+    depth_attachment: Option<(TextureHandle, AttachmentInfo)>,
     /// Render area derived from the first colour attachment (or depth if none).
-    pub render_extent: Option<vk::Extent2D>,
+    render_extent: Option<vk::Extent2D>,
     /// The user-provided recording callback.
-    pub callback: Option<PassCallback<'a>>,
+    callback: Option<PassCallback<'a>>,
 }
 
-pub struct ColorAttachment {
-    pub handle: TextureHandle,
-    pub info: AttachmentInfo,
-    pub resolve: Option<TextureHandle>,
+struct ColorAttachment {
+    handle: TextureHandle,
+    info: AttachmentInfo,
+    resolve: Option<TextureHandle>,
 }
 
 /// Output of the compilation phase.
