@@ -33,10 +33,13 @@ use resources::descriptors::DescriptorLayouts;
 use utils::{Frame, RendererProperties, Vertex, make_version};
 
 mod errors;
+#[cfg(feature = "editor")]
 pub use egui;
 pub use errors::{Error, Result};
 
+#[cfg(feature = "editor")]
 mod egui_integration;
+#[cfg(feature = "editor")]
 use egui_integration::EguiState;
 
 mod window;
@@ -60,7 +63,7 @@ use proxy::{
 mod render_commands;
 use render_commands::RenderCommandReceiver;
 
-use crate::frame_graph::{ImportedTexture, RenderGraph, TextureDesc};
+use crate::frame_graph::{ImportedTexture, RenderGraph, TextureDesc, TextureHandle};
 
 mod init;
 mod models;
@@ -102,6 +105,7 @@ pub struct Renderer {
     /// The management for all the models.
     models: models::ModelRegistry,
     /// Immediate-mode UI rendering state.
+    #[cfg(feature = "editor")]
     egui: EguiState,
     /// Maps each live [`PlayerId`] to its proxy.
     players: HashMap<PlayerId, PlayerProxy>,
@@ -196,6 +200,7 @@ impl Renderer {
 
         let models = models::ModelRegistry::new(&render_device, event_manager)?;
         let scene_manager = SceneManager::init(&render_device)?;
+        #[cfg(feature = "editor")]
         let egui = EguiState::new(&render_device)?;
 
         let windows = {
@@ -212,6 +217,7 @@ impl Renderer {
             scene_manager,
             players: HashMap::new(),
             models,
+            #[cfg(feature = "editor")]
             egui,
 
             frames,
@@ -229,12 +235,18 @@ impl Renderer {
     /// Begins a frame.
     ///
     /// Returns an [`egui::Context`] for rendering.
+    #[cfg(feature = "editor")]
     pub fn begin_frame(&mut self) -> egui::Context {
         self.egui.begin_frame(self.primary_extent())
     }
 
+    /// Begins a frame.
+    #[cfg(not(feature = "editor"))]
+    pub fn begin_frame(&mut self) {}
+
     // TODO: shouldn't be necessary
 
+    #[cfg(feature = "editor")]
     fn primary_extent(&self) -> vk::Extent2D {
         self.players
             .values()
@@ -358,6 +370,7 @@ impl Renderer {
     ///
     /// Vulkan errors can occur during rendering
     pub fn end_frame(&mut self) -> Result<()> {
+        #[cfg(feature = "editor")]
         self.egui.end_frame();
 
         let frame_index = self.current_frame();
@@ -374,6 +387,7 @@ impl Renderer {
                 .reset_fences(std::slice::from_ref(&frame.fence))?;
         }
         self.render_device.flush_deletions();
+        #[cfg(feature = "editor")]
         self.egui.free_textures_for_frame(frame_index)?;
 
         let keys: Vec<_> = self.players.keys().copied().collect();
@@ -440,12 +454,15 @@ impl Renderer {
             }),
         });
 
-        let mut egui_pass = graph.add_pass("egui");
-        egui_pass.write_color_attachment(target, frame_graph::AttachmentInfo::load_store());
-        let egui = &mut self.egui;
-        egui_pass.execute(Box::new(move |device, cmd, _| {
-            egui.render(device, cmd, size, frame_index)
-        }));
+        #[cfg(feature = "editor")]
+        {
+            let mut egui_pass = graph.add_pass("egui");
+            egui_pass.write_color_attachment(target, frame_graph::AttachmentInfo::load_store());
+            let egui = &mut self.egui;
+            egui_pass.execute(Box::new(move |device, cmd, _| {
+                egui.render(device, cmd, size, frame_index)
+            }));
+        }
 
         let mut copy_pass = graph.add_pass("copy scene to swapchain");
         copy_pass

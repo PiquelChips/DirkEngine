@@ -25,6 +25,7 @@ pub enum Error {
     #[error("assets error: {0}")]
     AssetError(#[from] dirk_assets::Error),
     /// Error produced by the egui Vulkan renderer.
+    #[cfg(feature = "editor")]
     #[error("egui renderer error: {0}")]
     EguiRenderer(#[from] egui_ash_renderer::RendererError),
 

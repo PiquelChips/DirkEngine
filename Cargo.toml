@@ -31,8 +31,6 @@ dirk_world.workspace = true
 dirk_assets.workspace = true
 dirk_player.workspace = true
 
-egui.workspace = true
-
 [build-dependencies]
 dirk_build.workspace = true
 
@@ -46,7 +44,7 @@ rustdoc-args = ["-Zunstable-options", "--cfg", "docsrs"]
 [features]
 default = ["editor"]
 
-editor = []
+editor = ["dirk_renderer/editor"]
 
 # WORKSPACE CONFIGURATION
 

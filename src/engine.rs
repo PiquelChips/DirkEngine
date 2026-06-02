@@ -208,14 +208,22 @@ impl Engine {
             .tick(delta_time, self.platform.windows())
             .context("renderer")?;
 
-        let ctx = self.renderer.begin_frame();
-        self.render_ui(delta_time, &ctx);
+        #[cfg(feature = "editor")]
+        {
+            let ctx = self.renderer.begin_frame();
+            self.render_ui(delta_time, &ctx);
+        }
+
+        #[cfg(not(feature = "editor"))]
+        self.renderer.begin_frame();
+
         self.renderer.end_frame().context("rendering")?;
         Ok(())
     }
 
-    fn render_ui(&mut self, delta_time: f64, ctx: &egui::Context) {
-        egui::Window::new("DirkEngine").show(ctx, |ui| {
+    #[cfg(feature = "editor")]
+    fn render_ui(&mut self, delta_time: f64, ctx: &dirk_renderer::egui::Context) {
+        dirk_renderer::egui::Window::new("DirkEngine").show(ctx, |ui| {
             ui.label("egui is rendering through DirkEngine");
             ui.separator();
             ui.label(format!("frame: {}", self.frame));

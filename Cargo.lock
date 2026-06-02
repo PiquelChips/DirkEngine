@@ -603,7 +603,6 @@ dependencies = [
  "dirk_universe",
  "dirk_utils",
  "dirk_world",
- "egui",
  "glam",
  "piquel-log",
  "thiserror 2.0.18",
