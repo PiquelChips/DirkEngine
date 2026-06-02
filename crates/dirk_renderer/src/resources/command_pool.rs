@@ -86,6 +86,7 @@ impl<Type: Pool> CommandPool<Type> {
             self.device.destroy_command_pool(self.pool, None);
         }
     }
+    #[cfg_attr(not(feature = "editor"), allow(unused))]
     pub fn raw(&self) -> vk::CommandPool {
         self.pool
     }

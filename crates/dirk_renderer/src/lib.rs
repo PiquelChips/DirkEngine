@@ -63,7 +63,7 @@ use proxy::{
 mod render_commands;
 use render_commands::RenderCommandReceiver;
 
-use crate::frame_graph::{ImportedTexture, RenderGraph, TextureDesc, TextureHandle};
+use crate::frame_graph::{ImportedTexture, RenderGraph, TextureDesc};
 
 mod init;
 mod models;
@@ -417,9 +417,8 @@ impl Renderer {
             return Ok(());
         };
 
-        let window_id = player.window;
-        let Some(window) = self.windows.get_mut(&window_id) else {
-            return Err(Error::WindowDoesNotExist(window_id));
+        let Some(window) = self.windows.get_mut(&player.window) else {
+            return Err(Error::WindowDoesNotExist(player.window));
         };
 
         let size = window.extent();
@@ -458,9 +457,8 @@ impl Renderer {
         {
             let mut egui_pass = graph.add_pass("egui");
             egui_pass.write_color_attachment(target, frame_graph::AttachmentInfo::load_store());
-            let egui = &mut self.egui;
-            egui_pass.execute(Box::new(move |device, cmd, _| {
-                egui.render(device, cmd, size, frame_index)
+            egui_pass.execute(Box::new(|device, cmd, _| {
+                self.egui.render(device, cmd, size, frame_index)
             }));
         }
 
