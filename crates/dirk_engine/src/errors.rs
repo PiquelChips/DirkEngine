@@ -3,7 +3,7 @@
 use thiserror::Error;
 
 /// A wrapper for the result type that has an [`Error`].
-pub(crate) type Result<T> = std::result::Result<T, Error>;
+pub type Result<T> = std::result::Result<T, Error>;
 
 /// All errors that could be emitted by the engine.
 #[derive(Error, Debug)]
@@ -20,7 +20,16 @@ pub enum Error {
         #[source]
         source: anyhow::Error,
     },
+    /// When an engine system failed to initialize
+    #[error("system failed to initialize: {0}")]
+    SubsystemFailedInit(#[source] anyhow::Error),
     /// An error occured while starting
     #[error("engine failed to start: {0}")]
     StartFailed(#[source] anyhow::Error),
+    /// An error occured while ticking
+    #[error("engine failed while ticking: {0}")]
+    TickFailed(#[source] anyhow::Error),
+    /// An error occured while shutting down
+    #[error("engine failed while shutting down: {0}")]
+    ShutdownFailed(#[source] anyhow::Error),
 }
