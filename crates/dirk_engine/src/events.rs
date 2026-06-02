@@ -17,7 +17,7 @@ pub struct Exiting;
 /// It can be used by the platform to signal to the engine that the windows
 /// have all been closed. It is also used when users manually exit the engine.
 ///
-/// TODO: pass an engine handle around & allow calling engine exit
+/// TODO: remove when integrating with the rest of the engine.
 #[derive(Debug, Clone, Event)]
 #[event("App exit requested: {0}")]
 pub struct AppExit(pub String);

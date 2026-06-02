@@ -47,6 +47,8 @@ default = ["editor"]
 
 editor = ["dirk_engine/editor", "renderer", "assets"]
 
+# TODO: actually implement the feature stuff
+
 # This feature should never be manually enabled. There is no point.
 # Having this alone brings new features.
 platform = ["dep:dirk_platform"]

@@ -39,7 +39,7 @@ pub struct EngineBuilder {
     app_name: String,
     worker_name: String,
     log_level: piquel_log::LogLevel,
-    /// Store factories in HashMap keyed by the typeId of the [`Subsystem`].
+    /// Store factories in `HashMap` keyed by the typeId of the [`Subsystem`].
     /// This avoid duplicate subsystems.
     subsystem_factories: HashMap<TypeId, SubsystemFactory>,
     universe_builder: UniverseBuilder,
