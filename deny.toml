@@ -48,6 +48,11 @@ allow = [
     #"Unicode-DFS-2016",                  # required by the `unicode-ident` crate
     "Unicode-3.0",
     "MPL-2.0",
+
+    # Some random font licences
+    "OFL-1.1",
+    "Ubuntu-font-1.0"
+
 ]
 
 confidence-threshold = 0.8
