@@ -54,7 +54,8 @@ editor = []
 resolver = "3"
 members = [
     "crates/*",
-    "shaders"
+    "shaders",
+    "shaders/shaders"
 ]
 
 [workspace.package]
@@ -62,7 +63,7 @@ edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/DirkEngine/DirkEngine"
 rust-version = "1.94.0"
-version = "0.0.1"
+version = "0.1.0"
 
 homepage = "https://piquel.fr" # TODO: should piquel.fr/dirk of dirkengine.fr
 authors = ["Piquel <contact@piquel.fr>"]
@@ -81,22 +82,22 @@ slotmap = "1"
 
 thiserror = "2"
 anyhow = "1"
-cargo_metadata = "0.23"
+cargo_metadata = "0.21"
 
 # Engine modules
-dirk_build    = { version = "0.0.1", path = "crates/dirk_build" }
-dirk_threads  = { version = "0.0.1", path = "crates/dirk_threads" }
-dirk_utils    = { version = "0.0.1", path = "crates/dirk_utils" }
-dirk_events   = { version = "0.0.1", path = "crates/dirk_events" }
-dirk_proc     = { version = "0.0.1", path = "crates/dirk_proc" }
-dirk_platform = { version = "0.0.1", path = "crates/dirk_platform" }
-dirk_renderer = { version = "0.0.1", path = "crates/dirk_renderer" }
-dirk_assets   = { version = "0.0.1", path = "crates/dirk_assets" }
-dirk_world    = { version = "0.0.1", path = "crates/dirk_world" }
-dirk_universe = { version = "0.0.1", path = "crates/dirk_universe" }
-dirk_player   = { version = "0.0.1", path = "crates/dirk_player" }
+dirk_build    = { version = "0.1.0", path = "crates/dirk_build" }
+dirk_threads  = { version = "0.1.0", path = "crates/dirk_threads" }
+dirk_utils    = { version = "0.1.0", path = "crates/dirk_utils" }
+dirk_events   = { version = "0.1.0", path = "crates/dirk_events" }
+dirk_proc     = { version = "0.1.0", path = "crates/dirk_proc" }
+dirk_platform = { version = "0.1.0", path = "crates/dirk_platform" }
+dirk_renderer = { version = "0.1.0", path = "crates/dirk_renderer" }
+dirk_assets   = { version = "0.1.0", path = "crates/dirk_assets" }
+dirk_world    = { version = "0.1.0", path = "crates/dirk_world" }
+dirk_universe = { version = "0.1.0", path = "crates/dirk_universe" }
+dirk_player   = { version = "0.1.0", path = "crates/dirk_player" }
 
-dirk_shaders  = { version = "0.0.1", path = "shaders" }
+dirk_shaders  = { version = "0.1.0", path = "shaders" }
 
 # Main Engine Dependencies
 winit = "0.31.0-beta.2"
@@ -105,13 +106,16 @@ ash-window = "0.13"
 raw-window-handle = "0.6"
 glam = "0.32"
 gltf = "1"
-shaderc = "0.10"
 gpu-allocator = { version = "0.28", default-features = false, features = ["std", "vulkan"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
 egui = "0.33"
 egui-ash-renderer = { version = "0.11", features = ["dynamic-rendering"] }
+
+# Shaders
+cargo-gpu-install = "0.10.0-alpha.1"
+spirv-std         = "0.10.0-alpha.1"
 
 # Macro dependencies
 syn = { version = "2", features = ["full"] }
