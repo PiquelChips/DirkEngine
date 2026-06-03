@@ -1,5 +1,7 @@
 //! This crate contains all the shaders used in the engine.
 
+pub mod types;
+
 use std::ffi::CStr;
 
 /// A simple struct that holds a block of shader bytecode and

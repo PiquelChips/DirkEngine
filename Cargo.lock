@@ -537,12 +537,14 @@ name = "dirk_shaders"
 version = "0.1.0"
 dependencies = [
  "cargo-gpu-install",
+ "glam",
 ]
 
 [[package]]
 name = "dirk_shaders_gpu"
 version = "0.1.0"
 dependencies = [
+ "dirk_shaders",
  "glam",
  "spirv-std",
 ]

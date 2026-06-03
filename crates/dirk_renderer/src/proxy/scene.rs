@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use ash::vk;
+use dirk_shaders::types::{ProxyUbo, SceneUbo};
 use dirk_universe::{Entity, WorldId};
 use gpu_allocator::MemoryLocation;
 
@@ -335,21 +336,6 @@ impl Drop for SceneManager {
         self.entities.clear();
         self.proxies.clear();
     }
-}
-
-#[derive(Clone, Copy)]
-// fields are read by Vulkan, not us
-#[allow(unused)]
-struct SceneUbo {
-    view: glam::Mat4,
-    proj: glam::Mat4,
-}
-
-#[derive(Clone, Copy)]
-// fields are read by Vulkan, not us
-#[allow(unused)]
-struct ProxyUbo {
-    model: glam::Mat4,
 }
 
 /// Renderer representation of a [`World`].
