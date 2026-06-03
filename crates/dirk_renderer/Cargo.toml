@@ -34,9 +34,19 @@ glam.workspace = true
 gpu-allocator.workspace = true
 gltf.workspace = true
 slotmap.workspace = true
+egui = { workspace = true, optional = true }
+egui-ash-renderer = { workspace = true, optional = true }
 
 [build-dependencies]
 dirk_build.workspace = true
+
+[features]
+default = []
+
+editor = [
+    "dep:egui",
+    "dep:egui-ash-renderer",
+]
 
 [lints.rust]
 missing_docs = "warn"
