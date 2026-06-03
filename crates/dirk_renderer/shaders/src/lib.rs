@@ -3,23 +3,12 @@
 #![allow(clippy::too_many_arguments)]
 
 use spirv_std::{
-    glam::{Mat4, Vec2, Vec3, Vec4},
+    glam::{Vec2, Vec3, Vec4},
     image::{Image2d, SampledImage},
     spirv,
 };
 
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct SceneUbo {
-    view: Mat4,
-    proj: Mat4,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct ProxyUbo {
-    model: Mat4,
-}
+use dirk_shaders::types::{ProxyUbo, SceneUbo};
 
 #[spirv(vertex)]
 pub fn main_vs(

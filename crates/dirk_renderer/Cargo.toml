@@ -36,6 +36,9 @@ gltf.workspace = true
 slotmap.workspace = true
 
 [build-dependencies]
+cargo-gpu-install.workspace = true
+anyhow.workspace = true
+
 dirk_build.workspace = true
 
 [lints.rust]

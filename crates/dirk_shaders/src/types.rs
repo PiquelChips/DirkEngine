@@ -1,6 +1,7 @@
 //! This module contains all the shared shader types.
 
 /// The Uniform buffer for scene specific data
+#[repr(C)]
 #[derive(Clone, Copy)]
 pub struct SceneUbo {
     /// The view matrix to render the scene
@@ -10,6 +11,7 @@ pub struct SceneUbo {
 }
 
 /// The Uniform buffer for proxy specific data
+#[repr(C)]
 #[derive(Clone, Copy)]
 pub struct ProxyUbo {
     /// The model matrix of the proxy

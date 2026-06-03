@@ -52,8 +52,7 @@ editor = []
 resolver = "3"
 members = [
     "crates/*",
-    "shaders",
-    "shaders/shaders"
+    "crates/dirk_renderer/shaders",
 ]
 
 [workspace.package]
@@ -95,14 +94,14 @@ dirk_world    = { version = "0.1.0", path = "crates/dirk_world" }
 dirk_universe = { version = "0.1.0", path = "crates/dirk_universe" }
 dirk_player   = { version = "0.1.0", path = "crates/dirk_player" }
 
-dirk_shaders  = { version = "0.1.0", path = "shaders" }
+dirk_shaders  = { version = "0.1.0", path = "crates/dirk_shaders" }
 
 # Main Engine Dependencies
 winit = "0.31.0-beta.2"
 ash = { version = "0.38", features = ["loaded"] }
 ash-window = "0.13"
 raw-window-handle = "0.6"
-glam = "0.32"
+glam = { version = "0.32", default-features = false, features = ["libm"] }
 gltf = "1"
 gpu-allocator = { version = "0.28", default-features = false, features = ["std", "vulkan"] }
 serde = { version = "1", features = ["derive"] }

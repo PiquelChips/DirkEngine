@@ -60,6 +60,7 @@ mod init;
 mod models;
 mod physical_device;
 mod pipeline;
+pub mod shaders;
 
 mod frame_graph;
 
@@ -440,7 +441,7 @@ impl Renderer {
 
     fn create_shader_module(
         device: &Device,
-        shader: &'static dirk_shaders::Shader,
+        shader: &'static shaders::Shader,
     ) -> Result<vk::ShaderModule> {
         let code = shader.code_as_u32();
         let info = vk::ShaderModuleCreateInfo::default().code(code.as_slice());

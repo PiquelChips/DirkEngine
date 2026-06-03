@@ -10,8 +10,5 @@ version.workspace = true
 [dependencies]
 glam.workspace = true
 
-[build-dependencies]
-cargo-gpu-install.workspace = true
-
 [lints]
 workspace = true

@@ -512,6 +512,7 @@ dependencies = [
  "anyhow",
  "ash",
  "ash-window",
+ "cargo-gpu-install",
  "dirk_assets",
  "dirk_build",
  "dirk_events",
@@ -536,7 +537,6 @@ dependencies = [
 name = "dirk_shaders"
 version = "0.1.0"
 dependencies = [
- "cargo-gpu-install",
  "glam",
 ]
 
