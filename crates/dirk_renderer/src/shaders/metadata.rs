@@ -46,16 +46,26 @@ where
     }
 }
 
-impl<A, B> VertexInputs for (A, B)
-where
-    A: VertexInput,
-    B: VertexInput,
-{
-    fn layouts() -> Vec<VertexInputLayout> {
-        vec![A::layout(), B::layout()]
-    }
+macro_rules! impl_vertex_inputs_for_tuple {
+    ($($name:ident),+ $(,)?) => {
+        impl<$($name),+> VertexInputs for ($($name,)+)
+        where
+            $($name: VertexInput),+
+        {
+            fn layouts() -> Vec<VertexInputLayout> {
+                vec![$($name::layout()),+]
+            }
+        }
+    };
 }
-// TODO: macro to implement this infinitely
+
+impl_vertex_inputs_for_tuple!(A, B);
+impl_vertex_inputs_for_tuple!(A, B, C);
+impl_vertex_inputs_for_tuple!(A, B, C, D);
+impl_vertex_inputs_for_tuple!(A, B, C, D, E);
+impl_vertex_inputs_for_tuple!(A, B, C, D, E, F);
+impl_vertex_inputs_for_tuple!(A, B, C, D, E, F, G);
+impl_vertex_inputs_for_tuple!(A, B, C, D, E, F, G, H);
 
 pub struct VertexInputLayout {
     stride: u32,
