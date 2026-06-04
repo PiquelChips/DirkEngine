@@ -9,7 +9,7 @@ use crate::{
     Error, MAX_FRAMES_IN_FLIGHT, Result,
     frame_graph::{AttachmentInfo, ImportedTexture, RenderGraph, TextureDesc},
     models::ModelRegistry,
-    pipeline::GraphicsPipeline,
+    pipeline::{GraphicsPipeline, GraphicsPipelineInfo},
     resources::{
         buffer::UniformBuffer,
         command_pool::CommandBuffer,
@@ -18,6 +18,8 @@ use crate::{
         },
         device::RenderDevice,
     },
+    shaders::{self, metadata::VertexInput},
+    utils::Vertex,
 };
 
 /// This is the renderer proxy for the [`Universe`]. It also has
@@ -48,8 +50,12 @@ impl SceneManager {
         let scene_alloc = DescriptorAllocator::<SceneLayout>::new(device, 16)?;
         let proxy_alloc = DescriptorAllocator::<ObjectLayout>::new(device, 256)?;
 
-        let graphics_pipeline =
-            GraphicsPipeline::build(device, &device.layouts, &device.properties)?;
+        let info = GraphicsPipelineInfo {
+            vert: shaders::VERT,
+            frag: shaders::FRAG,
+            layouts: vec![Vertex::layout()],
+        };
+        let graphics_pipeline = GraphicsPipeline::build(device, &device.layouts, info)?;
 
         Ok(Self {
             device: device.clone(),
