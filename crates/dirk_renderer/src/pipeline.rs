@@ -42,31 +42,8 @@ where
             F::shader_create_info(&mut device)?,
         ];
 
-        let input_layouts = V::input_layouts();
-        let binding_descriptions: Vec<_> = input_layouts
-            .iter()
-            .enumerate()
-            .map(|(binding, layout)| {
-                #[allow(clippy::cast_possible_truncation)]
-                layout.binding(binding as u32)
-            })
-            .collect();
-
-        let mut location_offset = 0_u32;
-        let attribute_descriptions: Vec<_> = input_layouts
-            .iter()
-            .enumerate()
-            .flat_map(|(binding, layout)| {
-                #[allow(clippy::cast_possible_truncation)]
-                let binding = binding as u32;
-                let attrs = layout.attrs(binding, location_offset);
-                #[allow(clippy::cast_possible_truncation)]
-                {
-                    location_offset += layout.attribute_count() as u32;
-                }
-                attrs
-            })
-            .collect();
+        let binding_descriptions = V::input_binding_descriptions();
+        let attribute_descriptions = V::input_attribute_descriptions();
 
         let vertex_input_info = vk::PipelineVertexInputStateCreateInfo::default()
             .vertex_binding_descriptions(&binding_descriptions)

@@ -150,6 +150,35 @@ pub trait VertexShader: Shader {
     fn input_layouts() -> Vec<VertexInputLayout> {
         Self::Input::layouts()
     }
+
+    fn input_binding_descriptions() -> Vec<vk::VertexInputBindingDescription> {
+        Self::input_layouts()
+            .iter()
+            .enumerate()
+            .map(|(binding, layout)| {
+                #[allow(clippy::cast_possible_truncation)]
+                layout.binding(binding as u32)
+            })
+            .collect()
+    }
+
+    fn input_attribute_descriptions() -> Vec<vk::VertexInputAttributeDescription> {
+        let mut location_offset = 0_u32;
+        Self::input_layouts()
+            .iter()
+            .enumerate()
+            .flat_map(|(binding, layout)| {
+                #[allow(clippy::cast_possible_truncation)]
+                let binding = binding as u32;
+                let attrs = layout.attrs(binding, location_offset);
+                #[allow(clippy::cast_possible_truncation)]
+                {
+                    location_offset += layout.attribute_count() as u32;
+                }
+                attrs
+            })
+            .collect()
+    }
 }
 
 pub trait FragmentShader: Shader {
