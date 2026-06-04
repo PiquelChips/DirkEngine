@@ -31,8 +31,7 @@ where
     pub fn build(device: &RenderDevice) -> Result<Self> {
         let mut device = device.clone();
 
-        let mut set_layouts = V::set_layouts(&mut device)?;
-        set_layouts.extend(F::set_layouts(&mut device)?);
+        let set_layouts = Self::create_pipeline_set_layouts(&mut device)?;
 
         let layout_info = vk::PipelineLayoutCreateInfo::default().set_layouts(&set_layouts);
         let pipeline_layout = unsafe { device.device.create_pipeline_layout(&layout_info, None)? };
@@ -41,9 +40,6 @@ where
             V::shader_create_info(&mut device)?,
             F::shader_create_info(&mut device)?,
         ];
-
-        let binding_descriptions = V::input_binding_descriptions();
-        let attribute_descriptions = V::input_attribute_descriptions();
 
         let vertex_input_info = vk::PipelineVertexInputStateCreateInfo::default()
             .vertex_binding_descriptions(V::INPUT_BINDINGS)
@@ -131,6 +127,37 @@ where
     }
     pub fn layout(&self) -> vk::PipelineLayout {
         self.pipeline_layout
+    }
+    fn create_pipeline_set_layouts(
+        device: &mut RenderDevice,
+    ) -> Result<Vec<vk::DescriptorSetLayout>> {
+        let max_sets = V::SET_LAYOUTS.len().max(F::SET_LAYOUTS.len());
+        (0..max_sets)
+            .map(|set| {
+                let mut bindings = Vec::new();
+                bindings.extend(
+                    V::SET_LAYOUTS
+                        .get(set)
+                        .copied()
+                        .unwrap_or_default()
+                        .iter()
+                        .copied(),
+                );
+                bindings.extend(
+                    F::SET_LAYOUTS
+                        .get(set)
+                        .copied()
+                        .unwrap_or_default()
+                        .iter()
+                        .copied(),
+                );
+                bindings.sort_by_key(|binding| binding.binding);
+                let info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
+                let layout = unsafe { device.device.create_descriptor_set_layout(&info, None)? };
+                device.destroy(Garbage::DescriptorSetLayout(layout));
+                Ok(layout)
+            })
+            .collect()
     }
 }
 
