@@ -1,6 +1,6 @@
 use ash::vk;
 
-pub trait VertexInput: Sized {
+pub trait VertexInput: Sized + Copy {
     const ATTRIBUTES: &'static [vk::VertexInputAttributeDescription];
 
     fn binding(binding: u32) -> vk::VertexInputBindingDescription {

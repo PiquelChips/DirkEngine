@@ -91,7 +91,7 @@ impl Drop for Texture {
 }
 
 struct Primitive {
-    pub vertex_buffer: VertexBuffer,
+    pub vertex_buffer: VertexBuffer<Vertex>,
     pub index_buffer: IndexBuffer,
     pub index_count: u32,
     pub material_handle: Option<Handle<Material>>,
