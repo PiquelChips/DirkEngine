@@ -1,15 +1,24 @@
 use ash::vk;
 
 use crate::{
-    DescriptorLayouts, Renderer, RendererProperties, Result, Vertex,
+    Renderer, Result,
     resources::{
         command_pool::CommandBuffer,
+        descriptors::DescriptorLayouts,
         device::{Garbage, RenderDevice},
     },
-    shaders,
+    shaders::{
+        FragmentShader, VertexShader,
+        metadata::{VertexInput, VertexInputLayout},
+    },
+    utils::Vertex,
 };
 
-/// This struct holds the graphics pipeline & stuff.
+pub struct GraphicsPipelineInfo {
+    vert: VertexShader,
+    frag: FragmentShader,
+}
+
 pub struct GraphicsPipeline {
     device: RenderDevice,
     pipeline_layout: vk::PipelineLayout,
@@ -20,17 +29,17 @@ impl GraphicsPipeline {
     pub fn build(
         device: &RenderDevice,
         layouts: &DescriptorLayouts,
-        properties: &RendererProperties,
+        pipeline_info: GraphicsPipelineInfo,
     ) -> Result<Self> {
         let set_layouts = layouts.pipeline_layouts();
         let layout_info = vk::PipelineLayoutCreateInfo::default().set_layouts(&set_layouts);
         let pipeline_layout = unsafe { device.device.create_pipeline_layout(&layout_info, None)? };
 
-        let vert = Renderer::create_shader_module(&device.device, &shaders::VERT)?;
-        let vert_name = shaders::VERT.entrypoint();
+        let vert = Renderer::create_shader_module(&device.device, &pipeline_info.vert)?;
+        let vert_name = pipeline_info.vert.entrypoint();
 
-        let frag = Renderer::create_shader_module(&device.device, &shaders::FRAG)?;
-        let frag_name = shaders::FRAG.entrypoint();
+        let frag = Renderer::create_shader_module(&device.device, &pipeline_info.frag)?;
+        let frag_name = pipeline_info.frag.entrypoint();
 
         let shader_stages = [
             vk::PipelineShaderStageCreateInfo::default()
@@ -43,11 +52,12 @@ impl GraphicsPipeline {
                 .name(frag_name),
         ];
 
-        let binding_description = Vertex::binding_description();
-        let attribute_description = Vertex::attribute_description();
+        #[allow(clippy::cast_possible_truncation)]
+        let binding_description = Vertex::binding(0);
+        let attribute_description = Vertex::ATTRIBUTES;
         let vertex_input_info = vk::PipelineVertexInputStateCreateInfo::default()
             .vertex_binding_descriptions(std::slice::from_ref(&binding_description))
-            .vertex_attribute_descriptions(&attribute_description);
+            .vertex_attribute_descriptions(attribute_description);
 
         let input_assembly = vk::PipelineInputAssemblyStateCreateInfo::default()
             .topology(vk::PrimitiveTopology::TRIANGLE_LIST)
@@ -70,7 +80,7 @@ impl GraphicsPipeline {
 
         let multisampling = vk::PipelineMultisampleStateCreateInfo::default()
             .sample_shading_enable(false)
-            .rasterization_samples(properties.msaa_samples);
+            .rasterization_samples(device.properties.msaa_samples);
 
         let color_blend_attachment = vk::PipelineColorBlendAttachmentState::default()
             .blend_enable(false)
@@ -86,8 +96,10 @@ impl GraphicsPipeline {
             .depth_compare_op(vk::CompareOp::LESS);
 
         let mut pipeline_rendering_info = vk::PipelineRenderingCreateInfo::default()
-            .color_attachment_formats(std::slice::from_ref(&properties.surface_format.format))
-            .depth_attachment_format(properties.depth_format);
+            .color_attachment_formats(std::slice::from_ref(
+                &device.properties.surface_format.format,
+            ))
+            .depth_attachment_format(device.properties.depth_format);
 
         let pipeline_info = vk::GraphicsPipelineCreateInfo::default()
             .stages(&shader_stages)

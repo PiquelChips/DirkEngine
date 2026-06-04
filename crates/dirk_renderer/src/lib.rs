@@ -60,7 +60,7 @@ mod init;
 mod models;
 mod physical_device;
 mod pipeline;
-pub mod shaders;
+mod shaders;
 
 mod frame_graph;
 
@@ -439,10 +439,7 @@ impl Renderer {
         Ok(unsafe { device.device.create_sampler(&sampler_info, None)? })
     }
 
-    fn create_shader_module(
-        device: &Device,
-        shader: &'static shaders::Shader,
-    ) -> Result<vk::ShaderModule> {
+    fn create_shader_module(device: &Device, shader: &shaders::Shader) -> Result<vk::ShaderModule> {
         let code = shader.code_as_u32();
         let info = vk::ShaderModuleCreateInfo::default().code(code.as_slice());
         Ok(unsafe { device.create_shader_module(&info, None)? })

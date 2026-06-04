@@ -2,6 +2,11 @@
 
 use std::ffi::CStr;
 
+pub mod metadata;
+
+pub type VertexShader = Shader;
+pub type FragmentShader = Shader;
+
 /// A block of shader bytecode and the shader entry point name.
 pub struct Shader {
     code: &'static [u8],
@@ -11,6 +16,7 @@ pub struct Shader {
 impl Shader {
     /// Returns the shader code.
     #[must_use]
+    #[allow(unused)]
     pub const fn code(&self) -> &[u8] {
         self.code
     }
