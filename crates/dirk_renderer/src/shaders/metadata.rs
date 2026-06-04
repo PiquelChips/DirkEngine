@@ -33,6 +33,30 @@ pub trait VertexInput: Sized + Copy {
     }
 }
 
+pub trait VertexInputs {
+    fn layouts() -> Vec<VertexInputLayout>;
+}
+
+impl<A> VertexInputs for A
+where
+    A: VertexInput,
+{
+    fn layouts() -> Vec<VertexInputLayout> {
+        vec![A::layout()]
+    }
+}
+
+impl<A, B> VertexInputs for (A, B)
+where
+    A: VertexInput,
+    B: VertexInput,
+{
+    fn layouts() -> Vec<VertexInputLayout> {
+        vec![A::layout(), B::layout()]
+    }
+}
+// TODO: macro to implement this infinitely
+
 pub struct VertexInputLayout {
     stride: u32,
     input_rate: vk::VertexInputRate,
@@ -48,12 +72,22 @@ impl VertexInputLayout {
         }
     }
 
-    pub fn attrs_with_loc_offset(&self, offset: u32) -> Vec<vk::VertexInputAttributeDescription> {
+    #[must_use]
+    pub fn attribute_count(&self) -> usize {
+        self.attributes.len()
+    }
+
+    pub fn attrs(
+        &self,
+        binding: u32,
+        location_offset: u32,
+    ) -> Vec<vk::VertexInputAttributeDescription> {
         self.attributes
             .iter()
             .copied()
             .map(|mut attr| {
-                attr.location += offset;
+                attr.binding = binding;
+                attr.location += location_offset;
                 attr
             })
             .collect()
@@ -92,6 +126,8 @@ pub trait Shader {
 
 pub trait VertexShader: Shader {
     const STAGE: vk::ShaderStageFlags = vk::ShaderStageFlags::VERTEX;
+    type Input: VertexInputs;
+
     fn shader_create_info<'a>(
         device: &mut RenderDevice,
     ) -> Result<vk::PipelineShaderStageCreateInfo<'a>> {
@@ -101,7 +137,9 @@ pub trait VertexShader: Shader {
     // TODO: when creating the pipeline, compare these against
     // the layouts in GraphicsPipelineInfo. Return error if needed &
     // use to determine bindings & locations
-    const INPUT_LAYOUTS: Vec<VertexInputLayout>;
+    fn input_layouts() -> Vec<VertexInputLayout> {
+        Self::Input::layouts()
+    }
 }
 
 pub trait FragmentShader: Shader {

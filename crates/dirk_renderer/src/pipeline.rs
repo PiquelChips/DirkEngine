@@ -8,8 +8,7 @@ use crate::{
         command_pool::CommandBuffer,
         device::{Garbage, RenderDevice},
     },
-    shaders::metadata::{FragmentShader, VertexInput, VertexShader},
-    utils::Vertex,
+    shaders::metadata::{FragmentShader, VertexShader},
 };
 
 pub struct GraphicsPipeline<V, F>
@@ -43,12 +42,35 @@ where
             F::shader_create_info(&mut device)?,
         ];
 
-        #[allow(clippy::cast_possible_truncation)]
-        let binding_description = Vertex::binding(0);
-        let attribute_description = Vertex::ATTRIBUTES;
+        let input_layouts = V::input_layouts();
+        let binding_descriptions: Vec<_> = input_layouts
+            .iter()
+            .enumerate()
+            .map(|(binding, layout)| {
+                #[allow(clippy::cast_possible_truncation)]
+                layout.binding(binding as u32)
+            })
+            .collect();
+
+        let mut location_offset = 0_u32;
+        let attribute_descriptions: Vec<_> = input_layouts
+            .iter()
+            .enumerate()
+            .flat_map(|(binding, layout)| {
+                #[allow(clippy::cast_possible_truncation)]
+                let binding = binding as u32;
+                let attrs = layout.attrs(binding, location_offset);
+                #[allow(clippy::cast_possible_truncation)]
+                {
+                    location_offset += layout.attribute_count() as u32;
+                }
+                attrs
+            })
+            .collect();
+
         let vertex_input_info = vk::PipelineVertexInputStateCreateInfo::default()
-            .vertex_binding_descriptions(std::slice::from_ref(&binding_description))
-            .vertex_attribute_descriptions(attribute_description);
+            .vertex_binding_descriptions(&binding_descriptions)
+            .vertex_attribute_descriptions(&attribute_descriptions);
 
         let input_assembly = vk::PipelineInputAssemblyStateCreateInfo::default()
             .topology(vk::PrimitiveTopology::TRIANGLE_LIST)

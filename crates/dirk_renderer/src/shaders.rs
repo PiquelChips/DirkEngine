@@ -7,7 +7,8 @@ use crate::{
         layouts::SetLayout,
         sets::{MaterialSet, ObjectSet, SceneSet},
     },
-    shaders::metadata::{FragmentShader, Shader, VertexInputLayout, VertexShader},
+    shaders::metadata::{FragmentShader, Shader, VertexShader},
+    utils::Vertex,
 };
 use ash::vk;
 
@@ -65,7 +66,7 @@ impl Shader for MainVS {
 }
 
 impl VertexShader for MainVS {
-    const INPUT_LAYOUTS: Vec<VertexInputLayout> = Vec::new(); // TODO: populate
+    type Input = Vertex;
 }
 
 /// Fragment shader.
