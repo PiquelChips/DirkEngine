@@ -15,8 +15,7 @@ use crate::{
         command_pool::CommandBuffer,
         descriptors::{
             DescriptorAllocator, DescriptorSet, DescriptorWriter,
-            layouts::SetLayout,
-            sets::{MaterialSet, ObjectSet, SceneSet},
+            sets::{ObjectSet, SceneSet},
         },
         device::RenderDevice,
     },
@@ -56,11 +55,6 @@ impl SceneManager {
             vert: shaders::VERT,
             frag: shaders::FRAG,
             input_layouts: vec![Vertex::layout()],
-            set_layouts: vec![
-                SceneSet::create_layout(&device.device)?,
-                ObjectSet::create_layout(&device.device)?,
-                MaterialSet::create_layout(&device.device)?,
-            ],
         };
         let graphics_pipeline = GraphicsPipeline::build(device, info)?;
 

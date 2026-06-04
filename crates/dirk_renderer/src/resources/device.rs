@@ -208,6 +208,7 @@ pub enum Garbage {
 
     Swapchain(vk::SwapchainKHR),
     Surface(vk::SurfaceKHR),
+    Shader(vk::ShaderModule),
 }
 
 struct PendingDeletion {
@@ -290,6 +291,7 @@ impl Garbage {
                 Self::Swapchain(swapchain) => render_device
                     .swapchain_loader
                     .destroy_swapchain(swapchain, None),
+                Self::Shader(shader) => device.destroy_shader_module(shader, None),
             }
         }
     }

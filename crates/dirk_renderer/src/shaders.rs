@@ -2,62 +2,37 @@
 
 use std::ffi::CStr;
 
-use crate::shaders::{metadata::VertexInputLayout, private::ShaderPrivate};
+use crate::{
+    Result,
+    resources::{
+        descriptors::{
+            layouts::SetLayout,
+            sets::{MaterialSet, ObjectSet, SceneSet},
+        },
+        device::{Garbage, RenderDevice},
+    },
+    shaders::metadata::VertexInputLayout,
+};
+use ash::vk;
 
-mod private {
-    use crate::shaders::ShaderCode;
-
-    pub trait ShaderPrivate {
-        fn shader_code(&self) -> &ShaderCode;
-    }
+macro_rules! shader_code {
+    ($name:literal) => {
+        ShaderCode {
+            code: (include_bytes!(concat!(env!("OUT_DIR"), "/", $name, ".spv"))),
+        }
+    };
 }
-
-pub mod metadata;
-
-pub trait Shader: ShaderPrivate {
-    /// Returns the shader code.
-    #[must_use]
-    #[allow(unused)]
-    fn code(&self) -> &[u8] {
-        self.shader_code().code()
-    }
-
-    /// Returns the shader code as little-endian `u32` words.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the SPIR-V code size is not a multiple of 4 bytes.
-    #[must_use]
-    fn code_as_u32(&self) -> Vec<u32> {
-        self.shader_code().code_as_u32()
-    }
-
-    /// Returns the shader entry point.
-    #[must_use]
-    fn entrypoint(&self) -> &CStr {
-        self.shader_code().entrypoint()
-    }
-}
-
-impl<T: ShaderPrivate> Shader for T {}
 
 /// A block of shader bytecode and the shader entry point name.
-pub(crate) struct ShaderCode {
+struct ShaderCode {
     code: &'static [u8],
-    entrypoint: &'static CStr,
-}
-
-impl ShaderPrivate for ShaderCode {
-    fn shader_code(&self) -> &ShaderCode {
-        self
-    }
 }
 
 impl ShaderCode {
-    /// Returns the shader code.
-    #[must_use]
-    const fn code(&self) -> &[u8] {
-        self.code
+    fn create_module(&self, device: &ash::Device) -> crate::Result<ash::vk::ShaderModule> {
+        let code = self.code_as_u32();
+        let info = ash::vk::ShaderModuleCreateInfo::default().code(code.as_slice());
+        Ok(unsafe { device.create_shader_module(&info, None)? })
     }
 
     /// Returns the shader code as little-endian `u32` words.
@@ -76,50 +51,106 @@ impl ShaderCode {
             .map(|chunk| u32::from_le_bytes(chunk.try_into().expect("4 byte chunks")))
             .collect()
     }
-
-    /// Returns the shader entry point.
-    #[must_use]
-    const fn entrypoint(&self) -> &CStr {
-        self.entrypoint
-    }
 }
 
-macro_rules! shader {
-    ($name:literal, $entrypoint:literal) => {
-        ShaderCode {
-            code: include_bytes!(concat!(env!("OUT_DIR"), "/", $name, ".spv")),
-            entrypoint: $entrypoint,
-        }
-    };
-}
+pub mod metadata;
 
 pub struct VertexShader {
     code: ShaderCode,
+    entrypoint: &'static CStr,
     // TODO: when creating the pipeline, compare these against
     // the layouts in GraphicsPipelineInfo. Return error if needed &
     // use to determine bindings & locations
-    inputs: Vec<VertexInputLayout>,
+    input_layouts: Vec<VertexInputLayout>,
+    set_layouts: &'static [&'static [vk::DescriptorSetLayoutBinding<'static>]],
 }
 
-impl ShaderPrivate for VertexShader {
-    fn shader_code(&self) -> &ShaderCode {
-        &self.code
+impl VertexShader {
+    pub fn shader_create_info(
+        &self,
+        device: &mut RenderDevice,
+    ) -> Result<vk::PipelineShaderStageCreateInfo<'_>> {
+        shader_create_info(
+            device,
+            self.entrypoint,
+            &self.code,
+            vk::ShaderStageFlags::VERTEX,
+        )
+    }
+
+    pub fn set_layouts(&self, device: &mut RenderDevice) -> Result<Vec<vk::DescriptorSetLayout>> {
+        set_layouts(self.set_layouts, device)
     }
 }
 
-pub struct FragmentShader(ShaderCode);
+pub struct FragmentShader {
+    code: ShaderCode,
+    entrypoint: &'static CStr,
+    set_layouts: &'static [&'static [vk::DescriptorSetLayoutBinding<'static>]],
+}
 
-impl ShaderPrivate for FragmentShader {
-    fn shader_code(&self) -> &ShaderCode {
-        &self.0
+impl FragmentShader {
+    pub fn shader_create_info(
+        &self,
+        device: &mut RenderDevice,
+    ) -> Result<vk::PipelineShaderStageCreateInfo<'_>> {
+        shader_create_info(
+            device,
+            self.entrypoint,
+            &self.code,
+            vk::ShaderStageFlags::FRAGMENT,
+        )
     }
+
+    pub fn set_layouts(&self, device: &mut RenderDevice) -> Result<Vec<vk::DescriptorSetLayout>> {
+        set_layouts(self.set_layouts, device)
+    }
+}
+
+fn shader_create_info<'a>(
+    device: &mut RenderDevice,
+    entrypoint: &'a CStr,
+    code: &'a ShaderCode,
+    stage: vk::ShaderStageFlags,
+) -> Result<vk::PipelineShaderStageCreateInfo<'a>> {
+    let module = code.create_module(&device.device)?;
+    device.destroy(Garbage::Shader(module));
+    Ok(vk::PipelineShaderStageCreateInfo::default()
+        .stage(stage)
+        .module(module)
+        .name(entrypoint))
+}
+
+fn set_layouts(
+    set_layouts: &[&[vk::DescriptorSetLayoutBinding]],
+    device: &mut RenderDevice,
+) -> Result<Vec<vk::DescriptorSetLayout>> {
+    set_layouts
+        .iter()
+        .map(|&set| {
+            let info = vk::DescriptorSetLayoutCreateInfo::default().bindings(set);
+            let layout = unsafe { device.device.create_descriptor_set_layout(&info, None)? };
+            device.destroy(Garbage::DescriptorSetLayout(layout));
+            Ok(layout)
+        })
+        .collect::<Result<Vec<_>>>()
 }
 
 /// Vertex shader.
 pub const VERT: VertexShader = VertexShader {
-    code: shader!("main_vs", c"main_vs"),
-    inputs: Vec::new(), // TODO: populate
+    code: shader_code!("main_vs"),
+    set_layouts: &[
+        SceneSet::BINDINGS,
+        ObjectSet::BINDINGS,
+        MaterialSet::BINDINGS,
+    ],
+    input_layouts: Vec::new(), // TODO: populate
+    entrypoint: c"main_vs",
 };
 
 /// Fragment shader.
-pub const FRAG: FragmentShader = FragmentShader(shader!("main_fs", c"main_fs"));
+pub const FRAG: FragmentShader = FragmentShader {
+    code: shader_code!("main_fs"),
+    entrypoint: c"main_fs",
+    set_layouts: &[&[]], // TODO: populate
+};
