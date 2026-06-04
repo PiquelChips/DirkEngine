@@ -3,15 +3,11 @@
 use std::ffi::CStr;
 
 use crate::{
-    Result,
-    resources::{
-        descriptors::{
-            layouts::SetLayout,
-            sets::{MaterialSet, ObjectSet, SceneSet},
-        },
-        device::{Garbage, RenderDevice},
+    resources::descriptors::{
+        layouts::SetLayout,
+        sets::{MaterialSet, ObjectSet, SceneSet},
     },
-    shaders::metadata::VertexInputLayout,
+    shaders::metadata::{FragmentShader, Shader, VertexInputLayout, VertexShader},
 };
 use ash::vk;
 
@@ -23,8 +19,10 @@ macro_rules! shader_code {
     };
 }
 
+pub mod metadata;
+
 /// A block of shader bytecode and the shader entry point name.
-struct ShaderCode {
+pub(crate) struct ShaderCode {
     code: &'static [u8],
 }
 
@@ -53,104 +51,30 @@ impl ShaderCode {
     }
 }
 
-pub mod metadata;
-
-pub struct VertexShader {
-    code: ShaderCode,
-    entrypoint: &'static CStr,
-    // TODO: when creating the pipeline, compare these against
-    // the layouts in GraphicsPipelineInfo. Return error if needed &
-    // use to determine bindings & locations
-    input_layouts: Vec<VertexInputLayout>,
-    set_layouts: &'static [&'static [vk::DescriptorSetLayoutBinding<'static>]],
-}
-
-impl VertexShader {
-    pub fn shader_create_info(
-        &self,
-        device: &mut RenderDevice,
-    ) -> Result<vk::PipelineShaderStageCreateInfo<'_>> {
-        shader_create_info(
-            device,
-            self.entrypoint,
-            &self.code,
-            vk::ShaderStageFlags::VERTEX,
-        )
-    }
-
-    pub fn set_layouts(&self, device: &mut RenderDevice) -> Result<Vec<vk::DescriptorSetLayout>> {
-        set_layouts(self.set_layouts, device)
-    }
-}
-
-pub struct FragmentShader {
-    code: ShaderCode,
-    entrypoint: &'static CStr,
-    set_layouts: &'static [&'static [vk::DescriptorSetLayoutBinding<'static>]],
-}
-
-impl FragmentShader {
-    pub fn shader_create_info(
-        &self,
-        device: &mut RenderDevice,
-    ) -> Result<vk::PipelineShaderStageCreateInfo<'_>> {
-        shader_create_info(
-            device,
-            self.entrypoint,
-            &self.code,
-            vk::ShaderStageFlags::FRAGMENT,
-        )
-    }
-
-    pub fn set_layouts(&self, device: &mut RenderDevice) -> Result<Vec<vk::DescriptorSetLayout>> {
-        set_layouts(self.set_layouts, device)
-    }
-}
-
-fn shader_create_info<'a>(
-    device: &mut RenderDevice,
-    entrypoint: &'a CStr,
-    code: &'a ShaderCode,
-    stage: vk::ShaderStageFlags,
-) -> Result<vk::PipelineShaderStageCreateInfo<'a>> {
-    let module = code.create_module(&device.device)?;
-    device.destroy(Garbage::Shader(module));
-    Ok(vk::PipelineShaderStageCreateInfo::default()
-        .stage(stage)
-        .module(module)
-        .name(entrypoint))
-}
-
-fn set_layouts(
-    set_layouts: &[&[vk::DescriptorSetLayoutBinding]],
-    device: &mut RenderDevice,
-) -> Result<Vec<vk::DescriptorSetLayout>> {
-    set_layouts
-        .iter()
-        .map(|&set| {
-            let info = vk::DescriptorSetLayoutCreateInfo::default().bindings(set);
-            let layout = unsafe { device.device.create_descriptor_set_layout(&info, None)? };
-            device.destroy(Garbage::DescriptorSetLayout(layout));
-            Ok(layout)
-        })
-        .collect::<Result<Vec<_>>>()
-}
-
 /// Vertex shader.
-pub const VERT: VertexShader = VertexShader {
-    code: shader_code!("main_vs"),
-    set_layouts: &[
+pub struct MainVS;
+
+impl Shader for MainVS {
+    const CODE: ShaderCode = shader_code!("main_vs");
+    const ENTRYPOINT: &'static CStr = c"main_vs";
+    const SET_LAYOUTS: &'static [&'static [vk::DescriptorSetLayoutBinding<'static>]] = &[
         SceneSet::BINDINGS,
         ObjectSet::BINDINGS,
         MaterialSet::BINDINGS,
-    ],
-    input_layouts: Vec::new(), // TODO: populate
-    entrypoint: c"main_vs",
-};
+    ];
+}
+
+impl VertexShader for MainVS {
+    const INPUT_LAYOUTS: Vec<VertexInputLayout> = Vec::new(); // TODO: populate
+}
 
 /// Fragment shader.
-pub const FRAG: FragmentShader = FragmentShader {
-    code: shader_code!("main_fs"),
-    entrypoint: c"main_fs",
-    set_layouts: &[&[]], // TODO: populate
-};
+pub struct MainFS;
+
+impl Shader for MainFS {
+    const CODE: ShaderCode = shader_code!("main_fs");
+    const ENTRYPOINT: &'static CStr = c"main_fs";
+    const SET_LAYOUTS: &'static [&'static [vk::DescriptorSetLayoutBinding<'static>]] = &[];
+}
+
+impl FragmentShader for MainFS {}

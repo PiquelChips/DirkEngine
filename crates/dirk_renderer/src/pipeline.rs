@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use ash::vk;
 
 use crate::{
@@ -6,40 +8,39 @@ use crate::{
         command_pool::CommandBuffer,
         device::{Garbage, RenderDevice},
     },
-    shaders::{
-        FragmentShader, VertexShader,
-        metadata::{VertexInput, VertexInputLayout},
-    },
+    shaders::metadata::{FragmentShader, VertexInput, VertexShader},
     utils::Vertex,
 };
 
-pub struct GraphicsPipelineInfo {
-    pub vert: VertexShader,
-    pub frag: FragmentShader,
-    // TODO: have a builder that uses `.with_input<impl VertexInput>`
-    // TODO: make sure it matches with the vertex shader input
-    pub input_layouts: Vec<VertexInputLayout>,
-}
-
-pub struct GraphicsPipeline {
+pub struct GraphicsPipeline<V, F>
+where
+    V: VertexShader,
+    F: FragmentShader,
+{
     device: RenderDevice,
     pipeline_layout: vk::PipelineLayout,
     pipeline: vk::Pipeline,
+    _vert: PhantomData<V>,
+    _frag: PhantomData<F>,
 }
 
-impl GraphicsPipeline {
-    pub fn build(device: &RenderDevice, info: GraphicsPipelineInfo) -> Result<Self> {
+impl<V, F> GraphicsPipeline<V, F>
+where
+    V: VertexShader,
+    F: FragmentShader,
+{
+    pub fn build(device: &RenderDevice) -> Result<Self> {
         let mut device = device.clone();
 
-        let mut set_layouts = info.vert.set_layouts(&mut device)?;
-        set_layouts.extend(info.frag.set_layouts(&mut device)?);
+        let mut set_layouts = V::set_layouts(&mut device)?;
+        set_layouts.extend(F::set_layouts(&mut device)?);
 
         let layout_info = vk::PipelineLayoutCreateInfo::default().set_layouts(&set_layouts);
         let pipeline_layout = unsafe { device.device.create_pipeline_layout(&layout_info, None)? };
 
         let shader_stages = [
-            info.vert.shader_create_info(&mut device)?,
-            info.frag.shader_create_info(&mut device)?,
+            V::shader_create_info(&mut device)?,
+            F::shader_create_info(&mut device)?,
         ];
 
         #[allow(clippy::cast_possible_truncation)]
@@ -122,6 +123,8 @@ impl GraphicsPipeline {
             device,
             pipeline,
             pipeline_layout,
+            _vert: PhantomData,
+            _frag: PhantomData,
         })
     }
     pub fn bind(&self, cmd: &CommandBuffer) {
@@ -132,7 +135,7 @@ impl GraphicsPipeline {
     }
 }
 
-impl Drop for GraphicsPipeline {
+impl<V: VertexShader, F: FragmentShader> Drop for GraphicsPipeline<V, F> {
     fn drop(&mut self) {
         self.device
             .destroy(Garbage::PipelineLayout(self.pipeline_layout));
