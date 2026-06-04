@@ -2,22 +2,61 @@
 
 use std::ffi::CStr;
 
+use crate::shaders::{metadata::VertexInputLayout, private::ShaderPrivate};
+
+mod private {
+    use crate::shaders::ShaderCode;
+
+    pub trait ShaderPrivate {
+        fn shader_code(&self) -> &ShaderCode;
+    }
+}
+
 pub mod metadata;
 
-pub type VertexShader = Shader;
-pub type FragmentShader = Shader;
+pub trait Shader: ShaderPrivate {
+    /// Returns the shader code.
+    #[must_use]
+    #[allow(unused)]
+    fn code(&self) -> &[u8] {
+        self.shader_code().code()
+    }
+
+    /// Returns the shader code as little-endian `u32` words.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the SPIR-V code size is not a multiple of 4 bytes.
+    #[must_use]
+    fn code_as_u32(&self) -> Vec<u32> {
+        self.shader_code().code_as_u32()
+    }
+
+    /// Returns the shader entry point.
+    #[must_use]
+    fn entrypoint(&self) -> &CStr {
+        self.shader_code().entrypoint()
+    }
+}
+
+impl<T: ShaderPrivate> Shader for T {}
 
 /// A block of shader bytecode and the shader entry point name.
-pub struct Shader {
+pub(crate) struct ShaderCode {
     code: &'static [u8],
     entrypoint: &'static CStr,
 }
 
-impl Shader {
+impl ShaderPrivate for ShaderCode {
+    fn shader_code(&self) -> &ShaderCode {
+        self
+    }
+}
+
+impl ShaderCode {
     /// Returns the shader code.
     #[must_use]
-    #[allow(unused)]
-    pub const fn code(&self) -> &[u8] {
+    const fn code(&self) -> &[u8] {
         self.code
     }
 
@@ -27,7 +66,7 @@ impl Shader {
     ///
     /// Panics if the SPIR-V code size is not a multiple of 4 bytes.
     #[must_use]
-    pub fn code_as_u32(&self) -> Vec<u32> {
+    fn code_as_u32(&self) -> Vec<u32> {
         assert!(
             self.code.len().is_multiple_of(4),
             "SPIR-V size must be a multiple of 4"
@@ -40,22 +79,47 @@ impl Shader {
 
     /// Returns the shader entry point.
     #[must_use]
-    pub const fn entrypoint(&self) -> &CStr {
+    const fn entrypoint(&self) -> &CStr {
         self.entrypoint
     }
 }
 
 macro_rules! shader {
     ($name:literal, $entrypoint:literal) => {
-        Shader {
+        ShaderCode {
             code: include_bytes!(concat!(env!("OUT_DIR"), "/", $name, ".spv")),
             entrypoint: $entrypoint,
         }
     };
 }
 
+pub struct VertexShader {
+    code: ShaderCode,
+    // TODO: when creating the pipeline, compare these against
+    // the layouts in GraphicsPipelineInfo. Return error if needed &
+    // use to determine bindings & locations
+    inputs: Vec<VertexInputLayout>,
+}
+
+impl ShaderPrivate for VertexShader {
+    fn shader_code(&self) -> &ShaderCode {
+        &self.code
+    }
+}
+
+pub struct FragmentShader(ShaderCode);
+
+impl ShaderPrivate for FragmentShader {
+    fn shader_code(&self) -> &ShaderCode {
+        &self.0
+    }
+}
+
 /// Vertex shader.
-pub const VERT: Shader = shader!("main_vs", c"main_vs");
+pub const VERT: VertexShader = VertexShader {
+    code: shader!("main_vs", c"main_vs"),
+    inputs: Vec::new(), // TODO: populate
+};
 
 /// Fragment shader.
-pub const FRAG: Shader = shader!("main_fs", c"main_fs");
+pub const FRAG: FragmentShader = FragmentShader(shader!("main_fs", c"main_fs"));

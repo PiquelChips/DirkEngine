@@ -4,6 +4,8 @@ pub trait VertexInput: Sized {
     const ATTRIBUTES: &'static [vk::VertexInputAttributeDescription];
 
     fn binding(binding: u32) -> vk::VertexInputBindingDescription {
+        // size_of::<Self> will never reach u32::MAX
+        #[allow(clippy::cast_possible_truncation)]
         vk::VertexInputBindingDescription {
             binding,
             stride: size_of::<Self>() as u32,

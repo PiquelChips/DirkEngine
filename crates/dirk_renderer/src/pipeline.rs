@@ -8,15 +8,15 @@ use crate::{
         device::{Garbage, RenderDevice},
     },
     shaders::{
-        FragmentShader, VertexShader,
+        FragmentShader, Shader, VertexShader,
         metadata::{VertexInput, VertexInputLayout},
     },
     utils::Vertex,
 };
 
 pub struct GraphicsPipelineInfo {
-    vert: VertexShader,
-    frag: FragmentShader,
+    pub vert: VertexShader,
+    pub frag: FragmentShader,
 }
 
 pub struct GraphicsPipeline {

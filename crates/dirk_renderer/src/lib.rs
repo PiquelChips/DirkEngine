@@ -30,7 +30,7 @@ use dirk_universe::{Universe, UniverseBuilder};
 mod utils;
 use dirk_utils::Version;
 use resources::descriptors::DescriptorLayouts;
-use utils::{Frame, RendererProperties, Vertex, make_version};
+use utils::{Frame, RendererProperties, make_version};
 
 mod errors;
 pub use errors::{Error, Result};
@@ -439,7 +439,10 @@ impl Renderer {
         Ok(unsafe { device.device.create_sampler(&sampler_info, None)? })
     }
 
-    fn create_shader_module(device: &Device, shader: &shaders::Shader) -> Result<vk::ShaderModule> {
+    fn create_shader_module(
+        device: &Device,
+        shader: &impl shaders::Shader,
+    ) -> Result<vk::ShaderModule> {
         let code = shader.code_as_u32();
         let info = vk::ShaderModuleCreateInfo::default().code(code.as_slice());
         Ok(unsafe { device.create_shader_module(&info, None)? })
