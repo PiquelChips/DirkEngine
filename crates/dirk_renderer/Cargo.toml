@@ -38,6 +38,8 @@ slotmap.workspace = true
 [build-dependencies]
 cargo-gpu-install.workspace = true
 anyhow.workspace = true
+naga.workspace = true
+rspirv-reflect.workspace = true
 
 dirk_build.workspace = true
 

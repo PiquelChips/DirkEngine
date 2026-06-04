@@ -111,6 +111,8 @@ tokio = { version = "1", features = ["full"] }
 # Shaders
 cargo-gpu-install = "0.10.0-alpha.1"
 spirv-std         = "0.10.0-alpha.1"
+naga = { version = "29", features = ["spv-in"] }
+rspirv-reflect = "0.9"
 
 # Macro dependencies
 syn = { version = "2", features = ["full"] }
