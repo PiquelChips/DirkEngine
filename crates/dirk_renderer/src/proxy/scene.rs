@@ -14,7 +14,9 @@ use crate::{
         buffer::UniformBuffer,
         command_pool::CommandBuffer,
         descriptors::{
-            DescriptorAllocator, DescriptorSet, DescriptorWriter, ObjectLayout, SceneLayout,
+            DescriptorAllocator, DescriptorSet, DescriptorWriter,
+            layouts::SetLayout,
+            sets::{MaterialSet, ObjectSet, SceneSet},
         },
         device::RenderDevice,
     },
@@ -35,8 +37,8 @@ pub struct SceneManager {
     // descriptor layouts, ...)
     graphics_pipeline: GraphicsPipeline,
 
-    scene_alloc: DescriptorAllocator<SceneLayout>,
-    proxy_alloc: DescriptorAllocator<ObjectLayout>,
+    scene_alloc: DescriptorAllocator<SceneSet>,
+    proxy_alloc: DescriptorAllocator<ObjectSet>,
 }
 
 pub(crate) struct RenderTarget {
@@ -47,15 +49,20 @@ pub(crate) struct RenderTarget {
 
 impl SceneManager {
     pub fn init(device: &RenderDevice) -> Result<Self> {
-        let scene_alloc = DescriptorAllocator::<SceneLayout>::new(device, 16)?;
-        let proxy_alloc = DescriptorAllocator::<ObjectLayout>::new(device, 256)?;
+        let scene_alloc = DescriptorAllocator::<SceneSet>::new(device, 16)?;
+        let proxy_alloc = DescriptorAllocator::<ObjectSet>::new(device, 256)?;
 
         let info = GraphicsPipelineInfo {
             vert: shaders::VERT,
             frag: shaders::FRAG,
-            layouts: vec![Vertex::layout()],
+            input_layouts: vec![Vertex::layout()],
+            set_layouts: vec![
+                SceneSet::create_layout(&device.device)?,
+                ObjectSet::create_layout(&device.device)?,
+                MaterialSet::create_layout(&device.device)?,
+            ],
         };
-        let graphics_pipeline = GraphicsPipeline::build(device, &device.layouts, info)?;
+        let graphics_pipeline = GraphicsPipeline::build(device, info)?;
 
         Ok(Self {
             device: device.clone(),
@@ -349,7 +356,7 @@ struct Scene {
     entities: HashSet<Entity>,
 
     ubo: [UniformBuffer; MAX_FRAMES_IN_FLIGHT],
-    sets: [DescriptorSet<SceneLayout>; MAX_FRAMES_IN_FLIGHT],
+    sets: [DescriptorSet<SceneSet>; MAX_FRAMES_IN_FLIGHT],
 }
 
 impl Scene {
@@ -369,7 +376,7 @@ impl Scene {
 
         let mut writer = DescriptorWriter::new(&manager.device.device);
         for (set, ubo) in sets.iter().zip(&ubo) {
-            writer = writer.uniform_buffer(set, ubo.buffer(), ubo_size);
+            writer = writer.uniform_buffer(set, 0, ubo.buffer(), ubo_size);
         }
         writer.flush();
 
@@ -393,7 +400,7 @@ pub struct SceneProxy {
 
     // Per frame render stuff
     ubo: [UniformBuffer; MAX_FRAMES_IN_FLIGHT],
-    sets: [DescriptorSet<ObjectLayout>; MAX_FRAMES_IN_FLIGHT],
+    sets: [DescriptorSet<ObjectSet>; MAX_FRAMES_IN_FLIGHT],
 }
 
 impl SceneProxy {
@@ -409,7 +416,7 @@ impl SceneProxy {
 
         let mut writer = DescriptorWriter::new(&manager.device.device);
         for (set, ubo) in sets.iter().zip(&ubo) {
-            writer = writer.uniform_buffer(set, ubo.buffer(), size);
+            writer = writer.uniform_buffer(set, 0, ubo.buffer(), size);
         }
         writer.flush();
 

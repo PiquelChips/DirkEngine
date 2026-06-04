@@ -21,8 +21,8 @@ use crate::{
         buffer::{IndexBuffer, VertexBuffer},
         command_pool::CommandBuffer,
         descriptors::{
-            DescriptorAllocator, DescriptorSet, DescriptorWriter, MaterialLayout, ObjectLayout,
-            SceneLayout,
+            DescriptorAllocator, DescriptorSet, DescriptorWriter,
+            sets::{MaterialSet, ObjectSet, SceneSet},
         },
         device::{Garbage, RenderDevice},
         image::Image,
@@ -104,7 +104,7 @@ struct Mesh {
 struct Material {
     #[allow(unused)]
     pub base_color: Handle<Texture>,
-    pub set: DescriptorSet<MaterialLayout>,
+    pub set: DescriptorSet<MaterialSet>,
 }
 
 struct Model {
@@ -120,7 +120,7 @@ pub struct ModelRegistry {
     materials: slotmap::SlotMap<slotmap::DefaultKey, Material>,
     models: HashMap<dirk_assets::AssetHandle, Model>,
 
-    material_alloc: DescriptorAllocator<MaterialLayout>,
+    material_alloc: DescriptorAllocator<MaterialSet>,
 
     asset_load_consumer: dirk_events::Consumer<::dirk_assets::AssetLoaded<::dirk_assets::Model>>,
     asset_unload_consumer: dirk_events::Consumer<::dirk_assets::AssetUnloaded>,
@@ -128,7 +128,7 @@ pub struct ModelRegistry {
 
 impl ModelRegistry {
     pub fn new(device: &RenderDevice, events: &dirk_events::EventManager) -> Result<Self> {
-        let material_alloc = DescriptorAllocator::<MaterialLayout>::new(device, 64)?;
+        let material_alloc = DescriptorAllocator::<MaterialSet>::new(device, 64)?;
 
         Ok(Self {
             device: device.clone(),
@@ -158,8 +158,8 @@ impl ModelRegistry {
         &self,
         handle: &dirk_assets::AssetHandle,
         cmd: &CommandBuffer,
-        scene_set: &DescriptorSet<SceneLayout>,
-        proxy_set: &DescriptorSet<ObjectLayout>,
+        scene_set: &DescriptorSet<SceneSet>,
+        proxy_set: &DescriptorSet<ObjectSet>,
         pipeline_layout: vk::PipelineLayout,
     ) -> dirk_assets::Result<()> {
         if handle.asset_type() != dirk_assets::AssetType::Model {
@@ -275,7 +275,7 @@ impl ModelRegistry {
 
         let mut writer = DescriptorWriter::new(&self.device.device);
         for (_, set, view, sampler) in &pending {
-            writer = writer.combined_image_sampler(set, *view, *sampler);
+            writer = writer.combined_image_sampler(set, 0, *view, *sampler);
         }
         writer.flush();
 

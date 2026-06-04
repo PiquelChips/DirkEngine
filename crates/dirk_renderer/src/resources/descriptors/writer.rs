@@ -2,10 +2,9 @@
 
 use ash::vk;
 
-use super::{
-    layout_types::{CombinedImageSamplerLayout, UniformBufferLayout},
-    set::DescriptorSet,
-};
+use crate::resources::descriptors::layouts::SetLayout;
+
+use super::set::DescriptorSet;
 
 enum WriteOp {
     UniformBuffer {
@@ -40,15 +39,18 @@ impl<'dev> DescriptorWriter<'dev> {
     }
 
     /// Adds a uniform-buffer descriptor write.
-    pub fn uniform_buffer<L: UniformBufferLayout>(
+    pub fn uniform_buffer<L: SetLayout>(
         mut self,
         set: &DescriptorSet<L>,
+        binding: u32,
         buffer: vk::Buffer,
         range: vk::DeviceSize,
     ) -> Self {
+        // TODO: verify that the binding on the layout is indeed a
+        // uniform buffer
         self.ops.push(WriteOp::UniformBuffer {
             set: set.raw(),
-            binding: L::BINDING,
+            binding,
             buffer,
             offset: 0,
             range,
@@ -57,15 +59,18 @@ impl<'dev> DescriptorWriter<'dev> {
     }
 
     /// Adds a combined image sampler descriptor write.
-    pub fn combined_image_sampler<L: CombinedImageSamplerLayout>(
+    pub fn combined_image_sampler<L: SetLayout>(
         mut self,
         set: &DescriptorSet<L>,
+        binding: u32,
         view: vk::ImageView,
         sampler: vk::Sampler,
     ) -> Self {
+        // TODO: verify that the binding on the layout is indeed a
+        // combined image sampler
         self.ops.push(WriteOp::CombinedImageSampler {
             set: set.raw(),
-            binding: L::BINDING,
+            binding,
             view,
             sampler,
             image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,

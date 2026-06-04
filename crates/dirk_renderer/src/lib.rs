@@ -21,15 +21,13 @@ use ash::{
     vk,
 };
 
+use dirk_platform::{PlatformEvent, WindowEvent, WindowId};
 use dirk_player::PlayerId;
+use dirk_universe::{Universe, UniverseBuilder};
+use dirk_utils::Version;
 use tracing::{debug, info};
 
-use dirk_platform::{PlatformEvent, WindowEvent, WindowId};
-use dirk_universe::{Universe, UniverseBuilder};
-
 mod utils;
-use dirk_utils::Version;
-use resources::descriptors::DescriptorLayouts;
 use utils::{Frame, RendererProperties, make_version};
 
 mod errors;

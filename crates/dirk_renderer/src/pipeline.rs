@@ -4,7 +4,6 @@ use crate::{
     Renderer, Result,
     resources::{
         command_pool::CommandBuffer,
-        descriptors::DescriptorLayouts,
         device::{Garbage, RenderDevice},
     },
     shaders::{
@@ -17,29 +16,32 @@ use crate::{
 pub struct GraphicsPipelineInfo {
     pub vert: VertexShader,
     pub frag: FragmentShader,
+    // TODO: have a builder that uses `.with_input<impl VertexInput>`
+    // TODO: make sure it matches with the vertex shader input
+    pub input_layouts: Vec<VertexInputLayout>,
+    // TODO: have builder that uses `.with_desc_set<impl SetLayout>`
+    // TODO: make sure it matches with the shader inputs
+    pub set_layouts: Vec<vk::DescriptorSetLayout>,
 }
 
 pub struct GraphicsPipeline {
     device: RenderDevice,
     pipeline_layout: vk::PipelineLayout,
     pipeline: vk::Pipeline,
+
+    set_layouts: Vec<vk::DescriptorSetLayout>,
 }
 
 impl GraphicsPipeline {
-    pub fn build(
-        device: &RenderDevice,
-        layouts: &DescriptorLayouts,
-        pipeline_info: GraphicsPipelineInfo,
-    ) -> Result<Self> {
-        let set_layouts = layouts.pipeline_layouts();
-        let layout_info = vk::PipelineLayoutCreateInfo::default().set_layouts(&set_layouts);
+    pub fn build(device: &RenderDevice, info: GraphicsPipelineInfo) -> Result<Self> {
+        let layout_info = vk::PipelineLayoutCreateInfo::default().set_layouts(&info.set_layouts);
         let pipeline_layout = unsafe { device.device.create_pipeline_layout(&layout_info, None)? };
 
-        let vert = Renderer::create_shader_module(&device.device, &pipeline_info.vert)?;
-        let vert_name = pipeline_info.vert.entrypoint();
+        let vert = Renderer::create_shader_module(&device.device, &info.vert)?;
+        let vert_name = info.vert.entrypoint();
 
-        let frag = Renderer::create_shader_module(&device.device, &pipeline_info.frag)?;
-        let frag_name = pipeline_info.frag.entrypoint();
+        let frag = Renderer::create_shader_module(&device.device, &info.frag)?;
+        let frag_name = info.frag.entrypoint();
 
         let shader_stages = [
             vk::PipelineShaderStageCreateInfo::default()
@@ -137,6 +139,7 @@ impl GraphicsPipeline {
             device: device.clone(),
             pipeline,
             pipeline_layout,
+            set_layouts: info.set_layouts,
         })
     }
     pub fn bind(&self, cmd: &CommandBuffer) {
@@ -152,5 +155,8 @@ impl Drop for GraphicsPipeline {
         self.device
             .destroy(Garbage::PipelineLayout(self.pipeline_layout));
         self.device.destroy(Garbage::Pipeline(self.pipeline));
+        self.set_layouts
+            .iter()
+            .for_each(|layout| self.device.destroy(Garbage::DescriptorSetLayout(*layout)));
     }
 }
