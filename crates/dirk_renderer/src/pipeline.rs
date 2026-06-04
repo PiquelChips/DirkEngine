@@ -46,8 +46,8 @@ where
         let attribute_descriptions = V::input_attribute_descriptions();
 
         let vertex_input_info = vk::PipelineVertexInputStateCreateInfo::default()
-            .vertex_binding_descriptions(&binding_descriptions)
-            .vertex_attribute_descriptions(&attribute_descriptions);
+            .vertex_binding_descriptions(V::INPUT_BINDINGS)
+            .vertex_attribute_descriptions(V::INPUT_ATTRIBUTES);
 
         let input_assembly = vk::PipelineInputAssemblyStateCreateInfo::default()
             .topology(vk::PrimitiveTopology::TRIANGLE_LIST)
