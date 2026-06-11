@@ -35,6 +35,10 @@ dirk_assets = { workspace = true, optional = true }
 [build-dependencies]
 dirk_build.workspace = true
 
+[[bin]]
+name = "dirkengine-new"
+path = "src/bin/new_system.rs"
+
 [lints]
 workspace = true
 
