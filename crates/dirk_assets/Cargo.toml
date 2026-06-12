@@ -21,7 +21,9 @@ parking_lot.workspace = true
 tokio.workspace = true
 
 dirk_events.workspace = true
+dirk_engine.workspace = true
 dirk_threads.workspace = true
+dirk_universe.workspace = true
 
 gltf.workspace = true
 

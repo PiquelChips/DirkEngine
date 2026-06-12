@@ -17,6 +17,7 @@ use handle::AssetRef;
 pub use handle::Handle;
 
 use ::dirk_events::{Consumer, Dispatcher, EventManager};
+use dirk_engine::{EngineBuilder, EngineHandle, EnginePlugin, Subsystem};
 use dirk_threads::WorkerPool;
 use parking_lot::{Mutex, RwLock};
 use std::{
@@ -35,6 +36,45 @@ use tracing::warn;
 use serde::{Deserialize, Serialize};
 
 use crate::events::InternalAssetUnloaded;
+
+/// Registers the asset registry as an engine subsystem.
+pub struct AssetsPlugin;
+
+impl EnginePlugin for AssetsPlugin {
+    fn name(&self) -> &'static str {
+        "assets"
+    }
+
+    fn build(&self, builder: &mut EngineBuilder) -> anyhow::Result<()> {
+        builder.add_subsystem(|ctx| {
+            let registry = AssetRegistry::init(ctx.events(), ctx.workers().clone())?;
+            ctx.add_resource(registry.clone())?;
+            Ok(AssetsSubsystem { registry })
+        });
+        Ok(())
+    }
+}
+
+/// Runtime asset subsystem.
+pub struct AssetsSubsystem {
+    registry: AssetRegistry,
+}
+
+impl Subsystem for AssetsSubsystem {
+    fn name(&self) -> &'static str {
+        "assets"
+    }
+
+    fn tick(
+        &mut self,
+        _delta_time: f64,
+        _handle: &EngineHandle,
+        _universe: &mut dirk_universe::Universe,
+    ) -> anyhow::Result<()> {
+        self.registry.tick();
+        Ok(())
+    }
+}
 
 /// Extension used for all asset descriptor files.
 pub(crate) const DIRK_ASSET_EXT: &str = "dirkasset";
