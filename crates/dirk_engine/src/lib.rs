@@ -1,201 +1,95 @@
 //! Core front-facing engine API.
 //!
 //! This crate owns the engine runtime primitives and composition API. Optional
-//! engine features such as rendering, assets, players, and editor tooling should
-//! be registered through [`EnginePlugin`] implementations instead of being
+//! engine features such as rendering, assets, players, and editor tooling are
+//! registered through [`EnginePlugin`] implementations instead of being
 //! hard-wired into [`Engine`].
+//!
+//! # Composition model
+//!
+//! `DirkEngine` has three deliberately separate extension concepts:
+//!
+//! - **Plugins** are build-time extension points. A plugin receives an
+//!   [`EngineBuilder`] and registers the pieces needed by one engine feature.
+//!   Plugins are never started or ticked by the runtime.
+//! - **Subsystems** are runtime lifecycle objects. They own mutable feature
+//!   state and are started, ticked, and shut down by the engine loop.
+//! - **Resources** are immutable, cloneable handles published while subsystems
+//!   are being built. They let later subsystem factories discover capabilities
+//!   created by earlier subsystem factories without transferring mutable
+//!   ownership out of the subsystem that owns the runtime behavior.
+//!
+//! Plugin registration is idempotent by concrete plugin type. This lets plugins
+//! declare their dependencies directly:
+//!
+//! ```rust
+//! # use dirk_engine::{EngineBuilder, EnginePlugin};
+//! # struct AssetsPlugin;
+//! # impl EnginePlugin for AssetsPlugin {
+//! #     fn name(&self) -> &'static str { "assets" }
+//! #     fn build(&self, _builder: &mut EngineBuilder) -> anyhow::Result<()> { Ok(()) }
+//! # }
+//! # struct RendererPlugin;
+//! impl EnginePlugin for RendererPlugin {
+//!     fn name(&self) -> &'static str {
+//!         "renderer"
+//!     }
+//!
+//!     fn build(&self, builder: &mut EngineBuilder) -> anyhow::Result<()> {
+//!         builder.with_plugin(AssetsPlugin)?;
+//!         Ok(())
+//!     }
+//! }
+//! ```
+//!
+//! If multiple plugins request the same dependency type, only the first
+//! successful registration runs that dependency plugin's `build` method. The
+//! builder stores explicit order lists for plugins and subsystems, so runtime
+//! behavior follows first successful registration rather than hash-map order.
+//!
+//! Resources are intentionally read-only handles. They should be cheap to clone
+//! and should not become the primary owner of mutable runtime behavior. If a
+//! feature needs mutable state, keep that state in the subsystem and publish a
+//! small synchronized handle only when another subsystem factory needs to find
+//! it during engine construction.
+//!
+//! Resource availability is order-dependent: a resource published by one
+//! subsystem factory is immediately available to later subsystem factories, but
+//! earlier factories cannot see resources that have not been published yet.
+//! Looking up a missing resource returns [`Error::ResourceMissing`], and
+//! registering a second resource of the same concrete type returns
+//! [`Error::ResourceAlreadyRegistered`].
 
 use std::{
-    any::TypeId,
+    any::{Any, TypeId},
     collections::HashMap,
-    mem,
-    path::PathBuf,
     sync::{
         Arc,
         atomic::{AtomicU64, Ordering},
-        mpsc::{self, Receiver, Sender},
+        mpsc::{Receiver, Sender},
     },
     time::Instant,
 };
 
 use dirk_events::EventManager;
 use dirk_threads::WorkerPool;
-use dirk_universe::{Universe, UniverseBuilder};
+use dirk_universe::Universe;
 use parking_lot::RwLock;
-use tracing::{error, info};
+use tracing::error;
 
 pub mod errors;
 pub mod events;
 pub mod subsystem;
 
+mod builder;
+pub use builder::EngineBuilder;
+
 use errors::{Error, Result};
-pub use subsystem::{EnginePlugin, Subsystem};
+pub use subsystem::{EnginePlugin, EngineResource, Subsystem};
 
-type SubsystemFactory =
-    Box<dyn FnOnce(&EngineHandle) -> anyhow::Result<Box<dyn Subsystem>> + 'static>;
+mod tests;
 
-/// Builds an [`Engine`] from core configuration and plugin registrations.
-pub struct EngineBuilder {
-    app_name: String,
-    worker_name: String,
-    log_level: piquel_log::LogLevel,
-    /// Store factories in `HashMap` keyed by the typeId of the [`Subsystem`].
-    /// This avoid duplicate subsystems.
-    subsystem_factories: HashMap<TypeId, SubsystemFactory>,
-    universe_builder: UniverseBuilder,
-    plugin_names: Vec<&'static str>,
-}
-
-impl EngineBuilder {
-    /// Creates an empty engine builder with default core configuration.
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            app_name: "DirkEngine".to_owned(),
-            worker_name: "dirk-workers".to_owned(),
-            log_level: piquel_log::LogLevel::Debug,
-            subsystem_factories: HashMap::new(),
-            universe_builder: Universe::builder(),
-            plugin_names: Vec::new(),
-        }
-    }
-
-    /// Sets the application name used for diagnostics.
-    #[must_use]
-    pub fn with_app_name(mut self, app_name: impl Into<String>) -> Self {
-        self.app_name = app_name.into();
-        self
-    }
-
-    /// Sets the worker thread name prefix.
-    #[must_use]
-    pub fn with_worker_name(mut self, worker_name: impl Into<String>) -> Self {
-        self.worker_name = worker_name.into();
-        self
-    }
-
-    /// Sets the maximum log level configured by the engine.
-    #[must_use]
-    pub fn with_log_level(mut self, level: piquel_log::LogLevel) -> Self {
-        self.log_level = level;
-        self
-    }
-
-    /// Registers a plugin with the builder.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the plugin fails to register its build-time pieces.
-    pub fn with_plugin<P>(mut self, plugin: P) -> anyhow::Result<Self>
-    where
-        P: EnginePlugin,
-    {
-        let name = plugin.name();
-        plugin.build(&mut self)?;
-        self.plugin_names.push(name);
-        drop(plugin);
-        Ok(self)
-    }
-
-    /// Registers a plugin with the builder.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the plugin fails to register its build-time pieces.
-    pub fn add_plugin<P>(&mut self, plugin: &P) -> anyhow::Result<&mut Self>
-    where
-        P: EnginePlugin,
-    {
-        plugin.build(self)?;
-        self.plugin_names.push(plugin.name());
-        Ok(self)
-    }
-
-    /// Adds a runtime subsystem factory.
-    ///
-    /// The factory runs during [`EngineBuilder::build`], after core engine
-    /// services have been created.
-    pub fn add_subsystem<F, S>(&mut self, factory: F) -> &mut Self
-    where
-        F: FnOnce(&EngineHandle) -> anyhow::Result<S> + 'static,
-        S: Subsystem + 'static,
-    {
-        self.subsystem_factories.insert(
-            TypeId::of::<S>(),
-            Box::new(move |context| Ok(Box::new(factory(context)?) as Box<dyn Subsystem>)),
-        );
-        self
-    }
-
-    /// Extends the engine ECS builder with another prepared ECS builder.
-    pub fn extend_universe(&mut self, builder: UniverseBuilder) -> &mut Self {
-        let universe_builder = mem::take(&mut self.universe_builder);
-        self.universe_builder = universe_builder.with_other(builder);
-        self
-    }
-
-    /// Builds a new engine.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if logging or subsystem initialization fails.
-    pub fn build(self) -> Result<Engine> {
-        let logger = piquel_log::Logger::new()
-            .with_max_level(self.log_level)
-            .with_log_bridge(true)
-            .with_file(piquel_log::FileConfig::new(
-                PathBuf::from(std::env!("SAVED_PATH")).join("logs"),
-            ));
-
-        logger.init()?;
-
-        #[cfg(feature = "editor")]
-        info!("starting editor");
-
-        info!(app = self.app_name, "initialising engine");
-
-        let workers = WorkerPool::new(&self.worker_name);
-        let events = EventManager::new(workers.clone());
-        let state = Arc::new(EngineState::new());
-        let (commands, command_receiver) = mpsc::channel();
-        let handle = EngineHandle {
-            state: Arc::clone(&state),
-            events: events.clone(),
-            workers: workers.clone(),
-            commands,
-        };
-
-        let mut subsystems = Vec::with_capacity(self.subsystem_factories.len());
-        for (_, factory) in self.subsystem_factories {
-            subsystems.push(factory(&handle).map_err(Error::SubsystemFailedInit)?);
-        }
-
-        let universe = self.universe_builder.build();
-
-        Ok(Engine {
-            logger,
-            workers,
-            universe,
-            subsystems,
-            state,
-            handle,
-            command_receiver,
-            frame_dispatcher: events.register(),
-            exiting_dispatcher: events.register(),
-            events,
-            last_tick: Instant::now(),
-            started: false,
-            shutdown: false,
-            plugin_names: self.plugin_names,
-        })
-    }
-}
-
-impl Default for EngineBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+type ResourceStorage = Arc<RwLock<HashMap<TypeId, Box<dyn Any + Send + Sync>>>>; // TODO: see about some other better storage method
 
 /// The main engine object.
 ///
@@ -203,8 +97,6 @@ impl Default for EngineBuilder {
 /// subsystems before the runtime starts.
 pub struct Engine {
     logger: piquel_log::Logger,
-    events: EventManager,
-    workers: WorkerPool,
     universe: Universe,
     subsystems: Vec<Box<dyn Subsystem>>,
     state: Arc<EngineState>,
@@ -215,7 +107,6 @@ pub struct Engine {
     last_tick: Instant,
     started: bool,
     shutdown: bool,
-    plugin_names: Vec<&'static str>,
 }
 
 impl Engine {
@@ -232,42 +123,6 @@ impl Engine {
     /// Returns an error if the engine cannot be built.
     pub fn new() -> Result<Self> {
         Self::builder().build()
-    }
-
-    /// Returns a cheap handle to the engine.
-    #[must_use]
-    pub fn handle(&self) -> EngineHandle {
-        self.handle.clone()
-    }
-
-    /// Returns the shared event manager.
-    #[must_use]
-    pub fn events(&self) -> &EventManager {
-        &self.events
-    }
-
-    /// Returns the worker pool.
-    #[must_use]
-    pub fn workers(&self) -> &WorkerPool {
-        &self.workers
-    }
-
-    /// Returns the engine ECS.
-    #[must_use]
-    pub fn universe(&self) -> &Universe {
-        &self.universe
-    }
-
-    /// Returns mutable access to the engine ECS.
-    #[must_use]
-    pub fn universe_mut(&mut self) -> &mut Universe {
-        &mut self.universe
-    }
-
-    /// Returns the names of registered plugins.
-    #[must_use]
-    pub fn plugin_names(&self) -> &[&'static str] {
-        &self.plugin_names
     }
 
     /// Starts all subsystems.
@@ -353,32 +208,16 @@ impl Engine {
         Ok(self.status())
     }
 
-    /// Requests engine exit without an error.
-    pub fn exit(&mut self) {
-        self.request_exit(None);
-    }
-
-    /// Requests engine exit with an error.
-    pub fn exit_with_error(&mut self, error: anyhow::Error) {
-        self.request_exit(Some(error));
-    }
-
     /// Returns whether the engine is exiting or has exited.
     #[must_use]
-    pub fn is_exiting(&self) -> bool {
+    fn is_exiting(&self) -> bool {
         self.status().is_exiting()
     }
 
     /// Returns the current lightweight engine status.
     #[must_use]
-    pub fn status(&self) -> EngineStatus {
+    fn status(&self) -> EngineStatus {
         self.state.status()
-    }
-
-    /// Returns the current frame number.
-    #[must_use]
-    pub fn frame(&self) -> u64 {
-        self.state.frame()
     }
 
     /// Shuts down the engine subsystems.
@@ -484,6 +323,7 @@ pub struct EngineHandle {
     events: EventManager,
     workers: WorkerPool,
     commands: Sender<EngineCommand>,
+    resources: ResourceStorage,
 }
 
 impl EngineHandle {

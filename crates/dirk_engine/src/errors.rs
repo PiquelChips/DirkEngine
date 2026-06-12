@@ -11,6 +11,33 @@ pub enum Error {
     /// An error occured when initializing the logger
     #[error("failed to initialize logging")]
     LoggerFailure(#[from] piquel_log::InitError),
+    /// When a plugin failed to register its build-time pieces.
+    #[error("plugin `{name}` failed to build")]
+    PluginBuildFailed {
+        /// The plugin name.
+        name: &'static str,
+        /// The error that caused the build failure.
+        #[source]
+        source: anyhow::Error,
+    },
+    /// When a requested typed engine resource has not been registered.
+    #[error("resource `{type_name}` was not registered")]
+    ResourceMissing {
+        /// The requested resource type name.
+        type_name: &'static str,
+    },
+    /// When a typed engine resource has already been registered.
+    #[error("resource `{type_name}` was already registered")]
+    ResourceAlreadyRegistered {
+        /// The duplicate resource type name.
+        type_name: &'static str,
+    },
+    /// When a stored resource does not match the requested concrete type.
+    #[error("resource `{type_name}` had an unexpected concrete type")]
+    ResourceTypeMismatch {
+        /// The requested resource type name.
+        type_name: &'static str,
+    },
     /// When an engine system failed to tick
     #[error("system {name} failed tick: {source}")]
     SubsystemFailedTick {

@@ -5,7 +5,18 @@
 //! configure the builder, while subsystems are started, ticked, and shut down by
 //! the engine loop.
 //!
-//! [`EngineBuilder`]: crate::EngineBuilder
+//! Plugins may depend on other plugins by calling
+//! [`EngineBuilder::with_plugin`] from [`EnginePlugin::build`]. That call is
+//! idempotent by concrete plugin type, so shared dependencies can be requested
+//! by every plugin that needs them.
+//!
+//! Subsystem factories receive an [`EngineBuildContext`]. A factory should
+//! publish an [`EngineResource`] when later subsystem factories need a stable,
+//! cloneable handle to something the subsystem creates. The subsystem remains
+//! the owner of mutable runtime state; resources are read-only handles used for
+//! build-time discovery.
+//!
+//! [`EngineBuildContext`]: crate::EngineBuildContext
 
 use dirk_universe::Universe;
 
@@ -14,8 +25,12 @@ use crate::{EngineBuilder, EngineHandle};
 /// Builder-time extension point for engine features.
 ///
 /// Plugins configure an [`EngineBuilder`]. They should register subsystem
-/// factories, ECS systems, resources, event registrations, editor panels, or
-/// other future build-time integrations. They are not ticked by the engine.
+/// factories, ECS systems, event registrations, editor panels, or other future
+/// build-time integrations. They are not ticked by the engine.
+///
+/// Dependencies are declared by calling [`EngineBuilder::with_plugin`] inside
+/// [`EnginePlugin::build`]. Because plugin registration is idempotent, two
+/// plugins can request the same dependency without building it twice.
 pub trait EnginePlugin {
     /// Returns the plugin name for diagnostics.
     fn name(&self) -> &'static str;
@@ -28,7 +43,24 @@ pub trait EnginePlugin {
     fn build(&self, builder: &mut EngineBuilder) -> anyhow::Result<()>;
 }
 
+/// Marker trait for immutable, cloneable handles published during engine build.
+///
+/// Resources are type-driven and are stored by their concrete type. They should
+/// be cheap to clone and safe to share across threads. A resource should not be
+/// the primary owner of mutable runtime behavior; the subsystem that creates it
+/// should keep that state and publish only the handle that other subsystem
+/// factories need. Interior synchronization is acceptable when it is necessary
+/// to make the handle safe.
+pub trait EngineResource: Clone + Send + Sync + 'static {}
+
+impl<T> EngineResource for T where T: Clone + Send + Sync + 'static {}
+
 /// A runtime system owned and driven by the engine.
+///
+/// Subsystems are the lifecycle primitive for mutable runtime behavior. They
+/// are created from factories during [`EngineBuilder::build`], started before
+/// the first tick, ticked in registration order, and shut down in reverse
+/// registration order.
 pub trait Subsystem {
     /// The name of the subsystem.
     ///
