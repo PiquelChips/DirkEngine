@@ -1,17 +1,5 @@
 //! Compiled shader blobs used by the renderer.
 
-use std::ffi::CStr;
-
-use crate::{
-    resources::descriptors::{
-        layouts::SetLayout,
-        sets::{MaterialSet, ObjectSet, SceneSet},
-    },
-    shaders::metadata::{FragmentShader, Shader, VertexShader},
-    utils::Vertex,
-};
-use ash::vk;
-
 macro_rules! shader_code {
     ($name:literal) => {
         ShaderCode {
@@ -52,30 +40,4 @@ impl ShaderCode {
     }
 }
 
-/// Vertex shader.
-pub struct MainVS;
-
-impl Shader for MainVS {
-    const CODE: ShaderCode = shader_code!("main_vs");
-    const ENTRYPOINT: &'static CStr = c"main_vs";
-    const SET_LAYOUTS: &'static [&'static [vk::DescriptorSetLayoutBinding<'static>]] = &[
-        SceneSet::BINDINGS,
-        ObjectSet::BINDINGS,
-        MaterialSet::BINDINGS,
-    ];
-}
-
-impl VertexShader for MainVS {
-    type Input = Vertex;
-}
-
-/// Fragment shader.
-pub struct MainFS;
-
-impl Shader for MainFS {
-    const CODE: ShaderCode = shader_code!("main_fs");
-    const ENTRYPOINT: &'static CStr = c"main_fs";
-    const SET_LAYOUTS: &'static [&'static [vk::DescriptorSetLayoutBinding<'static>]] = &[];
-}
-
-impl FragmentShader for MainFS {}
+include!(concat!(env!("OUT_DIR"), "/generated_shaders.rs"));

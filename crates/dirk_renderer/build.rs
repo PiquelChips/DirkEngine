@@ -1,11 +1,25 @@
-#![allow(missing_docs)]
+//! Builds platform configuration and generated shader metadata for `dirk_renderer`.
 
-use anyhow::anyhow;
+use anyhow::{Context, anyhow, bail};
 use cargo_gpu_install::{
     install::Install,
     spirv_builder::{ModuleResult, SpirvMetadata},
 };
-use std::{fs, path::PathBuf};
+use naga::{
+    AddressSpace, ArraySize, Binding, Expression, GlobalVariable, Handle, ImageClass, Module,
+    Scalar, ScalarKind, ShaderStage, Type, TypeInner, VectorSize, front::spv,
+};
+use rspirv_reflect::rspirv::{
+    binary::Parser,
+    dr::{Instruction, Loader, Module as SpirvModule, Operand},
+    spirv::{Decoration, ExecutionModel, Op, StorageClass},
+};
+use std::{
+    collections::{BTreeMap, HashMap, HashSet},
+    fmt::Write as _,
+    fs,
+    path::{Path, PathBuf},
+};
 
 fn main() -> anyhow::Result<()> {
     dirk_build::configure_platform();
@@ -40,9 +54,1017 @@ fn build_shaders() -> anyhow::Result<()> {
     let ModuleResult::MultiModule(modules) = spv_result.module else {
         return Err(anyhow!("expected one SPIR-V module per shader entry point"));
     };
+    let mut shaders = Vec::new();
     for (entrypoint, source_path) in modules {
-        fs::copy(source_path, out_dir.join(format!("{entrypoint}.spv")))?;
+        let output_path = out_dir.join(format!("{entrypoint}.spv"));
+        fs::copy(&source_path, &output_path)?;
+        shaders.push(reflect_shader(&entrypoint, &source_path)?);
     }
+    shaders.sort_by(|left, right| left.entrypoint.cmp(&right.entrypoint));
+    fs::write(
+        out_dir.join("generated_shaders.rs"),
+        generate_shader_module(&shaders),
+    )?;
 
     Ok(())
+}
+
+#[derive(Debug)]
+struct ReflectedShader {
+    entrypoint: String,
+    type_name: String,
+    stage: ShaderStage,
+    set_layouts: Vec<Vec<DescriptorBinding>>,
+    vertex_inputs: Vec<VertexInput>,
+}
+
+#[derive(Clone, Debug)]
+struct DescriptorBinding {
+    binding: u32,
+    descriptor_type: &'static str,
+    descriptor_count: u32,
+    stage_flags: &'static str,
+}
+
+#[derive(Debug)]
+struct VertexInput {
+    location: u32,
+    format: &'static str,
+    size: u32,
+    offset: u32,
+}
+
+struct ReflectedDescriptor {
+    descriptor_type: &'static str,
+    descriptor_count: u32,
+}
+
+fn reflect_shader(entrypoint: &str, spv_path: &Path) -> anyhow::Result<ReflectedShader> {
+    let bytes = fs::read(spv_path)
+        .with_context(|| format!("failed to read SPIR-V for shader entry point `{entrypoint}`"))?;
+    reflect_shader_naga(entrypoint, &bytes).or_else(|naga_err| {
+        println!(
+            "cargo:warning=naga reflection failed for `{entrypoint}`, falling back to SPIR-V instruction reflection: {naga_err:#}"
+        );
+        reflect_shader_spirv(entrypoint, &bytes)
+    })
+}
+
+fn reflect_shader_naga(entrypoint: &str, bytes: &[u8]) -> anyhow::Result<ReflectedShader> {
+    let module = spv::parse_u8_slice(
+        bytes,
+        &spv::Options {
+            strict_capabilities: false,
+            ..spv::Options::default()
+        },
+    )
+    .with_context(|| format!("failed to parse SPIR-V for shader entry point `{entrypoint}`"))?;
+    let entry = module
+        .entry_points
+        .iter()
+        .find(|entry| entry.name == entrypoint)
+        .ok_or_else(|| anyhow!("SPIR-V module did not contain entry point `{entrypoint}`"))?;
+
+    let used_globals = naga_entry_point_globals(entry);
+    let has_bound_globals = module
+        .global_variables
+        .iter()
+        .any(|(_, global)| global.binding.is_some());
+    let has_used_bound_globals = used_globals
+        .iter()
+        .any(|handle| module.global_variables[*handle].binding.is_some());
+    if has_bound_globals && !has_used_bound_globals {
+        bail!("naga did not expose used descriptor globals for shader entry point `{entrypoint}`");
+    }
+    let set_layouts = reflect_descriptor_sets(entrypoint, entry.stage, &module, &used_globals)?;
+    let vertex_inputs = if entry.stage == ShaderStage::Vertex {
+        reflect_vertex_inputs(entrypoint, entry, &module.types)?
+    } else {
+        Vec::new()
+    };
+
+    Ok(ReflectedShader {
+        entrypoint: entrypoint.to_owned(),
+        type_name: shader_type_name(entrypoint, entry.stage)?,
+        stage: entry.stage,
+        set_layouts,
+        vertex_inputs,
+    })
+}
+
+fn reflect_shader_spirv(entrypoint: &str, bytes: &[u8]) -> anyhow::Result<ReflectedShader> {
+    let module = parse_spirv(bytes)
+        .with_context(|| format!("failed to parse SPIR-V fallback for shader `{entrypoint}`"))?;
+    let raw = RawReflection::new(&module);
+    let (stage, function_id, interface_ids) = raw.entry_point(entrypoint)?;
+    let used_ids = raw.used_ids(function_id);
+    let set_layouts = raw.descriptor_sets(entrypoint, stage, &used_ids)?;
+    let vertex_inputs = if stage == ShaderStage::Vertex {
+        raw.vertex_inputs(entrypoint, &interface_ids)?
+    } else {
+        Vec::new()
+    };
+
+    Ok(ReflectedShader {
+        entrypoint: entrypoint.to_owned(),
+        type_name: shader_type_name(entrypoint, stage)?,
+        stage,
+        set_layouts,
+        vertex_inputs,
+    })
+}
+
+fn parse_spirv(bytes: &[u8]) -> anyhow::Result<SpirvModule> {
+    let mut loader = Loader::new();
+    Parser::new(bytes, &mut loader).parse()?;
+    Ok(loader.module())
+}
+
+fn naga_entry_point_globals(entry: &naga::EntryPoint) -> HashSet<Handle<GlobalVariable>> {
+    entry
+        .function
+        .expressions
+        .iter()
+        .filter_map(|(_, expression)| match expression {
+            Expression::GlobalVariable(handle) => Some(*handle),
+            _ => None,
+        })
+        .collect()
+}
+
+fn reflect_descriptor_sets(
+    entrypoint: &str,
+    stage: ShaderStage,
+    module: &Module,
+    used_globals: &HashSet<Handle<GlobalVariable>>,
+) -> anyhow::Result<Vec<Vec<DescriptorBinding>>> {
+    let mut sets = BTreeMap::<u32, Vec<DescriptorBinding>>::new();
+    for (handle, global) in module.global_variables.iter() {
+        if !used_globals.contains(&handle) {
+            continue;
+        }
+        let Some(binding) = global.binding else {
+            continue;
+        };
+        let descriptor = descriptor_for_global(entrypoint, &module.types, global)?;
+        sets.entry(binding.group)
+            .or_default()
+            .push(DescriptorBinding {
+                binding: binding.binding,
+                descriptor_type: descriptor.descriptor_type,
+                descriptor_count: descriptor.descriptor_count,
+                stage_flags: stage_flags(stage)?,
+            });
+    }
+
+    let Some(max_set) = sets.keys().next_back().copied() else {
+        return Ok(Vec::new());
+    };
+
+    let mut layouts = Vec::new();
+    for set in 0..=max_set {
+        let mut bindings = sets.remove(&set).unwrap_or_default();
+        bindings.sort_by_key(|binding| binding.binding);
+        layouts.push(bindings);
+    }
+    Ok(layouts)
+}
+
+fn descriptor_for_global(
+    entrypoint: &str,
+    types: &naga::UniqueArena<Type>,
+    global: &naga::GlobalVariable,
+) -> anyhow::Result<ReflectedDescriptor> {
+    let (inner, descriptor_count) = strip_binding_array(entrypoint, types, global.ty)?;
+    let descriptor_type = match (global.space, inner) {
+        (AddressSpace::Uniform, _) => "UNIFORM_BUFFER",
+        (
+            AddressSpace::Handle,
+            TypeInner::Image {
+                class: ImageClass::Sampled { .. } | ImageClass::Depth { .. },
+                ..
+            },
+        ) => "COMBINED_IMAGE_SAMPLER",
+        (
+            AddressSpace::Handle,
+            TypeInner::Image {
+                class: ImageClass::Storage { .. },
+                ..
+            },
+        ) => bail!(
+            "shader `{entrypoint}` uses storage image resource `{}`; storage image descriptors are not supported by shader generation yet",
+            global.name.as_deref().unwrap_or("<unnamed>")
+        ),
+        (AddressSpace::Handle, TypeInner::Sampler { .. }) => bail!(
+            "shader `{entrypoint}` uses standalone sampler resource `{}`; separate sampler descriptors are not supported by shader generation yet",
+            global.name.as_deref().unwrap_or("<unnamed>")
+        ),
+        (AddressSpace::Storage { .. }, _) => bail!(
+            "shader `{entrypoint}` uses storage resource `{}`; storage descriptors are not supported by shader generation yet",
+            global.name.as_deref().unwrap_or("<unnamed>")
+        ),
+        _ => bail!(
+            "shader `{entrypoint}` uses unsupported resource `{}` in address space {:?} with type {:?}",
+            global.name.as_deref().unwrap_or("<unnamed>"),
+            global.space,
+            inner
+        ),
+    };
+    Ok(ReflectedDescriptor {
+        descriptor_type,
+        descriptor_count,
+    })
+}
+
+fn strip_binding_array<'types>(
+    entrypoint: &str,
+    types: &'types naga::UniqueArena<Type>,
+    ty: Handle<Type>,
+) -> anyhow::Result<(&'types TypeInner, u32)> {
+    match &types[ty].inner {
+        TypeInner::BindingArray { base, size } => {
+            let descriptor_count = array_size_to_descriptor_count(entrypoint, *size)?;
+            let (inner, nested_count) = strip_binding_array(entrypoint, types, *base)?;
+            Ok((
+                inner,
+                descriptor_count.checked_mul(nested_count).ok_or_else(|| {
+                    anyhow!("shader `{entrypoint}` descriptor array count overflowed u32")
+                })?,
+            ))
+        }
+        inner => Ok((inner, 1)),
+    }
+}
+
+fn array_size_to_descriptor_count(entrypoint: &str, size: ArraySize) -> anyhow::Result<u32> {
+    match size {
+        ArraySize::Constant(count) => Ok(count.get()),
+        ArraySize::Pending(_) => bail!(
+            "shader `{entrypoint}` uses override-sized descriptor arrays, which are not supported"
+        ),
+        ArraySize::Dynamic => bail!(
+            "shader `{entrypoint}` uses runtime-sized descriptor arrays, which are not supported"
+        ),
+    }
+}
+
+fn reflect_vertex_inputs(
+    entrypoint: &str,
+    entry: &naga::EntryPoint,
+    types: &naga::UniqueArena<Type>,
+) -> anyhow::Result<Vec<VertexInput>> {
+    let mut reflected = Vec::new();
+    for argument in &entry.function.arguments {
+        let Some(Binding::Location { location, .. }) = argument.binding else {
+            continue;
+        };
+        let (format, size) = vertex_format(entrypoint, location, argument.ty, types)?;
+        reflected.push((location, format, size));
+    }
+    build_vertex_inputs(entrypoint, reflected)
+}
+
+fn build_vertex_inputs(
+    entrypoint: &str,
+    mut reflected: Vec<(u32, &'static str, u32)>,
+) -> anyhow::Result<Vec<VertexInput>> {
+    reflected.sort_by_key(|(location, _, _)| *location);
+
+    let mut offset = 0_u32;
+    let mut inputs = Vec::new();
+    for (location, format, size) in reflected {
+        inputs.push(VertexInput {
+            location,
+            format,
+            size,
+            offset,
+        });
+        offset = offset
+            .checked_add(size)
+            .ok_or_else(|| anyhow!("shader `{entrypoint}` vertex input stride overflowed u32"))?;
+    }
+    Ok(inputs)
+}
+
+fn vertex_format(
+    entrypoint: &str,
+    location: u32,
+    ty: Handle<Type>,
+    types: &naga::UniqueArena<Type>,
+) -> anyhow::Result<(&'static str, u32)> {
+    let inner = &types[ty].inner;
+    match inner {
+        TypeInner::Scalar(scalar) => scalar_format(entrypoint, location, None, *scalar),
+        TypeInner::Vector { size, scalar } => {
+            scalar_format(entrypoint, location, Some(*size), *scalar)
+        }
+        TypeInner::Matrix { .. } => {
+            bail!(
+                "shader `{entrypoint}` location {location} uses a matrix vertex input, which is not supported"
+            )
+        }
+        _ => bail!(
+            "shader `{entrypoint}` location {location} uses unsupported vertex input type {inner:?}"
+        ),
+    }
+}
+
+fn scalar_format(
+    entrypoint: &str,
+    location: u32,
+    size: Option<VectorSize>,
+    scalar: Scalar,
+) -> anyhow::Result<(&'static str, u32)> {
+    let components = size.map_or(1, u32::from);
+    let format = match (scalar.kind, scalar.width, components) {
+        (ScalarKind::Float, 4, 1) => "R32_SFLOAT",
+        (ScalarKind::Float, 4, 2) => "R32G32_SFLOAT",
+        (ScalarKind::Float, 4, 3) => "R32G32B32_SFLOAT",
+        (ScalarKind::Float, 4, 4) => "R32G32B32A32_SFLOAT",
+        (ScalarKind::Sint, 4, 1) => "R32_SINT",
+        (ScalarKind::Sint, 4, 2) => "R32G32_SINT",
+        (ScalarKind::Sint, 4, 3) => "R32G32B32_SINT",
+        (ScalarKind::Sint, 4, 4) => "R32G32B32A32_SINT",
+        (ScalarKind::Uint, 4, 1) => "R32_UINT",
+        (ScalarKind::Uint, 4, 2) => "R32G32_UINT",
+        (ScalarKind::Uint, 4, 3) => "R32G32B32_UINT",
+        (ScalarKind::Uint, 4, 4) => "R32G32B32A32_UINT",
+        _ => bail!(
+            "shader `{entrypoint}` location {location} uses unsupported vertex scalar {:?} with width {} and {components} component(s)",
+            scalar.kind,
+            scalar.width
+        ),
+    };
+    Ok((format, u32::from(scalar.width) * components))
+}
+
+#[derive(Default)]
+struct RawDecorations {
+    location: Option<u32>,
+    descriptor_set: Option<u32>,
+    binding: Option<u32>,
+    built_in: bool,
+}
+
+struct RawReflection<'a> {
+    module: &'a SpirvModule,
+    decorations: HashMap<u32, RawDecorations>,
+    assignments: HashMap<u32, &'a Instruction>,
+}
+
+const ENTRY_POINT_STAGE_OPERAND: usize = 0;
+const ENTRY_POINT_FUNCTION_OPERAND: usize = 1;
+const ENTRY_POINT_NAME_OPERAND: usize = 2;
+const ENTRY_POINT_INTERFACE_OPERAND_START: usize = 3;
+const TYPE_IMAGE_SAMPLED_OPERAND: usize = 5;
+
+impl<'a> RawReflection<'a> {
+    fn new(module: &'a SpirvModule) -> Self {
+        let mut decorations = HashMap::<u32, RawDecorations>::new();
+        for instruction in &module.annotations {
+            if instruction.class.opcode != Op::Decorate {
+                continue;
+            }
+            let Some(target) = id_ref(instruction, 0) else {
+                continue;
+            };
+            let entry = decorations.entry(target).or_default();
+            match decoration(instruction, 1) {
+                Some(Decoration::Location) => entry.location = literal_u32(instruction, 2),
+                Some(Decoration::DescriptorSet) => {
+                    entry.descriptor_set = literal_u32(instruction, 2);
+                }
+                Some(Decoration::Binding) => entry.binding = literal_u32(instruction, 2),
+                Some(Decoration::BuiltIn) => entry.built_in = true,
+                _ => {}
+            }
+        }
+
+        let assignments = module
+            .types_global_values
+            .iter()
+            .filter_map(|instruction| instruction.result_id.map(|id| (id, instruction)))
+            .collect();
+
+        Self {
+            module,
+            decorations,
+            assignments,
+        }
+    }
+
+    fn entry_point(&self, entrypoint: &str) -> anyhow::Result<(ShaderStage, u32, Vec<u32>)> {
+        for instruction in &self.module.entry_points {
+            let Some(name) = literal_string(instruction, ENTRY_POINT_NAME_OPERAND) else {
+                continue;
+            };
+            if name != entrypoint {
+                continue;
+            }
+            let model = execution_model(instruction, ENTRY_POINT_STAGE_OPERAND)
+                .ok_or_else(|| anyhow!("shader `{entrypoint}` entry point is missing a stage"))?;
+            let stage = match model {
+                ExecutionModel::Vertex => ShaderStage::Vertex,
+                ExecutionModel::Fragment => ShaderStage::Fragment,
+                ExecutionModel::GLCompute => ShaderStage::Compute,
+                _ => bail!("shader `{entrypoint}` uses unsupported execution model {model:?}"),
+            };
+            let function_id =
+                id_ref(instruction, ENTRY_POINT_FUNCTION_OPERAND).ok_or_else(|| {
+                    anyhow!("shader `{entrypoint}` entry point is missing a function id")
+                })?;
+            let interface_ids = instruction
+                .operands
+                .iter()
+                .skip(ENTRY_POINT_INTERFACE_OPERAND_START)
+                .filter_map(|operand| match operand {
+                    Operand::IdRef(id) => Some(*id),
+                    _ => None,
+                })
+                .collect();
+            return Ok((stage, function_id, interface_ids));
+        }
+        bail!("SPIR-V module did not contain entry point `{entrypoint}`")
+    }
+
+    fn used_ids(&self, function_id: u32) -> HashSet<u32> {
+        let mut used_ids = HashSet::new();
+        let mut visited_functions = HashSet::new();
+        self.collect_function_used_ids(function_id, &mut used_ids, &mut visited_functions);
+        used_ids
+    }
+
+    fn collect_function_used_ids(
+        &self,
+        function_id: u32,
+        used_ids: &mut HashSet<u32>,
+        visited_functions: &mut HashSet<u32>,
+    ) {
+        if !visited_functions.insert(function_id) {
+            return;
+        }
+        let Some(function) = self.module.functions.iter().find(|function| {
+            function.def.as_ref().and_then(|def| def.result_id) == Some(function_id)
+        }) else {
+            return;
+        };
+
+        for block in &function.blocks {
+            for instruction in &block.instructions {
+                for operand in &instruction.operands {
+                    if let Operand::IdRef(id) = operand {
+                        used_ids.insert(*id);
+                        if self.is_function_id(*id) {
+                            self.collect_function_used_ids(*id, used_ids, visited_functions);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn is_function_id(&self, id: u32) -> bool {
+        self.module
+            .functions
+            .iter()
+            .any(|function| function.def.as_ref().and_then(|def| def.result_id) == Some(id))
+    }
+
+    fn descriptor_sets(
+        &self,
+        entrypoint: &str,
+        stage: ShaderStage,
+        used_ids: &HashSet<u32>,
+    ) -> anyhow::Result<Vec<Vec<DescriptorBinding>>> {
+        let mut sets = BTreeMap::<u32, Vec<DescriptorBinding>>::new();
+        for instruction in &self.module.types_global_values {
+            if instruction.class.opcode != Op::Variable {
+                continue;
+            }
+            let Some(result_id) = instruction.result_id else {
+                continue;
+            };
+            if !used_ids.contains(&result_id) {
+                continue;
+            }
+            let Some(decorations) = self.decorations.get(&result_id) else {
+                continue;
+            };
+            let (Some(set), Some(binding)) = (decorations.descriptor_set, decorations.binding)
+            else {
+                continue;
+            };
+            let descriptor = self.descriptor(entrypoint, instruction)?;
+            sets.entry(set).or_default().push(DescriptorBinding {
+                binding,
+                descriptor_type: descriptor.descriptor_type,
+                descriptor_count: descriptor.descriptor_count,
+                stage_flags: stage_flags(stage)?,
+            });
+        }
+
+        let Some(max_set) = sets.keys().next_back().copied() else {
+            return Ok(Vec::new());
+        };
+        let mut layouts = Vec::new();
+        for set in 0..=max_set {
+            let mut bindings = sets.remove(&set).unwrap_or_default();
+            bindings.sort_by_key(|binding| binding.binding);
+            layouts.push(bindings);
+        }
+        Ok(layouts)
+    }
+
+    fn descriptor(
+        &self,
+        entrypoint: &str,
+        variable: &Instruction,
+    ) -> anyhow::Result<ReflectedDescriptor> {
+        let storage_class = storage_class(variable, 0).ok_or_else(|| {
+            anyhow!("shader `{entrypoint}` has descriptor variable without storage class")
+        })?;
+        let pointer_type = variable.result_type.ok_or_else(|| {
+            anyhow!("shader `{entrypoint}` has descriptor variable without pointer type")
+        })?;
+        let pointee = self.pointer_pointee(pointer_type)?;
+        let (_, descriptor_count) = self.strip_descriptor_array(entrypoint, pointee)?;
+
+        match storage_class {
+            StorageClass::Uniform => Ok(ReflectedDescriptor {
+                descriptor_type: "UNIFORM_BUFFER",
+                descriptor_count,
+            }),
+            StorageClass::UniformConstant => {
+                let descriptor_type = self.uniform_constant_descriptor_type(entrypoint, pointee)?;
+                Ok(ReflectedDescriptor {
+                    descriptor_type,
+                    descriptor_count,
+                })
+            }
+            StorageClass::StorageBuffer => bail!(
+                "shader `{entrypoint}` uses a storage buffer descriptor; storage descriptors are not supported yet"
+            ),
+            _ => bail!(
+                "shader `{entrypoint}` uses unsupported descriptor storage class {storage_class:?}"
+            ),
+        }
+    }
+
+    fn strip_descriptor_array(&self, entrypoint: &str, type_id: u32) -> anyhow::Result<(u32, u32)> {
+        let instruction = self
+            .assignments
+            .get(&type_id)
+            .ok_or_else(|| anyhow!("missing SPIR-V descriptor type id {type_id}"))?;
+        match instruction.class.opcode {
+            Op::TypeArray => {
+                let element = id_ref(instruction, 0)
+                    .ok_or_else(|| anyhow!("SPIR-V array type id {type_id} lacks element type"))?;
+                let length_id = id_ref(instruction, 1)
+                    .ok_or_else(|| anyhow!("SPIR-V array type id {type_id} lacks length id"))?;
+                let descriptor_count = self.constant_u32(length_id)?;
+                let (element_type, nested_count) =
+                    self.strip_descriptor_array(entrypoint, element)?;
+                Ok((
+                    element_type,
+                    descriptor_count.checked_mul(nested_count).ok_or_else(|| {
+                        anyhow!("shader `{entrypoint}` descriptor array count overflowed u32")
+                    })?,
+                ))
+            }
+            Op::TypeRuntimeArray => bail!(
+                "shader `{entrypoint}` uses runtime-sized descriptor arrays, which are not supported"
+            ),
+            _ => Ok((type_id, 1)),
+        }
+    }
+
+    fn constant_u32(&self, constant_id: u32) -> anyhow::Result<u32> {
+        let instruction = self
+            .assignments
+            .get(&constant_id)
+            .ok_or_else(|| anyhow!("missing SPIR-V constant id {constant_id}"))?;
+        if instruction.class.opcode != Op::Constant {
+            bail!("SPIR-V id {constant_id} is not an OpConstant");
+        }
+        literal_u32(instruction, 0)
+            .ok_or_else(|| anyhow!("SPIR-V constant id {constant_id} is not a u32 literal"))
+    }
+
+    fn uniform_constant_descriptor_type(
+        &self,
+        entrypoint: &str,
+        type_id: u32,
+    ) -> anyhow::Result<&'static str> {
+        let (element_type, _) = self.strip_descriptor_array(entrypoint, type_id)?;
+        let instruction = self
+            .assignments
+            .get(&element_type)
+            .ok_or_else(|| anyhow!("missing SPIR-V descriptor type id {element_type}"))?;
+        match instruction.class.opcode {
+            Op::TypeSampledImage => Ok("COMBINED_IMAGE_SAMPLER"),
+            Op::TypeImage => {
+                if sampled_image_mode(instruction) == Some(2) {
+                    bail!(
+                        "shader `{entrypoint}` uses a storage image descriptor; storage image descriptors are not supported yet"
+                    )
+                }
+                bail!(
+                    "shader `{entrypoint}` uses a separate sampled image descriptor; only combined image samplers are supported"
+                )
+            }
+            Op::TypeSampler => bail!(
+                "shader `{entrypoint}` uses a standalone sampler descriptor; separate sampler descriptors are not supported"
+            ),
+            _ => bail!(
+                "shader `{entrypoint}` uses unsupported uniform-constant descriptor opcode {:?}",
+                instruction.class.opcode
+            ),
+        }
+    }
+
+    fn vertex_inputs(
+        &self,
+        entrypoint: &str,
+        interface_ids: &[u32],
+    ) -> anyhow::Result<Vec<VertexInput>> {
+        let mut reflected = Vec::new();
+        for id in interface_ids {
+            let Some(decorations) = self.decorations.get(id) else {
+                continue;
+            };
+            if decorations.built_in {
+                continue;
+            }
+            let Some(location) = decorations.location else {
+                continue;
+            };
+            let variable = self.assignments.get(id).ok_or_else(|| {
+                anyhow!("shader `{entrypoint}` location {location} is not assigned")
+            })?;
+            if storage_class(variable, 0) != Some(StorageClass::Input) {
+                continue;
+            }
+            let pointer_type = variable.result_type.ok_or_else(|| {
+                anyhow!("shader `{entrypoint}` input location {location} has no pointer type")
+            })?;
+            let pointee = self.pointer_pointee(pointer_type)?;
+            let (format, size) = self.vertex_format(entrypoint, location, pointee)?;
+            reflected.push((location, format, size));
+        }
+        build_vertex_inputs(entrypoint, reflected)
+    }
+
+    fn pointer_pointee(&self, pointer_type: u32) -> anyhow::Result<u32> {
+        let instruction = self
+            .assignments
+            .get(&pointer_type)
+            .ok_or_else(|| anyhow!("missing SPIR-V pointer type id {pointer_type}"))?;
+        if instruction.class.opcode != Op::TypePointer {
+            bail!("SPIR-V type id {pointer_type} is not an OpTypePointer");
+        }
+        id_ref(instruction, 1)
+            .ok_or_else(|| anyhow!("SPIR-V pointer type id {pointer_type} lacks a pointee type"))
+    }
+
+    fn vertex_format(
+        &self,
+        entrypoint: &str,
+        location: u32,
+        type_id: u32,
+    ) -> anyhow::Result<(&'static str, u32)> {
+        let instruction = self
+            .assignments
+            .get(&type_id)
+            .ok_or_else(|| anyhow!("missing SPIR-V vertex input type id {type_id}"))?;
+        match instruction.class.opcode {
+            Op::TypeFloat => {
+                let width = literal_u32(instruction, 0)
+                    .ok_or_else(|| anyhow!("SPIR-V float type id {type_id} lacks width"))?;
+                scalar_format(
+                    entrypoint,
+                    location,
+                    None,
+                    raw_scalar(ScalarKind::Float, width)?,
+                )
+            }
+            Op::TypeInt => {
+                let width = literal_u32(instruction, 0)
+                    .ok_or_else(|| anyhow!("SPIR-V int type id {type_id} lacks width"))?;
+                let signed = literal_u32(instruction, 1)
+                    .ok_or_else(|| anyhow!("SPIR-V int type id {type_id} lacks signedness"))?;
+                let kind = if signed == 0 {
+                    ScalarKind::Uint
+                } else {
+                    ScalarKind::Sint
+                };
+                scalar_format(entrypoint, location, None, raw_scalar(kind, width)?)
+            }
+            Op::TypeVector => {
+                let component = id_ref(instruction, 0).ok_or_else(|| {
+                    anyhow!("SPIR-V vector type id {type_id} lacks component type")
+                })?;
+                let components = literal_u32(instruction, 1).ok_or_else(|| {
+                    anyhow!("SPIR-V vector type id {type_id} lacks component count")
+                })?;
+                let (kind, width) = self.scalar_type(component)?;
+                scalar_format(
+                    entrypoint,
+                    location,
+                    Some(raw_vector_size(entrypoint, location, components)?),
+                    raw_scalar(kind, width)?,
+                )
+            }
+            Op::TypeMatrix => bail!(
+                "shader `{entrypoint}` location {location} uses a matrix vertex input, which is not supported"
+            ),
+            _ => bail!(
+                "shader `{entrypoint}` location {location} uses unsupported SPIR-V vertex input opcode {:?}",
+                instruction.class.opcode
+            ),
+        }
+    }
+
+    fn scalar_type(&self, type_id: u32) -> anyhow::Result<(ScalarKind, u32)> {
+        let instruction = self
+            .assignments
+            .get(&type_id)
+            .ok_or_else(|| anyhow!("missing SPIR-V scalar type id {type_id}"))?;
+        match instruction.class.opcode {
+            Op::TypeFloat => Ok((
+                ScalarKind::Float,
+                literal_u32(instruction, 0)
+                    .ok_or_else(|| anyhow!("SPIR-V float type id {type_id} lacks width"))?,
+            )),
+            Op::TypeInt => {
+                let kind = if literal_u32(instruction, 1).unwrap_or(0) == 0 {
+                    ScalarKind::Uint
+                } else {
+                    ScalarKind::Sint
+                };
+                Ok((
+                    kind,
+                    literal_u32(instruction, 0)
+                        .ok_or_else(|| anyhow!("SPIR-V int type id {type_id} lacks width"))?,
+                ))
+            }
+            _ => bail!("SPIR-V type id {type_id} is not a scalar"),
+        }
+    }
+}
+
+fn raw_scalar(kind: ScalarKind, width_bits: u32) -> anyhow::Result<Scalar> {
+    let width = match width_bits {
+        8 => 1,
+        16 => 2,
+        32 => 4,
+        64 => 8,
+        _ => {
+            bail!("SPIR-V scalar width {width_bits} is unsupported; expected 8, 16, 32, or 64 bits")
+        }
+    };
+    Ok(Scalar { kind, width })
+}
+
+fn raw_vector_size(entrypoint: &str, location: u32, components: u32) -> anyhow::Result<VectorSize> {
+    match components {
+        2 => Ok(VectorSize::Bi),
+        3 => Ok(VectorSize::Tri),
+        4 => Ok(VectorSize::Quad),
+        _ => bail!(
+            "shader `{entrypoint}` location {location} uses unsupported vector width {components}"
+        ),
+    }
+}
+
+fn id_ref(instruction: &Instruction, index: usize) -> Option<u32> {
+    match instruction.operands.get(index) {
+        Some(Operand::IdRef(id)) => Some(*id),
+        _ => None,
+    }
+}
+
+fn literal_u32(instruction: &Instruction, index: usize) -> Option<u32> {
+    match instruction.operands.get(index) {
+        Some(Operand::LiteralBit32(value)) => Some(*value),
+        _ => None,
+    }
+}
+
+fn literal_string(instruction: &Instruction, index: usize) -> Option<&str> {
+    match instruction.operands.get(index) {
+        Some(Operand::LiteralString(value)) => Some(value.as_str()),
+        _ => None,
+    }
+}
+
+fn decoration(instruction: &Instruction, index: usize) -> Option<Decoration> {
+    match instruction.operands.get(index) {
+        Some(Operand::Decoration(value)) => Some(*value),
+        _ => None,
+    }
+}
+
+fn execution_model(instruction: &Instruction, index: usize) -> Option<ExecutionModel> {
+    match instruction.operands.get(index) {
+        Some(Operand::ExecutionModel(value)) => Some(*value),
+        _ => None,
+    }
+}
+
+fn storage_class(instruction: &Instruction, index: usize) -> Option<StorageClass> {
+    match instruction.operands.get(index) {
+        Some(Operand::StorageClass(value)) => Some(*value),
+        _ => None,
+    }
+}
+
+fn sampled_image_mode(instruction: &Instruction) -> Option<u32> {
+    literal_u32(instruction, TYPE_IMAGE_SAMPLED_OPERAND)
+}
+
+fn stage_flags(stage: ShaderStage) -> anyhow::Result<&'static str> {
+    match stage {
+        ShaderStage::Vertex => Ok("VERTEX"),
+        ShaderStage::Fragment => Ok("FRAGMENT"),
+        ShaderStage::Compute => Ok("COMPUTE"),
+        _ => bail!("unsupported shader stage {stage:?}"),
+    }
+}
+
+fn shader_type_name(entrypoint: &str, stage: ShaderStage) -> anyhow::Result<String> {
+    let mut name = String::new();
+    let suffix = entrypoint.rsplit_once('_').map(|(_, suffix)| suffix);
+    let stem = match suffix {
+        Some("vs" | "fs" | "cs") => entrypoint
+            .rsplit_once('_')
+            .map_or(entrypoint, |(stem, _)| stem),
+        _ => entrypoint,
+    };
+    for part in stem.split('_').filter(|part| !part.is_empty()) {
+        let mut chars = part.chars();
+        if let Some(first) = chars.next() {
+            name.extend(first.to_uppercase());
+            name.push_str(chars.as_str());
+        }
+    }
+    if name.is_empty() {
+        bail!("shader entry point `{entrypoint}` does not contain a valid Rust type-name stem");
+    }
+    name.push_str(match suffix {
+        Some("vs") => {
+            ensure_entrypoint_suffix_matches_stage(entrypoint, stage, ShaderStage::Vertex)?;
+            "VS"
+        }
+        Some("fs") => {
+            ensure_entrypoint_suffix_matches_stage(entrypoint, stage, ShaderStage::Fragment)?;
+            "FS"
+        }
+        Some("cs") => {
+            ensure_entrypoint_suffix_matches_stage(entrypoint, stage, ShaderStage::Compute)?;
+            "CS"
+        }
+        _ => shader_stage_suffix(stage)?,
+    });
+    Ok(name)
+}
+
+fn ensure_entrypoint_suffix_matches_stage(
+    entrypoint: &str,
+    actual: ShaderStage,
+    expected: ShaderStage,
+) -> anyhow::Result<()> {
+    if actual == expected {
+        Ok(())
+    } else {
+        bail!(
+            "shader entry point `{entrypoint}` suffix implies {expected:?}, but reflection reported {actual:?}"
+        )
+    }
+}
+
+fn shader_stage_suffix(stage: ShaderStage) -> anyhow::Result<&'static str> {
+    match stage {
+        ShaderStage::Vertex => Ok("VS"),
+        ShaderStage::Fragment => Ok("FS"),
+        ShaderStage::Compute => Ok("CS"),
+        _ => bail!("unsupported shader stage {stage:?}"),
+    }
+}
+
+fn generate_shader_module(shaders: &[ReflectedShader]) -> String {
+    let mut output = String::from(
+        "use std::{ffi::CStr, marker::PhantomData};\n\
+         use ash::vk;\n\
+         use crate::shaders::metadata::{FragmentShader, Shader, VertexShader};\n\n",
+    );
+    for shader in shaders {
+        output.push_str(&generate_shader(shader));
+    }
+    output
+}
+
+fn generate_shader(shader: &ReflectedShader) -> String {
+    let const_prefix = shader
+        .entrypoint
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() {
+                ch.to_ascii_uppercase()
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+
+    let mut output = String::new();
+    for (set, bindings) in shader.set_layouts.iter().enumerate() {
+        let _ = writeln!(
+            output,
+            "const {const_prefix}_SET_{set}_BINDINGS: &[vk::DescriptorSetLayoutBinding<'static>] = &["
+        );
+        for binding in bindings {
+            let _ = writeln!(
+                output,
+                "    vk::DescriptorSetLayoutBinding {{ binding: {}, descriptor_type: vk::DescriptorType::{}, descriptor_count: {}, stage_flags: vk::ShaderStageFlags::{}, p_immutable_samplers: ::core::ptr::null(), _marker: PhantomData }},",
+                binding.binding,
+                binding.descriptor_type,
+                binding.descriptor_count,
+                binding.stage_flags
+            );
+        }
+        output.push_str("];\n");
+    }
+
+    if shader.stage == ShaderStage::Vertex {
+        let stride = shader
+            .vertex_inputs
+            .last()
+            .map_or(0, |input| input.offset + input.size);
+        let _ = writeln!(
+            output,
+            "const {const_prefix}_INPUT_BINDINGS: &[vk::VertexInputBindingDescription] = &[",
+        );
+        let _ = writeln!(
+            output,
+            "    vk::VertexInputBindingDescription {{ binding: 0, stride: {stride}, input_rate: vk::VertexInputRate::VERTEX }},"
+        );
+        output.push_str("];\n");
+        let _ = writeln!(
+            output,
+            "const {const_prefix}_INPUT_ATTRIBUTES: &[vk::VertexInputAttributeDescription] = &["
+        );
+        for input in &shader.vertex_inputs {
+            let _ = writeln!(
+                output,
+                "    vk::VertexInputAttributeDescription {{ location: {}, binding: 0, format: vk::Format::{}, offset: {} }},",
+                input.location, input.format, input.offset
+            );
+        }
+        output.push_str("];\n");
+    }
+
+    let _ = write!(output, "pub struct {};\n\n", shader.type_name);
+    let _ = writeln!(output, "impl Shader for {} {{", shader.type_name);
+    let _ = writeln!(
+        output,
+        "    const CODE: ShaderCode = shader_code!(\"{}\");",
+        shader.entrypoint
+    );
+    let _ = writeln!(
+        output,
+        "    const ENTRYPOINT: &'static CStr = c\"{}\";",
+        shader.entrypoint
+    );
+    output.push_str(
+        "    const SET_LAYOUTS: &'static [&'static [vk::DescriptorSetLayoutBinding<'static>]] = &[\n",
+    );
+    for set in 0..shader.set_layouts.len() {
+        let _ = writeln!(output, "        {const_prefix}_SET_{set}_BINDINGS,");
+    }
+    output.push_str("    ];\n}\n\n");
+
+    match shader.stage {
+        ShaderStage::Vertex => {
+            let _ = writeln!(output, "impl VertexShader for {} {{", shader.type_name);
+            let _ = writeln!(
+                output,
+                "    const INPUT_BINDINGS: &'static [vk::VertexInputBindingDescription] = {const_prefix}_INPUT_BINDINGS;"
+            );
+            let _ = writeln!(
+                output,
+                "    const INPUT_ATTRIBUTES: &'static [vk::VertexInputAttributeDescription] = {const_prefix}_INPUT_ATTRIBUTES;"
+            );
+            output.push_str("}\n\n");
+        }
+        ShaderStage::Fragment => {
+            let _ = write!(
+                output,
+                "impl FragmentShader for {} {{}}\n\n",
+                shader.type_name
+            );
+        }
+        ShaderStage::Compute => {}
+        _ => unreachable!("unsupported shader stage should fail before code generation"),
+    }
+    output
 }
