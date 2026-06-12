@@ -176,7 +176,6 @@ impl EngineBuilder {
 
         let mut context = EngineBuildContext {
             handle: handle.clone(),
-            resource_order: Vec::new(),
         };
 
         let mut subsystems = Vec::with_capacity(self.subsystem_factories.len());
@@ -185,7 +184,6 @@ impl EngineBuilder {
                 subsystems.push(factory(&mut context).map_err(Error::SubsystemFailedInit)?);
             }
         }
-        let _registered_resource_count = context.resource_order.len();
 
         let universe = self.universe_builder.build();
 
@@ -258,8 +256,7 @@ impl Default for EngineBuilder {
 /// }
 /// ```
 pub struct EngineBuildContext {
-    handle: EngineHandle,
-    resource_order: Vec<TypeId>,
+    pub(crate) handle: EngineHandle,
 }
 
 impl EngineBuildContext {
@@ -299,7 +296,6 @@ impl EngineBuildContext {
 
             resources.insert(type_id, Box::new(resource));
         }
-        self.resource_order.push(type_id);
         Ok(self)
     }
 

@@ -82,7 +82,7 @@ pub mod events;
 pub mod subsystem;
 
 mod builder;
-pub use builder::EngineBuilder;
+pub use builder::{EngineBuildContext, EngineBuilder};
 
 use errors::{Error, Result};
 pub use subsystem::{EnginePlugin, EngineResource, Subsystem};
