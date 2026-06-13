@@ -249,6 +249,8 @@ impl Engine {
         // remove when rendering takes longer
         std::thread::sleep(std::time::Duration::from_millis(10));
 
+        self.universe.tick(delta_time);
+
         for index in 0..self.subsystems.len() {
             let subsystem = &mut self.subsystems[index];
             let name = subsystem.name();
@@ -262,7 +264,6 @@ impl Engine {
             }
         }
 
-        self.universe.tick(delta_time);
         self.process_commands();
         Ok(self.status())
     }
