@@ -24,3 +24,5 @@ pub use dirk_universe as universe;
 pub use dirk_utils as utils;
 #[doc(inline)]
 pub use dirk_world as world;
+
+pub mod demo;
