@@ -1,6 +1,6 @@
 //! Builds platform configuration and generated shader metadata for `dirk_renderer`.
 
-use anyhow::{Context, anyhow, bail};
+use anyhow::{Context, anyhow, bail, ensure};
 use cargo_gpu_install::{
     install::Install,
     spirv_builder::{ModuleResult, SpirvMetadata},
@@ -9,6 +9,8 @@ use naga::{
     AddressSpace, ArraySize, Binding, Expression, GlobalVariable, Handle, ImageClass, Module,
     Scalar, ScalarKind, ShaderStage, Type, TypeInner, VectorSize, front::spv,
 };
+use proc_macro2::{Ident, Span, TokenStream};
+use quote::{format_ident, quote};
 use rspirv_reflect::rspirv::{
     binary::Parser,
     dr::{Instruction, Loader, Module as SpirvModule, Operand},
@@ -16,7 +18,6 @@ use rspirv_reflect::rspirv::{
 };
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
-    fmt::Write as _,
     fs,
     path::{Path, PathBuf},
 };
@@ -63,7 +64,7 @@ fn build_shaders() -> anyhow::Result<()> {
     shaders.sort_by(|left, right| left.entrypoint.cmp(&right.entrypoint));
     fs::write(
         out_dir.join("generated_shaders.rs"),
-        generate_shader_module(&shaders),
+        generate_shader_module(&shaders)?.to_string(),
     )?;
 
     Ok(())
@@ -951,21 +952,142 @@ fn shader_stage_suffix(stage: ShaderStage) -> anyhow::Result<&'static str> {
     }
 }
 
-fn generate_shader_module(shaders: &[ReflectedShader]) -> String {
-    let mut output = String::from(
-        "use std::{ffi::CStr, marker::PhantomData};\n\
-         use ash::vk;\n\
-         use crate::shaders::metadata::{FragmentShader, Shader, VertexShader};\n\n",
-    );
-    for shader in shaders {
-        output.push_str(&generate_shader(shader));
-    }
-    output
+fn generate_shader_module(shaders: &[ReflectedShader]) -> anyhow::Result<TokenStream> {
+    let shaders = shaders
+        .iter()
+        .map(generate_shader)
+        .collect::<anyhow::Result<Vec<_>>>()?;
+
+    Ok(quote! {
+        use std::ffi::CStr;
+        use ash::vk;
+        use crate::shaders::metadata::{FragmentShader, Shader, VertexShader};
+
+        #(#shaders)*
+    })
 }
 
-fn generate_shader(shader: &ReflectedShader) -> String {
-    let const_prefix = shader
-        .entrypoint
+fn generate_shader(shader: &ReflectedShader) -> anyhow::Result<TokenStream> {
+    let const_prefix = shader_const_prefix(&shader.entrypoint);
+    let type_name = format_ident!("{}", shader.type_name);
+    let entrypoint = &shader.entrypoint;
+    let entrypoint_cstr = c_string_literal(entrypoint)?;
+
+    let set_binding_idents = shader
+        .set_layouts
+        .iter()
+        .enumerate()
+        .map(|(set, _)| format_ident!("{const_prefix}_SET_{set}_BINDINGS"))
+        .collect::<Vec<_>>();
+
+    let set_bindings =
+        shader
+            .set_layouts
+            .iter()
+            .zip(&set_binding_idents)
+            .map(|(bindings, ident)| {
+                let bindings = bindings.iter().map(generate_descriptor_binding);
+                quote! {
+                    const #ident: &[vk::DescriptorSetLayoutBinding<'static>] = &[
+                        #(#bindings,)*
+                    ];
+                }
+            });
+
+    let vertex_input = if shader.stage == ShaderStage::Vertex {
+        let input_bindings_ident = format_ident!("{const_prefix}_INPUT_BINDINGS");
+        let input_attributes_ident = format_ident!("{const_prefix}_INPUT_ATTRIBUTES");
+        let stride = shader
+            .vertex_inputs
+            .last()
+            .map_or(0, |input| input.offset + input.size);
+        let attributes = shader.vertex_inputs.iter().map(generate_vertex_attribute);
+
+        quote! {
+            const #input_bindings_ident: &[vk::VertexInputBindingDescription] = &[
+                vk::VertexInputBindingDescription {
+                    binding: 0,
+                    stride: #stride,
+                    input_rate: vk::VertexInputRate::VERTEX,
+                },
+            ];
+
+            const #input_attributes_ident: &[vk::VertexInputAttributeDescription] = &[
+                #(#attributes,)*
+            ];
+
+            impl VertexShader for #type_name {
+                const INPUT_BINDINGS: &'static [vk::VertexInputBindingDescription] =
+                    #input_bindings_ident;
+                const INPUT_ATTRIBUTES: &'static [vk::VertexInputAttributeDescription] =
+                    #input_attributes_ident;
+            }
+        }
+    } else {
+        quote! {}
+    };
+
+    let stage_impl = match shader.stage {
+        ShaderStage::Vertex | ShaderStage::Compute => quote! {},
+        ShaderStage::Fragment => quote! {
+            impl FragmentShader for #type_name {}
+        },
+        _ => unreachable!("unsupported shader stage should fail before code generation"),
+    };
+
+    Ok(quote! {
+        #(#set_bindings)*
+        #vertex_input
+
+        pub struct #type_name;
+
+        impl Shader for #type_name {
+            const CODE: ShaderCode = shader_code!(#entrypoint);
+            const ENTRYPOINT: &'static CStr = #entrypoint_cstr;
+            const SET_LAYOUTS: &'static [&'static [vk::DescriptorSetLayoutBinding<'static>]] = &[
+                #(#set_binding_idents,)*
+            ];
+        }
+
+        #stage_impl
+    })
+}
+
+fn generate_descriptor_binding(binding: &DescriptorBinding) -> TokenStream {
+    let descriptor_type = vk_ident(binding.descriptor_type);
+    let stage_flags = vk_ident(binding.stage_flags);
+    let binding_index = binding.binding;
+    let descriptor_count = binding.descriptor_count;
+
+    quote! {
+        vk::DescriptorSetLayoutBinding {
+            binding: #binding_index,
+            descriptor_type: vk::DescriptorType::#descriptor_type,
+            descriptor_count: #descriptor_count,
+            stage_flags: vk::ShaderStageFlags::#stage_flags,
+            p_immutable_samplers: ::core::ptr::null(),
+            _marker: ::core::marker::PhantomData,
+        }
+    }
+}
+
+fn generate_vertex_attribute(input: &VertexInput) -> TokenStream {
+    let location = input.location;
+    let format = vk_ident(input.format);
+    let offset = input.offset;
+
+    quote! {
+        vk::VertexInputAttributeDescription {
+            location: #location,
+            binding: 0,
+            format: vk::Format::#format,
+            offset: #offset,
+        }
+    }
+}
+
+fn shader_const_prefix(entrypoint: &str) -> String {
+    entrypoint
         .chars()
         .map(|ch| {
             if ch.is_ascii_alphanumeric() {
@@ -974,97 +1096,21 @@ fn generate_shader(shader: &ReflectedShader) -> String {
                 '_'
             }
         })
-        .collect::<String>();
+        .collect()
+}
 
-    let mut output = String::new();
-    for (set, bindings) in shader.set_layouts.iter().enumerate() {
-        let _ = writeln!(
-            output,
-            "const {const_prefix}_SET_{set}_BINDINGS: &[vk::DescriptorSetLayoutBinding<'static>] = &["
-        );
-        for binding in bindings {
-            let _ = writeln!(
-                output,
-                "    vk::DescriptorSetLayoutBinding {{ binding: {}, descriptor_type: vk::DescriptorType::{}, descriptor_count: {}, stage_flags: vk::ShaderStageFlags::{}, p_immutable_samplers: ::core::ptr::null(), _marker: PhantomData }},",
-                binding.binding,
-                binding.descriptor_type,
-                binding.descriptor_count,
-                binding.stage_flags
-            );
-        }
-        output.push_str("];\n");
-    }
+fn vk_ident(name: &str) -> Ident {
+    Ident::new(name, Span::call_site())
+}
 
-    if shader.stage == ShaderStage::Vertex {
-        let stride = shader
-            .vertex_inputs
-            .last()
-            .map_or(0, |input| input.offset + input.size);
-        let _ = writeln!(
-            output,
-            "const {const_prefix}_INPUT_BINDINGS: &[vk::VertexInputBindingDescription] = &[",
-        );
-        let _ = writeln!(
-            output,
-            "    vk::VertexInputBindingDescription {{ binding: 0, stride: {stride}, input_rate: vk::VertexInputRate::VERTEX }},"
-        );
-        output.push_str("];\n");
-        let _ = writeln!(
-            output,
-            "const {const_prefix}_INPUT_ATTRIBUTES: &[vk::VertexInputAttributeDescription] = &["
-        );
-        for input in &shader.vertex_inputs {
-            let _ = writeln!(
-                output,
-                "    vk::VertexInputAttributeDescription {{ location: {}, binding: 0, format: vk::Format::{}, offset: {} }},",
-                input.location, input.format, input.offset
-            );
-        }
-        output.push_str("];\n");
-    }
-
-    let _ = write!(output, "pub struct {};\n\n", shader.type_name);
-    let _ = writeln!(output, "impl Shader for {} {{", shader.type_name);
-    let _ = writeln!(
-        output,
-        "    const CODE: ShaderCode = shader_code!(\"{}\");",
-        shader.entrypoint
+fn c_string_literal(entrypoint: &str) -> anyhow::Result<TokenStream> {
+    ensure!(
+        !entrypoint
+            .bytes()
+            .any(|byte| matches!(byte, b'\0' | b'"' | b'\\')),
+        "shader entry point `{entrypoint}` cannot be emitted as a C string literal"
     );
-    let _ = writeln!(
-        output,
-        "    const ENTRYPOINT: &'static CStr = c\"{}\";",
-        shader.entrypoint
-    );
-    output.push_str(
-        "    const SET_LAYOUTS: &'static [&'static [vk::DescriptorSetLayoutBinding<'static>]] = &[\n",
-    );
-    for set in 0..shader.set_layouts.len() {
-        let _ = writeln!(output, "        {const_prefix}_SET_{set}_BINDINGS,");
-    }
-    output.push_str("    ];\n}\n\n");
-
-    match shader.stage {
-        ShaderStage::Vertex => {
-            let _ = writeln!(output, "impl VertexShader for {} {{", shader.type_name);
-            let _ = writeln!(
-                output,
-                "    const INPUT_BINDINGS: &'static [vk::VertexInputBindingDescription] = {const_prefix}_INPUT_BINDINGS;"
-            );
-            let _ = writeln!(
-                output,
-                "    const INPUT_ATTRIBUTES: &'static [vk::VertexInputAttributeDescription] = {const_prefix}_INPUT_ATTRIBUTES;"
-            );
-            output.push_str("}\n\n");
-        }
-        ShaderStage::Fragment => {
-            let _ = write!(
-                output,
-                "impl FragmentShader for {} {{}}\n\n",
-                shader.type_name
-            );
-        }
-        ShaderStage::Compute => {}
-        _ => unreachable!("unsupported shader stage should fail before code generation"),
-    }
-    output
+    format!("c\"{entrypoint}\"")
+        .parse()
+        .map_err(|err| anyhow!("failed to emit C string literal for shader `{entrypoint}`: {err}"))
 }

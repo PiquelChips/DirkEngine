@@ -558,6 +558,8 @@ dependencies = [
  "naga",
  "parking_lot",
  "pastey",
+ "proc-macro2",
+ "quote",
  "raw-window-handle",
  "rspirv-reflect",
  "slotmap",
