@@ -1,13 +1,10 @@
 #![doc = include_str!("../README.md")]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-pub mod engine;
-
 #[doc(inline)]
 pub use dirk_assets as assets;
-// TODO: uncomment when engine module is gone
-// #[doc(inline)]
-// pub use dirk_engine as engine;
+#[doc(inline)]
+pub use dirk_engine as engine;
 #[doc(inline)]
 pub use dirk_events as events;
 #[doc(inline)]
