@@ -145,7 +145,10 @@ impl Engine {
         info!("starting engine");
         let world_id = self.create_test_world();
 
-        let player = self.players.new_player(self.platform.main_window().id());
+        let player = self
+            .players
+            .registry()
+            .new_player(self.platform.main_window().id());
         self.universe.spawn_entity(
             world_id,
             Entity::builder().with_component(player).with_component(
