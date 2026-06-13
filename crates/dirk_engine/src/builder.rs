@@ -35,6 +35,7 @@ pub struct EngineBuilder {
     worker_name: String,
     log_level: piquel_log::LogLevel,
     plugins: HashSet<TypeId>,
+    plugins_in_progress: HashSet<TypeId>,
     subsystem_factories: HashMap<TypeId, SubsystemFactory>,
     subsystem_order: Vec<TypeId>,
 }
@@ -59,6 +60,7 @@ impl EngineBuilder {
             worker_name: "dirk-workers".to_owned(),
             log_level: piquel_log::LogLevel::Debug,
             plugins: HashSet::new(),
+            plugins_in_progress: HashSet::new(),
             subsystem_factories: HashMap::new(),
             subsystem_order: Vec::new(),
         }
@@ -111,9 +113,17 @@ impl EngineBuilder {
         }
 
         let name = plugin.name();
-        plugin
-            .build(self)
-            .map_err(|source| Error::PluginBuildFailed { name, source })?;
+        if !self.plugins_in_progress.insert(type_id) {
+            return Err(Error::PluginDependencyCycle {
+                name,
+                type_name: type_name::<P>(),
+            });
+        }
+
+        let result = plugin.build(self);
+        self.plugins_in_progress.remove(&type_id);
+
+        result.map_err(|source| Error::PluginBuildFailed { name, source })?;
         self.plugins.insert(type_id);
         drop(plugin);
         Ok(self)

@@ -20,6 +20,14 @@ pub enum Error {
         #[source]
         source: anyhow::Error,
     },
+    /// When plugin dependencies contain a cycle.
+    #[error("plugin dependency cycle detected while building `{name}` ({type_name})")]
+    PluginDependencyCycle {
+        /// The plugin name.
+        name: &'static str,
+        /// The concrete plugin type name.
+        type_name: &'static str,
+    },
     /// When a requested typed engine resource has not been registered.
     #[error("resource `{type_name}` was not registered")]
     ResourceMissing {
