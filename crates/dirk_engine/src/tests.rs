@@ -146,15 +146,13 @@ fn build_context() -> EngineBuildContext {
     let events = EventManager::new(workers.clone());
     let (commands, _command_receiver) = mpsc::channel();
 
-    EngineBuildContext {
-        handle: EngineHandle {
-            state: Arc::new(EngineState::new()),
-            events,
-            workers,
-            commands,
-            resources: Arc::new(RwLock::new(HashMap::new())),
-        },
-    }
+    EngineBuildContext::new(EngineHandle {
+        state: Arc::new(EngineState::new()),
+        events,
+        workers,
+        commands,
+        resources: Arc::new(RwLock::new(HashMap::new())),
+    })
 }
 
 #[test]

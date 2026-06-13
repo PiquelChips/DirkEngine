@@ -254,7 +254,7 @@ pub struct EngineBuildContext {
 
 impl EngineBuildContext {
     #[cfg(test)]
-    fn new(handle: EngineHandle) -> Self {
+    pub(crate) fn new(handle: EngineHandle) -> Self {
         Self {
             handle,
             builder: Universe::builder(),
