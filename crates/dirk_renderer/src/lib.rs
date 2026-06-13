@@ -206,7 +206,8 @@ impl dirk_engine::Subsystem for Renderer {
 impl Renderer {
     // TODO: shouldn't be here
     #[cfg(feature = "editor")]
-    fn render_ui(&mut self, delta_time: f64, ctx: &egui::Context) {
+    #[allow(clippy::unused_self)]
+    fn render_ui(&self, delta_time: f64, ctx: &egui::Context) {
         egui::Window::new("DirkEngine").show(ctx, |ui| {
             ui.label("egui is rendering through DirkEngine");
             ui.separator();
