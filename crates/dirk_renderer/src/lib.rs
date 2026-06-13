@@ -331,6 +331,7 @@ impl Renderer {
 
     /// Begins a frame.
     #[cfg(not(feature = "editor"))]
+    #[allow(clippy::unused_self)]
     pub fn begin_frame(&mut self) {}
 
     // TODO: shouldn't be necessary
