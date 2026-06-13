@@ -7,7 +7,7 @@ use crate::resources::descriptors::layouts::SetLayout;
 pub struct SceneSet;
 
 impl SetLayout for SceneSet {
-    const BINDINGS: &'static [vk::DescriptorSetLayoutBinding<'_>] =
+    const BINDINGS: &'static [vk::DescriptorSetLayoutBinding<'static>] =
         &[vk::DescriptorSetLayoutBinding {
             binding: 0,
             descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
@@ -21,7 +21,7 @@ impl SetLayout for SceneSet {
 pub struct ObjectSet;
 
 impl SetLayout for ObjectSet {
-    const BINDINGS: &'static [vk::DescriptorSetLayoutBinding<'_>] =
+    const BINDINGS: &'static [vk::DescriptorSetLayoutBinding<'static>] =
         &[vk::DescriptorSetLayoutBinding {
             binding: 0,
             descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
@@ -35,7 +35,7 @@ impl SetLayout for ObjectSet {
 pub struct MaterialSet;
 
 impl SetLayout for MaterialSet {
-    const BINDINGS: &'static [vk::DescriptorSetLayoutBinding<'_>] =
+    const BINDINGS: &'static [vk::DescriptorSetLayoutBinding<'static>] =
         &[vk::DescriptorSetLayoutBinding {
             binding: 0,
             descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,

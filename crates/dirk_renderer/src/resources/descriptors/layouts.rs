@@ -5,7 +5,7 @@ use ash::vk;
 use crate::Result;
 
 pub trait SetLayout {
-    const BINDINGS: &'static [vk::DescriptorSetLayoutBinding<'_>];
+    const BINDINGS: &'static [vk::DescriptorSetLayoutBinding<'static>];
 
     // TODO: setup RAII
     fn create_layout(device: &ash::Device) -> Result<vk::DescriptorSetLayout> {

@@ -46,8 +46,7 @@ impl<'dev> DescriptorWriter<'dev> {
         buffer: vk::Buffer,
         range: vk::DeviceSize,
     ) -> Self {
-        // TODO: verify that the binding on the layout is indeed a
-        // uniform buffer
+        debug_assert_binding::<L>(binding, vk::DescriptorType::UNIFORM_BUFFER);
         self.ops.push(WriteOp::UniformBuffer {
             set: set.raw(),
             binding,
@@ -66,8 +65,7 @@ impl<'dev> DescriptorWriter<'dev> {
         view: vk::ImageView,
         sampler: vk::Sampler,
     ) -> Self {
-        // TODO: verify that the binding on the layout is indeed a
-        // combined image sampler
+        debug_assert_binding::<L>(binding, vk::DescriptorType::COMBINED_IMAGE_SAMPLER);
         self.ops.push(WriteOp::CombinedImageSampler {
             set: set.raw(),
             binding,
@@ -148,5 +146,25 @@ impl<'dev> DescriptorWriter<'dev> {
         unsafe {
             self.device.update_descriptor_sets(&writes, &[]);
         }
+    }
+}
+
+fn debug_assert_binding<L: SetLayout>(binding: u32, descriptor_type: vk::DescriptorType) {
+    if cfg!(debug_assertions) {
+        let Some(layout_binding) = L::BINDINGS
+            .iter()
+            .find(|layout_binding| layout_binding.binding == binding)
+        else {
+            panic!("descriptor binding {binding} does not exist in layout");
+        };
+
+        debug_assert_eq!(
+            layout_binding.descriptor_type, descriptor_type,
+            "descriptor binding {binding} has incompatible descriptor type"
+        );
+        debug_assert!(
+            layout_binding.descriptor_count >= 1,
+            "descriptor binding {binding} must have at least one descriptor"
+        );
     }
 }
