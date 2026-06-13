@@ -1,34 +1,33 @@
 #![allow(missing_docs)]
 
-use shaderc::{CompileOptions, Compiler, ShaderKind};
+use cargo_gpu_install::{
+    install::Install,
+    spirv_builder::{ModuleResult, SpirvMetadata},
+};
 use std::{fs, path::PathBuf};
 
-fn main() {
-    let shader_dir = PathBuf::from("shaders");
-    let out_dir = PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR env var present"));
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let shader_crate = PathBuf::from("shaders");
+    let out_dir = PathBuf::from(std::env::var("OUT_DIR")?);
 
-    let compiler = Compiler::new().expect("Failed to init shaderc");
-    let options = CompileOptions::new().expect("failed to init shaderc compile options");
+    println!("cargo:rerun-if-changed=shaders/Cargo.toml");
+    // TODO: rerun on any rust file change
+    println!("cargo:rerun-if-changed=shaders/src/lib.rs");
 
-    let shaders = [
-        ("shader.vert", ShaderKind::Vertex),
-        ("shader.frag", ShaderKind::Fragment),
-    ];
+    let backend = Install::from_shader_crate(shader_crate.clone()).run()?;
+    let mut builder = backend.to_spirv_builder(shader_crate, "spirv-unknown-vulkan1.3");
+    builder.build_script.defaults = true;
+    builder.build_script.env_shader_spv_path = Some(false);
+    builder.multimodule = true;
+    builder.spirv_metadata = SpirvMetadata::None;
 
-    for (filename, kind) in &shaders {
-        let src_path = shader_dir.join(filename);
-        let spv_path = out_dir.join(format!("{filename}.spv"));
-
-        // Tell Cargo to re-run if the shader changes
-        println!("cargo:rerun-if-changed={}", src_path.display());
-
-        let src = fs::read_to_string(&src_path)
-            .unwrap_or_else(|_| panic!("Could not read {}", src_path.display()));
-
-        let artifact = compiler
-            .compile_into_spirv(&src, *kind, filename, "main", Some(&options))
-            .unwrap_or_else(|e| panic!("Shader compile error in {filename}: {e}"));
-
-        fs::write(&spv_path, artifact.as_binary_u8()).expect("Failed to write .spv file");
+    let spv_result = builder.build()?;
+    let ModuleResult::MultiModule(modules) = spv_result.module else {
+        return Err("expected one SPIR-V module per shader entry point".into());
+    };
+    for (entrypoint, source_path) in modules {
+        fs::copy(source_path, out_dir.join(format!("{entrypoint}.spv")))?;
     }
+
+    Ok(())
 }

@@ -4,6 +4,7 @@ pub struct PhysicalDeviceInfo {
     pub handle: vk::PhysicalDevice,
     pub properties: vk::PhysicalDeviceProperties,
     pub features: vk::PhysicalDeviceFeatures,
+    pub vulkan12_features: vk::PhysicalDeviceVulkan12Features<'static>,
     pub memory_properties: vk::PhysicalDeviceMemoryProperties,
     pub queue_families: Vec<vk::QueueFamilyProperties>,
     pub extensions: Vec<vk::ExtensionProperties>,
@@ -12,10 +13,16 @@ pub struct PhysicalDeviceInfo {
 impl PhysicalDeviceInfo {
     pub fn query(instance: &ash::Instance, handle: vk::PhysicalDevice) -> Self {
         unsafe {
+            let mut vulkan12_features = vk::PhysicalDeviceVulkan12Features::default();
+            let mut features2 =
+                vk::PhysicalDeviceFeatures2::default().push_next(&mut vulkan12_features);
+            instance.get_physical_device_features2(handle, &mut features2);
+
             Self {
                 handle,
                 properties: instance.get_physical_device_properties(handle),
                 features: instance.get_physical_device_features(handle),
+                vulkan12_features,
                 memory_properties: instance.get_physical_device_memory_properties(handle),
                 queue_families: instance.get_physical_device_queue_family_properties(handle),
                 extensions: instance
