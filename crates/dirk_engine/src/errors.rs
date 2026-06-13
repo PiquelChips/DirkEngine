@@ -55,6 +55,24 @@ pub enum Error {
         #[source]
         source: anyhow::Error,
     },
+    /// When an engine system failed to start.
+    #[error("system {name} failed start: {source}")]
+    SubsystemFailedStart {
+        /// The name of the system.
+        name: &'static str,
+        /// The error that caused the failure.
+        #[source]
+        source: anyhow::Error,
+    },
+    /// When an engine system failed to shut down.
+    #[error("system {name} failed shutdown: {source}")]
+    SubsystemFailedShutdown {
+        /// The name of the system.
+        name: &'static str,
+        /// The error that caused the failure.
+        #[source]
+        source: anyhow::Error,
+    },
     /// When an engine system failed to initialize
     #[error("system failed to initialize: {0}")]
     SubsystemFailedInit(#[source] anyhow::Error),

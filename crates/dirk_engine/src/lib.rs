@@ -197,7 +197,7 @@ impl Engine {
         for subsystem in &mut self.subsystems {
             subsystem
                 .start(&self.handle, &mut self.universe)
-                .map_err(|source| Error::SubsystemFailedTick {
+                .map_err(|source| Error::SubsystemFailedStart {
                     name: subsystem.name(),
                     source,
                 })?;
@@ -299,7 +299,7 @@ impl Engine {
         while let Some(mut subsystem) = self.subsystems.pop() {
             subsystem
                 .shutdown(&self.handle, &mut self.universe)
-                .map_err(|source| Error::SubsystemFailedTick {
+                .map_err(|source| Error::SubsystemFailedShutdown {
                     name: subsystem.name(),
                     source,
                 })?;
