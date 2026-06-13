@@ -1,15 +1,13 @@
 #![doc = include_str!("../README.md")]
 
-#[cfg(validation)]
 use std::{
     collections::HashMap,
-    ffi::CString,
+    ffi::{CStr, CString},
     sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
     },
 };
-use std::{ffi::CStr, str::FromStr};
 
 #[cfg(validation)]
 use ash::ext::debug_utils;
@@ -78,15 +76,7 @@ impl dirk_engine::EnginePlugin for RendererPlugin {
         builder.add_subsystem(|ctx| {
             let platform_windows = ctx.resource::<dirk_platform::PlatformWindows>()?;
 
-            // TODO: some kind of engine metadata
-            let version = dirk_utils::Version::from_str(env!("CARGO_PKG_VERSION"))?;
-            let name = "DirkEngine";
-            let create_info = RendererCreateInfo {
-                engine_name: CString::from_str(name)?,
-                engine_version: version,
-                app_name: CString::from_str(name)?,
-                app_version: version,
-            };
+            let create_info = RendererCreateInfo::from_engine_metadata(ctx.handle().metadata())?;
 
             let main_window = platform_windows.main_window();
             let mut renderer = Renderer::init(
@@ -123,6 +113,23 @@ pub struct RendererCreateInfo {
     pub app_name: CString,
     /// The version of the application. Used for vulkan initialisation.
     pub app_version: Version,
+}
+
+impl RendererCreateInfo {
+    /// Creates renderer metadata from engine metadata.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if one of the metadata strings contains an interior NUL
+    /// byte and cannot be passed to Vulkan.
+    pub fn from_engine_metadata(metadata: &dirk_engine::EngineMetadata) -> anyhow::Result<Self> {
+        Ok(Self {
+            engine_name: CString::new(metadata.engine_name())?,
+            engine_version: metadata.engine_version(),
+            app_name: CString::new(metadata.app_name())?,
+            app_version: metadata.app_version(),
+        })
+    }
 }
 
 /// The Renderer struct that holds all render state and is called upon to handle
