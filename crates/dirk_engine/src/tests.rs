@@ -7,6 +7,7 @@ use std::{
         atomic::{AtomicUsize, Ordering},
         mpsc,
     },
+    time::Instant,
 };
 
 use parking_lot::{Mutex, RwLock};
@@ -77,6 +78,43 @@ impl EnginePlugin for OtherDependentPlugin {
             builds: Arc::clone(&self.dependency_builds),
         })?;
         Ok(())
+    }
+}
+
+struct SelfDependentPlugin;
+
+impl EnginePlugin for SelfDependentPlugin {
+    fn name(&self) -> &'static str {
+        "self-dependent"
+    }
+
+    fn build(&self, builder: &mut EngineBuilder) -> anyhow::Result<()> {
+        builder.with_plugin(SelfDependentPlugin)?;
+        Ok(())
+    }
+}
+
+struct StartFailingSubsystem;
+
+impl Subsystem for StartFailingSubsystem {
+    fn name(&self) -> &'static str {
+        "start-failing"
+    }
+
+    fn start(&mut self, _handle: &EngineHandle, _universe: &mut Universe) -> anyhow::Result<()> {
+        Err(anyhow::anyhow!("start failed"))
+    }
+}
+
+struct ShutdownFailingSubsystem;
+
+impl Subsystem for ShutdownFailingSubsystem {
+    fn name(&self) -> &'static str {
+        "shutdown-failing"
+    }
+
+    fn shutdown(&mut self, _handle: &EngineHandle, _universe: &mut Universe) -> anyhow::Result<()> {
+        Err(anyhow::anyhow!("shutdown failed"))
     }
 }
 
@@ -161,6 +199,41 @@ fn build_context() -> EngineBuildContext {
     })
 }
 
+fn engine_with_subsystems(subsystems: Vec<Box<dyn Subsystem>>) -> Engine {
+    let workers = WorkerPool::new("dirk-engine-test");
+    let events = EventManager::new(workers.clone());
+    let state = Arc::new(EngineState::new());
+    let (commands, command_receiver) = mpsc::channel();
+    let resources = Arc::new(RwLock::new(HashMap::new()));
+    let handle = EngineHandle {
+        metadata: Arc::new(EngineMetadata::new(
+            "test-app",
+            dirk_utils::Version::ZERO,
+            "test-engine",
+            dirk_utils::Version::ZERO,
+        )),
+        state: Arc::clone(&state),
+        events: events.clone(),
+        workers,
+        commands,
+        resources,
+    };
+
+    Engine {
+        logger: piquel_log::Logger::new(),
+        universe: Universe::builder().build(),
+        subsystems,
+        state,
+        handle,
+        command_receiver,
+        frame_dispatcher: events.register(),
+        exiting_dispatcher: events.register(),
+        last_tick: Instant::now(),
+        started: false,
+        shutdown: false,
+    }
+}
+
 #[test]
 fn registering_same_plugin_twice_only_builds_it_once() -> Result<()> {
     let builds = Arc::new(AtomicUsize::new(0));
@@ -204,6 +277,57 @@ fn shared_dependency_is_registered_once_for_multiple_dependents() -> Result<()> 
 
     assert_eq!(dependency_builds.load(Ordering::Relaxed), 1);
     Ok(())
+}
+
+#[test]
+fn cyclic_plugin_dependency_reports_error() {
+    let mut builder = EngineBuilder::new();
+
+    let result = builder.with_plugin(SelfDependentPlugin);
+
+    match result {
+        Err(Error::PluginBuildFailed {
+            name: "self-dependent",
+            source,
+        }) => assert!(matches!(
+            source.downcast_ref::<Error>(),
+            Some(Error::PluginDependencyCycle {
+                name: "self-dependent",
+                ..
+            })
+        )),
+        _ => panic!("expected self-dependent plugin build to fail with a cycle"),
+    }
+}
+
+#[test]
+fn subsystem_start_failure_uses_start_error_variant() {
+    let mut engine = engine_with_subsystems(vec![Box::new(StartFailingSubsystem)]);
+
+    let result = engine.start();
+
+    assert!(matches!(
+        result,
+        Err(Error::SubsystemFailedStart {
+            name: "start-failing",
+            ..
+        })
+    ));
+}
+
+#[test]
+fn subsystem_shutdown_failure_uses_shutdown_error_variant() {
+    let mut engine = engine_with_subsystems(vec![Box::new(ShutdownFailingSubsystem)]);
+
+    let result = engine.shutdown();
+
+    assert!(matches!(
+        result,
+        Err(Error::SubsystemFailedShutdown {
+            name: "shutdown-failing",
+            ..
+        })
+    ));
 }
 
 #[test]
