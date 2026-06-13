@@ -102,8 +102,7 @@ struct Mesh {
 }
 
 struct Material {
-    #[allow(unused)]
-    pub base_color: Handle<Texture>,
+    pub base_color: Option<Handle<Texture>>,
     pub set: DescriptorSet<MaterialSet>,
 }
 
@@ -120,6 +119,9 @@ pub struct ModelRegistry {
     materials: slotmap::SlotMap<slotmap::DefaultKey, Material>,
     models: HashMap<dirk_assets::AssetHandle, Model>,
 
+    fallback_material: Material,
+    #[allow(unused)]
+    fallback_texture: Texture,
     material_alloc: DescriptorAllocator<MaterialSet>,
 
     asset_load_consumer: dirk_events::Consumer<::dirk_assets::AssetLoaded<::dirk_assets::Model>>,
@@ -128,7 +130,9 @@ pub struct ModelRegistry {
 
 impl ModelRegistry {
     pub fn new(device: &RenderDevice, events: &dirk_events::EventManager) -> Result<Self> {
-        let material_alloc = DescriptorAllocator::<MaterialSet>::new(device, 64)?;
+        let mut material_alloc = DescriptorAllocator::<MaterialSet>::new(device, 64)?;
+        let (fallback_material, fallback_texture) =
+            Self::create_fallback_material(device, &mut material_alloc)?;
 
         Ok(Self {
             device: device.clone(),
@@ -136,6 +140,8 @@ impl ModelRegistry {
             meshes: slotmap::SlotMap::new(),
             materials: slotmap::SlotMap::new(),
             models: HashMap::new(),
+            fallback_material,
+            fallback_texture,
             material_alloc,
 
             asset_load_consumer: events.subscribe(),
@@ -196,6 +202,32 @@ impl ModelRegistry {
             cmd.draw_indexed(prim.index_count, 1, 0, 0, 0);
         }
         Ok(())
+    }
+
+    fn create_fallback_material(
+        device: &RenderDevice,
+        material_alloc: &mut DescriptorAllocator<MaterialSet>,
+    ) -> Result<(Material, Texture)> {
+        let white = gltf::image::Data {
+            pixels: vec![255, 255, 255, 255],
+            format: gltf::image::Format::R8G8B8A8,
+            width: 1,
+            height: 1,
+        };
+        let texture = Image::upload_texture(device, &white)?;
+        let set = material_alloc.allocate()?;
+
+        DescriptorWriter::new(&device.device)
+            .combined_image_sampler(&set, 0, texture.image.view(), texture.sampler)
+            .flush();
+
+        Ok((
+            Material {
+                base_color: None,
+                set,
+            },
+            texture,
+        ))
     }
 
     fn load_model(&mut self, handle: &dirk_assets::Handle<dirk_assets::Model>) -> Result<()> {
@@ -283,7 +315,7 @@ impl ModelRegistry {
             .into_iter()
             .map(|(tex_handle, set, _, _)| {
                 Handle::new(self.materials.insert(Material {
-                    base_color: tex_handle,
+                    base_color: Some(tex_handle),
                     set,
                 }))
             })
@@ -357,7 +389,7 @@ impl ModelRegistry {
         let mut texture_handles = HashSet::new();
         for material_handle in material_handles {
             if let Some(material) = self.materials.remove(*material_handle) {
-                texture_handles.insert(material.base_color);
+                texture_handles.extend(material.base_color);
             }
         }
 
