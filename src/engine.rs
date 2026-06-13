@@ -88,6 +88,8 @@ impl Engine {
         let name = "DirkEngine";
 
         let platform = dirk_platform::Platform::init(&event_manager).context("platform init")?;
+        let platform_windows = platform.platform_windows();
+        let main_window = platform.main_window();
         let mut renderer = dirk_renderer::Renderer::init(
             &dirk_renderer::RendererCreateInfo {
                 engine_name: CString::from_str(name)?,
@@ -95,10 +97,12 @@ impl Engine {
                 app_name: CString::from_str(name)?,
                 app_version: version,
             },
-            platform.main_window(),
+            &main_window,
             &event_manager,
+            platform_windows,
         )
         .context("renderer init")?;
+        drop(main_window); // drop the lock
 
         let players = dirk_player::PlayerManager::new(&event_manager);
 
@@ -204,9 +208,7 @@ impl Engine {
         self.universe.tick(delta_time);
         self.asset_registry.tick();
 
-        self.renderer
-            .tick(delta_time, self.platform.windows())
-            .context("renderer")?;
+        self.renderer.tick(delta_time).context("renderer")?;
 
         self.renderer.render().context("rendering")?;
         Ok(())

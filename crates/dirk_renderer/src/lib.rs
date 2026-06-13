@@ -1,6 +1,5 @@
 #![doc = include_str!("../README.md")]
 
-use std::ffi::CStr;
 #[cfg(validation)]
 use std::{
     collections::HashMap,
@@ -10,6 +9,7 @@ use std::{
         atomic::{AtomicUsize, Ordering},
     },
 };
+use std::{ffi::CStr, str::FromStr};
 
 #[cfg(validation)]
 use ash::ext::debug_utils;
@@ -24,7 +24,7 @@ use ash::{
 use dirk_player::PlayerId;
 use tracing::{debug, info};
 
-use dirk_platform::{PlatformEvent, WindowEvent, WindowId};
+use dirk_platform::{PlatformEvent, PlatformWindows, WindowEvent, WindowId};
 use dirk_universe::{Universe, UniverseBuilder};
 
 mod utils;
@@ -63,6 +63,46 @@ mod pipeline;
 
 mod frame_graph;
 
+/// Registers renderer integration with the engine.
+pub struct RendererPlugin;
+
+impl dirk_engine::EnginePlugin for RendererPlugin {
+    fn name(&self) -> &'static str {
+        "renderer"
+    }
+
+    fn build(&self, builder: &mut dirk_engine::EngineBuilder) -> anyhow::Result<()> {
+        builder.with_plugin(dirk_platform::PlatformPlugin)?;
+        builder.with_plugin(dirk_assets::AssetsPlugin)?;
+
+        builder.add_subsystem(|ctx| {
+            let platform_windows = ctx.resource::<dirk_platform::PlatformWindows>()?;
+
+            // TODO: some kind of engine metadata
+            let version = dirk_utils::Version::from_str(env!("CARGO_PKG_VERSION"))?;
+            let name = "DirkEngine";
+            let create_info = RendererCreateInfo {
+                engine_name: CString::from_str(name)?,
+                engine_version: version,
+                app_name: CString::from_str(name)?,
+                app_version: version,
+            };
+
+            let main_window = platform_windows.main_window();
+            let mut renderer = Renderer::init(
+                &create_info,
+                &main_window,
+                ctx.events(),
+                platform_windows.clone(),
+            )?;
+
+            ctx.extend_universe(renderer.universe_builder());
+            Ok(renderer)
+        });
+        Ok(())
+    }
+}
+
 #[cfg(validation)]
 mod debug;
 
@@ -87,10 +127,12 @@ pub struct RendererCreateInfo {
 
 /// The Renderer struct that holds all render state and is called upon to handle
 /// all rendering operations
+// TODO: make private after removing old engine
 pub struct Renderer {
     // Heavy renderer state:
     /// All of the [`window::Window`]s constructed from [`platform::Window`]s.
     windows: HashMap<WindowId, Window>,
+    platform_windows: PlatformWindows,
     /// All of the internal [`world::World`] representations.
     scene_manager: SceneManager,
     /// The management for all the models.
@@ -115,6 +157,23 @@ pub struct Renderer {
     render_device: RenderDevice,
 }
 
+impl dirk_engine::Subsystem for Renderer {
+    fn name(&self) -> &'static str {
+        "renderer"
+    }
+
+    fn tick(
+        &mut self,
+        delta_time: f64,
+        _handle: &dirk_engine::EngineHandle,
+        _universe: &mut dirk_universe::Universe,
+    ) -> anyhow::Result<()> {
+        self.tick(delta_time)?;
+        self.render()?;
+        Ok(())
+    }
+}
+
 impl Renderer {
     /// Renderer initialisation. Creates all Vulkan & other renderer objects.
     ///
@@ -122,9 +181,11 @@ impl Renderer {
     ///
     /// Plenty of Vulkan & platform errors can occur during renderer intializing
     pub fn init(
+        // TODO: take EngineBuildContext as input & do everything here
         create_info: &RendererCreateInfo,
         window: &dirk_platform::Window,
         event_manager: &dirk_events::EventManager,
+        platform_windows: PlatformWindows,
     ) -> Result<Self> {
         info!("Intializing Vulkan...");
 
@@ -200,6 +261,7 @@ impl Renderer {
             render_device,
 
             windows,
+            platform_windows,
             scene_manager,
             players: HashMap::new(),
             models,
@@ -248,11 +310,7 @@ impl Renderer {
     ///
     /// Will panic if the scene object does not exist for the specified
     /// world (unless in [`WorldEvent::Created`] or [`WorldEvent::Destroyed`].
-    pub fn tick(
-        &mut self,
-        _delta_time: f64,
-        windows: &HashMap<WindowId, dirk_platform::Window>,
-    ) -> Result<()> {
+    pub fn tick(&mut self, _delta_time: f64) -> Result<()> {
         for event in self.player_spawn_consumer.consume_all() {
             self.players.insert(event.id, event.into());
         }
@@ -274,6 +332,7 @@ impl Renderer {
         for event in platform_events {
             match event {
                 PlatformEvent::WindowCreated { id } => {
+                    let windows = self.platform_windows.windows();
                     let Some(plat_window) = windows.get(&id) else {
                         continue;
                     };
