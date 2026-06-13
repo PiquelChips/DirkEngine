@@ -12,8 +12,10 @@ authors.workspace = true
 documentation.workspace = true
 
 [dependencies]
+anyhow.workspace = true
 parking_lot.workspace = true
 
+dirk_engine.workspace = true
 dirk_events.workspace = true
 dirk_universe.workspace = true
 dirk_platform.workspace = true
