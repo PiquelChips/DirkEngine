@@ -46,13 +46,11 @@ impl dirk_engine::EnginePlugin for PlatformPlugin {
 /// This is an engine [`Subsystem`].
 ///
 /// [`Subsystem`]: dirk_engine::Subsystem
-// TODO: make private when removing the old engine
-pub struct Platform {
+struct Platform {
     handler: PlatformHandler,
     event_loop: EventLoop,
     windows: PlatformWindows,
 
-    exit_dispatcher: dirk_events::Dispatcher<dirk_engine::events::AppExit>,
     window_consumer: dirk_events::Consumer<WindowEvent>,
 }
 
@@ -64,14 +62,12 @@ impl Platform {
     ///
     /// Returns an error if the [winit] App exited while trying
     /// to start it.
-    // TODO: make private after removing old engine
-    pub fn init(events: &dirk_events::EventManager) -> Result<Self> {
+    fn init(events: &dirk_events::EventManager) -> Result<Self> {
         let windows = PlatformWindows::default();
         let mut platform = Self {
             handler: PlatformHandler::new(events, windows.clone()),
             event_loop: EventLoop::new()?,
             windows,
-            exit_dispatcher: events.register(),
             window_consumer: events.subscribe(),
         };
 
@@ -91,54 +87,49 @@ impl Platform {
         info!("initialized platform");
         Ok(platform)
     }
-    /// Process pending OS events without blocking.
-    /// Returns the events that occurred this tick for the engine to handle.
-    // TODO: merge with Subsystem::tick
-    pub fn tick(&mut self, _delta_time: f64) {
+
+    /// Returns the shared platform window resource.
+    #[must_use]
+    pub fn platform_windows(&self) -> PlatformWindows {
+        self.windows.clone()
+    }
+}
+
+impl dirk_engine::Subsystem for Platform {
+    fn name(&self) -> &'static str {
+        "platform"
+    }
+
+    fn tick(
+        &mut self,
+        _delta_time: f64,
+        handle: &dirk_engine::EngineHandle,
+        _universe: &mut dirk_universe::Universe,
+    ) -> anyhow::Result<()> {
         match self
             .event_loop
             .pump_app_events(Some(Duration::ZERO), &mut self.handler)
         {
             PumpStatus::Exit(code) => {
                 // Treat a forced OS exit like a window close.
-                self.exit_dispatcher
-                    .dispatch(dirk_engine::events::AppExit(format!(
-                        "Event loop exited with code {code}"
-                    )));
-                return;
+                info!("event loop exited with code {code}");
+                handle.exit();
+                return Ok(());
             }
             PumpStatus::Continue => {}
         }
 
         if self.windows.is_empty() {
-            self.exit_dispatcher.dispatch(dirk_engine::events::AppExit(
-                "all platform windows have been closed".into(),
-            ));
+            info!("all platform windows have been closed");
+            handle.exit();
+            return Ok(());
         }
 
         self.window_consumer.consume_all().for_each(|event| {
             self.windows.handle_window_event(&event);
         });
-    }
 
-    /// Returns a reference to the main window. The main window is just the
-    /// first window ever created.
-    #[must_use]
-    pub fn main_window(&self) -> MainWindow<'_> {
-        self.windows.main_window()
-    }
-
-    /// Returns a reference to the `HashMap` of all the windows currently
-    /// owned by the engine.
-    #[must_use]
-    pub fn windows(&self) -> Windows<'_> {
-        self.windows.windows()
-    }
-
-    /// Returns the shared platform window resource.
-    #[must_use]
-    pub fn platform_windows(&self) -> PlatformWindows {
-        self.windows.clone()
+        Ok(())
     }
 }
 
@@ -150,26 +141,5 @@ impl Drop for Platform {
         // events before we tear everything down.
         self.event_loop
             .pump_app_events(Some(Duration::ZERO), &mut self.handler);
-    }
-}
-
-impl dirk_engine::Subsystem for Platform {
-    fn name(&self) -> &'static str {
-        "platform"
-    }
-
-    fn tick(
-        &mut self,
-        delta_time: f64,
-        handle: &dirk_engine::EngineHandle,
-        _universe: &mut dirk_universe::Universe,
-    ) -> anyhow::Result<()> {
-        self.tick(delta_time);
-
-        if self.windows.is_empty() {
-            handle.exit();
-        }
-
-        Ok(())
     }
 }

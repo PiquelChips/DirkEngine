@@ -10,9 +10,8 @@ use std::{
 use dirk_engine::{EngineBuilder, EngineHandle, EnginePlugin, Subsystem};
 use dirk_events::{Dispatcher, EventManager};
 use dirk_platform::{InputEvent, WindowId};
-use dirk_universe::{UniverseBuilder, components::Component};
+use dirk_universe::components::Component;
 use input::InputContext;
-use movement::PlayerMovementSystem;
 use parking_lot::{MappedRwLockReadGuard, MappedRwLockWriteGuard, RwLock, RwLockReadGuard};
 
 mod events;
@@ -20,6 +19,8 @@ pub mod input;
 mod movement;
 pub use events::{PlayerDespawned, PlayerSpawned};
 pub use movement::{DEFAULT_PLAYER_LOOK_SENSITIVITY, DEFAULT_PLAYER_MOVE_SPEED};
+
+use crate::movement::PlayerMovementSystem;
 
 /// Registers player management as an engine subsystem.
 pub struct PlayerPlugin;
@@ -33,25 +34,12 @@ impl EnginePlugin for PlayerPlugin {
         builder.add_subsystem(|ctx| {
             let players = PlayerManager::new(ctx.events());
             ctx.add_resource(players.registry())?;
-            ctx.extend_universe(players.universe_builder());
+            ctx.extend_universe(
+                dirk_universe::Universe::builder()
+                    .with_ticking_system(PlayerMovementSystem::new(players.registry.input_state())),
+            );
             Ok(players)
         });
-        Ok(())
-    }
-}
-
-impl Subsystem for PlayerManager {
-    fn name(&self) -> &'static str {
-        "player"
-    }
-
-    fn tick(
-        &mut self,
-        _delta_time: f64,
-        _handle: &EngineHandle,
-        _universe: &mut dirk_universe::Universe,
-    ) -> anyhow::Result<()> {
-        self.tick();
         Ok(())
     }
 }
@@ -155,8 +143,7 @@ impl PlayerHandle {
 /// This crate currently tracks only player IDs and their associated windows.
 /// Input routing, viewport management, and camera updates are handled outside
 /// of `dirk_player`.
-// TODO: make private when removing engine
-pub struct PlayerManager {
+struct PlayerManager {
     registry: PlayerRegistry,
     input_consumer: dirk_events::Consumer<InputEvent>,
 }
@@ -181,8 +168,7 @@ impl PlayerManager {
     /// Creates a new [`PlayerManager`], registering its event channels with
     /// `events`.
     #[must_use]
-    // TODO: make private after engine update
-    pub fn new(events: &EventManager) -> Self {
+    fn new(events: &EventManager) -> Self {
         let registry = PlayerRegistry {
             state: Arc::default(),
             input_state: PlayerInputState::default(),
@@ -196,23 +182,25 @@ impl PlayerManager {
         }
     }
 
-    /// Returns a [`UniverseBuilder`] with player-related ECS systems.
-    #[must_use]
-    // TODO: remove function after engine update
-    pub fn universe_builder(&self) -> UniverseBuilder {
-        dirk_universe::Universe::builder()
-            .with_ticking_system(PlayerMovementSystem::new(self.registry.input_state()))
-    }
-
     /// Returns a shared registry for creating and removing players.
     #[must_use]
     pub fn registry(&self) -> PlayerRegistry {
         self.registry.clone()
     }
+}
+
+impl Subsystem for PlayerManager {
+    fn name(&self) -> &'static str {
+        "player"
+    }
 
     /// Ticks internal player state.
-    // TODO: merge with Subsystem::tick
-    pub fn tick(&mut self) {
+    fn tick(
+        &mut self,
+        _delta_time: f64,
+        _handle: &EngineHandle,
+        _universe: &mut dirk_universe::Universe,
+    ) -> anyhow::Result<()> {
         let events = self.input_consumer.consume_all().collect::<Vec<_>>();
         let mut state = self.registry.state.write();
         for event in events {
@@ -234,6 +222,7 @@ impl PlayerManager {
         for player in state.players.values_mut() {
             player.input.clear_frame_state();
         }
+        Ok(())
     }
 }
 

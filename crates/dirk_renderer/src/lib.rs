@@ -134,8 +134,7 @@ impl RendererCreateInfo {
 
 /// The Renderer struct that holds all render state and is called upon to handle
 /// all rendering operations
-// TODO: make private after removing old engine
-pub struct Renderer {
+struct Renderer {
     // Heavy renderer state:
     /// All of the [`window::Window`]s constructed from [`platform::Window`]s.
     windows: HashMap<WindowId, Window>,
@@ -188,7 +187,6 @@ impl Renderer {
     ///
     /// Plenty of Vulkan & platform errors can occur during renderer intializing
     pub fn init(
-        // TODO: take EngineBuildContext as input & do everything here
         create_info: &RendererCreateInfo,
         window: &dirk_platform::Window,
         event_manager: &dirk_events::EventManager,
@@ -286,7 +284,7 @@ impl Renderer {
     }
 
     /// Returns a [`UniverseBuilder`] that is populated with [`Renderer`] systems.
-    pub fn universe_builder(&mut self) -> UniverseBuilder {
+    fn universe_builder(&mut self) -> UniverseBuilder {
         let (uni_sender, uni_receiver) = render_commands::channel();
         let (mesh_sender, mesh_receiver) = render_commands::channel();
         let (trans_sender, trans_receiver) = render_commands::channel();
@@ -317,7 +315,7 @@ impl Renderer {
     ///
     /// Will panic if the scene object does not exist for the specified
     /// world (unless in [`WorldEvent::Created`] or [`WorldEvent::Destroyed`].
-    pub fn tick(&mut self, _delta_time: f64) -> Result<()> {
+    fn tick(&mut self, _delta_time: f64) -> Result<()> {
         for event in self.player_spawn_consumer.consume_all() {
             self.players.insert(event.id, event.into());
         }
@@ -390,7 +388,7 @@ impl Renderer {
     /// # Errors
     ///
     /// Vulkan errors can occur during rendering
-    pub fn render(&mut self) -> Result<()> {
+    fn render(&mut self) -> Result<()> {
         for player in self.players.values() {
             let Some(entity) = player.entity else {
                 continue;
