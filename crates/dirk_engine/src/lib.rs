@@ -89,7 +89,7 @@ pub use subsystem::{EnginePlugin, EngineResource, Subsystem};
 
 mod tests;
 
-type ResourceStorage = Arc<RwLock<HashMap<TypeId, Box<dyn Any + Send + Sync>>>>; // TODO: see about some other better storage method
+type ResourceStorage = Arc<RwLock<HashMap<TypeId, Box<dyn Any + Send + Sync>>>>;
 
 /// The main engine object.
 ///

@@ -33,7 +33,6 @@ pub struct EngineBuilder {
     plugins: HashSet<TypeId>,
     subsystem_factories: HashMap<TypeId, SubsystemFactory>,
     subsystem_order: Vec<TypeId>,
-    universe_builder: UniverseBuilder,
 }
 
 impl EngineBuilder {
@@ -47,7 +46,6 @@ impl EngineBuilder {
             plugins: HashSet::new(),
             subsystem_factories: HashMap::new(),
             subsystem_order: Vec::new(),
-            universe_builder: Universe::builder(),
         }
     }
 
@@ -134,13 +132,6 @@ impl EngineBuilder {
         self
     }
 
-    /// Extends the engine ECS builder with another prepared ECS builder.
-    pub fn extend_universe(&mut self, builder: UniverseBuilder) -> &mut Self {
-        let universe_builder = std::mem::take(&mut self.universe_builder);
-        self.universe_builder = universe_builder.with_other(builder);
-        self
-    }
-
     /// Builds a new engine.
     ///
     /// # Errors
@@ -176,6 +167,7 @@ impl EngineBuilder {
 
         let mut context = EngineBuildContext {
             handle: handle.clone(),
+            builder: Universe::builder(),
         };
 
         let mut subsystems = Vec::with_capacity(self.subsystem_factories.len());
@@ -185,7 +177,7 @@ impl EngineBuilder {
             }
         }
 
-        let universe = self.universe_builder.build();
+        let universe = context.builder.build();
 
         Ok(Engine {
             logger,
@@ -256,10 +248,18 @@ impl Default for EngineBuilder {
 /// }
 /// ```
 pub struct EngineBuildContext {
-    pub(crate) handle: EngineHandle,
+    handle: EngineHandle,
+    builder: UniverseBuilder,
 }
 
 impl EngineBuildContext {
+    #[cfg(test)]
+    fn new(handle: EngineHandle) -> Self {
+        Self {
+            handle,
+            builder: Universe::builder(),
+        }
+    }
     /// Returns the engine handle being shared with runtime subsystems.
     #[must_use]
     pub fn handle(&self) -> &EngineHandle {
@@ -276,6 +276,13 @@ impl EngineBuildContext {
     #[must_use]
     pub fn workers(&self) -> &WorkerPool {
         self.handle.workers()
+    }
+
+    /// Extends the engine ECS builder with another prepared ECS builder.
+    pub fn extend_universe(&mut self, builder: UniverseBuilder) -> &mut Self {
+        let universe_builder = std::mem::take(&mut self.builder);
+        self.builder = universe_builder.with_other(builder);
+        self
     }
 
     /// Publishes a typed resource for later subsystem factories.
