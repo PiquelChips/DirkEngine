@@ -89,6 +89,61 @@ pub use subsystem::{EnginePlugin, EngineResource, Subsystem};
 
 mod tests;
 
+/// Immutable metadata describing this engine instance.
+///
+/// The engine constructs this once while building [`EngineHandle`]. Subsystems
+/// should treat it as read-only configuration for integration points such as
+/// renderer or platform initialisation.
+#[derive(Debug)]
+pub struct EngineMetadata {
+    app_name: String,
+    app_version: dirk_utils::Version,
+    engine_name: String,
+    engine_version: dirk_utils::Version,
+}
+
+impl EngineMetadata {
+    /// Creates engine metadata.
+    #[must_use]
+    pub fn new(
+        app_name: impl Into<String>,
+        app_version: dirk_utils::Version,
+        engine_name: impl Into<String>,
+        engine_version: dirk_utils::Version,
+    ) -> Self {
+        Self {
+            app_name: app_name.into(),
+            app_version,
+            engine_name: engine_name.into(),
+            engine_version,
+        }
+    }
+
+    /// Returns the application name.
+    #[must_use]
+    pub fn app_name(&self) -> &str {
+        &self.app_name
+    }
+
+    /// Returns the application version.
+    #[must_use]
+    pub fn app_version(&self) -> dirk_utils::Version {
+        self.app_version
+    }
+
+    /// Returns the engine name.
+    #[must_use]
+    pub fn engine_name(&self) -> &str {
+        &self.engine_name
+    }
+
+    /// Returns the engine version.
+    #[must_use]
+    pub fn engine_version(&self) -> dirk_utils::Version {
+        self.engine_version
+    }
+}
+
 type ResourceStorage = Arc<RwLock<HashMap<TypeId, Box<dyn Any + Send + Sync>>>>;
 
 /// The main engine object.
@@ -323,6 +378,7 @@ impl EngineStatus {
 /// A cheap handle for systems to communicate with the main engine object.
 #[derive(Clone)]
 pub struct EngineHandle {
+    metadata: Arc<EngineMetadata>,
     state: Arc<EngineState>,
     events: EventManager,
     workers: WorkerPool,
@@ -331,6 +387,12 @@ pub struct EngineHandle {
 }
 
 impl EngineHandle {
+    /// Returns immutable engine metadata.
+    #[must_use]
+    pub fn metadata(&self) -> &EngineMetadata {
+        &self.metadata
+    }
+
     /// Returns the shared event manager.
     #[must_use]
     pub fn events(&self) -> &EventManager {

@@ -437,6 +437,7 @@ dependencies = [
  "dirk_events",
  "dirk_threads",
  "dirk_universe",
+ "dirk_utils",
  "parking_lot",
  "piquel-log",
  "thiserror 2.0.18",

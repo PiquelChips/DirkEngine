@@ -147,6 +147,12 @@ fn build_context() -> EngineBuildContext {
     let (commands, _command_receiver) = mpsc::channel();
 
     EngineBuildContext::new(EngineHandle {
+        metadata: Arc::new(EngineMetadata::new(
+            "test-app",
+            dirk_utils::Version::ZERO,
+            "test-engine",
+            dirk_utils::Version::ZERO,
+        )),
         state: Arc::new(EngineState::new()),
         events,
         workers,
@@ -198,6 +204,17 @@ fn shared_dependency_is_registered_once_for_multiple_dependents() -> Result<()> 
 
     assert_eq!(dependency_builds.load(Ordering::Relaxed), 1);
     Ok(())
+}
+
+#[test]
+fn metadata_is_available_on_engine_handle() {
+    let context = build_context();
+    let metadata = context.handle().metadata();
+
+    assert_eq!(metadata.app_name(), "test-app");
+    assert_eq!(metadata.app_version(), dirk_utils::Version::ZERO);
+    assert_eq!(metadata.engine_name(), "test-engine");
+    assert_eq!(metadata.engine_version(), dirk_utils::Version::ZERO);
 }
 
 #[test]

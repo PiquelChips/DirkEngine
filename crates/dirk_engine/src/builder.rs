@@ -2,6 +2,7 @@ use std::{
     any::{TypeId, type_name},
     collections::{HashMap, HashSet},
     path::PathBuf,
+    str::FromStr,
     sync::{Arc, mpsc},
     time::Instant,
 };
@@ -13,8 +14,8 @@ use parking_lot::RwLock;
 use tracing::info;
 
 use crate::{
-    Engine, EngineHandle, EnginePlugin, EngineResource, EngineState, Result, Subsystem,
-    errors::Error,
+    Engine, EngineHandle, EngineMetadata, EnginePlugin, EngineResource, EngineState, Result,
+    Subsystem, errors::Error,
 };
 
 type SubsystemFactory =
@@ -28,6 +29,9 @@ type SubsystemFactory =
 /// application or with other plugins.
 pub struct EngineBuilder {
     app_name: String,
+    app_version: dirk_utils::Version,
+    engine_name: String,
+    engine_version: dirk_utils::Version,
     worker_name: String,
     log_level: piquel_log::LogLevel,
     plugins: HashSet<TypeId>,
@@ -37,10 +41,21 @@ pub struct EngineBuilder {
 
 impl EngineBuilder {
     /// Creates an empty engine builder with default core configuration.
+    ///
+    /// # Panics
+    ///
+    /// Panics if this crate's package version is not a valid `DirkEngine`
+    /// semantic version. This is a build-time configuration error.
     #[must_use]
     pub fn new() -> Self {
+        let package_version = dirk_utils::Version::from_str(env!("CARGO_PKG_VERSION"))
+            .expect("crate package version should be a valid DirkEngine version");
+
         Self {
             app_name: "DirkEngine".to_owned(),
+            app_version: package_version,
+            engine_name: "DirkEngine".to_owned(),
+            engine_version: package_version,
             worker_name: "dirk-workers".to_owned(),
             log_level: piquel_log::LogLevel::Debug,
             plugins: HashSet::new(),
@@ -53,6 +68,13 @@ impl EngineBuilder {
     #[must_use]
     pub fn with_app_name(mut self, app_name: impl Into<String>) -> Self {
         self.app_name = app_name.into();
+        self
+    }
+
+    /// Sets the application version used for diagnostics and subsystem metadata.
+    #[must_use]
+    pub fn with_app_version(mut self, app_version: dirk_utils::Version) -> Self {
+        self.app_version = app_version;
         self
     }
 
@@ -152,12 +174,19 @@ impl EngineBuilder {
 
         info!(app = self.app_name, "initialising engine");
 
+        let metadata = Arc::new(EngineMetadata::new(
+            self.app_name.clone(),
+            self.app_version,
+            self.engine_name,
+            self.engine_version,
+        ));
         let workers = WorkerPool::new(&self.worker_name);
         let events = EventManager::new(workers.clone());
         let state = Arc::new(EngineState::new());
         let (commands, command_receiver) = mpsc::channel();
         let resources = Arc::new(RwLock::new(HashMap::new()));
         let handle = EngineHandle {
+            metadata,
             state: Arc::clone(&state),
             events: events.clone(),
             workers: workers.clone(),
