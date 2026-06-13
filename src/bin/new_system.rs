@@ -1,7 +1,5 @@
 //! Entrypoint for exercising the new plugin/subsystem engine runtime.
 
-use dirkengine::demo::Demo;
-
 use anyhow::Context;
 use tracing::error;
 
@@ -13,12 +11,7 @@ fn run() -> anyhow::Result<()> {
     builder.with_plugin(dirk_player::PlayerPlugin)?;
     builder.with_plugin(dirk_world::WorldPlugin)?;
     builder.with_plugin(dirk_renderer::RendererPlugin)?;
-    builder.add_subsystem(|ctx| {
-        Ok(Demo::new(
-            ctx.resource::<dirk_player::PlayerRegistry>()?,
-            ctx.resource::<dirk_platform::PlatformWindows>()?,
-        ))
-    });
+    builder.with_plugin(dirkengine::demo::DemoPlugin)?;
 
     let engine = builder.build().context("build new engine")?;
 

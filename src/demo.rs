@@ -3,29 +3,37 @@
 use std::f32::consts::PI;
 
 use anyhow::Context;
-use dirk_engine::{EngineHandle, Subsystem};
+use dirk_engine::{EngineHandle, EnginePlugin, Subsystem};
 use dirk_universe::{Entity, Universe, World};
 
+/// An [`EnginePlugin`] with a basic demo world.
+pub struct DemoPlugin;
+
+impl EnginePlugin for DemoPlugin {
+    fn name(&self) -> &'static str {
+        "demo"
+    }
+    fn build(&self, builder: &mut dirk_engine::EngineBuilder) -> anyhow::Result<()> {
+        builder.with_app_name(self.name());
+
+        builder.with_plugin(dirk_player::PlayerPlugin)?;
+        builder.with_plugin(dirk_platform::PlatformPlugin)?;
+        builder.add_subsystem(|ctx| {
+            Ok(Demo {
+                players: ctx.resource::<dirk_player::PlayerRegistry>()?,
+                windows: ctx.resource::<dirk_platform::PlatformWindows>()?,
+                started: false,
+            })
+        });
+        Ok(())
+    }
+}
+
 /// A basic demo [`Subsystem`].
-pub struct Demo {
+struct Demo {
     players: dirk_player::PlayerRegistry,
     windows: dirk_platform::PlatformWindows,
     started: bool,
-}
-
-impl Demo {
-    /// Creates a new [`Demo`] [`Subsystem`].
-    #[must_use]
-    pub fn new(
-        players: dirk_player::PlayerRegistry,
-        windows: dirk_platform::PlatformWindows,
-    ) -> Self {
-        Self {
-            players,
-            windows,
-            started: false,
-        }
-    }
 }
 
 impl Subsystem for Demo {
