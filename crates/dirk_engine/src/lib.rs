@@ -190,6 +190,10 @@ impl Engine {
 
         let delta_time = self.capture_delta_time();
 
+        // TODO: renders too fast and semaphores have problem.
+        // remove when rendering takes longer
+        std::thread::sleep(std::time::Duration::from_millis(10));
+
         for index in 0..self.subsystems.len() {
             let subsystem = &mut self.subsystems[index];
             let name = subsystem.name();
