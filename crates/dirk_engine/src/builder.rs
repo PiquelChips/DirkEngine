@@ -65,29 +65,25 @@ impl EngineBuilder {
     }
 
     /// Sets the application name used for diagnostics.
-    #[must_use]
-    pub fn with_app_name(mut self, app_name: impl Into<String>) -> Self {
+    pub fn with_app_name(&mut self, app_name: impl Into<String>) -> &mut Self {
         self.app_name = app_name.into();
         self
     }
 
     /// Sets the application version used for diagnostics and subsystem metadata.
-    #[must_use]
-    pub fn with_app_version(mut self, app_version: dirk_utils::Version) -> Self {
+    pub fn with_app_version(&mut self, app_version: dirk_utils::Version) -> &mut Self {
         self.app_version = app_version;
         self
     }
 
     /// Sets the worker thread name prefix.
-    #[must_use]
-    pub fn with_worker_name(mut self, worker_name: impl Into<String>) -> Self {
+    pub fn with_worker_name(&mut self, worker_name: impl Into<String>) -> &mut Self {
         self.worker_name = worker_name.into();
         self
     }
 
     /// Sets the maximum log level configured by the engine.
-    #[must_use]
-    pub fn with_log_level(mut self, level: piquel_log::LogLevel) -> Self {
+    pub fn with_log_level(&mut self, level: piquel_log::LogLevel) -> &mut Self {
         self.log_level = level;
         self
     }
