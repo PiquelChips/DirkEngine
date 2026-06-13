@@ -9,6 +9,7 @@ use std::{
     },
 };
 
+use anyhow::Context;
 #[cfg(validation)]
 use ash::ext::debug_utils;
 #[cfg(platform_linux)]
@@ -187,12 +188,32 @@ impl dirk_engine::Subsystem for Renderer {
         _universe: &mut dirk_universe::Universe,
     ) -> anyhow::Result<()> {
         self.tick(delta_time)?;
-        self.render()?;
+        #[cfg(feature = "editor")]
+        {
+            let ctx = self.begin_frame();
+            self.render_ui(delta_time, &ctx);
+        }
+
+        #[cfg(not(feature = "editor"))]
+        self.begin_frame();
+
+        self.end_frame().context("rendering")?;
+
         Ok(())
     }
 }
 
 impl Renderer {
+    // TODO: shouldn't be here
+    #[cfg(feature = "editor")]
+    fn render_ui(&mut self, delta_time: f64, ctx: &egui::Context) {
+        egui::Window::new("DirkEngine").show(ctx, |ui| {
+            ui.label("egui is rendering through DirkEngine");
+            ui.separator();
+            ui.label(format!("delta: {:.2} ms", delta_time * 1_000.0));
+        });
+    }
+
     /// Renderer initialisation. Creates all Vulkan & other renderer objects.
     ///
     /// # Errors
@@ -312,7 +333,6 @@ impl Renderer {
     pub fn begin_frame(&mut self) {}
 
     // TODO: shouldn't be necessary
-
     #[cfg(feature = "editor")]
     fn primary_extent(&self) -> vk::Extent2D {
         self.players
