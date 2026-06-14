@@ -199,7 +199,7 @@ fn build_context() -> EngineBuildContext {
     })
 }
 
-fn engine_with_subsystems(subsystems: Vec<Box<dyn Subsystem>>) -> Engine {
+pub(crate) fn engine_with_subsystems(subsystems: Vec<Box<dyn Subsystem>>) -> Engine {
     let workers = WorkerPool::new("dirk-engine-test");
     let events = EventManager::new(workers.clone());
     let state = Arc::new(EngineState::new());

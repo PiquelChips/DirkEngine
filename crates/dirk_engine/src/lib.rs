@@ -79,6 +79,7 @@ use tracing::error;
 
 pub mod errors;
 pub mod events;
+pub mod signal;
 pub mod subsystem;
 
 mod builder;
