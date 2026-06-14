@@ -440,8 +440,10 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "dirk_build",
+ "dirk_engine",
  "dirk_events",
  "dirk_threads",
+ "dirk_universe",
  "gltf",
  "parking_lot",
  "serde",
@@ -457,6 +459,22 @@ name = "dirk_build"
 version = "0.1.0"
 dependencies = [
  "cargo_metadata",
+]
+
+[[package]]
+name = "dirk_engine"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "dirk_build",
+ "dirk_events",
+ "dirk_threads",
+ "dirk_universe",
+ "dirk_utils",
+ "parking_lot",
+ "piquel-log",
+ "thiserror 2.0.18",
+ "tracing",
 ]
 
 [[package]]
@@ -476,8 +494,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "dirk_build",
+ "dirk_engine",
  "dirk_events",
+ "dirk_universe",
  "glam",
+ "parking_lot",
  "thiserror 2.0.18",
  "tracing",
  "winit",
@@ -487,6 +508,8 @@ dependencies = [
 name = "dirk_player"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "dirk_engine",
  "dirk_events",
  "dirk_platform",
  "dirk_universe",
@@ -514,6 +537,7 @@ dependencies = [
  "ash-window",
  "dirk_assets",
  "dirk_build",
+ "dirk_engine",
  "dirk_events",
  "dirk_platform",
  "dirk_player",
@@ -579,7 +603,9 @@ dependencies = [
 name = "dirk_world"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "dirk_assets",
+ "dirk_engine",
  "dirk_events",
  "dirk_platform",
  "dirk_universe",
@@ -595,6 +621,7 @@ dependencies = [
  "anyhow",
  "dirk_assets",
  "dirk_build",
+ "dirk_engine",
  "dirk_events",
  "dirk_platform",
  "dirk_player",

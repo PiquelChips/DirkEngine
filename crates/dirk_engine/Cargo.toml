@@ -1,6 +1,6 @@
 [package]
-name = "dirk_player"
-description = "DirkEngine Player"
+name = "dirk_engine"
+description = "The API for the engine & its systems"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -12,17 +12,22 @@ authors.workspace = true
 documentation.workspace = true
 
 [dependencies]
+tracing.workspace = true
 anyhow.workspace = true
+thiserror.workspace = true
 parking_lot.workspace = true
+piquel-log.workspace = true
 
-dirk_engine.workspace = true
+dirk_threads.workspace = true
 dirk_events.workspace = true
 dirk_universe.workspace = true
-dirk_platform.workspace = true
-dirk_world.workspace = true
 dirk_utils.workspace = true
 
-glam.workspace = true
+[build-dependencies]
+dirk_build.workspace = true
+
+[features]
+editor = []
 
 [lints]
 workspace = true

@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use tracing::{debug, trace};
 use winit::{
     application::ApplicationHandler,
@@ -10,14 +8,13 @@ use winit::{
 };
 
 use crate::{
-    InputEvent, Window,
+    InputEvent, PlatformWindows, Window,
     event::{PlatformEvent, WindowEvent as PlatformWindowEvent},
 };
 
 pub struct PlatformHandler {
     can_create_surfaces: bool,
-    pub windows: HashMap<WindowId, Window>,
-    main_window: Option<WindowId>,
+    windows: PlatformWindows,
 
     /// Current keyboard modifier state, updated on every `ModifiersChanged` event.
     /// TODO: should only be tracked by input manager
@@ -32,11 +29,10 @@ pub struct PlatformHandler {
 }
 
 impl PlatformHandler {
-    pub fn new(events: &dirk_events::EventManager) -> Self {
+    pub fn new(events: &dirk_events::EventManager, windows: PlatformWindows) -> Self {
         Self {
             can_create_surfaces: false,
-            windows: HashMap::new(),
-            main_window: None,
+            windows,
             modifiers: ModifiersState::default(),
             platform_dispatcher: events.register(),
             window_dispatcher: events.register(),
@@ -52,26 +48,16 @@ impl PlatformHandler {
 
         let window = Window::new(window);
         let window_id = window.id();
+        self.windows.insert(window);
         self.platform_dispatcher
             .dispatch(PlatformEvent::WindowCreated { id: window_id });
-        self.windows.insert(window_id, window);
         Ok(window_id)
-    }
-    pub fn main_window(&self) -> &Window {
-        self.windows
-            .get(
-                &self
-                    .main_window
-                    .expect("there should always be a main window"),
-            )
-            .expect("there should always be a main window")
     }
     pub fn is_initialized(&self) -> bool {
         self.can_create_surfaces
     }
     pub fn shutdown(&mut self) {
-        let count = self.windows.len();
-        self.windows.clear();
+        let count = self.windows.clear();
         debug!("Closed {count} window(s) during platform shutdown");
     }
 
@@ -79,7 +65,7 @@ impl PlatformHandler {
         match event {
             WindowEvent::CloseRequested => {
                 debug!("Close requested for Window={id:?}");
-                self.windows.remove(&id);
+                self.windows.remove(id);
                 self.platform_dispatcher
                     .dispatch(PlatformEvent::WindowCloseRequested { id });
             }
@@ -221,7 +207,7 @@ impl ApplicationHandler for PlatformHandler {
         let id = self
             .create_window(event_loop)
             .expect("failed to create main window");
-        self.main_window = Some(id);
+        self.windows.set_main_window(id);
         self.can_create_surfaces = true;
     }
 

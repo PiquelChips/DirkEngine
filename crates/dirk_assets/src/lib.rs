@@ -16,7 +16,8 @@ mod handle;
 use handle::AssetRef;
 pub use handle::Handle;
 
-use ::dirk_events::{Consumer, Dispatcher, EventManager};
+use dirk_engine::{EngineBuilder, EngineHandle, EnginePlugin, Subsystem};
+use dirk_events::{Consumer, Dispatcher, EventManager};
 use dirk_threads::WorkerPool;
 use parking_lot::{Mutex, RwLock};
 use std::{
@@ -35,6 +36,45 @@ use tracing::warn;
 use serde::{Deserialize, Serialize};
 
 use crate::events::InternalAssetUnloaded;
+
+/// Registers the asset registry as an engine subsystem.
+pub struct AssetsPlugin;
+
+impl EnginePlugin for AssetsPlugin {
+    fn name(&self) -> &'static str {
+        "assets"
+    }
+
+    fn build(&self, builder: &mut EngineBuilder) -> anyhow::Result<()> {
+        builder.add_subsystem(|ctx| {
+            let registry = AssetRegistry::init(ctx.events(), ctx.workers().clone())?;
+            ctx.add_resource(registry.clone())?;
+            Ok(AssetsSubsystem { registry })
+        });
+        Ok(())
+    }
+}
+
+/// Runtime asset subsystem.
+pub struct AssetsSubsystem {
+    registry: AssetRegistry,
+}
+
+impl Subsystem for AssetsSubsystem {
+    fn name(&self) -> &'static str {
+        "assets"
+    }
+
+    fn tick(
+        &mut self,
+        _delta_time: f64,
+        _handle: &EngineHandle,
+        _universe: &mut dirk_universe::Universe,
+    ) -> anyhow::Result<()> {
+        self.registry.tick();
+        Ok(())
+    }
+}
 
 /// Extension used for all asset descriptor files.
 pub(crate) const DIRK_ASSET_EXT: &str = "dirkasset";
@@ -279,7 +319,7 @@ impl DirkAsset {
 /// # let workers = dirk_threads::WorkerPool::new("test");
 /// # let events = dirk_events::EventManager::new(workers.clone());
 /// # let registry = dirk_assets::AssetRegistry::init(&events, workers).unwrap();
-/// // Must be called once per frame, *after* EventManager::dispatch_all.
+/// // Must be called once per frame.
 /// registry.tick();
 /// # Ok(()) }
 /// ```
@@ -430,10 +470,9 @@ impl AssetRegistry {
 
     /// Processes deferred asset-unload notifications and emits public events.
     ///
-    /// Must be called **exactly once per frame**, after
-    /// [`EventManager::dispatch_all`]. Skipping this call means
-    /// [`AssetUnloaded`] events are never delivered, causing potential
-    /// memory leaks (e.g. the renderer cannot free GPU resources).
+    /// Must be called **exactly once per frame**. Skipping this call means
+    /// [`AssetUnloaded`] events are never delivered, causing potential memory
+    /// leaks (e.g. the renderer cannot free GPU resources).
     pub fn tick(&self) {
         let unloaded: Vec<_> = self
             .inner

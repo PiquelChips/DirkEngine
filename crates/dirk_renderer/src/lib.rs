@@ -1,16 +1,15 @@
 #![doc = include_str!("../README.md")]
 
-use std::ffi::CStr;
-#[cfg(validation)]
 use std::{
     collections::HashMap,
-    ffi::CString,
+    ffi::{CStr, CString},
     sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
     },
 };
 
+use anyhow::Context;
 #[cfg(validation)]
 use ash::ext::debug_utils;
 #[cfg(platform_linux)]
@@ -24,7 +23,7 @@ use ash::{
 use dirk_player::PlayerId;
 use tracing::{debug, info};
 
-use dirk_platform::{PlatformEvent, WindowEvent, WindowId};
+use dirk_platform::{PlatformEvent, PlatformWindows, WindowEvent, WindowId};
 use dirk_universe::{Universe, UniverseBuilder};
 
 mod utils;
@@ -72,6 +71,38 @@ mod pipeline;
 
 mod frame_graph;
 
+/// Registers renderer integration with the engine.
+pub struct RendererPlugin;
+
+impl dirk_engine::EnginePlugin for RendererPlugin {
+    fn name(&self) -> &'static str {
+        "renderer"
+    }
+
+    fn build(&self, builder: &mut dirk_engine::EngineBuilder) -> anyhow::Result<()> {
+        builder.with_plugin(dirk_platform::PlatformPlugin)?;
+        builder.with_plugin(dirk_assets::AssetsPlugin)?;
+
+        builder.add_subsystem(|ctx| {
+            let platform_windows = ctx.resource::<dirk_platform::PlatformWindows>()?;
+
+            let create_info = RendererCreateInfo::from_engine_metadata(ctx.handle().metadata())?;
+
+            let main_window = platform_windows.main_window();
+            let mut renderer = Renderer::init(
+                &create_info,
+                &main_window,
+                ctx.events(),
+                platform_windows.clone(),
+            )?;
+
+            ctx.extend_universe(renderer.universe_builder());
+            Ok(renderer)
+        });
+        Ok(())
+    }
+}
+
 #[cfg(validation)]
 mod debug;
 
@@ -94,12 +125,30 @@ pub struct RendererCreateInfo {
     pub app_version: Version,
 }
 
+impl RendererCreateInfo {
+    /// Creates renderer metadata from engine metadata.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if one of the metadata strings contains an interior NUL
+    /// byte and cannot be passed to Vulkan.
+    pub fn from_engine_metadata(metadata: &dirk_engine::EngineMetadata) -> anyhow::Result<Self> {
+        Ok(Self {
+            engine_name: CString::new(metadata.engine_name())?,
+            engine_version: metadata.engine_version(),
+            app_name: CString::new(metadata.app_name())?,
+            app_version: metadata.app_version(),
+        })
+    }
+}
+
 /// The Renderer struct that holds all render state and is called upon to handle
 /// all rendering operations
-pub struct Renderer {
+struct Renderer {
     // Heavy renderer state:
     /// All of the [`window::Window`]s constructed from [`platform::Window`]s.
     windows: HashMap<WindowId, Window>,
+    platform_windows: PlatformWindows,
     /// All of the internal [`world::World`] representations.
     scene_manager: SceneManager,
     /// The management for all the models.
@@ -127,7 +176,45 @@ pub struct Renderer {
     render_device: RenderDevice,
 }
 
+impl dirk_engine::Subsystem for Renderer {
+    fn name(&self) -> &'static str {
+        "renderer"
+    }
+
+    fn tick(
+        &mut self,
+        delta_time: f64,
+        _handle: &dirk_engine::EngineHandle,
+        _universe: &mut dirk_universe::Universe,
+    ) -> anyhow::Result<()> {
+        self.tick(delta_time)?;
+        #[cfg(feature = "editor")]
+        {
+            let ctx = self.begin_frame();
+            self.render_ui(delta_time, &ctx);
+        }
+
+        #[cfg(not(feature = "editor"))]
+        self.begin_frame();
+
+        self.end_frame().context("rendering")?;
+
+        Ok(())
+    }
+}
+
 impl Renderer {
+    // TODO: shouldn't be here
+    #[cfg(feature = "editor")]
+    #[allow(clippy::unused_self)]
+    fn render_ui(&self, delta_time: f64, ctx: &egui::Context) {
+        egui::Window::new("DirkEngine").show(ctx, |ui| {
+            ui.label("egui is rendering through DirkEngine");
+            ui.separator();
+            ui.label(format!("delta: {:.2} ms", delta_time * 1_000.0));
+        });
+    }
+
     /// Renderer initialisation. Creates all Vulkan & other renderer objects.
     ///
     /// # Errors
@@ -137,6 +224,7 @@ impl Renderer {
         create_info: &RendererCreateInfo,
         window: &dirk_platform::Window,
         event_manager: &dirk_events::EventManager,
+        platform_windows: PlatformWindows,
     ) -> Result<Self> {
         info!("Intializing Vulkan...");
 
@@ -214,6 +302,7 @@ impl Renderer {
             render_device,
 
             windows,
+            platform_windows,
             scene_manager,
             players: HashMap::new(),
             models,
@@ -242,10 +331,10 @@ impl Renderer {
 
     /// Begins a frame.
     #[cfg(not(feature = "editor"))]
+    #[allow(clippy::unused_self)]
     pub fn begin_frame(&mut self) {}
 
     // TODO: shouldn't be necessary
-
     #[cfg(feature = "editor")]
     fn primary_extent(&self) -> vk::Extent2D {
         self.players
@@ -262,7 +351,7 @@ impl Renderer {
     }
 
     /// Returns a [`UniverseBuilder`] that is populated with [`Renderer`] systems.
-    pub fn universe_builder(&mut self) -> UniverseBuilder {
+    fn universe_builder(&mut self) -> UniverseBuilder {
         let (uni_sender, uni_receiver) = render_commands::channel();
         let (mesh_sender, mesh_receiver) = render_commands::channel();
         let (trans_sender, trans_receiver) = render_commands::channel();
@@ -293,11 +382,7 @@ impl Renderer {
     ///
     /// Will panic if the scene object does not exist for the specified
     /// world (unless in [`WorldEvent::Created`] or [`WorldEvent::Destroyed`].
-    pub fn tick(
-        &mut self,
-        _delta_time: f64,
-        windows: &HashMap<WindowId, dirk_platform::Window>,
-    ) -> Result<()> {
+    fn tick(&mut self, _delta_time: f64) -> Result<()> {
         for event in self.player_spawn_consumer.consume_all() {
             self.players.insert(event.id, event.into());
         }
@@ -319,6 +404,7 @@ impl Renderer {
         for event in platform_events {
             match event {
                 PlatformEvent::WindowCreated { id } => {
+                    let windows = self.platform_windows.windows();
                     let Some(plat_window) = windows.get(&id) else {
                         continue;
                     };
@@ -369,7 +455,7 @@ impl Renderer {
     /// # Errors
     ///
     /// Vulkan errors can occur during rendering
-    pub fn end_frame(&mut self) -> Result<()> {
+    fn end_frame(&mut self) -> Result<()> {
         #[cfg(feature = "editor")]
         self.egui.end_frame();
 
