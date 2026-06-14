@@ -17,6 +17,8 @@ crate-type = ["rlib", "cdylib"]
 [dependencies]
 spirv-std.workspace = true
 
+dirk_shaders.workspace = true
+
 [target.'cfg(target_arch = "spirv")'.dependencies]
 glam = { version = ">=0.30.8", default-features = false, features = ["libm"] }
 

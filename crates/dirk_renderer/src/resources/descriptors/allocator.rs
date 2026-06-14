@@ -9,7 +9,7 @@ use crate::{
     resources::device::{Garbage, RenderDevice},
 };
 
-use super::{layout_types::SetLayout, set::DescriptorSet};
+use super::{layouts::SetLayout, set::DescriptorSet};
 
 /// Growable descriptor pool allocator for a single layout type.
 pub struct DescriptorAllocator<L: SetLayout> {
@@ -27,7 +27,7 @@ impl<L: SetLayout> DescriptorAllocator<L> {
         let initial_max_sets = initial_max_sets.max(1);
         let mut allocator = Self {
             device: device.clone(),
-            layout: L::layout(&device.layouts),
+            layout: L::create_layout(&device.device)?,
             pools: Vec::new(),
             cursor: 0,
             next_max_sets: initial_max_sets,
@@ -90,13 +90,10 @@ impl<L: SetLayout> DescriptorAllocator<L> {
         let max_sets = self.next_max_sets.max(required_sets).max(1);
         self.next_max_sets = max_sets.saturating_mul(2).max(1);
 
-        let pool_size = vk::DescriptorPoolSize::default()
-            .ty(L::DESCRIPTOR_TYPE)
-            .descriptor_count(L::DESCRIPTORS_PER_SET.saturating_mul(max_sets).max(1));
-
+        let pool_sizes = L::pool_sizes(max_sets);
         let pool_info = vk::DescriptorPoolCreateInfo::default()
             .flags(vk::DescriptorPoolCreateFlags::FREE_DESCRIPTOR_SET)
-            .pool_sizes(std::slice::from_ref(&pool_size))
+            .pool_sizes(&pool_sizes)
             .max_sets(max_sets);
 
         let pool = unsafe {
@@ -116,5 +113,7 @@ impl<L: SetLayout> Drop for DescriptorAllocator<L> {
         for pool in self.pools.drain(..) {
             self.device.destroy(Garbage::DescriptorPool(pool));
         }
+        self.device
+            .destroy(Garbage::DescriptorSetLayout(self.layout));
     }
 }

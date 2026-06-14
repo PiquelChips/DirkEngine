@@ -4,9 +4,10 @@ use std::marker::PhantomData;
 
 use ash::vk;
 
-use crate::resources::device::{Garbage, RenderDevice};
-
-use super::layout_types::SetLayout;
+use crate::resources::{
+    descriptors::layouts::SetLayout,
+    device::{Garbage, RenderDevice},
+};
 
 /// An owned Vulkan descriptor set with deferred RAII cleanup.
 ///

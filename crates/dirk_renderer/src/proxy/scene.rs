@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use ash::vk;
+use dirk_shaders::types::{ProxyUbo, SceneUbo};
 use dirk_universe::{Entity, WorldId};
 use gpu_allocator::MemoryLocation;
 
@@ -8,12 +9,13 @@ use crate::{
     Error, MAX_FRAMES_IN_FLIGHT, Result,
     frame_graph::{AttachmentInfo, RenderGraph, TextureDesc, TextureHandle},
     models::ModelRegistry,
-    pipeline::GraphicsPipeline,
+    pipeline::{MainPipelineSpec, graphics::GraphicsPipeline},
     resources::{
         buffer::UniformBuffer,
         command_pool::CommandBuffer,
         descriptors::{
-            DescriptorAllocator, DescriptorSet, DescriptorWriter, ObjectLayout, SceneLayout,
+            DescriptorAllocator, DescriptorSet, DescriptorWriter,
+            sets::{ObjectSet, SceneSet},
         },
         device::RenderDevice,
     },
@@ -30,19 +32,17 @@ pub struct SceneManager {
 
     // TODO: see about centralising the different pipelines (link with
     // descriptor layouts, ...)
-    graphics_pipeline: GraphicsPipeline,
+    graphics_pipeline: GraphicsPipeline<MainPipelineSpec>,
 
-    scene_alloc: DescriptorAllocator<SceneLayout>,
-    proxy_alloc: DescriptorAllocator<ObjectLayout>,
+    scene_alloc: DescriptorAllocator<SceneSet>,
+    proxy_alloc: DescriptorAllocator<ObjectSet>,
 }
 
 impl SceneManager {
     pub fn init(device: &RenderDevice) -> Result<Self> {
-        let scene_alloc = DescriptorAllocator::<SceneLayout>::new(device, 16)?;
-        let proxy_alloc = DescriptorAllocator::<ObjectLayout>::new(device, 256)?;
-
-        let graphics_pipeline =
-            GraphicsPipeline::build(device, &device.layouts, &device.properties)?;
+        let scene_alloc = DescriptorAllocator::<SceneSet>::new(device, 16)?;
+        let proxy_alloc = DescriptorAllocator::<ObjectSet>::new(device, 256)?;
+        let graphics_pipeline = GraphicsPipeline::build(device)?;
 
         Ok(Self {
             device: device.clone(),
@@ -153,7 +153,7 @@ impl SceneManager {
             proxy.write_ubo(frame);
         }
 
-        self.graphics_pipeline.bind(cmd);
+        let ctx = self.graphics_pipeline.bind(cmd);
 
         // the window size never gets anywhere near 2^23
         #[allow(clippy::cast_precision_loss)]
@@ -174,13 +174,7 @@ impl SceneManager {
                 continue;
             };
 
-            match models.render_model(
-                model,
-                cmd,
-                &scene.sets[frame],
-                &proxy.sets[frame],
-                self.graphics_pipeline.layout(),
-            ) {
+            match models.render_model(model, cmd, &scene.sets[frame], &proxy.sets[frame], &ctx) {
                 Ok(()) | Err(dirk_assets::Error::NotFound(_)) => (),
                 Err(err) => return Err(err.into()),
             }
@@ -269,27 +263,12 @@ impl Drop for SceneManager {
     }
 }
 
-#[derive(Clone, Copy)]
-// fields are read by Vulkan, not us
-#[allow(unused)]
-struct SceneUbo {
-    view: glam::Mat4,
-    proj: glam::Mat4,
-}
-
-#[derive(Clone, Copy)]
-// fields are read by Vulkan, not us
-#[allow(unused)]
-struct ProxyUbo {
-    model: glam::Mat4,
-}
-
 /// Renderer representation of a [`World`].
 struct Scene {
     entities: HashSet<Entity>,
 
     ubo: [UniformBuffer; MAX_FRAMES_IN_FLIGHT],
-    sets: [DescriptorSet<SceneLayout>; MAX_FRAMES_IN_FLIGHT],
+    sets: [DescriptorSet<SceneSet>; MAX_FRAMES_IN_FLIGHT],
 }
 
 impl Scene {
@@ -309,7 +288,7 @@ impl Scene {
 
         let mut writer = DescriptorWriter::new(&manager.device.device);
         for (set, ubo) in sets.iter().zip(&ubo) {
-            writer = writer.uniform_buffer(set, ubo.buffer(), ubo_size);
+            writer = writer.uniform_buffer(set, 0, ubo.buffer(), ubo_size);
         }
         writer.flush();
 
@@ -333,7 +312,7 @@ pub struct SceneProxy {
 
     // Per frame render stuff
     ubo: [UniformBuffer; MAX_FRAMES_IN_FLIGHT],
-    sets: [DescriptorSet<ObjectLayout>; MAX_FRAMES_IN_FLIGHT],
+    sets: [DescriptorSet<ObjectSet>; MAX_FRAMES_IN_FLIGHT],
 }
 
 impl SceneProxy {
@@ -349,7 +328,7 @@ impl SceneProxy {
 
         let mut writer = DescriptorWriter::new(&manager.device.device);
         for (set, ubo) in sets.iter().zip(&ubo) {
-            writer = writer.uniform_buffer(set, ubo.buffer(), size);
+            writer = writer.uniform_buffer(set, 0, ubo.buffer(), size);
         }
         writer.flush();
 

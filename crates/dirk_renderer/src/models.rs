@@ -17,12 +17,13 @@ use ash::vk;
 
 use crate::{
     Error, Result,
+    pipeline::{MainPipelineSpec, graphics::GraphicsPipelineRenderingContext},
     resources::{
         buffer::{IndexBuffer, VertexBuffer},
         command_pool::CommandBuffer,
         descriptors::{
-            DescriptorAllocator, DescriptorSet, DescriptorWriter, MaterialLayout, ObjectLayout,
-            SceneLayout,
+            DescriptorAllocator, DescriptorSet, DescriptorWriter,
+            sets::{MaterialSet, ObjectSet, SceneSet},
         },
         device::{Garbage, RenderDevice},
         image::Image,
@@ -91,7 +92,7 @@ impl Drop for Texture {
 }
 
 struct Primitive {
-    pub vertex_buffer: VertexBuffer,
+    pub vertex_buffer: VertexBuffer<Vertex>,
     pub index_buffer: IndexBuffer,
     pub index_count: u32,
     pub material_handle: Option<Handle<Material>>,
@@ -102,9 +103,8 @@ struct Mesh {
 }
 
 struct Material {
-    #[allow(unused)]
-    pub base_color: Handle<Texture>,
-    pub set: DescriptorSet<MaterialLayout>,
+    pub base_color: Option<Handle<Texture>>,
+    pub set: DescriptorSet<MaterialSet>,
 }
 
 struct Model {
@@ -120,7 +120,10 @@ pub struct ModelRegistry {
     materials: slotmap::SlotMap<slotmap::DefaultKey, Material>,
     models: HashMap<dirk_assets::AssetHandle, Model>,
 
-    material_alloc: DescriptorAllocator<MaterialLayout>,
+    fallback_material: Material,
+    #[allow(unused)]
+    fallback_texture: Texture,
+    material_alloc: DescriptorAllocator<MaterialSet>,
 
     asset_load_consumer: dirk_events::Consumer<::dirk_assets::AssetLoaded<::dirk_assets::Model>>,
     asset_unload_consumer: dirk_events::Consumer<::dirk_assets::AssetUnloaded>,
@@ -128,7 +131,9 @@ pub struct ModelRegistry {
 
 impl ModelRegistry {
     pub fn new(device: &RenderDevice, events: &dirk_events::EventManager) -> Result<Self> {
-        let material_alloc = DescriptorAllocator::<MaterialLayout>::new(device, 64)?;
+        let mut material_alloc = DescriptorAllocator::<MaterialSet>::new(device, 64)?;
+        let (fallback_material, fallback_texture) =
+            Self::create_fallback_material(device, &mut material_alloc)?;
 
         Ok(Self {
             device: device.clone(),
@@ -136,6 +141,8 @@ impl ModelRegistry {
             meshes: slotmap::SlotMap::new(),
             materials: slotmap::SlotMap::new(),
             models: HashMap::new(),
+            fallback_material,
+            fallback_texture,
             material_alloc,
 
             asset_load_consumer: events.subscribe(),
@@ -158,9 +165,9 @@ impl ModelRegistry {
         &self,
         handle: &dirk_assets::AssetHandle,
         cmd: &CommandBuffer,
-        scene_set: &DescriptorSet<SceneLayout>,
-        proxy_set: &DescriptorSet<ObjectLayout>,
-        pipeline_layout: vk::PipelineLayout,
+        scene_set: &DescriptorSet<SceneSet>,
+        proxy_set: &DescriptorSet<ObjectSet>,
+        ctx: &GraphicsPipelineRenderingContext<'_, MainPipelineSpec>,
     ) -> dirk_assets::Result<()> {
         if handle.asset_type() != dirk_assets::AssetType::Model {
             return Err(dirk_assets::Error::TypeMismatch(handle.to_string()));
@@ -177,25 +184,42 @@ impl ModelRegistry {
             .flat_map(|&mesh| self.meshes[*mesh].primitives.iter());
 
         for prim in primitives {
-            let mat_set = prim
+            let material_set = prim
                 .material_handle
-                .map_or(vk::DescriptorSet::null(), |mat| {
-                    self.materials[*mat].set.raw()
-                });
-            let descriptor_sets = [scene_set.raw(), proxy_set.raw(), mat_set];
+                .map_or(&self.fallback_material.set, |mat| &self.materials[*mat].set);
 
-            cmd.bind_descriptor_sets(
-                vk::PipelineBindPoint::GRAPHICS,
-                pipeline_layout,
-                0,
-                &descriptor_sets,
-                &[],
-            );
-            cmd.bind_vertex_buffers(0, &[prim.vertex_buffer.buffer()], &[0]);
+            ctx.bind_descriptor_sets(&(scene_set, proxy_set, material_set));
+            ctx.bind_vertex_buffer(&prim.vertex_buffer);
             cmd.bind_index_buffer(prim.index_buffer.buffer(), 0, vk::IndexType::UINT32);
             cmd.draw_indexed(prim.index_count, 1, 0, 0, 0);
         }
         Ok(())
+    }
+
+    fn create_fallback_material(
+        device: &RenderDevice,
+        material_alloc: &mut DescriptorAllocator<MaterialSet>,
+    ) -> Result<(Material, Texture)> {
+        let white = gltf::image::Data {
+            pixels: vec![255, 255, 255, 255],
+            format: gltf::image::Format::R8G8B8A8,
+            width: 1,
+            height: 1,
+        };
+        let texture = Image::upload_texture(device, &white)?;
+        let set = material_alloc.allocate()?;
+
+        DescriptorWriter::new(&device.device)
+            .combined_image_sampler(&set, 0, texture.image.view(), texture.sampler)
+            .flush();
+
+        Ok((
+            Material {
+                base_color: None,
+                set,
+            },
+            texture,
+        ))
     }
 
     fn load_model(&mut self, handle: &dirk_assets::Handle<dirk_assets::Model>) -> Result<()> {
@@ -256,36 +280,45 @@ impl ModelRegistry {
     ) -> Result<Vec<Handle<Material>>> {
         let mut pending = Vec::with_capacity(materials.len());
 
-        for (material_index, mat) in materials.into_iter().enumerate() {
+        for mat in materials {
             let set = self.material_alloc.allocate()?;
-            let tex_index = mat
+            let base_color = mat
                 .pbr_metallic_roughness()
                 .base_color_texture()
-                .ok_or(Error::MissingBaseColorTexture(material_index))?
-                .texture()
-                .source()
-                .index();
-            let tex_handle = texture_refs
-                .get(tex_index)
-                .copied()
-                .ok_or(Error::TextureIndexOutOfRange(tex_index))?;
-            let tex = &self.textures[*tex_handle];
-            pending.push((tex_handle, set, tex.image.view(), tex.sampler));
+                .map(|texture| {
+                    let tex_index = texture.texture().source().index();
+                    texture_refs
+                        .get(tex_index)
+                        .copied()
+                        .ok_or(Error::TextureIndexOutOfRange(tex_index))
+                })
+                .transpose()?;
+
+            let (view, sampler) = base_color.map_or_else(
+                || {
+                    (
+                        self.fallback_texture.image.view(),
+                        self.fallback_texture.sampler,
+                    )
+                },
+                |tex_handle| {
+                    let tex = &self.textures[*tex_handle];
+                    (tex.image.view(), tex.sampler)
+                },
+            );
+            pending.push((base_color, set, view, sampler));
         }
 
         let mut writer = DescriptorWriter::new(&self.device.device);
         for (_, set, view, sampler) in &pending {
-            writer = writer.combined_image_sampler(set, *view, *sampler);
+            writer = writer.combined_image_sampler(set, 0, *view, *sampler);
         }
         writer.flush();
 
         Ok(pending
             .into_iter()
-            .map(|(tex_handle, set, _, _)| {
-                Handle::new(self.materials.insert(Material {
-                    base_color: tex_handle,
-                    set,
-                }))
+            .map(|(base_color, set, _, _)| {
+                Handle::new(self.materials.insert(Material { base_color, set }))
             })
             .collect())
     }
@@ -357,7 +390,7 @@ impl ModelRegistry {
         let mut texture_handles = HashSet::new();
         for material_handle in material_handles {
             if let Some(material) = self.materials.remove(*material_handle) {
-                texture_handles.insert(material.base_color);
+                texture_handles.extend(material.base_color);
             }
         }
 

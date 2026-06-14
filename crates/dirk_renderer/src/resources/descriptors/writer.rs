@@ -2,10 +2,9 @@
 
 use ash::vk;
 
-use super::{
-    layout_types::{CombinedImageSamplerLayout, UniformBufferLayout},
-    set::DescriptorSet,
-};
+use crate::resources::descriptors::layouts::SetLayout;
+
+use super::set::DescriptorSet;
 
 enum WriteOp {
     UniformBuffer {
@@ -40,15 +39,17 @@ impl<'dev> DescriptorWriter<'dev> {
     }
 
     /// Adds a uniform-buffer descriptor write.
-    pub fn uniform_buffer<L: UniformBufferLayout>(
+    pub fn uniform_buffer<L: SetLayout>(
         mut self,
         set: &DescriptorSet<L>,
+        binding: u32,
         buffer: vk::Buffer,
         range: vk::DeviceSize,
     ) -> Self {
+        debug_assert_binding::<L>(binding, vk::DescriptorType::UNIFORM_BUFFER);
         self.ops.push(WriteOp::UniformBuffer {
             set: set.raw(),
-            binding: L::BINDING,
+            binding,
             buffer,
             offset: 0,
             range,
@@ -57,15 +58,17 @@ impl<'dev> DescriptorWriter<'dev> {
     }
 
     /// Adds a combined image sampler descriptor write.
-    pub fn combined_image_sampler<L: CombinedImageSamplerLayout>(
+    pub fn combined_image_sampler<L: SetLayout>(
         mut self,
         set: &DescriptorSet<L>,
+        binding: u32,
         view: vk::ImageView,
         sampler: vk::Sampler,
     ) -> Self {
+        debug_assert_binding::<L>(binding, vk::DescriptorType::COMBINED_IMAGE_SAMPLER);
         self.ops.push(WriteOp::CombinedImageSampler {
             set: set.raw(),
-            binding: L::BINDING,
+            binding,
             view,
             sampler,
             image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
@@ -143,5 +146,25 @@ impl<'dev> DescriptorWriter<'dev> {
         unsafe {
             self.device.update_descriptor_sets(&writes, &[]);
         }
+    }
+}
+
+fn debug_assert_binding<L: SetLayout>(binding: u32, descriptor_type: vk::DescriptorType) {
+    if cfg!(debug_assertions) {
+        let Some(layout_binding) = L::BINDINGS
+            .iter()
+            .find(|layout_binding| layout_binding.binding == binding)
+        else {
+            panic!("descriptor binding {binding} does not exist in layout");
+        };
+
+        debug_assert_eq!(
+            layout_binding.descriptor_type, descriptor_type,
+            "descriptor binding {binding} has incompatible descriptor type"
+        );
+        debug_assert!(
+            layout_binding.descriptor_count >= 1,
+            "descriptor binding {binding} must have at least one descriptor"
+        );
     }
 }

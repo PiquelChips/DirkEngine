@@ -19,7 +19,7 @@ use gpu_allocator::{
 use parking_lot::Mutex;
 
 use crate::{
-    DescriptorLayouts, MAX_FRAMES_IN_FLIGHT, RendererProperties, Result,
+    MAX_FRAMES_IN_FLIGHT, RendererProperties, Result,
     resources::{
         command_pool::{CommandPool, Graphics, Transfer},
         queues::Queues,
@@ -52,8 +52,6 @@ pub struct RenderDeviceInner {
     /// For single use buffers.
     /// Used for mip generation.
     pub graphics_pool: CommandPool<Graphics>,
-    /// All the descriptor layouts used in the renderer.
-    pub layouts: DescriptorLayouts,
     pub properties: RendererProperties,
 
     #[cfg(validation)]
@@ -95,9 +93,6 @@ impl RenderDevice {
         // SWAP CHAIN
         let swapchain_loader = swapchain::Device::new(&instance, &device);
 
-        // LAYOUTS
-        let layouts = DescriptorLayouts::create(&device)?;
-
         // QUEUES
         let queues = Queues::new(&instance, &device, &properties.queue_family_indices);
 
@@ -121,7 +116,6 @@ impl RenderDevice {
             queues,
             transfer_pool,
             graphics_pool,
-            layouts,
             properties,
             allocator: Some(Mutex::new(allocator)),
             deletion_queue: Mutex::new(DeletionQueue::new(
@@ -178,7 +172,6 @@ impl RenderDeviceInner {
 
 impl Drop for RenderDeviceInner {
     fn drop(&mut self) {
-        self.layouts.destroy(&self.device);
         self.graphics_pool.destroy();
         self.transfer_pool.destroy();
 
@@ -205,6 +198,7 @@ pub enum Garbage {
     Sampler(vk::Sampler),
     Pipeline(vk::Pipeline),
     PipelineLayout(vk::PipelineLayout),
+    DescriptorSetLayout(vk::DescriptorSetLayout),
     DescriptorSet {
         pool: vk::DescriptorPool,
         set: vk::DescriptorSet,
@@ -214,6 +208,7 @@ pub enum Garbage {
 
     Swapchain(vk::SwapchainKHR),
     Surface(vk::SurfaceKHR),
+    Shader(vk::ShaderModule),
 }
 
 struct PendingDeletion {
@@ -282,6 +277,9 @@ impl Garbage {
                 Self::Sampler(s) => device.destroy_sampler(s, None),
                 Self::Pipeline(p) => device.destroy_pipeline(p, None),
                 Self::PipelineLayout(l) => device.destroy_pipeline_layout(l, None),
+                Self::DescriptorSetLayout(layout) => {
+                    device.destroy_descriptor_set_layout(layout, None);
+                }
                 Self::DescriptorSet { pool, set } => {
                     let _ = device.free_descriptor_sets(pool, &[set]);
                 }
@@ -293,6 +291,7 @@ impl Garbage {
                 Self::Swapchain(swapchain) => render_device
                     .swapchain_loader
                     .destroy_swapchain(swapchain, None),
+                Self::Shader(shader) => device.destroy_shader_module(shader, None),
             }
         }
     }

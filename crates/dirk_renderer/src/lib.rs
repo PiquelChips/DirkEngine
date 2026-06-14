@@ -15,21 +15,21 @@ use ash::ext::debug_utils;
 #[cfg(platform_linux)]
 use ash::khr::wayland_surface;
 use ash::{
-    Device, Entry,
+    Entry,
     khr::{surface, swapchain},
     vk,
 };
 
+use dirk_platform::{PlatformEvent, WindowEvent, WindowId};
 use dirk_player::PlayerId;
+use dirk_universe::{Universe, UniverseBuilder};
+use dirk_utils::Version;
 use tracing::{debug, info};
 
-use dirk_platform::{PlatformEvent, PlatformWindows, WindowEvent, WindowId};
-use dirk_universe::{Universe, UniverseBuilder};
+use dirk_platform::PlatformWindows;
 
 mod utils;
-use dirk_utils::Version;
-use resources::descriptors::DescriptorLayouts;
-use utils::{Frame, RendererProperties, Vertex, make_version};
+use utils::{Frame, RendererProperties, make_version};
 
 mod errors;
 #[cfg(feature = "editor")]
@@ -68,6 +68,7 @@ mod init;
 mod models;
 mod physical_device;
 mod pipeline;
+mod shaders;
 
 mod frame_graph;
 
@@ -646,15 +647,6 @@ impl Renderer {
             .unnormalized_coordinates(false);
 
         Ok(unsafe { device.device.create_sampler(&sampler_info, None)? })
-    }
-
-    fn create_shader_module(
-        device: &Device,
-        shader: &'static dirk_shaders::Shader,
-    ) -> Result<vk::ShaderModule> {
-        let code = shader.code_as_u32();
-        let info = vk::ShaderModuleCreateInfo::default().code(code.as_slice());
-        Ok(unsafe { device.create_shader_module(&info, None)? })
     }
 
     fn required_instance_extensions() -> Vec<*const i8> {

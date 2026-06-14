@@ -7,8 +7,8 @@ repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
 
-[build-dependencies]
-cargo-gpu-install.workspace = true
+[dependencies]
+glam.workspace = true
 
 [lints]
 workspace = true

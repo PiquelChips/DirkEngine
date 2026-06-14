@@ -39,6 +39,13 @@ egui = { workspace = true, optional = true }
 egui-ash-renderer = { workspace = true, optional = true }
 
 [build-dependencies]
+cargo-gpu-install.workspace = true
+anyhow.workspace = true
+naga.workspace = true
+rspirv-reflect.workspace = true
+quote.workspace = true
+proc-macro2.workspace = true
+
 dirk_build.workspace = true
 
 [features]
