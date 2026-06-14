@@ -16,8 +16,8 @@ mod handle;
 use handle::AssetRef;
 pub use handle::Handle;
 
-use ::dirk_events::{Consumer, Dispatcher, EventManager};
 use dirk_engine::{EngineBuilder, EngineHandle, EnginePlugin, Subsystem};
+use dirk_events::{Consumer, Dispatcher, EventManager};
 use dirk_threads::WorkerPool;
 use parking_lot::{Mutex, RwLock};
 use std::{
