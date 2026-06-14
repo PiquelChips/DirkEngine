@@ -492,6 +492,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "dirk_editor"
+version = "0.1.0"
+
+[[package]]
+name = "dirk_engine"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "dirk_build",
+ "dirk_events",
+ "dirk_threads",
+ "dirk_universe",
+ "dirk_utils",
+ "parking_lot",
+ "piquel-log",
+ "thiserror 2.0.18",
+ "tracing",
+]
+
+[[package]]
 name = "dirk_events"
 version = "0.1.0"
 dependencies = [
