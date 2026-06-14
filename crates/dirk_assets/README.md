@@ -11,6 +11,8 @@ engine. It provides:
   data; the last [drop] triggers an [`AssetUnloaded`] event.
 - **[`AssetRegistry`]** — scans the asset directory at startup, validates
   every `.dirkasset` descriptor, and vends [`Handle<T>`]s on demand.
+- **[`AssetsPlugin`]** — installs the registry as an engine subsystem and
+  publishes an `AssetRegistry` resource for other subsystem factories.
 
 # Asset file format
 
@@ -28,7 +30,20 @@ references. Example for a model:
 The `meta.asset_type` field determines which config section is used. Each
 asset type has its own optional config object (currently only `"model"`).
 
-# Quick start
+# Engine integration
+
+Most applications should register `AssetsPlugin` with `EngineBuilder`. The
+plugin initializes `AssetRegistry`, publishes it as a resource, and ticks it
+once per engine frame.
+
+```rust
+# fn main() -> anyhow::Result<()> {
+let mut builder = dirk_engine::Engine::builder();
+builder.with_plugin(dirk_assets::AssetsPlugin)?;
+# Ok(()) }
+```
+
+# Manual registry usage
 
 ```rust
 use dirk_assets::{AssetRegistry, AssetHandle, AssetType, AssetLoaded, AssetUnloaded, Model};

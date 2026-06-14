@@ -24,12 +24,13 @@ piquel-log.workspace = true
 dirk_threads.workspace = true
 dirk_utils.workspace = true
 dirk_events.workspace = true
-dirk_platform.workspace = true
-dirk_renderer.workspace = true
 dirk_universe.workspace = true
 dirk_world.workspace = true
-dirk_assets.workspace = true
 dirk_player.workspace = true
+dirk_engine.workspace = true
+dirk_platform.workspace = true
+dirk_renderer.workspace = true
+dirk_assets.workspace = true
 
 [build-dependencies]
 dirk_build.workspace = true
@@ -44,7 +45,7 @@ rustdoc-args = ["-Zunstable-options", "--cfg", "docsrs"]
 [features]
 default = ["editor"]
 
-editor = ["dirk_renderer/editor"]
+editor = ["dirk_engine/editor", "dirk_renderer/editor"]
 
 # WORKSPACE CONFIGURATION
 
@@ -93,6 +94,7 @@ dirk_assets   = { version = "0.1.0", path = "crates/dirk_assets" }
 dirk_world    = { version = "0.1.0", path = "crates/dirk_world" }
 dirk_universe = { version = "0.1.0", path = "crates/dirk_universe" }
 dirk_player   = { version = "0.1.0", path = "crates/dirk_player" }
+dirk_engine   = { version = "0.1.0", path = "crates/dirk_engine" }
 
 dirk_shaders  = { version = "0.1.0", path = "crates/dirk_shaders" }
 

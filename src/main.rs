@@ -1,23 +1,22 @@
-//! This is the main entrypoint crate. No real logic is contained here,
-//! just engine init & tick looping
+//! Entrypoint for exercising the new plugin/subsystem engine runtime.
 
 use anyhow::Context;
-use dirkengine::engine::ExitState;
 use tracing::error;
 
 fn run() -> anyhow::Result<()> {
-    let mut engine = dirkengine::engine::Engine::init().context("engine init")?;
-    engine.start().context("start engine")?;
-    while matches!(engine.tick(), ExitState::Running) {}
+    let mut builder = dirk_engine::Engine::builder();
 
-    match engine.exit_state() {
-        ExitState::Running => unreachable!("engine loop only stops once exit is requested"),
-        ExitState::Requested => Ok(()),
-        ExitState::Error(err) => {
-            error!("{err:#}");
-            Ok(())
-        }
-    }
+    builder.with_plugin(dirkengine::assets::AssetsPlugin)?;
+    builder.with_plugin(dirkengine::platform::PlatformPlugin)?;
+    builder.with_plugin(dirkengine::player::PlayerPlugin)?;
+    builder.with_plugin(dirkengine::world::WorldPlugin)?;
+    builder.with_plugin(dirkengine::renderer::RendererPlugin)?;
+    builder.with_plugin(dirkengine::demo::DemoPlugin)?;
+
+    let engine = builder.build().context("build new engine")?;
+
+    engine.run().context("run new engine")?;
+    Ok(())
 }
 
 fn main() {
