@@ -8,7 +8,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// All errors that could be emitted by the engine.
 #[derive(Error, Debug)]
 pub enum Error {
-    /// An error occured when initializing the logger
+    /// An error occurred when initializing the logger.
     #[error("failed to initialize logging")]
     LoggerFailure(#[from] piquel_log::InitError),
     /// When a plugin failed to register its build-time pieces.
@@ -46,43 +46,43 @@ pub enum Error {
         /// The requested resource type name.
         type_name: &'static str,
     },
-    /// When an engine system failed to tick
-    #[error("system {name} failed tick: {source}")]
+    /// When an engine subsystem failed to tick.
+    #[error("subsystem {name} failed tick: {source}")]
     SubsystemFailedTick {
-        /// The name of the system
+        /// The name of the subsystem.
         name: &'static str,
-        /// The error that caused the failure
+        /// The error that caused the failure.
         #[source]
         source: anyhow::Error,
     },
-    /// When an engine system failed to start.
-    #[error("system {name} failed start: {source}")]
+    /// When an engine subsystem failed to start.
+    #[error("subsystem {name} failed start: {source}")]
     SubsystemFailedStart {
-        /// The name of the system.
+        /// The name of the subsystem.
         name: &'static str,
         /// The error that caused the failure.
         #[source]
         source: anyhow::Error,
     },
-    /// When an engine system failed to shut down.
-    #[error("system {name} failed shutdown: {source}")]
+    /// When an engine subsystem failed to shut down.
+    #[error("subsystem {name} failed shutdown: {source}")]
     SubsystemFailedShutdown {
-        /// The name of the system.
+        /// The name of the subsystem.
         name: &'static str,
         /// The error that caused the failure.
         #[source]
         source: anyhow::Error,
     },
-    /// When an engine system failed to initialize
-    #[error("system failed to initialize: {0}")]
+    /// When an engine subsystem failed to initialize.
+    #[error("subsystem failed to initialize: {0}")]
     SubsystemFailedInit(#[source] anyhow::Error),
-    /// An error occured while starting
+    /// An error occurred while starting.
     #[error("engine failed to start: {0}")]
     StartFailed(#[source] anyhow::Error),
-    /// An error occured while ticking
+    /// An error occurred while ticking.
     #[error("engine failed while ticking: {0}")]
     TickFailed(#[source] anyhow::Error),
-    /// An error occured while shutting down
+    /// An error occurred while shutting down.
     #[error("engine failed while shutting down: {0}")]
     ShutdownFailed(#[source] anyhow::Error),
 }

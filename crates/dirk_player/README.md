@@ -2,11 +2,15 @@
 
 This crate manages player identity and lifecycle.
 
+Register `PlayerPlugin` with an `EngineBuilder` to install player management
+and movement ECS systems. The plugin publishes a `PlayerRegistry` resource that
+other subsystem factories can clone.
+
 `dirk_player` does not own ECS entities or camera state directly. Instead, it
 provides:
 
 - `PlayerId`, a component that links a game entity to a player
-- `PlayerManager`, which allocates and tracks live players
+- `PlayerRegistry`, which allocates and tracks live players
 - `PlayerSpawned` and `PlayerDespawned` events for lifecycle integration
 
 Game code is responsible for responding to those events by spawning or

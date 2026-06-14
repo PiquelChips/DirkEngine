@@ -14,10 +14,10 @@
 //!   Plugins are never started or ticked by the runtime.
 //! - **Subsystems** are runtime lifecycle objects. They own mutable feature
 //!   state and are started, ticked, and shut down by the engine loop.
-//! - **Resources** are immutable, cloneable handles published while subsystems
-//!   are being built. They let later subsystem factories discover capabilities
-//!   created by earlier subsystem factories without transferring mutable
-//!   ownership out of the subsystem that owns the runtime behavior.
+//! - **Resources** are cloneable handles published while subsystems are being
+//!   built. They let later subsystem factories discover capabilities created by
+//!   earlier subsystem factories without transferring runtime ownership out of
+//!   the subsystem that drives the behavior.
 //!
 //! Plugin registration is idempotent by concrete plugin type. This lets plugins
 //! declare their dependencies directly:
@@ -47,11 +47,11 @@
 //! builder stores explicit order lists for plugins and subsystems, so runtime
 //! behavior follows first successful registration rather than hash-map order.
 //!
-//! Resources are intentionally read-only handles. They should be cheap to clone
-//! and should not become the primary owner of mutable runtime behavior. If a
-//! feature needs mutable state, keep that state in the subsystem and publish a
-//! small synchronized handle only when another subsystem factory needs to find
-//! it during engine construction.
+//! Resources are intended to be small handles. They should be cheap to clone and
+//! should not become the primary owner of mutable runtime behavior. If a feature
+//! needs mutable state, keep that state in the subsystem and publish a small
+//! synchronized handle only when another subsystem factory needs to find it
+//! during engine construction.
 //!
 //! Resource availability is order-dependent: a resource published by one
 //! subsystem factory is immediately available to later subsystem factories, but
@@ -225,11 +225,11 @@ impl Engine {
             .map_err(|err| Error::ShutdownFailed(err.into()))
     }
 
-    /// Advances the engine by one tick.
+    /// Starts the engine if needed, then advances it by one tick.
     ///
     /// # Errors
     ///
-    /// Returns an error if a subsystem tick fails.
+    /// Returns an error if a subsystem fails to start or tick.
     pub fn tick(&mut self) -> Result<EngineStatus> {
         if !self.started {
             self.start()?;

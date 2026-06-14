@@ -49,14 +49,14 @@ impl EnginePlugin for PlayerPlugin {
 /// A lightweight, copyable identifier for a player.
 ///
 /// Implements [`Component`] so that ECS entities can declare ownership by
-/// a player. This is the canonical link between [`PlayerManager`] and the
+/// a player. This is the canonical link between [`PlayerRegistry`] and the
 /// ECS: the manager never stores entity references; instead, game code attaches
 /// a `PlayerId` component when spawning the player's entity.
 ///
 /// # ECS Relationship
 ///
 /// ```text
-/// PlayerManager                Universe
+/// PlayerRegistry               Universe
 ///  └─ PlayerHandle(id=1) ◄──── Entity { PlayerId(1), Transform, Camera, ... }
 /// ```
 ///
@@ -93,8 +93,8 @@ impl AddAssign<u32> for PlayerId {
 /// and their in-world entity is established by the game in response to
 /// [`PlayerSpawned`].
 ///
-/// Access handles via [`PlayerManager::get_player`] or
-/// [`PlayerManager::get_player_mut`].
+/// Access handles via [`PlayerRegistry::get_player`] or
+/// [`PlayerRegistry::get_player_mut`].
 pub struct PlayerHandle {
     id: PlayerId,
     window: WindowId,
@@ -140,9 +140,9 @@ impl PlayerHandle {
 /// remove_player(id)    ──► PlayerDespawned    — game code despawns ECS entity
 /// ```
 ///
-/// This crate currently tracks only player IDs and their associated windows.
-/// Input routing, viewport management, and camera updates are handled outside
-/// of `dirk_player`.
+/// The public [`PlayerRegistry`] exposes player creation and lookup, while this
+/// internal subsystem consumes input events and updates per-frame input state
+/// for player movement systems.
 struct PlayerManager {
     registry: PlayerRegistry,
     input_consumer: dirk_events::Consumer<InputEvent>,

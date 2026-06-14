@@ -13,8 +13,8 @@
 //! Subsystem factories receive an [`EngineBuildContext`]. A factory should
 //! publish an [`EngineResource`] when later subsystem factories need a stable,
 //! cloneable handle to something the subsystem creates. The subsystem remains
-//! the owner of mutable runtime state; resources are read-only handles used for
-//! build-time discovery.
+//! the owner of mutable runtime state; resources are build-time discovery
+//! handles and may use interior synchronization when shared access is needed.
 //!
 //! [`EngineBuildContext`]: crate::EngineBuildContext
 
@@ -43,14 +43,14 @@ pub trait EnginePlugin {
     fn build(&self, builder: &mut EngineBuilder) -> anyhow::Result<()>;
 }
 
-/// Marker trait for immutable, cloneable handles published during engine build.
+/// Marker trait for cloneable handles published during engine build.
 ///
 /// Resources are type-driven and are stored by their concrete type. They should
 /// be cheap to clone and safe to share across threads. A resource should not be
 /// the primary owner of mutable runtime behavior; the subsystem that creates it
 /// should keep that state and publish only the handle that other subsystem
-/// factories need. Interior synchronization is acceptable when it is necessary
-/// to make the handle safe.
+/// factories need. Interior synchronization is acceptable when shared access is
+/// necessary.
 pub trait EngineResource: Clone + Send + Sync + 'static {}
 
 impl<T> EngineResource for T where T: Clone + Send + Sync + 'static {}

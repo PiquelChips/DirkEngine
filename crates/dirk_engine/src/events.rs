@@ -2,11 +2,14 @@
 
 use dirk_events::Event;
 
-/// An event to request to the engine to exit.
+/// An event emitted after the engine has accepted an exit request.
 ///
-/// This event is used by various engine systems.
-/// It can be used by the platform to signal to the engine that the windows
-/// have all been closed. It is also used when users manually exit the engine.
+/// Systems request exit through [`EngineHandle::exit`] or
+/// [`EngineHandle::exit_with_error`]. The engine dispatches this event once it
+/// transitions into an exiting state.
+///
+/// [`EngineHandle::exit`]: crate::EngineHandle::exit
+/// [`EngineHandle::exit_with_error`]: crate::EngineHandle::exit_with_error
 #[derive(Debug, Clone, Event)]
 #[event("Exiting")]
 pub struct Exiting;

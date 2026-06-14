@@ -319,7 +319,7 @@ impl DirkAsset {
 /// # let workers = dirk_threads::WorkerPool::new("test");
 /// # let events = dirk_events::EventManager::new(workers.clone());
 /// # let registry = dirk_assets::AssetRegistry::init(&events, workers).unwrap();
-/// // Must be called once per frame, *after* EventManager::dispatch_all.
+/// // Must be called once per frame.
 /// registry.tick();
 /// # Ok(()) }
 /// ```
@@ -470,10 +470,9 @@ impl AssetRegistry {
 
     /// Processes deferred asset-unload notifications and emits public events.
     ///
-    /// Must be called **exactly once per frame**, after
-    /// [`EventManager::dispatch_all`]. Skipping this call means
-    /// [`AssetUnloaded`] events are never delivered, causing potential
-    /// memory leaks (e.g. the renderer cannot free GPU resources).
+    /// Must be called **exactly once per frame**. Skipping this call means
+    /// [`AssetUnloaded`] events are never delivered, causing potential memory
+    /// leaks (e.g. the renderer cannot free GPU resources).
     pub fn tick(&self) {
         let unloaded: Vec<_> = self
             .inner
