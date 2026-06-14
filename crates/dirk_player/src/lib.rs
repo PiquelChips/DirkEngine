@@ -7,12 +7,12 @@ use std::{
     sync::Arc,
 };
 
+use dirk_engine::{EngineBuilder, EngineHandle, EnginePlugin, Subsystem};
 use dirk_events::{Dispatcher, EventManager};
 use dirk_platform::{InputEvent, WindowId};
-use dirk_universe::{UniverseBuilder, components::Component};
+use dirk_universe::components::Component;
 use input::InputContext;
-use movement::PlayerMovementSystem;
-use parking_lot::RwLock;
+use parking_lot::{MappedRwLockReadGuard, MappedRwLockWriteGuard, RwLock, RwLockReadGuard};
 
 mod events;
 pub mod input;
@@ -20,19 +20,43 @@ mod movement;
 pub use events::{PlayerDespawned, PlayerSpawned};
 pub use movement::{DEFAULT_PLAYER_LOOK_SENSITIVITY, DEFAULT_PLAYER_MOVE_SPEED};
 
+use crate::movement::PlayerMovementSystem;
+
+/// Registers player management as an engine subsystem.
+pub struct PlayerPlugin;
+
+impl EnginePlugin for PlayerPlugin {
+    fn name(&self) -> &'static str {
+        "player"
+    }
+
+    fn build(&self, builder: &mut EngineBuilder) -> anyhow::Result<()> {
+        builder.add_subsystem(|ctx| {
+            let players = PlayerManager::new(ctx.events());
+            ctx.add_resource(players.registry())?;
+            ctx.extend_universe(
+                dirk_universe::Universe::builder()
+                    .with_ticking_system(PlayerMovementSystem::new(players.registry.input_state())),
+            );
+            Ok(players)
+        });
+        Ok(())
+    }
+}
+
 // PlayerId
 
 /// A lightweight, copyable identifier for a player.
 ///
 /// Implements [`Component`] so that ECS entities can declare ownership by
-/// a player. This is the canonical link between [`PlayerManager`] and the
+/// a player. This is the canonical link between [`PlayerRegistry`] and the
 /// ECS: the manager never stores entity references; instead, game code attaches
 /// a `PlayerId` component when spawning the player's entity.
 ///
 /// # ECS Relationship
 ///
 /// ```text
-/// PlayerManager                Universe
+/// PlayerRegistry               Universe
 ///  └─ PlayerHandle(id=1) ◄──── Entity { PlayerId(1), Transform, Camera, ... }
 /// ```
 ///
@@ -69,8 +93,8 @@ impl AddAssign<u32> for PlayerId {
 /// and their in-world entity is established by the game in response to
 /// [`PlayerSpawned`].
 ///
-/// Access handles via [`PlayerManager::get_player`] or
-/// [`PlayerManager::get_player_mut`].
+/// Access handles via [`PlayerRegistry::get_player`] or
+/// [`PlayerRegistry::get_player_mut`].
 pub struct PlayerHandle {
     id: PlayerId,
     window: WindowId,
@@ -116,42 +140,93 @@ impl PlayerHandle {
 /// remove_player(id)    ──► PlayerDespawned    — game code despawns ECS entity
 /// ```
 ///
-/// This crate currently tracks only player IDs and their associated windows.
-/// Input routing, viewport management, and camera updates are handled outside
-/// of `dirk_player`.
-pub struct PlayerManager {
+/// The public [`PlayerRegistry`] exposes player creation and lookup, while this
+/// internal subsystem consumes input events and updates per-frame input state
+/// for player movement systems.
+struct PlayerManager {
+    registry: PlayerRegistry,
+    input_consumer: dirk_events::Consumer<InputEvent>,
+}
+
+/// Shared player registry owned by the player subsystem.
+#[derive(Clone)]
+pub struct PlayerRegistry {
+    state: Arc<RwLock<PlayerState>>,
+    input_state: PlayerInputState,
+    spawned_dispatcher: Dispatcher<PlayerSpawned>,
+    despawned_dispatcher: Dispatcher<PlayerDespawned>,
+}
+
+#[derive(Default)]
+struct PlayerState {
     // TODO: setup generation based player allocation
     next_id: PlayerId,
     players: HashMap<PlayerId, PlayerHandle>,
-    input_state: PlayerInputState,
-    input_consumer: dirk_events::Consumer<InputEvent>,
-
-    spawned_dispatcher: Dispatcher<PlayerSpawned>,
-    despawned_dispatcher: Dispatcher<PlayerDespawned>,
 }
 
 impl PlayerManager {
     /// Creates a new [`PlayerManager`], registering its event channels with
     /// `events`.
     #[must_use]
-    pub fn new(events: &EventManager) -> Self {
-        Self {
-            next_id: PlayerId::default(),
-            players: HashMap::new(),
+    fn new(events: &EventManager) -> Self {
+        let registry = PlayerRegistry {
+            state: Arc::default(),
             input_state: PlayerInputState::default(),
-            input_consumer: events.subscribe(),
             spawned_dispatcher: events.register(),
             despawned_dispatcher: events.register(),
+        };
+
+        Self {
+            registry,
+            input_consumer: events.subscribe(),
         }
     }
 
-    /// Returns a [`UniverseBuilder`] with player-related ECS systems.
+    /// Returns a shared registry for creating and removing players.
     #[must_use]
-    pub fn universe_builder(&self) -> UniverseBuilder {
-        dirk_universe::Universe::builder()
-            .with_ticking_system(PlayerMovementSystem::new(self.input_state.clone()))
+    pub fn registry(&self) -> PlayerRegistry {
+        self.registry.clone()
+    }
+}
+
+impl Subsystem for PlayerManager {
+    fn name(&self) -> &'static str {
+        "player"
     }
 
+    /// Ticks internal player state.
+    fn tick(
+        &mut self,
+        _delta_time: f64,
+        _handle: &EngineHandle,
+        _universe: &mut dirk_universe::Universe,
+    ) -> anyhow::Result<()> {
+        let events = self.input_consumer.consume_all().collect::<Vec<_>>();
+        let mut state = self.registry.state.write();
+        for event in events {
+            state
+                .players
+                .values_mut()
+                .filter(|p| p.window == *event.id())
+                .for_each(|p| p.input.handle_event(&event));
+        }
+        for player in state.players.values() {
+            self.registry.input_state.set(
+                player.id,
+                PlayerInputFrame {
+                    movement: player.movement_input(),
+                    look: player.input.look_input(),
+                },
+            );
+        }
+        for player in state.players.values_mut() {
+            player.input.clear_frame_state();
+        }
+        Ok(())
+    }
+}
+
+impl PlayerRegistry {
     /// Returns a shared read handle for systems that consume player input.
     #[must_use]
     pub fn input_state(&self) -> PlayerInputState {
@@ -160,24 +235,25 @@ impl PlayerManager {
 
     /// Creates a new player assigned to `window` and fires [`PlayerSpawned`].
     ///
-    /// The player is not placed in any world. Game code should respond to
-    /// [`PlayerSpawned`] by spawning an ECS entity with a [`PlayerId`]
-    /// component (and whatever other components are appropriate — `Transform`,
-    /// `Camera`, etc.).
-    ///
     /// # Returns
     ///
     /// The [`PlayerId`] of the new player.
-    pub fn new_player(&mut self, window: WindowId) -> PlayerId {
-        let id = self.allocate_id();
-        self.players.insert(
-            id,
-            PlayerHandle {
+    #[must_use]
+    pub fn new_player(&self, window: WindowId) -> PlayerId {
+        let id = {
+            let mut state = self.state.write();
+            let id = Self::allocate_id(&mut state);
+            state.players.insert(
                 id,
-                window,
-                input: InputContext::new(),
-            },
-        );
+                PlayerHandle {
+                    id,
+                    window,
+                    input: InputContext::new(),
+                },
+            );
+            id
+        };
+
         self.input_state.set(
             id,
             PlayerInputFrame {
@@ -191,61 +267,64 @@ impl PlayerManager {
     }
 
     /// Removes the player with `id` and fires [`PlayerDespawned`].
-    ///
-    /// If the player does not exist this is a no-op.
-    ///
-    /// The game code is responsible for despawning the associated ECS entity
-    /// in response to [`PlayerDespawned`].
-    pub fn remove_player(&mut self, id: PlayerId) {
-        if self.players.remove(&id).is_some() {
+    pub fn remove_player(&self, id: PlayerId) {
+        if self.state.write().players.remove(&id).is_some() {
             self.input_state.remove_player(id);
             self.despawned_dispatcher.dispatch(PlayerDespawned { id });
         }
     }
 
-    /// Returns a reference to the player with `id`, or `None`.
+    /// Returns a guard for the player with `id`, or `None`.
+    ///
+    /// # Panics
+    ///
+    /// Panics only if the player disappears while the same read lock is held,
+    /// which would indicate internal registry corruption.
     #[must_use]
-    pub fn get_player(&self, id: PlayerId) -> Option<&PlayerHandle> {
-        self.players.get(&id)
+    pub fn get_player(&self, id: PlayerId) -> Option<MappedRwLockReadGuard<'_, PlayerHandle>> {
+        let state = self.state.read();
+        if !state.players.contains_key(&id) {
+            return None;
+        }
+
+        Some(RwLockReadGuard::map(state, |state| {
+            state
+                .players
+                .get(&id)
+                .expect("player was checked before mapping guard")
+        }))
     }
 
-    /// Returns a mutable reference to the player with `id`, or `None`.
+    /// Returns a mutable guard for the player with `id`, or `None`.
+    ///
+    /// # Panics
+    ///
+    /// Panics only if the player disappears while the same write lock is held,
+    /// which would indicate internal registry corruption.
     #[must_use]
-    pub fn get_player_mut(&mut self, id: PlayerId) -> Option<&mut PlayerHandle> {
-        self.players.get_mut(&id)
+    pub fn get_player_mut(&self, id: PlayerId) -> Option<MappedRwLockWriteGuard<'_, PlayerHandle>> {
+        let state = self.state.write();
+        if !state.players.contains_key(&id) {
+            return None;
+        }
+
+        Some(parking_lot::RwLockWriteGuard::map(state, |state| {
+            state
+                .players
+                .get_mut(&id)
+                .expect("player was checked before mapping guard")
+        }))
     }
 
-    /// Returns an iterator over all live players.
-    pub fn players(&self) -> impl Iterator<Item = &PlayerHandle> {
-        self.players.values()
+    /// Returns the IDs of all live players.
+    #[must_use]
+    pub fn players(&self) -> Vec<PlayerId> {
+        self.state.read().players.keys().copied().collect()
     }
 
-    /// Ticks internal player state.
-    pub fn tick(&mut self) {
-        let events = self.input_consumer.consume_all().collect::<Vec<_>>();
-        for event in events {
-            self.players
-                .values_mut()
-                .filter(|p| p.window == *event.id())
-                .for_each(|p| p.input.handle_event(&event));
-        }
-        for player in self.players.values() {
-            self.input_state.set(
-                player.id,
-                PlayerInputFrame {
-                    movement: player.movement_input(),
-                    look: player.input.look_input(),
-                },
-            );
-        }
-        for player in self.players.values_mut() {
-            player.input.clear_frame_state();
-        }
-    }
-
-    fn allocate_id(&mut self) -> PlayerId {
-        let id = self.next_id;
-        self.next_id += 1;
+    fn allocate_id(state: &mut PlayerState) -> PlayerId {
+        let id = state.next_id;
+        state.next_id += 1;
         id
     }
 }

@@ -5,7 +5,9 @@ use dirk_platform::WindowId;
 
 use crate::PlayerId;
 
-/// Fired when a new player is created via [`PlayerManager::new_player`].
+/// Fired when a new player is created via [`PlayerRegistry::new_player`].
+///
+/// [`PlayerRegistry::new_player`]: crate::PlayerRegistry::new_player
 ///
 /// Game code should respond by spawning an ECS entity with a [`PlayerId`]
 /// component to link the player to their in-world representation.
@@ -30,7 +32,9 @@ pub struct PlayerSpawned {
     pub window: WindowId,
 }
 
-/// Fired when a player is removed via [`PlayerManager::remove_player`].
+/// Fired when a player is removed via [`PlayerRegistry::remove_player`].
+///
+/// [`PlayerRegistry::remove_player`]: crate::PlayerRegistry::remove_player
 ///
 /// Game code should respond by despawning the ECS entity that carries
 /// this player's [`PlayerId`] component.

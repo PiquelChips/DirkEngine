@@ -10,6 +10,7 @@ use gpu_allocator::{
 };
 
 use crate::resources::device::Garbage;
+use crate::shaders::metadata::VertexInput;
 use crate::{Result, resources::device::RenderDevice};
 
 /// An abstraction around the vulkan buffer.
@@ -154,6 +155,7 @@ impl<Type: BuffType> Drop for Buffer<Type> {
     }
 }
 
+// TODO: see about using uniform buffer binding in generics
 define_buff_type!(Uniform, vk::BufferUsageFlags::UNIFORM_BUFFER);
 
 impl UniformBuffer {
@@ -179,5 +181,31 @@ impl UniformBuffer {
     }
 }
 
-define_buff_type!(Vertex, vk::BufferUsageFlags::VERTEX_BUFFER);
+struct Vertex;
+impl BuffType for Vertex {
+    fn get_usage() -> vk::BufferUsageFlags {
+        vk::BufferUsageFlags::VERTEX_BUFFER
+    }
+}
+
+pub struct VertexBuffer<I: VertexInput> {
+    buff: Buffer<Vertex>,
+    _vert_in: PhantomData<I>,
+}
+
+impl<I: VertexInput> VertexBuffer<I> {
+    pub fn upload_slice(device: &RenderDevice, data: &[I]) -> Result<Self> {
+        let buff = Buffer::<Vertex>::upload_slice(device, data)?;
+
+        Ok(Self {
+            buff,
+            _vert_in: PhantomData,
+        })
+    }
+
+    pub fn buffer(&self) -> vk::Buffer {
+        self.buff.buffer()
+    }
+}
+
 define_buff_type!(Index, vk::BufferUsageFlags::INDEX_BUFFER);

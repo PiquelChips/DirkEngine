@@ -11,9 +11,6 @@ use tracing::trace;
 
 use dirk_threads::WorkerPool;
 
-mod common;
-pub use common::*;
-
 mod tests;
 
 /// The marker trait that every event type must implement.

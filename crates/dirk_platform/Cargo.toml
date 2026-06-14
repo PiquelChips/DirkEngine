@@ -16,8 +16,11 @@ tracing.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 winit.workspace = true
+parking_lot.workspace = true
 
 dirk_events.workspace = true
+dirk_engine.workspace = true
+dirk_universe.workspace = true
 
 glam.workspace = true
 

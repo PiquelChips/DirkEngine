@@ -1,4 +1,9 @@
 # renderer
 
-The Renderer. This monolithic crate handles all the rendering of
-the engine. All of the GPU operations are handled by [ash].
+The renderer owns Vulkan rendering for the engine. GPU operations are handled
+through `ash`.
+
+Register `RendererPlugin` with an `EngineBuilder` to install the renderer
+subsystem and its ECS integration systems. The plugin depends on
+`PlatformPlugin` and `AssetsPlugin`, reads engine metadata for Vulkan
+application info, and renders once per engine tick.

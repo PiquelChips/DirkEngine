@@ -1,19 +1,21 @@
 use std::collections::{HashMap, HashSet};
 
 use ash::vk;
+use dirk_shaders::types::{ProxyUbo, SceneUbo};
 use dirk_universe::{Entity, WorldId};
 use gpu_allocator::MemoryLocation;
 
 use crate::{
     Error, MAX_FRAMES_IN_FLIGHT, Result,
-    frame_graph::{AttachmentInfo, ImportedTexture, RenderGraph, TextureDesc},
+    frame_graph::{AttachmentInfo, RenderGraph, TextureDesc, TextureHandle},
     models::ModelRegistry,
-    pipeline::GraphicsPipeline,
+    pipeline::{MainPipelineSpec, graphics::GraphicsPipeline},
     resources::{
         buffer::UniformBuffer,
         command_pool::CommandBuffer,
         descriptors::{
-            DescriptorAllocator, DescriptorSet, DescriptorWriter, ObjectLayout, SceneLayout,
+            DescriptorAllocator, DescriptorSet, DescriptorWriter,
+            sets::{ObjectSet, SceneSet},
         },
         device::RenderDevice,
     },
@@ -30,25 +32,17 @@ pub struct SceneManager {
 
     // TODO: see about centralising the different pipelines (link with
     // descriptor layouts, ...)
-    graphics_pipeline: GraphicsPipeline,
+    graphics_pipeline: GraphicsPipeline<MainPipelineSpec>,
 
-    scene_alloc: DescriptorAllocator<SceneLayout>,
-    proxy_alloc: DescriptorAllocator<ObjectLayout>,
-}
-
-pub(crate) struct RenderTarget {
-    pub size: vk::Extent2D,
-    pub image: vk::Image,
-    pub view: vk::ImageView,
+    scene_alloc: DescriptorAllocator<SceneSet>,
+    proxy_alloc: DescriptorAllocator<ObjectSet>,
 }
 
 impl SceneManager {
     pub fn init(device: &RenderDevice) -> Result<Self> {
-        let scene_alloc = DescriptorAllocator::<SceneLayout>::new(device, 16)?;
-        let proxy_alloc = DescriptorAllocator::<ObjectLayout>::new(device, 256)?;
-
-        let graphics_pipeline =
-            GraphicsPipeline::build(device, &device.layouts, &device.properties)?;
+        let scene_alloc = DescriptorAllocator::<SceneSet>::new(device, 16)?;
+        let proxy_alloc = DescriptorAllocator::<ObjectSet>::new(device, 256)?;
+        let graphics_pipeline = GraphicsPipeline::build(device)?;
 
         Ok(Self {
             device: device.clone(),
@@ -60,27 +54,18 @@ impl SceneManager {
             proxy_alloc,
         })
     }
-    pub fn render(
-        &self,
-        models: &ModelRegistry,
-        cmd: &CommandBuffer,
+    pub fn render<'a>(
+        &'a self,
+        graph: &mut RenderGraph<'a>,
+        models: &'a ModelRegistry,
         world: WorldId,
-        target: &RenderTarget,
         camera: Entity,
-    ) -> Result<()> {
-        let mut graph = RenderGraph::new();
-        let scene_color = graph.create_texture(TextureDesc {
-            width: target.size.width,
-            height: target.size.height,
-            format: self.device.properties.surface_format.format,
-            usage: vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_SRC,
-            samples: vk::SampleCountFlags::TYPE_1,
-            imported: None,
-        });
-
+        size: vk::Extent2D,
+        target: TextureHandle,
+    ) {
         let depth = graph.create_texture(TextureDesc {
-            width: target.size.width,
-            height: target.size.height,
+            width: size.width,
+            height: size.height,
             format: self.device.properties.depth_format,
             usage: vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
             samples: self.device.properties.msaa_samples,
@@ -90,8 +75,8 @@ impl SceneManager {
         let msaa_color = (self.device.properties.msaa_samples != vk::SampleCountFlags::TYPE_1)
             .then(|| {
                 graph.create_texture(TextureDesc {
-                    width: target.size.width,
-                    height: target.size.height,
+                    width: size.width,
+                    height: size.height,
                     format: self.device.properties.surface_format.format,
                     usage: vk::ImageUsageFlags::TRANSIENT_ATTACHMENT
                         | vk::ImageUsageFlags::COLOR_ATTACHMENT,
@@ -100,74 +85,21 @@ impl SceneManager {
                 })
             });
 
-        let swapchain = graph.import_texture(TextureDesc {
-            width: target.size.width,
-            height: target.size.height,
-            format: self.device.properties.surface_format.format,
-            usage: vk::ImageUsageFlags::TRANSFER_DST,
-            samples: vk::SampleCountFlags::TYPE_1,
-            imported: Some(ImportedTexture {
-                image: target.image,
-                view: target.view,
-                aspect_flags: vk::ImageAspectFlags::COLOR,
-                initial_layout: vk::ImageLayout::UNDEFINED,
-                final_layout: vk::ImageLayout::PRESENT_SRC_KHR,
-            }),
-        });
-
-        let size = target.size;
         let mut pass = graph.add_pass("scene");
         if let Some(msaa_color) = msaa_color {
             pass.write_color_attachment_with_resolve(
                 msaa_color,
-                scene_color,
+                target,
                 AttachmentInfo::clear_color(0., 0., 0., 1.),
             );
         } else {
-            pass.write_color_attachment(scene_color, AttachmentInfo::clear_color(0., 0., 0., 1.));
+            pass.write_color_attachment(target, AttachmentInfo::clear_color(0., 0., 0., 1.));
         }
         pass.write_depth_attachment(depth, AttachmentInfo::clear_discard_depth(1., 0));
         pass.execute(Box::new(move |_, cmd, _| {
             self.record_scene_draws(models, cmd, world, size, camera)
         }));
-
-        // TODO: have copying occur in renderer
-        let mut copy_pass = graph.add_pass("copy scene to swapchain");
-        copy_pass
-            .read_transfer_src(scene_color)
-            .write_transfer_dst(swapchain);
-        copy_pass.execute(Box::new(move |_, cmd, images| {
-            let region = vk::ImageCopy::default()
-                .src_subresource(vk::ImageSubresourceLayers {
-                    aspect_mask: vk::ImageAspectFlags::COLOR,
-                    mip_level: 0,
-                    base_array_layer: 0,
-                    layer_count: 1,
-                })
-                .dst_subresource(vk::ImageSubresourceLayers {
-                    aspect_mask: vk::ImageAspectFlags::COLOR,
-                    mip_level: 0,
-                    base_array_layer: 0,
-                    layer_count: 1,
-                })
-                .extent(vk::Extent3D {
-                    width: size.width,
-                    height: size.height,
-                    depth: 1,
-                });
-
-            cmd.copy_image(
-                images[scene_color.index()].image,
-                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-                images[swapchain.index()].image,
-                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                &[region],
-            );
-            Ok(())
-        }));
-        graph.run(&self.device, cmd)
     }
-
     fn record_scene_draws(
         &self,
         models: &ModelRegistry,
@@ -221,7 +153,7 @@ impl SceneManager {
             proxy.write_ubo(frame);
         }
 
-        self.graphics_pipeline.bind(cmd);
+        let ctx = self.graphics_pipeline.bind(cmd);
 
         // the window size never gets anywhere near 2^23
         #[allow(clippy::cast_precision_loss)]
@@ -242,13 +174,7 @@ impl SceneManager {
                 continue;
             };
 
-            match models.render_model(
-                model,
-                cmd,
-                &scene.sets[frame],
-                &proxy.sets[frame],
-                self.graphics_pipeline.layout(),
-            ) {
+            match models.render_model(model, cmd, &scene.sets[frame], &proxy.sets[frame], &ctx) {
                 Ok(()) | Err(dirk_assets::Error::NotFound(_)) => (),
                 Err(err) => return Err(err.into()),
             }
@@ -337,27 +263,12 @@ impl Drop for SceneManager {
     }
 }
 
-#[derive(Clone, Copy)]
-// fields are read by Vulkan, not us
-#[allow(unused)]
-struct SceneUbo {
-    view: glam::Mat4,
-    proj: glam::Mat4,
-}
-
-#[derive(Clone, Copy)]
-// fields are read by Vulkan, not us
-#[allow(unused)]
-struct ProxyUbo {
-    model: glam::Mat4,
-}
-
 /// Renderer representation of a [`World`].
 struct Scene {
     entities: HashSet<Entity>,
 
     ubo: [UniformBuffer; MAX_FRAMES_IN_FLIGHT],
-    sets: [DescriptorSet<SceneLayout>; MAX_FRAMES_IN_FLIGHT],
+    sets: [DescriptorSet<SceneSet>; MAX_FRAMES_IN_FLIGHT],
 }
 
 impl Scene {
@@ -377,7 +288,7 @@ impl Scene {
 
         let mut writer = DescriptorWriter::new(&manager.device.device);
         for (set, ubo) in sets.iter().zip(&ubo) {
-            writer = writer.uniform_buffer(set, ubo.buffer(), ubo_size);
+            writer = writer.uniform_buffer(set, 0, ubo.buffer(), ubo_size);
         }
         writer.flush();
 
@@ -401,7 +312,7 @@ pub struct SceneProxy {
 
     // Per frame render stuff
     ubo: [UniformBuffer; MAX_FRAMES_IN_FLIGHT],
-    sets: [DescriptorSet<ObjectLayout>; MAX_FRAMES_IN_FLIGHT],
+    sets: [DescriptorSet<ObjectSet>; MAX_FRAMES_IN_FLIGHT],
 }
 
 impl SceneProxy {
@@ -417,7 +328,7 @@ impl SceneProxy {
 
         let mut writer = DescriptorWriter::new(&manager.device.device);
         for (set, ubo) in sets.iter().zip(&ubo) {
-            writer = writer.uniform_buffer(set, ubo.buffer(), size);
+            writer = writer.uniform_buffer(set, 0, ubo.buffer(), size);
         }
         writer.flush();
 

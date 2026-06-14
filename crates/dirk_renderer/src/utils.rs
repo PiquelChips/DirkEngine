@@ -3,6 +3,7 @@ use ash::{Device, vk};
 use crate::{
     physical_device,
     resources::command_pool::{CommandPool, Graphics},
+    shaders::metadata::VertexInput,
 };
 
 #[repr(C)]
@@ -13,40 +14,29 @@ pub struct Vertex {
     pub texcoord: [f32; 2],
 }
 
-impl Vertex {
-    pub const fn binding_description() -> vk::VertexInputBindingDescription {
-        // the size_of::<Self> is far from u32::MAX
-        #[allow(clippy::cast_possible_truncation)]
-        vk::VertexInputBindingDescription {
-            binding: 0,
-            stride: size_of::<Self>() as u32,
-            input_rate: vk::VertexInputRate::VERTEX,
-        }
-    }
+impl VertexInput for Vertex {
     // the offset is far from u32::MAX
     #[allow(clippy::cast_possible_truncation)]
-    pub const fn attribute_description() -> [vk::VertexInputAttributeDescription; 3] {
-        [
-            vk::VertexInputAttributeDescription {
-                location: 0,
-                binding: 0,
-                format: vk::Format::R32G32B32_SFLOAT,
-                offset: std::mem::offset_of!(Self, position) as u32,
-            },
-            vk::VertexInputAttributeDescription {
-                location: 1,
-                binding: 0,
-                format: vk::Format::R32G32B32_SFLOAT,
-                offset: std::mem::offset_of!(Self, normal) as u32,
-            },
-            vk::VertexInputAttributeDescription {
-                location: 2,
-                binding: 0,
-                format: vk::Format::R32G32_SFLOAT,
-                offset: std::mem::offset_of!(Self, texcoord) as u32,
-            },
-        ]
-    }
+    const ATTRIBUTES: &'static [vk::VertexInputAttributeDescription] = &[
+        vk::VertexInputAttributeDescription {
+            location: 0,
+            binding: 0,
+            format: vk::Format::R32G32B32_SFLOAT,
+            offset: std::mem::offset_of!(Self, position) as u32,
+        },
+        vk::VertexInputAttributeDescription {
+            location: 1,
+            binding: 0,
+            format: vk::Format::R32G32B32_SFLOAT,
+            offset: std::mem::offset_of!(Self, normal) as u32,
+        },
+        vk::VertexInputAttributeDescription {
+            location: 2,
+            binding: 0,
+            format: vk::Format::R32G32_SFLOAT,
+            offset: std::mem::offset_of!(Self, texcoord) as u32,
+        },
+    ];
 }
 
 pub fn make_version(version: dirk_utils::Version) -> u32 {
