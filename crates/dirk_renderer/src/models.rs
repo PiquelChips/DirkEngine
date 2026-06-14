@@ -17,6 +17,7 @@ use ash::vk;
 
 use crate::{
     Error, Result,
+    pipeline::{MainPipelineSpec, graphics::GraphicsPipelineRenderingContext},
     resources::{
         buffer::{IndexBuffer, VertexBuffer},
         command_pool::CommandBuffer,
@@ -166,7 +167,7 @@ impl ModelRegistry {
         cmd: &CommandBuffer,
         scene_set: &DescriptorSet<SceneSet>,
         proxy_set: &DescriptorSet<ObjectSet>,
-        pipeline_layout: vk::PipelineLayout,
+        ctx: &GraphicsPipelineRenderingContext<'_, MainPipelineSpec>,
     ) -> dirk_assets::Result<()> {
         if handle.asset_type() != dirk_assets::AssetType::Model {
             return Err(dirk_assets::Error::TypeMismatch(handle.to_string()));
@@ -183,21 +184,12 @@ impl ModelRegistry {
             .flat_map(|&mesh| self.meshes[*mesh].primitives.iter());
 
         for prim in primitives {
-            let mat_set = prim
+            let material_set = prim
                 .material_handle
-                .map_or(vk::DescriptorSet::null(), |mat| {
-                    self.materials[*mat].set.raw()
-                });
-            let descriptor_sets = [scene_set.raw(), proxy_set.raw(), mat_set];
+                .map_or(&self.fallback_material.set, |mat| &self.materials[*mat].set);
 
-            cmd.bind_descriptor_sets(
-                vk::PipelineBindPoint::GRAPHICS,
-                pipeline_layout,
-                0,
-                &descriptor_sets,
-                &[],
-            );
-            cmd.bind_vertex_buffers(0, &[prim.vertex_buffer.buffer()], &[0]);
+            ctx.bind_descriptor_sets(&(scene_set, proxy_set, material_set));
+            ctx.bind_vertex_buffer(&prim.vertex_buffer);
             cmd.bind_index_buffer(prim.index_buffer.buffer(), 0, vk::IndexType::UINT32);
             cmd.draw_indexed(prim.index_count, 1, 0, 0, 0);
         }
@@ -288,21 +280,33 @@ impl ModelRegistry {
     ) -> Result<Vec<Handle<Material>>> {
         let mut pending = Vec::with_capacity(materials.len());
 
-        for (material_index, mat) in materials.into_iter().enumerate() {
+        for mat in materials {
             let set = self.material_alloc.allocate()?;
-            let tex_index = mat
+            let base_color = mat
                 .pbr_metallic_roughness()
                 .base_color_texture()
-                .ok_or(Error::MissingBaseColorTexture(material_index))?
-                .texture()
-                .source()
-                .index();
-            let tex_handle = texture_refs
-                .get(tex_index)
-                .copied()
-                .ok_or(Error::TextureIndexOutOfRange(tex_index))?;
-            let tex = &self.textures[*tex_handle];
-            pending.push((tex_handle, set, tex.image.view(), tex.sampler));
+                .map(|texture| {
+                    let tex_index = texture.texture().source().index();
+                    texture_refs
+                        .get(tex_index)
+                        .copied()
+                        .ok_or(Error::TextureIndexOutOfRange(tex_index))
+                })
+                .transpose()?;
+
+            let (view, sampler) = base_color.map_or_else(
+                || {
+                    (
+                        self.fallback_texture.image.view(),
+                        self.fallback_texture.sampler,
+                    )
+                },
+                |tex_handle| {
+                    let tex = &self.textures[*tex_handle];
+                    (tex.image.view(), tex.sampler)
+                },
+            );
+            pending.push((base_color, set, view, sampler));
         }
 
         let mut writer = DescriptorWriter::new(&self.device.device);
@@ -313,11 +317,8 @@ impl ModelRegistry {
 
         Ok(pending
             .into_iter()
-            .map(|(tex_handle, set, _, _)| {
-                Handle::new(self.materials.insert(Material {
-                    base_color: Some(tex_handle),
-                    set,
-                }))
+            .map(|(base_color, set, _, _)| {
+                Handle::new(self.materials.insert(Material { base_color, set }))
             })
             .collect())
     }

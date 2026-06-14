@@ -9,7 +9,7 @@ use crate::{
     Error, MAX_FRAMES_IN_FLIGHT, Result,
     frame_graph::{AttachmentInfo, ImportedTexture, RenderGraph, TextureDesc},
     models::ModelRegistry,
-    pipeline::GraphicsPipeline,
+    pipeline::{MainPipelineSpec, graphics::GraphicsPipeline},
     resources::{
         buffer::UniformBuffer,
         command_pool::CommandBuffer,
@@ -19,7 +19,6 @@ use crate::{
         },
         device::RenderDevice,
     },
-    shaders::{MainFS, MainVS},
 };
 
 /// This is the renderer proxy for the [`Universe`]. It also has
@@ -33,7 +32,7 @@ pub struct SceneManager {
 
     // TODO: see about centralising the different pipelines (link with
     // descriptor layouts, ...)
-    graphics_pipeline: GraphicsPipeline<MainVS, MainFS>,
+    graphics_pipeline: GraphicsPipeline<MainPipelineSpec>,
 
     scene_alloc: DescriptorAllocator<SceneSet>,
     proxy_alloc: DescriptorAllocator<ObjectSet>,
@@ -222,7 +221,7 @@ impl SceneManager {
             proxy.write_ubo(frame);
         }
 
-        self.graphics_pipeline.bind(cmd);
+        let ctx = self.graphics_pipeline.bind(cmd);
 
         // the window size never gets anywhere near 2^23
         #[allow(clippy::cast_precision_loss)]
@@ -243,13 +242,7 @@ impl SceneManager {
                 continue;
             };
 
-            match models.render_model(
-                model,
-                cmd,
-                &scene.sets[frame],
-                &proxy.sets[frame],
-                self.graphics_pipeline.layout(),
-            ) {
+            match models.render_model(model, cmd, &scene.sets[frame], &proxy.sets[frame], &ctx) {
                 Ok(()) | Err(dirk_assets::Error::NotFound(_)) => (),
                 Err(err) => return Err(err.into()),
             }
