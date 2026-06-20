@@ -141,34 +141,13 @@ pub struct EditorUiContext<'a> {
     pub universe: &'a dirk_universe::Universe,
     /// Shared editor services.
     pub editor: &'a EditorServices,
-    commands: EditorCommandSender<'a>,
-    window_menu_entries: Option<&'a [EditorWindowMenuEntry]>,
 }
-
-const EMPTY_WINDOW_MENU_ENTRIES: &[EditorWindowMenuEntry] = &[];
 
 impl<'a> EditorUiContext<'a> {
     /// Returns the seconds elapsed since the previous engine tick.
     #[must_use]
     pub fn delta_time(&self) -> f64 {
         self.delta_time
-    }
-
-    /// Requests that an editor window be opened.
-    pub fn open_window(&mut self, id: EditorWindowId) {
-        self.commands.open_window(id);
-    }
-
-    /// Returns the editor command sender for this UI pass.
-    pub fn commands(&mut self) -> &mut EditorCommandSender<'a> {
-        &mut self.commands
-    }
-
-    /// Returns the editor window metadata snapshot available to menu capabilities.
-    #[must_use]
-    pub fn window_menu_entries(&self) -> &[EditorWindowMenuEntry] {
-        self.window_menu_entries
-            .unwrap_or(EMPTY_WINDOW_MENU_ENTRIES)
     }
 }
 
@@ -183,22 +162,64 @@ pub struct EditorWindowDescriptor {
     pub default_open: bool,
 }
 
-/// Window metadata exposed to editor menu capabilities.
+/// Static metadata for an editor menu capability.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct EditorWindowMenuEntry {
+pub struct EditorMenuDescriptor {
+    /// Menu title shown in the editor menu bar.
+    pub title: String,
+}
+
+/// Snapshot of a registered editor window.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EditorWindowInfo {
     /// Stable window identifier.
     pub id: EditorWindowId,
     /// Window title.
     pub title: String,
     /// Window category.
     pub category: String,
+    /// Whether the window is currently open.
+    pub open: bool,
 }
 
-/// Static metadata for an editor menu capability.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct EditorMenuDescriptor {
-    /// Menu title shown in the editor menu bar.
-    pub title: String,
+/// Global editor state snapshot and controls available to menu capabilities.
+pub struct EditorMenuContext<'a> {
+    windows: &'a [EditorWindowInfo],
+    commands: EditorCommandSender<'a>,
+}
+
+impl<'a> EditorMenuContext<'a> {
+    fn new(windows: &'a [EditorWindowInfo], commands: EditorCommandSender<'a>) -> Self {
+        Self { windows, commands }
+    }
+
+    /// Returns all registered windows in registration order.
+    #[must_use]
+    pub fn windows(&self) -> &[EditorWindowInfo] {
+        self.windows
+    }
+
+    /// Returns a registered window by id.
+    #[must_use]
+    pub fn window(&self, id: EditorWindowId) -> Option<&EditorWindowInfo> {
+        self.windows.iter().find(|window| window.id == id)
+    }
+
+    /// Returns whether a registered window is currently open.
+    #[must_use]
+    pub fn is_open(&self, id: EditorWindowId) -> Option<bool> {
+        self.window(id).map(|window| window.open)
+    }
+
+    /// Requests that an editor window be opened.
+    pub fn open_window(&mut self, id: EditorWindowId) {
+        self.commands.open_window(id);
+    }
+
+    /// Returns the editor command sender for this UI pass.
+    pub fn commands(&mut self) -> &mut EditorCommandSender<'a> {
+        &mut self.commands
+    }
 }
 
 /// Stable editor window identifier.
