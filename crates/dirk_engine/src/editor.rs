@@ -584,3 +584,14 @@ impl EditorServicesState {
         }
     }
 }
+
+struct RegisteredWindow {
+    id: EditorWindowId,
+    descriptor: EditorWindowDescriptor,
+    window: Box<dyn EditorWindow>,
+}
+
+struct WindowState {
+    open: bool,
+}
+
