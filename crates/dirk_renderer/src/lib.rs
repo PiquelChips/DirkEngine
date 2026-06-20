@@ -520,16 +520,8 @@ impl Renderer {
         let frame_index = self.current_frame();
         let frame = &self.frames[frame_index];
 
-        unsafe {
-            self.render_device.device.wait_for_fences(
-                std::slice::from_ref(&frame.fence),
-                true,
-                u64::MAX,
-            )?;
-            self.render_device
-                .device
-                .reset_fences(std::slice::from_ref(&frame.fence))?;
-        }
+        frame.fence.wait(u64::MAX)?;
+        frame.fence.reset()?;
         self.render_device.flush_deletions();
         #[cfg(feature = "editor")]
         self.egui.free_textures_for_frame(frame_index)?;
@@ -660,7 +652,7 @@ impl Renderer {
         self.render_device.queues.submit(
             QueueType::Graphics,
             std::slice::from_ref(&submit_info),
-            frame.fence,
+            Some(&frame.fence),
         )?;
 
         render_image.present()?;

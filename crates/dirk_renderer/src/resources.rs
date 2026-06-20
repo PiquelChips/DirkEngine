@@ -7,3 +7,4 @@ pub mod device;
 pub mod image;
 pub mod queues;
 pub mod swapchain;
+pub mod sync;

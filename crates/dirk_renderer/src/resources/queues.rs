@@ -2,7 +2,7 @@
 
 use ash::{Device, Instance, khr::swapchain, prelude::VkResult, vk};
 
-use crate::physical_device::QueueFamilyIndices;
+use crate::{physical_device::QueueFamilyIndices, resources::sync::Fence};
 
 /// The type of queue you would like to submit to.
 #[derive(Copy, Clone)]
@@ -37,13 +37,14 @@ impl Queues {
         &self,
         queue_type: QueueType,
         submits: &[vk::SubmitInfo],
-        fence: vk::Fence,
+        fence: Option<&Fence>,
     ) -> VkResult<()> {
         let queue = match queue_type {
             QueueType::Compute => self.compute,
             QueueType::Graphics => self.graphics,
             QueueType::Transfer => self.transfer,
         };
+        let fence = fence.map_or_else(Fence::null_handle, Fence::raw);
         unsafe { self.device.queue_submit(queue, submits, fence) }
     }
 
