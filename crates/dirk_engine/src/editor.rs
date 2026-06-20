@@ -728,3 +728,9 @@ where
         (self.ui)(ui, context, editor)
     }
 }
+
+pub(crate) type EditorSubsystemFactory = Box<
+    dyn FnOnce(&mut EditorBuildContext<'_>) -> crate::Result<Box<dyn EditorSubsystem>>
+        + Send
+        + 'static,
+>;
