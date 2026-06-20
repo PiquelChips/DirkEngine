@@ -213,7 +213,13 @@ impl EngineBuilder {
                 PathBuf::from(std::env!("SAVED_PATH")).join("logs"),
             ));
 
-        logger.init()?;
+        if let Err(err) = logger.init() {
+            match err {
+                piquel_log::InitError::AlreadyInitialized
+                | piquel_log::InitError::LogBridgeAlreadyInitialized => {}
+                err @ piquel_log::InitError::Build(_) => return Err(err.into()),
+            }
+        }
 
         #[cfg(feature = "editor")]
         info!("starting editor");
