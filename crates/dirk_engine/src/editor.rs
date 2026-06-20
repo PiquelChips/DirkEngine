@@ -277,3 +277,190 @@ pub trait EditorMenu: Send + 'static {
     ) -> anyhow::Result<()>;
 }
 
+/// Shared state with editor services.
+///
+/// Services are extensions of the editor. Notably, windows & menus.
+#[derive(Clone)]
+pub struct EditorServices {
+    state: Arc<Mutex<EditorServicesState>>,
+    next_window_id: Arc<AtomicU64>,
+    next_menu_id: Arc<AtomicU64>,
+}
+
+impl EditorServices {
+    /// Creates empty editor services.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            state: Arc::new(Mutex::new(EditorServicesState::new())),
+            next_window_id: Arc::new(AtomicU64::new(0)),
+            next_menu_id: Arc::new(AtomicU64::new(0)),
+        }
+    }
+
+    /// Registers an editor-native window.
+    pub fn add_window<W>(&self, window: W) -> EditorWindowId
+    where
+        W: EditorWindow,
+    {
+        let descriptor = window.descriptor();
+        let default_open = descriptor.default_open;
+        let id = EditorWindowId(self.next_window_id.fetch_add(1, Ordering::Relaxed));
+        let mut state = self.state.lock();
+        state.windows.push(RegisteredWindow {
+            id,
+            descriptor,
+            window: Box::new(window),
+        });
+        state
+            .window_states
+            .insert(id, WindowState { open: default_open });
+        id
+    }
+
+    /// Registers an editor-native window from a callback.
+    pub fn add_window_fn<F>(&self, descriptor: EditorWindowDescriptor, ui: F) -> EditorWindowId
+    where
+        F: FnMut(&mut egui::Ui, &mut EditorUiContext<'_>) -> anyhow::Result<()> + Send + 'static,
+    {
+        self.add_window(FnEditorWindow { descriptor, ui })
+    }
+
+    /// Registers an editor menu capability.
+    pub fn add_menu<M>(&self, menu: M) -> EditorMenuId
+    where
+        M: EditorMenu,
+    {
+        let descriptor = menu.descriptor();
+        let id = EditorMenuId(self.next_menu_id.fetch_add(1, Ordering::Relaxed));
+        self.state.lock().menus.push(RegisteredMenu {
+            id,
+            title: descriptor.title,
+            menu: Box::new(menu),
+        });
+        id
+    }
+
+    /// Registers an editor menu capability from a callback.
+    pub fn add_menu_fn<F>(&self, descriptor: EditorMenuDescriptor, ui: F) -> EditorMenuId
+    where
+        F: FnMut(
+                &mut egui::Ui,
+                &mut EditorUiContext<'_>,
+                &mut EditorMenuContext<'_>,
+            ) -> anyhow::Result<()>
+            + Send
+            + 'static,
+    {
+        self.add_menu(FnEditorMenu { descriptor, ui })
+    }
+
+    /// Updates a registered window's open state.
+    pub fn set_open(&self, id: EditorWindowId, open: bool) {
+        if let Some(state) = self.state.lock().window_states.get_mut(&id) {
+            state.open = open;
+        }
+    }
+
+    /// Returns whether a registered window is currently open.
+    #[must_use]
+    pub fn is_open(&self, id: EditorWindowId) -> Option<bool> {
+        self.state
+            .lock()
+            .window_states
+            .get(&id)
+            .map(|state| state.open)
+    }
+
+    /// Returns registered windows in registration order.
+    #[must_use]
+    pub fn windows(&self) -> Vec<EditorWindowInfo> {
+        self.state.lock().windows()
+    }
+
+    /// Returns a registered window by id.
+    #[must_use]
+    pub fn window(&self, id: EditorWindowId) -> Option<EditorWindowInfo> {
+        self.state
+            .lock()
+            .windows()
+            .into_iter()
+            .find(|window| window.id == id)
+    }
+
+    /// Returns the registered window count.
+    #[must_use]
+    pub fn window_count(&self) -> usize {
+        self.state.lock().windows.len()
+    }
+
+    /// Returns the registered menu count.
+    #[must_use]
+    pub fn menu_count(&self) -> usize {
+        self.state.lock().menus.len()
+    }
+
+    /// Returns registered window titles in registration order.
+    #[must_use]
+    pub fn window_titles(&self) -> Vec<String> {
+        self.state
+            .lock()
+            .windows
+            .iter()
+            .map(|window| window.descriptor.title.clone())
+            .collect()
+    }
+
+    /// Returns registered menu titles in registration order.
+    #[must_use]
+    pub fn menu_titles(&self) -> Vec<String> {
+        self.state
+            .lock()
+            .menus
+            .iter()
+            .map(|menu| menu.title.clone())
+            .collect()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn open_window_for_tests(&self, id: EditorWindowId) {
+        self.state
+            .lock()
+            .apply_commands(vec![EditorCommand::OpenWindow(id)]);
+    }
+
+    /// Renders editor menus and windows.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first error emitted by a registered capability callback.
+    pub fn render_ui(
+        &self,
+        ctx: &egui::Context,
+        context: &EditorRenderContext<'_>,
+    ) -> anyhow::Result<()> {
+        self.state.lock().render(ctx, context)
+    }
+}
+
+impl Default for EditorServices {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+struct EditorServicesState {
+    windows: Vec<RegisteredWindow>,
+    window_states: HashMap<EditorWindowId, WindowState>,
+    menus: Vec<RegisteredMenu>,
+}
+
+impl EditorServicesState {
+    fn new() -> Self {
+        Self {
+            windows: Vec::new(),
+            window_states: HashMap::new(),
+            menus: Vec::new(),
+        }
+    }
+}
