@@ -246,3 +246,34 @@ impl EditorMenuId {
     }
 }
 
+/// Editor window.
+pub trait EditorWindow: Send + 'static {
+    /// Returns this window's descriptor.
+    fn descriptor(&self) -> EditorWindowDescriptor;
+
+    /// Draws this window's contents.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the window cannot complete drawing.
+    fn ui(&mut self, ui: &mut egui::Ui, context: &mut EditorUiContext<'_>) -> anyhow::Result<()>;
+}
+
+/// Editor menu.
+pub trait EditorMenu: Send + 'static {
+    /// Returns this menu's descriptor.
+    fn descriptor(&self) -> EditorMenuDescriptor;
+
+    /// Draws this menu's contents.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the menu cannot complete drawing.
+    fn ui(
+        &mut self,
+        ui: &mut egui::Ui,
+        context: &mut EditorUiContext<'_>,
+        editor: &mut EditorMenuContext<'_>,
+    ) -> anyhow::Result<()>;
+}
+
