@@ -12,7 +12,7 @@ use std::{
 use anyhow::Context as _;
 use parking_lot::Mutex;
 
-use crate::{EngineBuildContext, EngineHandle, errors::Error};
+use crate::{EngineBuildContext, EngineHandle, Error, Result};
 
 /// Editor lifecycle subsystem owned by the engine.
 pub trait EditorSubsystem: Send + 'static {
@@ -593,5 +593,83 @@ struct RegisteredWindow {
 
 struct WindowState {
     open: bool,
+}
+
+pub(crate) struct EditorRuntime {
+    services: EditorServices,
+    subsystems: Vec<Box<dyn EditorSubsystem>>,
+}
+
+impl EditorRuntime {
+    pub(crate) fn new(services: EditorServices, subsystems: Vec<Box<dyn EditorSubsystem>>) -> Self {
+        Self {
+            services,
+            subsystems,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn empty_for_tests() -> Self {
+        Self::new(EditorServices::new(), Vec::new())
+    }
+
+    pub(crate) fn start(
+        &mut self,
+        engine: &EngineHandle,
+        universe: &dirk_universe::Universe,
+    ) -> Result<()> {
+        for subsystem in &mut self.subsystems {
+            let name = subsystem.name();
+            let mut context = EditorStartContext {
+                engine,
+                universe,
+                editor: &self.services,
+            };
+            subsystem
+                .start(&mut context)
+                .map_err(|source| Error::EditorSubsystemFailedStart { name, source })?;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn tick(
+        &mut self,
+        delta_time: f64,
+        engine: &EngineHandle,
+        universe: &dirk_universe::Universe,
+    ) -> crate::Result<()> {
+        for subsystem in &mut self.subsystems {
+            let name = subsystem.name();
+            let mut context = EditorTickContext {
+                delta_time,
+                engine,
+                universe,
+                editor: &self.services,
+            };
+            subsystem
+                .tick(&mut context)
+                .map_err(|source| Error::EditorSubsystemFailedTick { name, source })?;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn shutdown(
+        &mut self,
+        engine: &EngineHandle,
+        universe: &dirk_universe::Universe,
+    ) -> crate::Result<()> {
+        while let Some(mut subsystem) = self.subsystems.pop() {
+            let name = subsystem.name();
+            let mut context = EditorShutdownContext {
+                engine,
+                universe,
+                editor: &self.services,
+            };
+            subsystem
+                .shutdown(&mut context)
+                .map_err(|source| Error::EditorSubsystemFailedShutdown { name, source })?;
+        }
+        Ok(())
+    }
 }
 
