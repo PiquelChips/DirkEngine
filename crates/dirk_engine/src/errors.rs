@@ -76,6 +76,9 @@ pub enum Error {
     /// When an engine subsystem failed to initialize.
     #[error("subsystem failed to initialize: {0}")]
     SubsystemFailedInit(#[source] anyhow::Error),
+    /// When operating system signal handlers failed to initialize.
+    #[error("failed to initialize operating system signal handlers: {0}")]
+    SignalHandlerInitFailed(#[source] anyhow::Error),
     /// An error occurred while starting.
     #[error("engine failed to start: {0}")]
     StartFailed(#[source] anyhow::Error),

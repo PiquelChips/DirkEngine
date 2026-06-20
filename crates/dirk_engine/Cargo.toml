@@ -17,6 +17,7 @@ anyhow.workspace = true
 thiserror.workspace = true
 parking_lot.workspace = true
 piquel-log.workspace = true
+signal-hook.workspace = true
 
 dirk_threads.workspace = true
 dirk_events.workspace = true
