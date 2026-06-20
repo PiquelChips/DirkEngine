@@ -75,7 +75,7 @@ categories = ["game-engines", "graphics", "rendering", "vulkan"]
 # Basic stuff
 time = { version = "0.3", features = ["formatting", "macros"] }
 tracing = "0.1"
-piquel-log = { version = "0.0.5", features = ["log", "file"] }
+piquel-log = { version = "0.0.6", features = ["log", "file"] }
 parking_lot = "0.12"
 tempfile = "3"
 slotmap = "1"
