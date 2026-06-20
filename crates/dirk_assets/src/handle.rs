@@ -7,7 +7,7 @@
 //!
 //! [`AssetRegistry::load_asset`]: crate::AssetRegistry::load_asset
 
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 
 use dirk_events::Dispatcher;
 use parking_lot::Mutex;
@@ -111,6 +111,14 @@ pub struct Handle<T: Asset>(Arc<Mutex<AssetRef<T>>>);
 impl<T: Asset> Handle<T> {
     pub(crate) fn new(asset_ref: AssetRef<T>) -> Self {
         Self(Arc::new(Mutex::new(asset_ref)))
+    }
+
+    pub(crate) fn from_inner(inner: Arc<Mutex<AssetRef<T>>>) -> Self {
+        Self(inner)
+    }
+
+    pub(crate) fn downgrade(&self) -> Weak<Mutex<AssetRef<T>>> {
+        Arc::downgrade(&self.0)
     }
 
     /// Returns the loaded asset data.
