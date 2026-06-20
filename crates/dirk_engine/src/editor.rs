@@ -556,6 +556,22 @@ impl EditorServicesState {
         }
         Ok(())
     }
+
+    fn windows(&self) -> Vec<EditorWindowInfo> {
+        self.windows
+            .iter()
+            .map(|window| EditorWindowInfo {
+                id: window.id,
+                title: window.descriptor.title.clone(),
+                category: window.descriptor.category.clone(),
+                open: self
+                    .window_states
+                    .get(&window.id)
+                    .is_some_and(|state| state.open),
+            })
+            .collect()
+    }
+
     fn apply_commands(&mut self, commands: Vec<EditorCommand>) {
         for command in commands {
             match command {
