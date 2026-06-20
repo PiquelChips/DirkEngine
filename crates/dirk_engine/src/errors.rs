@@ -76,6 +76,46 @@ pub enum Error {
     /// When an engine subsystem failed to initialize.
     #[error("subsystem failed to initialize: {0}")]
     SubsystemFailedInit(#[source] anyhow::Error),
+    /// When an editor subsystem failed to initialize.
+    #[cfg(feature = "editor")]
+    #[error("editor subsystem `{type_name}` failed to initialize: {source}")]
+    EditorSubsystemFailedInit {
+        /// The concrete editor subsystem type name.
+        type_name: &'static str,
+        /// The error that caused the failure.
+        #[source]
+        source: anyhow::Error,
+    },
+    /// When an editor subsystem failed to start.
+    #[cfg(feature = "editor")]
+    #[error("editor subsystem {name} failed start: {source}")]
+    EditorSubsystemFailedStart {
+        /// The name of the editor subsystem.
+        name: &'static str,
+        /// The error that caused the failure.
+        #[source]
+        source: anyhow::Error,
+    },
+    /// When an editor subsystem failed to tick.
+    #[cfg(feature = "editor")]
+    #[error("editor subsystem {name} failed tick: {source}")]
+    EditorSubsystemFailedTick {
+        /// The name of the editor subsystem.
+        name: &'static str,
+        /// The error that caused the failure.
+        #[source]
+        source: anyhow::Error,
+    },
+    /// When an editor subsystem failed to shut down.
+    #[cfg(feature = "editor")]
+    #[error("editor subsystem {name} failed shutdown: {source}")]
+    EditorSubsystemFailedShutdown {
+        /// The name of the editor subsystem.
+        name: &'static str,
+        /// The error that caused the failure.
+        #[source]
+        source: anyhow::Error,
+    },
     /// When operating system signal handlers failed to initialize.
     #[error("failed to initialize operating system signal handlers: {0}")]
     SignalHandlerInitFailed(#[source] anyhow::Error),
