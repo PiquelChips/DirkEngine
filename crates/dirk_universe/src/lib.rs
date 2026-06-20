@@ -366,6 +366,31 @@ impl Universe {
         self.worlds.get(&world)
     }
 
+    /// Returns all live worlds.
+    pub fn worlds(&self) -> impl Iterator<Item = &World> {
+        self.worlds.values()
+    }
+
+    /// Returns all live entities with their current world.
+    pub fn entities(&self) -> impl Iterator<Item = (Entity, WorldId)> + '_ {
+        self.entities
+            .iter()
+            .map(|(entity, world)| (*entity, *world))
+    }
+
+    /// Returns all live entities currently in `world`.
+    pub fn entities_in_world(&self, world: WorldId) -> impl Iterator<Item = Entity> + '_ {
+        self.entities
+            .iter()
+            .filter_map(move |(entity, entity_world)| {
+                if *entity_world == world {
+                    Some(*entity)
+                } else {
+                    None
+                }
+            })
+    }
+
     /// Returns the [`WorldId`] of the [`Entity`]'s [`World`].
     #[must_use]
     pub fn get_world(&self, entity: Entity) -> Option<WorldId> {
