@@ -1,10 +1,4 @@
-use std::{
-    collections::{HashMap, VecDeque},
-    sync::Arc,
-};
-
 use dirk_events::Event;
-use parking_lot::Mutex;
 use winit::{
     event::{ButtonSource, MouseScrollDelta},
     keyboard::{Key, ModifiersState, PhysicalKey},
@@ -265,6 +259,8 @@ impl InputEvent {
 
 #[cfg(test)]
 mod tests {
+    use crate::{InputCapture, InputRouter};
+
     use super::*;
 
     fn window_id(raw: usize) -> WindowId {

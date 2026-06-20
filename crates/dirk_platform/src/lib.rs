@@ -14,14 +14,16 @@ mod handler;
 mod router;
 mod window;
 
-pub use errors::Error;
-pub use event::*;
-pub use router::InputRouter;
-pub use window::{MainWindow, PlatformWindows, Window, Windows};
 pub use winit::{
     event::{ButtonSource, MouseButton},
     keyboard::{Key, KeyCode, ModifiersState, NamedKey, PhysicalKey},
     window::{Theme, WindowId},
+};
+pub use {
+    errors::Error,
+    event::*,
+    router::{InputCapture, InputRouter},
+    window::{MainWindow, PlatformWindows, Window, Windows},
 };
 
 use errors::Result;
