@@ -77,6 +77,8 @@ use dirk_universe::Universe;
 use parking_lot::RwLock;
 use tracing::error;
 
+#[cfg(feature = "editor")]
+pub mod editor;
 pub mod errors;
 pub mod events;
 pub mod subsystem;
@@ -155,6 +157,8 @@ pub struct Engine {
     logger: piquel_log::Logger,
     universe: Universe,
     subsystems: Vec<Box<dyn Subsystem>>,
+    #[cfg(feature = "editor")]
+    editor: editor::EditorRuntime,
     state: Arc<EngineState>,
     handle: EngineHandle,
     command_receiver: Receiver<EngineCommand>,
@@ -204,6 +208,9 @@ impl Engine {
                     source,
                 })?;
         }
+
+        #[cfg(feature = "editor")]
+        self.editor.start(&self.handle, &self.universe)?;
 
         self.last_tick = Instant::now();
         self.started = true;
@@ -271,6 +278,9 @@ impl Engine {
             }
         }
 
+        #[cfg(feature = "editor")]
+        self.editor.tick(delta_time, &self.handle, &self.universe)?;
+
         self.process_commands();
         Ok(self.status())
     }
@@ -302,6 +312,9 @@ impl Engine {
         if !self.is_exiting() {
             self.request_exit(None);
         }
+
+        #[cfg(feature = "editor")]
+        self.editor.shutdown(&self.handle, &self.universe)?;
 
         while let Some(mut subsystem) = self.subsystems.pop() {
             subsystem

@@ -145,7 +145,7 @@ pub struct EditorUiContext<'a> {
     pub editor: &'a EditorServices,
 }
 
-impl<'a> EditorUiContext<'a> {
+impl EditorUiContext<'_> {
     /// Returns the seconds elapsed since the previous engine tick.
     #[must_use]
     pub fn delta_time(&self) -> f64 {
