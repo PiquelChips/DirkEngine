@@ -14,6 +14,9 @@ use parking_lot::Mutex;
 
 use crate::{EngineBuildContext, EngineHandle, Error, Result};
 
+pub mod commands;
+use commands::{EditorCommand, EditorCommandSender};
+
 /// Editor lifecycle subsystem owned by the engine.
 pub trait EditorSubsystem: Send + 'static {
     /// The subsystem name used for diagnostics.
