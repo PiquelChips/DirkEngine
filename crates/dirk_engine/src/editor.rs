@@ -463,4 +463,108 @@ impl EditorServicesState {
             menus: Vec::new(),
         }
     }
+
+    fn render(
+        &mut self,
+        ctx: &egui::Context,
+        context: &EditorRenderContext<'_>,
+    ) -> anyhow::Result<()> {
+        let mut editor_commands = Vec::new();
+        self.render_menus(ctx, context, &mut editor_commands)?;
+        self.apply_commands(std::mem::take(&mut editor_commands));
+        self.render_windows(ctx, context)?;
+        self.apply_commands(editor_commands);
+        Ok(())
+    }
+
+    fn render_menus(
+        &mut self,
+        ctx: &egui::Context,
+        context: &EditorRenderContext<'_>,
+        editor_commands: &mut Vec<EditorCommand>,
+    ) -> anyhow::Result<()> {
+        if self.menus.is_empty() {
+            return Ok(());
+        }
+
+        let windows = self.windows();
+        let mut menu_context =
+            EditorMenuContext::new(&windows, EditorCommandSender::new(editor_commands));
+        let mut context = EditorUiContext {
+            delta_time: context.delta_time(),
+            handle: context.handle,
+            universe: context.universe,
+            editor: context.editor,
+        };
+
+        let mut result = Ok(());
+        egui::TopBottomPanel::top("dirk_editor_menu_bar").show(ctx, |ui| {
+            egui::MenuBar::new().ui(ui, |ui| {
+                for menu in &mut self.menus {
+                    ui.menu_button(menu.title.clone(), |ui| {
+                        if result.is_ok() {
+                            result = menu
+                                .menu
+                                .ui(ui, &mut context, &mut menu_context)
+                                .with_context(|| format!("menu `{}` failed to render", menu.title));
+                        }
+                    });
+                }
+            });
+        });
+
+        result
+    }
+    fn render_windows(
+        &mut self,
+        ctx: &egui::Context,
+        context: &EditorRenderContext<'_>,
+    ) -> anyhow::Result<()> {
+        for window in &mut self.windows {
+            if !self
+                .window_states
+                .get(&window.id)
+                .is_some_and(|state| state.open)
+            {
+                continue;
+            }
+
+            let mut open = true;
+            let title = window.descriptor.title.clone();
+            let mut result = Ok(());
+            let mut context = EditorUiContext {
+                delta_time: context.delta_time(),
+                handle: context.handle,
+                universe: context.universe,
+                editor: context.editor,
+            };
+
+            egui::Window::new(title.clone())
+                .open(&mut open)
+                .show(ctx, |ui| {
+                    result = window
+                        .window
+                        .ui(ui, &mut context)
+                        .with_context(|| format!("window `{title}` failed to render"));
+                });
+
+            if let Some(state) = self.window_states.get_mut(&window.id) {
+                state.open = open;
+            }
+
+            result?;
+        }
+        Ok(())
+    }
+    fn apply_commands(&mut self, commands: Vec<EditorCommand>) {
+        for command in commands {
+            match command {
+                EditorCommand::OpenWindow(id) => {
+                    if let Some(state) = self.window_states.get_mut(&id) {
+                        state.open = true;
+                    }
+                }
+            }
+        }
+    }
 }
