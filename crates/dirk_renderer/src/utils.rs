@@ -1,8 +1,11 @@
-use ash::{Device, vk};
+use ash::vk;
 
 use crate::{
     physical_device,
-    resources::command_pool::{CommandPool, Graphics},
+    resources::{
+        command_pool::{CommandPool, Graphics},
+        sync::Fence,
+    },
     shaders::metadata::VertexInput,
 };
 
@@ -44,11 +47,10 @@ pub fn make_version(version: dirk_utils::Version) -> u32 {
 }
 
 pub struct Frame {
-    pub device: Device,
     /// Command pool to allocate command buffers on every frame
     pub command_pool: CommandPool<Graphics>,
     /// Main synchronization fence
-    pub fence: vk::Fence,
+    pub fence: Fence,
     // TODO: have one primary command buffer that is allocated once and
     // secondary command for each scene. Should be allocated every time
     // there is a change in scene count. If not reallocated, reset.
@@ -57,9 +59,6 @@ pub struct Frame {
 impl Drop for Frame {
     fn drop(&mut self) {
         self.command_pool.destroy();
-        unsafe {
-            self.device.destroy_fence(self.fence, None);
-        }
     }
 }
 

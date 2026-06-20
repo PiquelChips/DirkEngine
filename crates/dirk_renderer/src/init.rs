@@ -7,7 +7,7 @@ use tracing::info;
 
 use crate::{
     DEVICE_EXTENSIONS, Error, MAX_FRAMES_IN_FLIGHT, Renderer, Result, physical_device,
-    resources::{command_pool::CommandPool, device::RenderDevice},
+    resources::{command_pool::CommandPool, device::RenderDevice, sync::Fence},
     utils::{Frame, RendererProperties},
 };
 
@@ -221,14 +221,8 @@ impl Renderer {
                 &render_device.properties.queue_family_indices,
                 vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
             )?;
-            let fence = unsafe {
-                device.create_fence(
-                    &vk::FenceCreateInfo::default().flags(vk::FenceCreateFlags::SIGNALED),
-                    None,
-                )?
-            };
+            let fence = Fence::signaled(device)?;
             Ok(Frame {
-                device: device.clone(),
                 command_pool,
                 fence,
             })

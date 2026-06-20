@@ -5,7 +5,10 @@ use ash::{Device, prelude::VkResult, vk};
 use crate::{
     Result,
     physical_device::QueueFamilyIndices,
-    resources::queues::{QueueType, Queues},
+    resources::{
+        queues::{QueueType, Queues},
+        sync::Fence,
+    },
 };
 
 #[derive(Debug)]
@@ -325,7 +328,7 @@ impl CommandBuffer {
         &self,
         queues: &Queues,
         submit_info: vk::SubmitInfo,
-        fence: vk::Fence,
+        fence: Option<&Fence>,
     ) -> VkResult<()> {
         queues.submit(self.queue_type, std::slice::from_ref(&submit_info), fence)
     }
@@ -334,32 +337,19 @@ impl CommandBuffer {
         unsafe {
             self.device.end_command_buffer(self.buff)?;
         };
-        let fence = unsafe {
-            self.device
-                .create_fence(&vk::FenceCreateInfo::default(), None)?
-        };
+        let fence = Fence::unsignaled(&self.device)?;
 
-        let submit_result = self.submit(queues, info, fence);
+        let submit_result = self.submit(queues, info, Some(&fence));
         if submit_result.is_ok() {
-            let wait_result = unsafe {
-                self.device
-                    .wait_for_fences(std::slice::from_ref(&fence), true, u64::MAX)
-            };
+            let wait_result = fence.wait(u64::MAX);
             if wait_result.is_ok() {
                 unsafe {
                     self.device
                         .free_command_buffers(self.pool, std::slice::from_ref(&self.buff));
                 }
             }
-            unsafe {
-                self.device.destroy_fence(fence, None);
-            }
             wait_result
         } else {
-            // TODO: RAII Fence wrapper to avoid having to do this weird deletion.
-            unsafe {
-                self.device.destroy_fence(fence, None);
-            }
             submit_result
         }
     }
