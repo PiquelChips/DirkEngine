@@ -1,7 +1,6 @@
 //! Engine-owned editor subsystem and capability API.
 
 use std::{
-    any::type_name,
     collections::HashMap,
     sync::{
         Arc,
@@ -676,3 +675,56 @@ impl EditorRuntime {
     }
 }
 
+struct RegisteredMenu {
+    #[allow(dead_code)]
+    id: EditorMenuId,
+    title: String,
+    menu: Box<dyn EditorMenu>,
+}
+
+struct FnEditorWindow<F> {
+    descriptor: EditorWindowDescriptor,
+    ui: F,
+}
+
+impl<F> EditorWindow for FnEditorWindow<F>
+where
+    F: FnMut(&mut egui::Ui, &mut EditorUiContext<'_>) -> anyhow::Result<()> + Send + 'static,
+{
+    fn descriptor(&self) -> EditorWindowDescriptor {
+        self.descriptor.clone()
+    }
+
+    fn ui(&mut self, ui: &mut egui::Ui, context: &mut EditorUiContext<'_>) -> anyhow::Result<()> {
+        (self.ui)(ui, context)
+    }
+}
+
+struct FnEditorMenu<F> {
+    descriptor: EditorMenuDescriptor,
+    ui: F,
+}
+
+impl<F> EditorMenu for FnEditorMenu<F>
+where
+    F: FnMut(
+            &mut egui::Ui,
+            &mut EditorUiContext<'_>,
+            &mut EditorMenuContext<'_>,
+        ) -> anyhow::Result<()>
+        + Send
+        + 'static,
+{
+    fn descriptor(&self) -> EditorMenuDescriptor {
+        self.descriptor.clone()
+    }
+
+    fn ui(
+        &mut self,
+        ui: &mut egui::Ui,
+        context: &mut EditorUiContext<'_>,
+        editor: &mut EditorMenuContext<'_>,
+    ) -> anyhow::Result<()> {
+        (self.ui)(ui, context, editor)
+    }
+}
