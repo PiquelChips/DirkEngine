@@ -1724,9 +1724,9 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
 name = "piquel-log"
-version = "0.0.5"
+version = "0.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dcd401f64e488830955bf1e9fe4138de15fc42b1629439a981b14acab881e14b"
+checksum = "68825fb33a757b1dfa53ef0b8c6a6d58fa534090a3bd84a1da129e4026f21502"
 dependencies = [
  "log",
  "parking_lot",
