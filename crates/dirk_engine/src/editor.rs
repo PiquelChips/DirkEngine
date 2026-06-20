@@ -11,6 +11,7 @@ use std::{
 
 use anyhow::Context as _;
 use parking_lot::Mutex;
+use tracing::warn;
 
 use crate::{EngineBuildContext, EngineHandle, errors::Error};
 
@@ -85,5 +86,81 @@ pub struct EditorShutdownContext<'a> {
     pub universe: &'a dirk_universe::Universe,
     /// Shared editor services.
     pub editor: &'a EditorServices,
+}
+
+/// Per-frame context passed to editor rendering.
+pub struct EditorRenderContext<'a> {
+    /// Seconds elapsed since the previous engine tick.
+    pub delta_time: f64, // TODO: make delta time private with a getter to avoid accidental mutation.
+    /// Shared engine handle.
+    pub handle: &'a EngineHandle,
+    /// Read-only ECS universe.
+    pub universe: &'a dirk_universe::Universe,
+    /// Shared editor services.
+    pub editor: &'a EditorServices,
+}
+
+impl<'a> EditorRenderContext<'a> {
+    /// Creates a context for rendering editor UI.
+    #[must_use]
+    pub fn new(
+        delta_time: f64,
+        handle: &'a EngineHandle,
+        universe: &'a dirk_universe::Universe,
+        editor: &'a EditorServices,
+    ) -> Self {
+        Self {
+            delta_time,
+            handle,
+            universe,
+            editor,
+        }
+    }
+}
+
+/// Per-frame context passed to editor UI capabilities.
+pub struct EditorUiContext<'a> {
+    /// Seconds elapsed since the previous engine tick.
+    pub delta_time: f64,
+    /// Shared engine handle.
+    pub handle: &'a EngineHandle,
+    /// Read-only ECS universe.
+    pub universe: &'a dirk_universe::Universe,
+    /// Shared editor services.
+    pub editor: &'a EditorServices,
+    commands: EditorCommandSender<'a>,
+    window_menu_entries: Option<&'a WindowMenuEntries>,
+}
+
+impl<'a> EditorUiContext<'a> {
+    /// Requests that an editor window be opened.
+    pub fn open_window(&mut self, id: EditorWindowId) {
+        self.commands.open_window(id);
+    }
+
+    /// Returns the editor command sender for this UI pass.
+    pub fn commands(&mut self) -> &mut EditorCommandSender<'a> {
+        &mut self.commands
+    }
+
+    /// Draws the built-in categorized window list menu.
+    pub fn windows_menu_ui(&mut self, ui: &mut egui::Ui) {
+        let Some(window_menu_entries) = self.window_menu_entries else {
+            warn!("attempted to draw window menu. no window menu entries found");
+            return;
+        };
+        let commands = &mut self.commands;
+
+        for (category, windows) in window_menu_entries {
+            ui.menu_button(category, |ui| {
+                for (id, title) in windows {
+                    if ui.button(title).clicked() {
+                        commands.open_window(*id);
+                        ui.close();
+                    }
+                }
+            });
+        }
+    }
 }
 
