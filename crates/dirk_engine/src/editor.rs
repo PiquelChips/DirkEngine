@@ -69,13 +69,21 @@ pub struct EditorStartContext<'a> {
 /// Context passed to editor subsystem ticks.
 pub struct EditorTickContext<'a> {
     /// Seconds elapsed since the previous engine tick.
-    pub delta_time: f64,
+    delta_time: f64,
     /// Shared engine handle.
     pub engine: &'a EngineHandle,
     /// Read-only ECS universe.
     pub universe: &'a dirk_universe::Universe,
     /// Shared editor services.
     pub editor: &'a EditorServices,
+}
+
+impl EditorTickContext<'_> {
+    /// Returns the seconds elapsed since the previous engine tick.
+    #[must_use]
+    pub fn delta_time(&self) -> f64 {
+        self.delta_time
+    }
 }
 
 /// Context passed to editor subsystem shutdown.
@@ -91,7 +99,7 @@ pub struct EditorShutdownContext<'a> {
 /// Per-frame context passed to editor rendering.
 pub struct EditorRenderContext<'a> {
     /// Seconds elapsed since the previous engine tick.
-    pub delta_time: f64, // TODO: make delta time private with a getter to avoid accidental mutation.
+    delta_time: f64,
     /// Shared engine handle.
     pub handle: &'a EngineHandle,
     /// Read-only ECS universe.
@@ -116,12 +124,18 @@ impl<'a> EditorRenderContext<'a> {
             editor,
         }
     }
+
+    /// Returns the seconds elapsed since the previous engine tick.
+    #[must_use]
+    pub fn delta_time(&self) -> f64 {
+        self.delta_time
+    }
 }
 
 /// Per-frame context passed to editor UI capabilities.
 pub struct EditorUiContext<'a> {
     /// Seconds elapsed since the previous engine tick.
-    pub delta_time: f64,
+    delta_time: f64,
     /// Shared engine handle.
     pub handle: &'a EngineHandle,
     /// Read-only ECS universe.
@@ -133,6 +147,12 @@ pub struct EditorUiContext<'a> {
 }
 
 impl<'a> EditorUiContext<'a> {
+    /// Returns the seconds elapsed since the previous engine tick.
+    #[must_use]
+    pub fn delta_time(&self) -> f64 {
+        self.delta_time
+    }
+
     /// Requests that an editor window be opened.
     pub fn open_window(&mut self, id: EditorWindowId) {
         self.commands.open_window(id);
