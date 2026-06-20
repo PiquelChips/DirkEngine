@@ -2,7 +2,7 @@
 
 use std::{
     any::type_name,
-    collections::{BTreeMap, HashMap},
+    collections::HashMap,
     sync::{
         Arc,
         atomic::{AtomicU64, Ordering},
@@ -11,7 +11,6 @@ use std::{
 
 use anyhow::Context as _;
 use parking_lot::Mutex;
-use tracing::warn;
 
 use crate::{EngineBuildContext, EngineHandle, errors::Error};
 
@@ -143,8 +142,10 @@ pub struct EditorUiContext<'a> {
     /// Shared editor services.
     pub editor: &'a EditorServices,
     commands: EditorCommandSender<'a>,
-    window_menu_entries: Option<&'a WindowMenuEntries>,
+    window_menu_entries: Option<&'a [EditorWindowMenuEntry]>,
 }
+
+const EMPTY_WINDOW_MENU_ENTRIES: &[EditorWindowMenuEntry] = &[];
 
 impl<'a> EditorUiContext<'a> {
     /// Returns the seconds elapsed since the previous engine tick.
@@ -163,24 +164,11 @@ impl<'a> EditorUiContext<'a> {
         &mut self.commands
     }
 
-    /// Draws the built-in categorized window list menu.
-    pub fn windows_menu_ui(&mut self, ui: &mut egui::Ui) {
-        let Some(window_menu_entries) = self.window_menu_entries else {
-            warn!("attempted to draw window menu. no window menu entries found");
-            return;
-        };
-        let commands = &mut self.commands;
-
-        for (category, windows) in window_menu_entries {
-            ui.menu_button(category, |ui| {
-                for (id, title) in windows {
-                    if ui.button(title).clicked() {
-                        commands.open_window(*id);
-                        ui.close();
-                    }
-                }
-            });
-        }
+    /// Returns the editor window metadata snapshot available to menu capabilities.
+    #[must_use]
+    pub fn window_menu_entries(&self) -> &[EditorWindowMenuEntry] {
+        self.window_menu_entries
+            .unwrap_or(EMPTY_WINDOW_MENU_ENTRIES)
     }
 }
 
@@ -193,6 +181,17 @@ pub struct EditorWindowDescriptor {
     pub category: String,
     /// Whether the window starts open after registration.
     pub default_open: bool,
+}
+
+/// Window metadata exposed to editor menu capabilities.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EditorWindowMenuEntry {
+    /// Stable window identifier.
+    pub id: EditorWindowId,
+    /// Window title.
+    pub title: String,
+    /// Window category.
+    pub category: String,
 }
 
 /// Static metadata for an editor menu capability.
