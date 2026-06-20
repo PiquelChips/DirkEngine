@@ -3,6 +3,7 @@
 use std::{
     any::TypeId,
     collections::{HashMap, HashSet},
+    fmt::Debug,
 };
 
 use crate::{
@@ -27,6 +28,16 @@ pub use entity::{Entity, EntityBuilder};
 mod world;
 use tracing::warn;
 pub use world::{World, WorldBuilder, WorldId};
+
+/// Read-only information about one component attached to an entity.
+pub struct ComponentInfo<'a> {
+    /// Component [`TypeId`].
+    pub type_id: TypeId,
+    /// Fully-qualified Rust component type name.
+    pub type_name: &'static str,
+    /// Debug view of the component value.
+    pub debug: &'a dyn Debug,
+}
 
 /// This struct is the manager for all the worlds.
 pub struct Universe {
@@ -388,6 +399,17 @@ impl Universe {
                 } else {
                     None
                 }
+            })
+    }
+
+    /// Returns read-only component information for `entity`.
+    pub fn component_infos(&self, entity: Entity) -> impl Iterator<Item = ComponentInfo<'_>> {
+        self.components
+            .get_all(entity)
+            .map(|(type_id, component)| ComponentInfo {
+                type_id,
+                type_name: component.component_type_name(),
+                debug: component,
             })
     }
 

@@ -31,6 +31,8 @@ pub(crate) trait AnyComponent: Any + Debug + 'static {
 
     /// Returns the [`TypeId`] of the concrete component behind the any type.
     fn component_type_id(&self) -> TypeId;
+    /// Returns the Rust type name of the concrete component.
+    fn component_type_name(&self) -> &'static str;
 }
 
 // Blanket impl: every concrete Component automatically becomes an AnyComponent.
@@ -47,6 +49,9 @@ impl<T: Component> AnyComponent for T {
     }
     fn component_type_id(&self) -> TypeId {
         TypeId::of::<T>()
+    }
+    fn component_type_name(&self) -> &'static str {
+        std::any::type_name::<T>()
     }
 }
 
