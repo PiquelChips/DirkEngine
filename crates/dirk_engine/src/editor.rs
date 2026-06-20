@@ -184,3 +184,45 @@ impl<'a> EditorUiContext<'a> {
     }
 }
 
+/// Static metadata for an editor-native window capability.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EditorWindowDescriptor {
+    /// Window title.
+    pub title: String,
+    /// Window category used by the built-in Windows menu.
+    pub category: String,
+    /// Whether the window starts open after registration.
+    pub default_open: bool,
+}
+
+/// Static metadata for an editor menu capability.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EditorMenuDescriptor {
+    /// Menu title shown in the editor menu bar.
+    pub title: String,
+}
+
+/// Stable editor window identifier.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct EditorWindowId(u64);
+
+impl EditorWindowId {
+    /// Returns the raw numeric identifier.
+    #[must_use]
+    pub fn raw(self) -> u64 {
+        self.0
+    }
+}
+
+/// Stable editor menu identifier.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct EditorMenuId(u64);
+
+impl EditorMenuId {
+    /// Returns the raw numeric identifier.
+    #[must_use]
+    pub fn raw(self) -> u64 {
+        self.0
+    }
+}
+
