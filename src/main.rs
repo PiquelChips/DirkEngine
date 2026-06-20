@@ -6,7 +6,6 @@ use tracing::error;
 fn run() -> anyhow::Result<()> {
     let mut builder = dirk_engine::Engine::builder();
 
-    builder.with_plugin(dirk_engine::signal::OperatingSystemSignalPlugin)?;
     builder.with_plugin(dirkengine::assets::AssetsPlugin)?;
     builder.with_plugin(dirkengine::platform::PlatformPlugin)?;
     builder.with_plugin(dirkengine::player::PlayerPlugin)?;

@@ -200,6 +200,16 @@ fn build_context() -> EngineBuildContext {
 }
 
 pub(crate) fn engine_with_subsystems(subsystems: Vec<Box<dyn Subsystem>>) -> Engine {
+    engine_with_subsystems_and_signals(
+        subsystems,
+        signal::OperatingSystemSignals::empty_for_tests(),
+    )
+}
+
+fn engine_with_subsystems_and_signals(
+    subsystems: Vec<Box<dyn Subsystem>>,
+    signals: signal::OperatingSystemSignals,
+) -> Engine {
     let workers = WorkerPool::new("dirk-engine-test");
     let events = EventManager::new(workers.clone());
     let state = Arc::new(EngineState::new());
@@ -226,11 +236,32 @@ pub(crate) fn engine_with_subsystems(subsystems: Vec<Box<dyn Subsystem>>) -> Eng
         state,
         handle,
         command_receiver,
+        signals,
         frame_dispatcher: events.register(),
         exiting_dispatcher: events.register(),
         last_tick: Instant::now(),
         started: false,
         shutdown: false,
+    }
+}
+
+struct CountingTickSubsystem {
+    ticks: Arc<AtomicUsize>,
+}
+
+impl Subsystem for CountingTickSubsystem {
+    fn name(&self) -> &'static str {
+        "counting-tick"
+    }
+
+    fn tick(
+        &mut self,
+        _delta_time: f64,
+        _handle: &EngineHandle,
+        _universe: &mut Universe,
+    ) -> anyhow::Result<()> {
+        self.ticks.fetch_add(1, Ordering::Relaxed);
+        Ok(())
     }
 }
 
@@ -328,6 +359,27 @@ fn subsystem_shutdown_failure_uses_shutdown_error_variant() {
             ..
         })
     ));
+}
+
+#[test]
+fn operating_system_signals_are_processed_before_subsystem_ticks() -> Result<()> {
+    let ticks = Arc::new(AtomicUsize::new(0));
+    let signals =
+        signal::OperatingSystemSignals::with_signal_for_tests(signal_hook::consts::SIGINT)
+            .map_err(Error::SubsystemFailedInit)?;
+    let mut engine = engine_with_subsystems_and_signals(
+        vec![Box::new(CountingTickSubsystem {
+            ticks: Arc::clone(&ticks),
+        })],
+        signals,
+    );
+
+    let status = engine.tick()?;
+
+    assert_eq!(status, EngineStatus::ExitRequested);
+    assert_eq!(ticks.load(Ordering::Relaxed), 0);
+    engine.shutdown()?;
+    Ok(())
 }
 
 #[test]

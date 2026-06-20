@@ -4,6 +4,13 @@
 //! inside the OS signal context. `signal-hook` writes notifications into a pipe,
 //! a background thread forwards them to this subsystem, and the subsystem asks
 //! the engine to exit during the normal tick flow.
+//!
+//! This is intentionally scoped to terminal and service-manager workflows. On
+//! Unix-like systems this covers common termination signals such as `SIGINT`,
+//! `SIGTERM`, `SIGHUP`, and `SIGQUIT`. On Windows, `signal-hook` is limited to
+//! CRT signal emulation, so this covers `SIGINT` and `SIGBREAK` only. Console
+//! close, logoff, shutdown events, and normal game-window close events are
+//! handled elsewhere by platform/window integration.
 
 use std::{
     sync::{
@@ -13,37 +20,16 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use dirk_universe::Universe;
 use signal_hook::{
     iterator::{Handle as SignalIteratorHandle, Signals},
     low_level::{emulate_default_handler, signal_name},
 };
 use tracing::{debug, error, info, warn};
 
-use crate::{EngineBuilder, EngineHandle, EnginePlugin, Subsystem};
-
 #[cfg(windows)]
-use signal_hook::consts::signal::{SIGABRT, SIGBREAK, SIGINT, SIGTERM};
+use signal_hook::consts::signal::{SIGBREAK, SIGINT};
 #[cfg(not(windows))]
-use signal_hook::consts::signal::{SIGABRT, SIGHUP, SIGINT, SIGQUIT, SIGTERM};
-
-/// Registers operating system signal handlers with the engine.
-///
-/// The first handled signal requests graceful engine shutdown. Handled signals
-/// include `SIGINT`, `SIGTERM`, and `SIGABRT`, plus platform-specific console
-/// termination signals where available.
-pub struct OperatingSystemSignalPlugin;
-
-impl EnginePlugin for OperatingSystemSignalPlugin {
-    fn name(&self) -> &'static str {
-        "operating-system-signals"
-    }
-
-    fn build(&self, builder: &mut EngineBuilder) -> anyhow::Result<()> {
-        builder.add_subsystem(|_ctx| OperatingSystemSignalSubsystem::install());
-        Ok(())
-    }
-}
+use signal_hook::consts::signal::{SIGHUP, SIGINT, SIGQUIT, SIGTERM};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct OperatingSystemSignal {
@@ -118,17 +104,20 @@ impl Drop for SignalListener {
     }
 }
 
-struct OperatingSystemSignalSubsystem {
+pub(crate) struct OperatingSystemSignals {
     receiver: Receiver<OperatingSystemSignal>,
     listener: Option<SignalListener>,
 }
 
-impl OperatingSystemSignalSubsystem {
-    fn install() -> anyhow::Result<Self> {
+impl OperatingSystemSignals {
+    pub(crate) fn install() -> anyhow::Result<Self> {
         let (sender, receiver) = mpsc::channel();
         let listener = SignalListener::install(sender)?;
 
-        info!(signals = ?handled_signals(), "installed operating system signal handlers");
+        info!(
+            signals = ?handled_signal_names(),
+            "installed operating system signal handlers",
+        );
         Ok(Self {
             receiver,
             listener: Some(listener),
@@ -142,67 +131,94 @@ impl OperatingSystemSignalSubsystem {
             listener: None,
         }
     }
-}
 
-impl Subsystem for OperatingSystemSignalSubsystem {
-    fn name(&self) -> &'static str {
-        "operating-system-signals"
+    #[cfg(test)]
+    pub(crate) fn empty_for_tests() -> Self {
+        let (_sender, receiver) = mpsc::channel();
+        Self::from_receiver(receiver)
     }
 
-    fn tick(
-        &mut self,
-        _delta_time: f64,
-        handle: &EngineHandle,
-        _universe: &mut Universe,
-    ) -> anyhow::Result<()> {
-        if let Some(signal) = self.receiver.try_iter().next() {
+    #[cfg(test)]
+    pub(crate) fn with_signal_for_tests(signal: i32) -> anyhow::Result<Self> {
+        let (sender, receiver) = mpsc::channel();
+        sender.send(OperatingSystemSignal::new(signal))?;
+        Ok(Self::from_receiver(receiver))
+    }
+
+    pub(crate) fn exit_requested(&mut self) -> bool {
+        if let Ok(signal) = self.receiver.try_recv() {
             warn!(
                 signal = signal.number,
                 name = signal.name(),
                 "operating system signal received; requesting engine shutdown",
             );
-            handle.exit();
+            return true;
         }
 
-        Ok(())
+        false
     }
 
-    fn shutdown(&mut self, _handle: &EngineHandle, _universe: &mut Universe) -> anyhow::Result<()> {
+    pub(crate) fn shutdown(&mut self) {
         if let Some(mut listener) = self.listener.take() {
             listener.shutdown();
             debug!("shut down operating system signal listener");
         }
-
-        Ok(())
     }
 }
 
 #[cfg(not(windows))]
 fn handled_signals() -> &'static [i32] {
-    &[SIGINT, SIGTERM, SIGABRT, SIGHUP, SIGQUIT]
+    &[SIGINT, SIGTERM, SIGHUP, SIGQUIT]
 }
 
 #[cfg(windows)]
 fn handled_signals() -> &'static [i32] {
-    &[SIGINT, SIGTERM, SIGABRT, SIGBREAK]
+    &[SIGINT, SIGBREAK]
+}
+
+fn handled_signal_names() -> Vec<&'static str> {
+    handled_signals()
+        .iter()
+        .copied()
+        .map(signal_display_name)
+        .collect()
+}
+
+fn signal_display_name(signal: i32) -> &'static str {
+    if let Some(name) = signal_name(signal) {
+        return name;
+    }
+
+    #[cfg(windows)]
+    if signal == SIGBREAK {
+        return "SIGBREAK";
+    }
+
+    "unknown signal"
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::EngineStatus;
 
     #[test]
-    fn received_signal_requests_engine_exit() -> anyhow::Result<()> {
-        let (sender, receiver) = mpsc::channel();
-        sender.send(OperatingSystemSignal::new(SIGINT))?;
+    fn received_signal_requests_exit() -> anyhow::Result<()> {
+        let mut signals = OperatingSystemSignals::with_signal_for_tests(SIGINT)?;
 
-        let mut engine = crate::tests::engine_with_subsystems(vec![Box::new(
-            OperatingSystemSignalSubsystem::from_receiver(receiver),
-        )]);
-
-        assert_eq!(engine.tick()?, EngineStatus::ExitRequested);
-        engine.shutdown()?;
+        assert!(signals.exit_requested());
         Ok(())
+    }
+
+    #[test]
+    fn startup_signal_names_are_human_readable() {
+        let signal_names = handled_signal_names();
+
+        assert!(signal_names.contains(&"SIGINT"));
+        assert!(!signal_names.contains(&"unknown signal"));
+    }
+
+    #[test]
+    fn abort_signal_is_not_handled() {
+        assert!(!handled_signals().contains(&signal_hook::consts::SIGABRT));
     }
 }
