@@ -233,6 +233,8 @@ fn engine_with_subsystems_and_signals(
         logger: piquel_log::Logger::new(),
         universe: Universe::builder().build(),
         subsystems,
+        #[cfg(feature = "editor")]
+        editor: editor::EditorRuntime::empty_for_tests(),
         state,
         handle,
         command_receiver,
@@ -463,4 +465,375 @@ fn subsystem_factories_publish_and_read_resources_and_lifecycle_still_runs() -> 
     );
 
     Ok(())
+}
+
+#[cfg(feature = "editor")]
+mod editor_tests {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    use parking_lot::Mutex;
+
+    use super::*;
+    use crate::editor::{
+        EditorMenuDescriptor, EditorRenderContext, EditorServices, EditorSubsystem,
+        EditorTickContext, EditorWindowDescriptor, EditorWindowInfo,
+    };
+
+    struct FirstEditorSubsystem {
+        events: Arc<Mutex<Vec<&'static str>>>,
+    }
+
+    impl EditorSubsystem for FirstEditorSubsystem {
+        fn name(&self) -> &'static str {
+            "first-editor"
+        }
+
+        fn start(
+            &mut self,
+            _context: &mut crate::editor::EditorStartContext<'_>,
+        ) -> anyhow::Result<()> {
+            self.events.lock().push("first-start");
+            Ok(())
+        }
+
+        fn tick(&mut self, _context: &mut EditorTickContext<'_>) -> anyhow::Result<()> {
+            self.events.lock().push("first-tick");
+            Ok(())
+        }
+
+        fn shutdown(
+            &mut self,
+            _context: &mut crate::editor::EditorShutdownContext<'_>,
+        ) -> anyhow::Result<()> {
+            self.events.lock().push("first-shutdown");
+            Ok(())
+        }
+    }
+
+    struct SecondEditorSubsystem {
+        events: Arc<Mutex<Vec<&'static str>>>,
+    }
+
+    impl EditorSubsystem for SecondEditorSubsystem {
+        fn name(&self) -> &'static str {
+            "second-editor"
+        }
+
+        fn start(
+            &mut self,
+            _context: &mut crate::editor::EditorStartContext<'_>,
+        ) -> anyhow::Result<()> {
+            self.events.lock().push("second-start");
+            Ok(())
+        }
+
+        fn tick(&mut self, _context: &mut EditorTickContext<'_>) -> anyhow::Result<()> {
+            self.events.lock().push("second-tick");
+            Ok(())
+        }
+
+        fn shutdown(
+            &mut self,
+            _context: &mut crate::editor::EditorShutdownContext<'_>,
+        ) -> anyhow::Result<()> {
+            self.events.lock().push("second-shutdown");
+            Ok(())
+        }
+    }
+
+    struct DuplicateEditorSubsystem;
+
+    impl EditorSubsystem for DuplicateEditorSubsystem {
+        fn name(&self) -> &'static str {
+            "duplicate-editor"
+        }
+    }
+
+    struct StartFailingEditorSubsystem;
+
+    impl EditorSubsystem for StartFailingEditorSubsystem {
+        fn name(&self) -> &'static str {
+            "start-failing-editor"
+        }
+
+        fn start(
+            &mut self,
+            _context: &mut crate::editor::EditorStartContext<'_>,
+        ) -> anyhow::Result<()> {
+            Err(anyhow::anyhow!("editor start failed"))
+        }
+    }
+
+    fn render_services(services: &EditorServices, universe: &Universe) -> anyhow::Result<()> {
+        let ctx = egui::Context::default();
+        ctx.begin_pass(egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(800.0, 600.0),
+            )),
+            ..egui::RawInput::default()
+        });
+
+        let handle = build_context().handle().clone();
+        let frame = EditorRenderContext::new(0.016, &handle, universe, services);
+        let result = services.render_ui(&ctx, &frame);
+        let _ = ctx.end_pass();
+        result
+    }
+
+    fn descriptor(title: &str, default_open: bool) -> EditorWindowDescriptor {
+        EditorWindowDescriptor {
+            title: title.to_owned(),
+            category: "Tests".to_owned(),
+            default_open,
+        }
+    }
+
+    #[test]
+    fn editor_subsystem_registration_order_drives_lifecycle_order() -> Result<()> {
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let mut builder = EngineBuilder::new();
+
+        {
+            let events = Arc::clone(&events);
+            builder.add_editor_subsystem(move |_ctx| Ok(FirstEditorSubsystem { events }));
+        }
+        {
+            let events = Arc::clone(&events);
+            builder.add_editor_subsystem(move |_ctx| Ok(SecondEditorSubsystem { events }));
+        }
+
+        let mut engine = builder.build()?;
+        engine.start()?;
+        engine.tick()?;
+        engine.shutdown()?;
+
+        assert_eq!(
+            &*events.lock(),
+            &[
+                "first-start",
+                "second-start",
+                "first-tick",
+                "second-tick",
+                "second-shutdown",
+                "first-shutdown",
+            ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn duplicate_editor_subsystem_registration_is_skipped() -> Result<()> {
+        let builds = Arc::new(AtomicUsize::new(0));
+        let mut builder = EngineBuilder::new();
+
+        {
+            let builds = Arc::clone(&builds);
+            builder.add_editor_subsystem(move |_ctx| {
+                builds.fetch_add(1, Ordering::Relaxed);
+                Ok(DuplicateEditorSubsystem)
+            });
+        }
+        {
+            let builds = Arc::clone(&builds);
+            builder.add_editor_subsystem(move |_ctx| {
+                builds.fetch_add(1, Ordering::Relaxed);
+                Ok(DuplicateEditorSubsystem)
+            });
+        }
+
+        let _engine = builder.build()?;
+
+        assert_eq!(builds.load(Ordering::Relaxed), 1);
+        Ok(())
+    }
+
+    #[test]
+    fn editor_lifecycle_errors_include_subsystem_names() -> Result<()> {
+        let mut builder = EngineBuilder::new();
+        builder.add_editor_subsystem(|_ctx| Ok(StartFailingEditorSubsystem));
+        let mut engine = builder.build()?;
+
+        let result = engine.start();
+
+        assert!(matches!(
+            result,
+            Err(Error::EditorSubsystemFailedStart {
+                name: "start-failing-editor",
+                ..
+            })
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn editor_services_are_published_as_an_engine_resource() -> Result<()> {
+        let observed = Arc::new(Mutex::new(None));
+        let observed_services = Arc::clone(&observed);
+        let mut builder = EngineBuilder::new();
+
+        builder.add_editor_subsystem(move |ctx| {
+            *observed_services.lock() = Some(ctx.engine.resource::<EditorServices>()?);
+            Ok(DuplicateEditorSubsystem)
+        });
+
+        let _engine = builder.build()?;
+
+        assert!(observed.lock().is_some());
+        Ok(())
+    }
+
+    #[test]
+    fn window_ids_are_stable_and_increasing() {
+        let services = EditorServices::new();
+
+        let first = services.add_window_fn(descriptor("first", false), |_ui, _context| Ok(()));
+        let second = services.add_window_fn(descriptor("second", false), |_ui, _context| Ok(()));
+
+        assert_eq!(first.raw(), 1);
+        assert_eq!(second.raw(), 2);
+    }
+
+    #[test]
+    fn window_default_open_state_is_honored() {
+        let services = EditorServices::new();
+
+        let open = services.add_window_fn(descriptor("open", true), |_ui, _context| Ok(()));
+        let closed = services.add_window_fn(descriptor("closed", false), |_ui, _context| Ok(()));
+
+        assert_eq!(services.is_open(open), Some(true));
+        assert_eq!(services.is_open(closed), Some(false));
+    }
+
+    #[test]
+    fn closed_windows_do_not_render() -> anyhow::Result<()> {
+        let services = EditorServices::new();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let callback_calls = Arc::clone(&calls);
+        let id = services.add_window_fn(descriptor("window", true), move |_ui, _context| {
+            callback_calls.fetch_add(1, Ordering::Relaxed);
+            Ok(())
+        });
+        services.set_open(id, false);
+
+        let universe = Universe::builder().build();
+        render_services(&services, &universe)?;
+
+        assert_eq!(calls.load(Ordering::Relaxed), 0);
+        Ok(())
+    }
+
+    #[test]
+    fn open_windows_render_in_registration_order() -> anyhow::Result<()> {
+        let services = EditorServices::new();
+        let calls = Arc::new(Mutex::new(Vec::new()));
+
+        for label in ["first", "second", "third"] {
+            let calls = Arc::clone(&calls);
+            services.add_window_fn(descriptor(label, true), move |_ui, _context| {
+                calls.lock().push(label);
+                Ok(())
+            });
+        }
+
+        let universe = Universe::builder().build();
+        render_services(&services, &universe)?;
+
+        assert_eq!(*calls.lock(), vec!["first", "second", "third"]);
+        Ok(())
+    }
+
+    #[test]
+    fn window_render_errors_include_window_title() {
+        let services = EditorServices::new();
+        services.add_window_fn(descriptor("error", true), |_ui, _context| {
+            Err(anyhow::anyhow!("window failed"))
+        });
+
+        let universe = Universe::builder().build();
+        let err = render_services(&services, &universe).expect_err("render should fail");
+
+        assert!(err.to_string().contains("window `error`"));
+    }
+
+    #[test]
+    fn windows_expose_registered_window_metadata_and_open_state() {
+        let services = EditorServices::new();
+
+        let first = services.add_window_fn(
+            EditorWindowDescriptor {
+                title: "zeta".to_owned(),
+                category: "Universe".to_owned(),
+                default_open: true,
+            },
+            |_ui, _context| Ok(()),
+        );
+        let second = services.add_window_fn(
+            EditorWindowDescriptor {
+                title: "alpha".to_owned(),
+                category: "Editor".to_owned(),
+                default_open: false,
+            },
+            |_ui, _context| Ok(()),
+        );
+
+        assert_eq!(
+            services.windows(),
+            vec![
+                EditorWindowInfo {
+                    id: first,
+                    title: "zeta".to_owned(),
+                    category: "Universe".to_owned(),
+                    open: true,
+                },
+                EditorWindowInfo {
+                    id: second,
+                    title: "alpha".to_owned(),
+                    category: "Editor".to_owned(),
+                    open: false,
+                },
+            ]
+        );
+        assert_eq!(
+            services.window(second),
+            Some(EditorWindowInfo {
+                id: second,
+                title: "alpha".to_owned(),
+                category: "Editor".to_owned(),
+                open: false,
+            })
+        );
+    }
+
+    #[test]
+    fn editor_open_window_command_reopens_closed_windows() {
+        let services = EditorServices::new();
+        let id = services.add_window_fn(descriptor("window", false), |_ui, _context| Ok(()));
+
+        services.open_window_for_tests(id);
+
+        assert_eq!(services.is_open(id), Some(true));
+    }
+
+    #[test]
+    fn menu_capabilities_are_registered_in_registration_order() {
+        let services = EditorServices::new();
+
+        for label in ["first", "second", "third"] {
+            services.add_menu_fn(
+                EditorMenuDescriptor {
+                    title: label.to_owned(),
+                },
+                move |_ui, _context, editor| {
+                    let _ = editor.windows();
+                    Ok(())
+                },
+            );
+        }
+
+        assert_eq!(services.menu_titles(), vec!["first", "second", "third"]);
+    }
 }
