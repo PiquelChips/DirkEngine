@@ -39,7 +39,7 @@ pub use errors::{Error, Result};
 #[cfg(feature = "editor")]
 mod egui_integration;
 #[cfg(feature = "editor")]
-use egui_integration::EguiState;
+use egui_integration::{EguiFrameInput, EguiState};
 
 mod window;
 use window::Window;
@@ -86,6 +86,8 @@ impl dirk_engine::EnginePlugin for RendererPlugin {
 
         builder.add_subsystem(|ctx| {
             let platform_windows = ctx.resource::<dirk_platform::PlatformWindows>()?;
+            #[cfg(feature = "editor")]
+            let input_router = ctx.resource::<dirk_platform::InputRouter>()?;
 
             let create_info = RendererCreateInfo::from_engine_metadata(ctx.handle().metadata())?;
 
@@ -95,6 +97,8 @@ impl dirk_engine::EnginePlugin for RendererPlugin {
                 &main_window,
                 ctx.events(),
                 platform_windows.clone(),
+                #[cfg(feature = "editor")]
+                input_router,
             )?;
 
             ctx.extend_universe(renderer.universe_builder());
@@ -157,6 +161,10 @@ struct Renderer {
     /// Immediate-mode UI rendering state.
     #[cfg(feature = "editor")]
     egui: EguiState,
+    #[cfg(feature = "editor")]
+    egui_window: Option<WindowId>,
+    #[cfg(feature = "editor")]
+    input_router: dirk_platform::InputRouter,
     /// Maps each live [`PlayerId`] to its proxy.
     players: HashMap<PlayerId, PlayerProxy>,
 
@@ -195,9 +203,6 @@ impl dirk_engine::Subsystem for Renderer {
             self.render_ui(delta_time, &ctx);
         }
 
-        #[cfg(not(feature = "editor"))]
-        self.begin_frame();
-
         self.end_frame().context("rendering")?;
 
         Ok(())
@@ -226,6 +231,7 @@ impl Renderer {
         window: &dirk_platform::Window,
         event_manager: &dirk_events::EventManager,
         platform_windows: PlatformWindows,
+        #[cfg(feature = "editor")] input_router: dirk_platform::InputRouter,
     ) -> Result<Self> {
         info!("Intializing Vulkan...");
 
@@ -309,6 +315,10 @@ impl Renderer {
             models,
             #[cfg(feature = "editor")]
             egui,
+            #[cfg(feature = "editor")]
+            egui_window: None,
+            #[cfg(feature = "editor")]
+            input_router,
 
             frames,
             current_frame,
@@ -327,21 +337,16 @@ impl Renderer {
     /// Returns an [`egui::Context`] for rendering.
     #[cfg(feature = "editor")]
     pub fn begin_frame(&mut self) -> egui::Context {
-        self.egui.begin_frame(self.primary_extent())
+        let input = self.egui_frame_input();
+        self.egui_window = Some(input.window_id);
+        self.egui.begin_frame(&input)
     }
-
-    /// Begins a frame.
-    #[cfg(not(feature = "editor"))]
-    #[allow(clippy::unused_self)]
-    pub fn begin_frame(&mut self) {}
 
     // TODO: shouldn't be necessary
     #[cfg(feature = "editor")]
     fn primary_extent(&self) -> vk::Extent2D {
-        self.players
-            .values()
-            .find_map(|player| self.windows.get(&player.window))
-            .or_else(|| self.windows.values().next())
+        self.primary_window_id()
+            .and_then(|id| self.windows.get(&id))
             .map_or(
                 vk::Extent2D {
                     width: 1,
@@ -349,6 +354,53 @@ impl Renderer {
                 },
                 Window::extent,
             )
+    }
+
+    #[cfg(feature = "editor")]
+    fn primary_window_id(&self) -> Option<WindowId> {
+        self.players
+            .values()
+            .find_map(|player| {
+                self.windows
+                    .contains_key(&player.window)
+                    .then_some(player.window)
+            })
+            .or_else(|| self.windows.keys().next().copied())
+    }
+
+    #[cfg(feature = "editor")]
+    #[allow(clippy::cast_possible_truncation)]
+    fn egui_frame_input(&mut self) -> EguiFrameInput {
+        let window_id = self
+            .primary_window_id()
+            .unwrap_or_else(|| WindowId::from_raw(0));
+        let extent = self.primary_extent();
+        let events = self
+            .input_router
+            .drain_ui_events()
+            .into_iter()
+            .filter(|event| event.id() == window_id)
+            .collect();
+
+        let (native_pixels_per_point, focused, theme) = {
+            let windows = self.platform_windows.windows();
+            windows.get(&window_id).map_or((1.0, true, None), |window| {
+                (
+                    window.scale_factor() as f32,
+                    window.focused(),
+                    Some(window.theme()),
+                )
+            })
+        };
+
+        EguiFrameInput {
+            window_id,
+            extent,
+            native_pixels_per_point,
+            focused,
+            theme,
+            events,
+        }
     }
 
     /// Returns a [`UniverseBuilder`] that is populated with [`Renderer`] systems.
@@ -458,7 +510,12 @@ impl Renderer {
     /// Vulkan errors can occur during rendering
     fn end_frame(&mut self) -> Result<()> {
         #[cfg(feature = "editor")]
-        self.egui.end_frame();
+        {
+            let capture = self.egui.end_frame();
+            if let Some(window_id) = self.egui_window {
+                self.input_router.set_capture(window_id, capture);
+            }
+        }
 
         let frame_index = self.current_frame();
         let frame = &self.frames[frame_index];

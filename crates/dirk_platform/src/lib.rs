@@ -11,14 +11,19 @@ use winit::event_loop::{
 mod errors;
 mod event;
 mod handler;
+mod router;
 mod window;
-pub use errors::Error;
-pub use event::*;
-pub use window::{MainWindow, PlatformWindows, Window, Windows};
+
 pub use winit::{
     event::{ButtonSource, MouseButton},
-    keyboard::{KeyCode, PhysicalKey},
-    window::WindowId,
+    keyboard::{Key, KeyCode, ModifiersState, NamedKey, PhysicalKey},
+    window::{Theme, WindowId},
+};
+pub use {
+    errors::Error,
+    event::*,
+    router::{InputCapture, InputRouter},
+    window::{MainWindow, PlatformWindows, Window, Windows},
 };
 
 use errors::Result;
@@ -36,6 +41,7 @@ impl dirk_engine::EnginePlugin for PlatformPlugin {
         builder.add_subsystem(|ctx| {
             let platform = Platform::init(ctx.events())?;
             ctx.add_resource(platform.platform_windows())?;
+            ctx.add_resource(platform.input_router())?;
             Ok(platform)
         });
         Ok(())
@@ -50,6 +56,7 @@ struct Platform {
     handler: PlatformHandler,
     event_loop: EventLoop,
     windows: PlatformWindows,
+    input_router: InputRouter,
 
     window_consumer: dirk_events::Consumer<WindowEvent>,
 }
@@ -64,10 +71,12 @@ impl Platform {
     /// to start it.
     fn init(events: &dirk_events::EventManager) -> Result<Self> {
         let windows = PlatformWindows::default();
+        let input_router = InputRouter::default();
         let mut platform = Self {
-            handler: PlatformHandler::new(events, windows.clone()),
+            handler: PlatformHandler::new(events, windows.clone(), input_router.clone()),
             event_loop: EventLoop::new()?,
             windows,
+            input_router,
             window_consumer: events.subscribe(),
         };
 
@@ -92,6 +101,12 @@ impl Platform {
     #[must_use]
     pub fn platform_windows(&self) -> PlatformWindows {
         self.windows.clone()
+    }
+
+    /// Returns the shared platform input router.
+    #[must_use]
+    pub fn input_router(&self) -> InputRouter {
+        self.input_router.clone()
     }
 }
 
