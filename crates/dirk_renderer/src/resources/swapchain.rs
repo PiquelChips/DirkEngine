@@ -4,7 +4,10 @@ use ash::vk;
 
 use crate::{
     Error, Result,
-    resources::device::{Garbage, RenderDevice},
+    resources::{
+        device::{Garbage, RenderDevice},
+        sync::Fence,
+    },
 };
 
 /// An acquired image from a [`Swapchain`].
@@ -98,7 +101,7 @@ impl Swapchain {
                 self.raw,
                 u64::MAX,
                 image_available_semaphore,
-                vk::Fence::null(),
+                Fence::null_handle(),
             )?
         };
 
