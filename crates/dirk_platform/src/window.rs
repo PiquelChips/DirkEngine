@@ -149,6 +149,25 @@ impl Window {
     pub fn size(&self) -> PhysicalSize<u32> {
         self.raw.surface_size()
     }
+
+    /// Returns the native scale factor for this window.
+    #[must_use]
+    pub fn scale_factor(&self) -> f64 {
+        self.raw.scale_factor()
+    }
+
+    /// Returns whether this window is focused.
+    #[must_use]
+    pub fn focused(&self) -> bool {
+        self.focused
+    }
+
+    /// Returns the current window theme.
+    #[must_use]
+    pub fn theme(&self) -> Theme {
+        self.theme
+    }
+
     /// Handles [`WindowEvent`]. These should first be proccessed
     /// and accepted by the window.
     pub fn handle_event(&mut self, event: &WindowEvent) {

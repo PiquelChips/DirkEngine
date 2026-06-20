@@ -82,6 +82,7 @@ pub mod events;
 pub mod subsystem;
 
 mod builder;
+mod signal;
 pub use builder::{EngineBuildContext, EngineBuilder};
 
 use errors::{Error, Result};
@@ -157,6 +158,7 @@ pub struct Engine {
     state: Arc<EngineState>,
     handle: EngineHandle,
     command_receiver: Receiver<EngineCommand>,
+    signals: signal::OperatingSystemSignals,
     frame_dispatcher: dirk_events::Dispatcher<events::BeginFrame>,
     exiting_dispatcher: dirk_events::Dispatcher<events::Exiting>,
     last_tick: Instant,
@@ -240,6 +242,11 @@ impl Engine {
             return Ok(self.status());
         }
 
+        self.process_operating_system_signals();
+        if self.is_exiting() {
+            return Ok(self.status());
+        }
+
         let frame = self.state.increment_frame();
         self.frame_dispatcher.dispatch(events::BeginFrame(frame));
 
@@ -305,6 +312,7 @@ impl Engine {
                 })?;
         }
 
+        self.signals.shutdown();
         self.shutdown = true;
         self.state.set_status(EngineStatus::Exited);
         Ok(())
@@ -328,6 +336,12 @@ impl Engine {
             match command {
                 EngineCommand::RequestExit(error) => self.request_exit(error),
             }
+        }
+    }
+
+    fn process_operating_system_signals(&mut self) {
+        if self.signals.exit_requested() {
+            self.request_exit(None);
         }
     }
 

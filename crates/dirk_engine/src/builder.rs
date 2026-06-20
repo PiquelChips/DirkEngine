@@ -15,7 +15,7 @@ use tracing::info;
 
 use crate::{
     Engine, EngineHandle, EngineMetadata, EnginePlugin, EngineResource, EngineState, Result,
-    Subsystem, errors::Error,
+    Subsystem, errors::Error, signal::OperatingSystemSignals,
 };
 
 type SubsystemFactory =
@@ -205,7 +205,10 @@ impl EngineBuilder {
             builder: Universe::builder(),
         };
 
+        let signals = OperatingSystemSignals::install().map_err(Error::SignalHandlerInitFailed)?;
+
         let mut subsystems = Vec::with_capacity(self.subsystem_factories.len());
+
         for type_id in self.subsystem_order {
             if let Some(factory) = self.subsystem_factories.remove(&type_id) {
                 subsystems.push(factory(&mut context).map_err(Error::SubsystemFailedInit)?);
@@ -221,6 +224,7 @@ impl EngineBuilder {
             state,
             handle,
             command_receiver,
+            signals,
             frame_dispatcher: events.register(),
             exiting_dispatcher: events.register(),
             last_tick: Instant::now(),
