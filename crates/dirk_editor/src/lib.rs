@@ -76,7 +76,7 @@ impl EditorMenu for MainMenu {
 }
 
 /// Window list menu capability for the default editor package.
-pub struct WindowListMenu;
+struct WindowListMenu;
 
 impl EditorMenu for WindowListMenu {
     fn descriptor(&self) -> EditorMenuDescriptor {
@@ -125,7 +125,7 @@ fn grouped_window_menu_entries(
 }
 
 /// Engine diagnostics window capability for the default editor package.
-pub struct EngineDiagnosticsWindow;
+struct EngineDiagnosticsWindow;
 
 impl EditorWindow for EngineDiagnosticsWindow {
     fn descriptor(&self) -> EditorWindowDescriptor {

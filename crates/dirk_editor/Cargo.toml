@@ -1,6 +1,6 @@
 [package]
 name = "dirk_editor"
-description = "The entire editor logic & API for DirkEngine"
+description = "The base editor menus & windows"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true

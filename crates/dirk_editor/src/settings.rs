@@ -3,7 +3,7 @@ use crate::{
     EditorWindow, EditorWindowDescriptor, EditorWindowId,
 };
 
-pub(crate) fn register_capabilities(services: &EditorServices) {
+pub fn register_capabilities(services: &EditorServices) {
     let editor_settings = services.add_window(EditorSettingsWindow);
     services.add_menu(SettingsMenu {
         settings_windows: vec![editor_settings],
