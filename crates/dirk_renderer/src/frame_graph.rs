@@ -45,6 +45,7 @@ pub struct TextureDesc {
 
 /// Carries the physical `VkImage`/`VkImageView` for resources that live
 /// outside the graph (swapchain images being the canonical example).
+#[derive(Clone, Copy)]
 pub struct ImportedTexture {
     /// Externally-owned Vulkan image.
     pub image: vk::Image,
@@ -52,11 +53,18 @@ pub struct ImportedTexture {
     pub view: vk::ImageView,
     /// Aspect mask covered by the imported image.
     pub aspect_flags: vk::ImageAspectFlags,
-    /// Layout the image is in *before* the first pass touches it.
-    pub initial_layout: vk::ImageLayout,
-    /// Layout the image must be in *after* all passes have executed
-    /// (e.g. `PRESENT_SRC_KHR` for swapchain images).
-    pub final_layout: vk::ImageLayout,
+    /// Synchronization state the image is in before the first pass touches it.
+    pub initial_state: TextureStateDesc,
+    /// Synchronization state the image must be in after all passes execute.
+    pub final_state: TextureStateDesc,
+}
+
+/// External texture synchronization state at a graph boundary.
+#[derive(Clone, Copy)]
+pub struct TextureStateDesc {
+    pub layout: vk::ImageLayout,
+    pub stage: vk::PipelineStageFlags2,
+    pub access: vk::AccessFlags2,
 }
 
 /// Resolved Vulkan handles for a graph texture.
@@ -455,15 +463,16 @@ impl<'a> RenderGraph<'a> {
         for (idx, desc) in self.textures.iter().enumerate() {
             if let Some(imported) = &desc.imported {
                 let state = &states[idx];
-                if state.layout != imported.final_layout {
+                let final_state = ResourceState::from_state_desc(imported.final_state);
+                if state != &final_state {
                     final_barriers.push(ImageBarrier {
                         handle: texture_handle(idx),
                         old_layout: state.layout,
-                        new_layout: imported.final_layout,
+                        new_layout: final_state.layout,
                         src_stage: state.stage,
-                        dst_stage: vk::PipelineStageFlags2::BOTTOM_OF_PIPE,
+                        dst_stage: final_state.stage,
                         src_access: state.access,
-                        dst_access: vk::AccessFlags2::empty(),
+                        dst_access: final_state.access,
                     });
                 }
             }
@@ -486,7 +495,7 @@ impl Default for RenderGraph<'_> {
 /// The last-known synchronisation state of a single texture.
 /// Tracks exactly the three fields needed to fill out a
 /// `VkImageMemoryBarrier2`.
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 struct ResourceState {
     layout: vk::ImageLayout,
     stage: vk::PipelineStageFlags2,
@@ -495,13 +504,21 @@ struct ResourceState {
 
 impl ResourceState {
     fn from_desc(desc: &TextureDesc) -> Self {
+        desc.imported.as_ref().map_or(
+            Self {
+                layout: vk::ImageLayout::UNDEFINED,
+                stage: vk::PipelineStageFlags2::TOP_OF_PIPE,
+                access: vk::AccessFlags2::empty(),
+            },
+            |imported| Self::from_state_desc(imported.initial_state),
+        )
+    }
+
+    fn from_state_desc(desc: TextureStateDesc) -> Self {
         Self {
-            layout: desc
-                .imported
-                .as_ref()
-                .map_or(vk::ImageLayout::UNDEFINED, |i| i.initial_layout),
-            stage: vk::PipelineStageFlags2::TOP_OF_PIPE,
-            access: vk::AccessFlags2::empty(),
+            layout: desc.layout,
+            stage: desc.stage,
+            access: desc.access,
         }
     }
 }
@@ -547,8 +564,7 @@ struct CompiledGraph<'a> {
     textures: Vec<TextureDesc>,
     passes: Vec<CompiledPass<'a>>,
     /// Barriers emitted *after* the last pass – primarily used to transition
-    /// imported textures to their required `final_layout` (e.g.
-    /// `PRESENT_SRC_KHR`).
+    /// imported textures to their required final state.
     final_barriers: Vec<ImageBarrier>,
 }
 
