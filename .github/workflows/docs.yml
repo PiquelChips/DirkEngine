@@ -40,6 +40,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: "ci-ubuntu-latest"
+          cache-all-crates: "true"
 
       - name: Run docs-tests
         run: cargo test --workspace --locked --doc --all-features
