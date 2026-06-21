@@ -12,6 +12,43 @@ use dirk_engine::editor::{
 mod settings;
 mod universe;
 
+/// Registers the built-in editor subsystem package with the engine.
+pub struct EditorPlugin;
+
+impl dirk_engine::EnginePlugin for EditorPlugin {
+    fn name(&self) -> &'static str {
+        "editor"
+    }
+
+    fn build(&self, builder: &mut dirk_engine::EngineBuilder) -> anyhow::Result<()> {
+        builder.add_editor_subsystem(|_ctx| Ok(BuiltinEditorSubsystem));
+        Ok(())
+    }
+}
+
+/// Built-in editor subsystem package.
+struct BuiltinEditorSubsystem;
+
+impl dirk_engine::editor::EditorSubsystem for BuiltinEditorSubsystem {
+    fn name(&self) -> &'static str {
+        "builtin-editor"
+    }
+
+    fn start(
+        &mut self,
+        context: &mut dirk_engine::editor::EditorStartContext<'_>,
+    ) -> anyhow::Result<()> {
+        let services = context.editor;
+        services.add_menu(MainMenu);
+
+        settings::register_capabilities(services);
+        services.add_menu(WindowListMenu);
+        services.add_window(EngineDiagnosticsWindow);
+        universe::register_capabilities(services);
+        Ok(())
+    }
+}
+
 struct MainMenu;
 
 impl EditorMenu for MainMenu {
