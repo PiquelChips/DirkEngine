@@ -13,6 +13,8 @@ use dirk_universe::{Universe, UniverseBuilder};
 use parking_lot::RwLock;
 use tracing::info;
 
+#[cfg(feature = "editor")]
+use crate::editor::{self, EditorBuildContext, EditorServices, EditorSubsystem};
 use crate::{
     Engine, EngineHandle, EngineMetadata, EnginePlugin, EngineResource, EngineState, Result,
     Subsystem, errors::Error, signal::OperatingSystemSignals,
@@ -38,6 +40,10 @@ pub struct EngineBuilder {
     plugins_in_progress: HashSet<TypeId>,
     subsystem_factories: HashMap<TypeId, SubsystemFactory>,
     subsystem_order: Vec<TypeId>,
+    #[cfg(feature = "editor")]
+    editor_subsystem_factories: HashMap<TypeId, editor::EditorSubsystemFactory>,
+    #[cfg(feature = "editor")]
+    editor_subsystem_order: Vec<TypeId>,
 }
 
 impl EngineBuilder {
@@ -63,6 +69,10 @@ impl EngineBuilder {
             plugins_in_progress: HashSet::new(),
             subsystem_factories: HashMap::new(),
             subsystem_order: Vec::new(),
+            #[cfg(feature = "editor")]
+            editor_subsystem_factories: HashMap::new(),
+            #[cfg(feature = "editor")]
+            editor_subsystem_order: Vec::new(),
         }
     }
 
@@ -160,6 +170,36 @@ impl EngineBuilder {
         self
     }
 
+    /// Adds an editor subsystem factory.
+    ///
+    /// Duplicate editor subsystem types are skipped. The first registration
+    /// controls editor lifecycle order.
+    #[cfg(feature = "editor")]
+    pub fn add_editor_subsystem<F, S>(&mut self, factory: F) -> &mut Self
+    where
+        F: FnOnce(&mut EditorBuildContext<'_>) -> anyhow::Result<S> + Send + 'static,
+        S: EditorSubsystem + 'static,
+    {
+        let type_id = TypeId::of::<S>();
+        if self.editor_subsystem_factories.contains_key(&type_id) {
+            return self;
+        }
+
+        self.editor_subsystem_factories.insert(
+            type_id,
+            Box::new(move |context| {
+                Ok(Box::new(factory(context).map_err(|source| {
+                    Error::EditorSubsystemFailedInit {
+                        type_name: type_name::<S>(),
+                        source,
+                    }
+                })?) as Box<dyn EditorSubsystem>)
+            }),
+        );
+        self.editor_subsystem_order.push(type_id);
+        self
+    }
+
     /// Builds a new engine.
     ///
     /// # Errors
@@ -173,7 +213,13 @@ impl EngineBuilder {
                 PathBuf::from(std::env!("SAVED_PATH")).join("logs"),
             ));
 
-        logger.init()?;
+        if let Err(err) = logger.init() {
+            match err {
+                piquel_log::InitError::AlreadyInitialized
+                | piquel_log::InitError::LogBridgeAlreadyInitialized => {}
+                err @ piquel_log::InitError::Build(_) => return Err(err.into()),
+            }
+        }
 
         #[cfg(feature = "editor")]
         info!("starting editor");
@@ -205,6 +251,13 @@ impl EngineBuilder {
             builder: Universe::builder(),
         };
 
+        #[cfg(feature = "editor")]
+        let editor_services = {
+            let services = EditorServices::new();
+            context.add_resource(services.clone())?;
+            services
+        };
+
         let signals = OperatingSystemSignals::install().map_err(Error::SignalHandlerInitFailed)?;
 
         let mut subsystems = Vec::with_capacity(self.subsystem_factories.len());
@@ -215,12 +268,29 @@ impl EngineBuilder {
             }
         }
 
+        #[cfg(feature = "editor")]
+        let editor = {
+            let mut editor_subsystems = Vec::with_capacity(self.editor_subsystem_factories.len());
+            for type_id in self.editor_subsystem_order {
+                let mut editor_context = EditorBuildContext {
+                    engine: &mut context,
+                    editor: &editor_services,
+                };
+                if let Some(factory) = self.editor_subsystem_factories.remove(&type_id) {
+                    editor_subsystems.push(factory(&mut editor_context)?);
+                }
+            }
+            editor::EditorRuntime::new(editor_services, editor_subsystems)
+        };
+
         let universe = context.builder.build();
 
         Ok(Engine {
             logger,
             universe,
             subsystems,
+            #[cfg(feature = "editor")]
+            editor,
             state,
             handle,
             command_receiver,

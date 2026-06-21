@@ -1,0 +1,23 @@
+[package]
+name = "dirk_editor"
+description = "The base editor menus & windows"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+homepage.workspace = true
+authors.workspace = true
+documentation.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+parking_lot.workspace = true
+egui.workspace = true
+
+dirk_engine = { workspace = true, features = ["editor"] }
+dirk_universe.workspace = true
+
+[lints]
+workspace = true

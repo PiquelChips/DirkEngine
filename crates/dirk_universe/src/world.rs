@@ -69,6 +69,11 @@ impl World {
     pub fn name(&self) -> &str {
         &self.name
     }
+    /// Returns the number of alive entities in this world.
+    #[must_use]
+    pub fn entity_count(&self) -> usize {
+        self.alive.len()
+    }
 }
 
 /// Builder struct for [`World`].

@@ -52,6 +52,7 @@ dirk_build.workspace = true
 default = []
 
 editor = [
+    "dirk_engine/editor",
     "dep:egui",
     "dep:egui-ash-renderer",
 ]
