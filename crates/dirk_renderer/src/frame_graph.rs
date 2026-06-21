@@ -822,6 +822,39 @@ mod tests {
         }
     }
 
+    fn texture_state(
+        layout: vk::ImageLayout,
+        stage: vk::PipelineStageFlags2,
+        access: vk::AccessFlags2,
+    ) -> TextureStateDesc {
+        TextureStateDesc {
+            layout,
+            stage,
+            access,
+        }
+    }
+
+    fn imported_color_desc(
+        usage: vk::ImageUsageFlags,
+        initial_state: TextureStateDesc,
+        final_state: TextureStateDesc,
+    ) -> TextureDesc {
+        TextureDesc {
+            width: 64,
+            height: 64,
+            format: vk::Format::B8G8R8A8_UNORM,
+            usage,
+            samples: vk::SampleCountFlags::TYPE_1,
+            imported: Some(ImportedTexture {
+                image: vk::Image::null(),
+                view: vk::ImageView::null(),
+                aspect_flags: vk::ImageAspectFlags::COLOR,
+                initial_state,
+                final_state,
+            }),
+        }
+    }
+
     #[test]
     fn compile_transitions_color_attachment_to_transfer_src() {
         let mut graph = RenderGraph::new();
@@ -855,20 +888,19 @@ mod tests {
     #[test]
     fn compile_transitions_imported_swapchain_to_transfer_dst_then_present() {
         let mut graph = RenderGraph::new();
-        let swapchain = graph.import_texture(TextureDesc {
-            width: 64,
-            height: 64,
-            format: vk::Format::B8G8R8A8_UNORM,
-            usage: vk::ImageUsageFlags::TRANSFER_DST,
-            samples: vk::SampleCountFlags::TYPE_1,
-            imported: Some(ImportedTexture {
-                image: vk::Image::null(),
-                view: vk::ImageView::null(),
-                aspect_flags: vk::ImageAspectFlags::COLOR,
-                initial_layout: vk::ImageLayout::UNDEFINED,
-                final_layout: vk::ImageLayout::PRESENT_SRC_KHR,
-            }),
-        });
+        let swapchain = graph.import_texture(imported_color_desc(
+            vk::ImageUsageFlags::TRANSFER_DST,
+            texture_state(
+                vk::ImageLayout::UNDEFINED,
+                vk::PipelineStageFlags2::TOP_OF_PIPE,
+                vk::AccessFlags2::empty(),
+            ),
+            texture_state(
+                vk::ImageLayout::PRESENT_SRC_KHR,
+                vk::PipelineStageFlags2::BOTTOM_OF_PIPE,
+                vk::AccessFlags2::empty(),
+            ),
+        ));
 
         graph.add_pass("copy").write_transfer_dst(swapchain);
 
@@ -896,6 +928,95 @@ mod tests {
             vk::ImageLayout::TRANSFER_DST_OPTIMAL
         );
         assert_eq!(final_barrier.new_layout, vk::ImageLayout::PRESENT_SRC_KHR);
+        assert_eq!(
+            final_barrier.dst_stage,
+            vk::PipelineStageFlags2::BOTTOM_OF_PIPE
+        );
+        assert_eq!(final_barrier.dst_access, vk::AccessFlags2::empty());
+    }
+
+    #[test]
+    fn compile_transitions_imported_viewport_output_to_shader_read_final_state() {
+        let mut graph = RenderGraph::new();
+        let viewport = graph.import_texture(imported_color_desc(
+            vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::SAMPLED,
+            texture_state(
+                vk::ImageLayout::UNDEFINED,
+                vk::PipelineStageFlags2::TOP_OF_PIPE,
+                vk::AccessFlags2::empty(),
+            ),
+            texture_state(
+                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                vk::PipelineStageFlags2::FRAGMENT_SHADER,
+                vk::AccessFlags2::SHADER_READ,
+            ),
+        ));
+
+        graph
+            .add_pass("scene")
+            .write_color_attachment(viewport, AttachmentInfo::clear_color(0., 0., 0., 1.));
+
+        let compiled = graph.compile();
+        let final_barrier = compiled
+            .final_barriers
+            .iter()
+            .find(|barrier| barrier.handle == viewport)
+            .expect("final barrier should make viewport shader-readable");
+        assert_eq!(
+            final_barrier.old_layout,
+            vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL
+        );
+        assert_eq!(
+            final_barrier.new_layout,
+            vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL
+        );
+        assert_eq!(
+            final_barrier.dst_stage,
+            vk::PipelineStageFlags2::FRAGMENT_SHADER
+        );
+        assert_eq!(final_barrier.dst_access, vk::AccessFlags2::SHADER_READ);
+    }
+
+    #[test]
+    fn compile_reused_imported_viewport_starts_from_tracked_shader_read_state() {
+        let mut graph = RenderGraph::new();
+        let viewport = graph.import_texture(imported_color_desc(
+            vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::SAMPLED,
+            texture_state(
+                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                vk::PipelineStageFlags2::FRAGMENT_SHADER,
+                vk::AccessFlags2::SHADER_READ,
+            ),
+            texture_state(
+                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                vk::PipelineStageFlags2::FRAGMENT_SHADER,
+                vk::AccessFlags2::SHADER_READ,
+            ),
+        ));
+
+        graph
+            .add_pass("scene")
+            .write_color_attachment(viewport, AttachmentInfo::clear_color(0., 0., 0., 1.));
+
+        let compiled = graph.compile();
+        let scene_barrier = compiled.passes[0]
+            .pre_barriers
+            .iter()
+            .find(|barrier| barrier.handle == viewport)
+            .expect("scene pass should transition from tracked viewport state");
+        assert_eq!(
+            scene_barrier.old_layout,
+            vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL
+        );
+        assert_eq!(
+            scene_barrier.src_stage,
+            vk::PipelineStageFlags2::FRAGMENT_SHADER
+        );
+        assert_eq!(scene_barrier.src_access, vk::AccessFlags2::SHADER_READ);
+        assert_eq!(
+            scene_barrier.new_layout,
+            vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL
+        );
     }
 
     #[test]

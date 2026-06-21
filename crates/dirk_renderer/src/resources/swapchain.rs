@@ -16,7 +16,7 @@ use crate::{
 /// value with [`Self::present`] after the render-finished semaphore has been
 /// signalled.
 pub struct RenderImage {
-    /// The Image to be rendered too. The RenderImage does not own this image.
+    /// The image to render to. `RenderImage` does not own this image.
     pub image: vk::Image,
     pub view: vk::ImageView,
     pub image_index: u32,
