@@ -2,15 +2,15 @@
 //! engine CLI.
 
 use anyhow::Context;
-use clap::Parser;
+use clap::{ArgAction, Parser};
 
 #[derive(Parser, Debug)]
 #[command(name = "dirkengine")]
 #[command(about = "DirkEngine CLI")]
 struct Cli {
-    /// Enable debug logging.
-    #[arg(short = 'v', long = "verbose", global = true)]
-    verbose: bool,
+    /// Increase logging verbosity. Use -v for debug and -vv for trace.
+    #[arg(short = 'v', long = "verbose", global = true, action = ArgAction::Count)]
+    verbose: u8,
 
     /// Disable the demo world.
     #[arg(long = "no-demo", global = true)]
@@ -27,8 +27,14 @@ pub fn run() -> anyhow::Result<()> {
 
     let mut builder = dirk_engine::Engine::builder();
 
-    if cli.verbose {
-        builder.with_log_level(piquel_log::LogLevel::Trace);
+    match cli.verbose {
+        0 => {}
+        1 => {
+            builder.with_log_level(piquel_log::LogLevel::Debug);
+        }
+        _ => {
+            builder.with_log_level(piquel_log::LogLevel::Trace);
+        }
     }
 
     #[cfg(feature = "editor")]
@@ -47,4 +53,17 @@ pub fn run() -> anyhow::Result<()> {
 
     engine.run().context("run new engine")?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn verbosity_counts_repeated_flags() {
+        assert_eq!(Cli::parse_from(["dirkengine"]).verbose, 0);
+        assert_eq!(Cli::parse_from(["dirkengine", "-v"]).verbose, 1);
+        assert_eq!(Cli::parse_from(["dirkengine", "-vv"]).verbose, 2);
+        assert_eq!(Cli::parse_from(["dirkengine", "-v", "-v"]).verbose, 2);
+    }
 }

@@ -64,7 +64,7 @@ impl EngineBuilder {
             engine_name: "DirkEngine".to_owned(),
             engine_version: package_version,
             worker_name: "dirk-workers".to_owned(),
-            log_level: piquel_log::LogLevel::Debug,
+            log_level: piquel_log::LogLevel::Info,
             plugins: HashSet::new(),
             plugins_in_progress: HashSet::new(),
             subsystem_factories: HashMap::new(),
