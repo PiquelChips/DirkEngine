@@ -9,6 +9,8 @@ use dirk_engine::editor::{
     EditorWindow, EditorWindowDescriptor, EditorWindowId, EditorWindowInfo,
 };
 
+mod settings;
+
 struct MainMenu;
 
 impl EditorMenu for MainMenu {
