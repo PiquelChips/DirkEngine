@@ -3,6 +3,9 @@ use std::sync::{Arc, OnceLock};
 use dirk_engine::editor::EditorStyle;
 use dirk_engine::editor::EditorSubsystem as _;
 
+use crate::style::EditorPalette;
+use crate::style::default_editor_style;
+
 fn begin_egui_pass(ctx: &egui::Context) {
     ctx.begin_pass(egui::RawInput {
         screen_rect: Some(egui::Rect::from_min_size(
@@ -47,15 +50,20 @@ fn default_editor_style_applies_dark_editor_visuals() {
     let ctx = egui::Context::default();
     begin_egui_pass(&ctx);
 
-    crate::default_editor_style().apply(&ctx);
+    default_editor_style().apply(&ctx);
 
-    let palette = crate::EditorPalette::default();
+    let palette = EditorPalette::default();
     let style = ctx.style();
     assert_eq!(ctx.theme(), egui::Theme::Dark);
     assert_eq!(style.visuals.window_fill, palette.surface);
     assert_eq!(style.visuals.panel_fill, palette.background);
     assert_eq!(style.visuals.selection.bg_fill, palette.selection);
-    assert_eq!(style.visuals.widgets.active.bg_fill, palette.accent);
+    assert_eq!(style.visuals.widgets.active.bg_fill, palette.control_active);
+    assert_eq!(style.spacing.interact_size, egui::vec2(22.0, 18.0));
+    assert_eq!(
+        style.visuals.window_corner_radius,
+        egui::CornerRadius::same(2)
+    );
 
     let _ = ctx.end_pass();
 }
@@ -65,9 +73,9 @@ fn editor_palette_converts_to_editor_style() {
     let ctx = egui::Context::default();
     begin_egui_pass(&ctx);
 
-    let palette = crate::theme::EditorPalette {
+    let palette = EditorPalette {
         surface: egui::Color32::from_rgb(0x32, 0x10, 0x44),
-        ..crate::theme::EditorPalette::default()
+        ..EditorPalette::default()
     };
     let style: EditorStyle = palette.into();
     style.apply(&ctx);
@@ -103,12 +111,13 @@ fn builtin_editor_subsystem_registers_expected_default_capabilities() -> anyhow:
     let frame = dirk_engine::editor::EditorRenderContext::new(0.016, &handle, &universe);
     services.render_ui(&ctx, &frame)?;
 
-    let palette = crate::EditorPalette::default();
+    let palette = EditorPalette::default();
     let style = ctx.style();
     assert_eq!(style.visuals.window_fill, palette.surface);
     assert_eq!(style.visuals.panel_fill, palette.background);
     assert_eq!(style.visuals.selection.bg_fill, palette.selection);
-    assert_eq!(style.visuals.widgets.active.bg_fill, palette.accent);
+    assert_eq!(style.visuals.widgets.active.bg_fill, palette.control_active);
+    assert_eq!(style.spacing.window_margin, egui::Margin::symmetric(6, 5));
 
     let _ = ctx.end_pass();
 
