@@ -2,6 +2,19 @@ use std::sync::{Arc, OnceLock};
 
 use dirk_engine::editor::{EDITOR_CATEGORY, EditorSubsystem as _, UNIVERSE_CATEGORY};
 
+use crate::style::EditorPalette;
+use crate::style::default_editor_style;
+
+fn begin_egui_pass(ctx: &egui::Context) {
+    ctx.begin_pass(egui::RawInput {
+        screen_rect: Some(egui::Rect::from_min_size(
+            egui::Pos2::ZERO,
+            egui::vec2(800.0, 600.0),
+        )),
+        ..egui::RawInput::default()
+    });
+}
+
 fn test_handle() -> dirk_engine::EngineHandle {
     static HANDLE: OnceLock<dirk_engine::EngineHandle> = OnceLock::new();
 
@@ -32,6 +45,46 @@ fn test_handle() -> dirk_engine::EngineHandle {
 }
 
 #[test]
+fn default_editor_style_applies_dark_editor_visuals() {
+    let ctx = egui::Context::default();
+    begin_egui_pass(&ctx);
+
+    default_editor_style().apply(&ctx);
+
+    let palette = EditorPalette::default();
+    let style = ctx.style();
+    assert_eq!(ctx.theme(), egui::Theme::Dark);
+    assert_eq!(style.visuals.window_fill, palette.surface);
+    assert_eq!(style.visuals.panel_fill, palette.background);
+    assert_eq!(style.visuals.selection.bg_fill, palette.selection);
+    assert_eq!(style.visuals.widgets.active.bg_fill, palette.control_active);
+    assert_eq!(style.spacing.interact_size, egui::vec2(22.0, 18.0));
+    assert_eq!(
+        style.visuals.window_corner_radius,
+        egui::CornerRadius::same(2)
+    );
+
+    let _ = ctx.end_pass();
+}
+
+#[test]
+fn editor_palette_converts_to_editor_style() {
+    let ctx = egui::Context::default();
+    begin_egui_pass(&ctx);
+
+    let palette = EditorPalette {
+        surface: egui::Color32::from_rgb(0x32, 0x10, 0x44),
+        ..EditorPalette::default()
+    };
+    let style: EditorStyle = palette.into();
+    style.apply(&ctx);
+
+    assert_eq!(ctx.style().visuals.window_fill, palette.surface);
+
+    let _ = ctx.end_pass();
+}
+
+#[test]
 fn builtin_editor_subsystem_registers_expected_default_capabilities() -> anyhow::Result<()> {
     let services = crate::EditorServices::new();
     let handle = test_handle();
@@ -57,6 +110,22 @@ fn builtin_editor_subsystem_registers_expected_default_capabilities() -> anyhow:
         .map(|window| window.title)
         .collect::<Vec<_>>();
     assert_eq!(open_windows, vec!["Engine", "Entities", "Entity Details"]);
+
+    let ctx = egui::Context::default();
+    begin_egui_pass(&ctx);
+
+    let frame = dirk_engine::editor::EditorRenderContext::new(0.016, &handle, &universe);
+    services.render_ui(&ctx, &frame)?;
+
+    let palette = EditorPalette::default();
+    let style = ctx.style();
+    assert_eq!(style.visuals.window_fill, palette.surface);
+    assert_eq!(style.visuals.panel_fill, palette.background);
+    assert_eq!(style.visuals.selection.bg_fill, palette.selection);
+    assert_eq!(style.visuals.widgets.active.bg_fill, palette.control_active);
+    assert_eq!(style.spacing.window_margin, egui::Margin::symmetric(6, 5));
+
+    let _ = ctx.end_pass();
 
     Ok(())
 }

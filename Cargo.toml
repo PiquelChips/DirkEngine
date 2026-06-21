@@ -20,6 +20,7 @@ thiserror.workspace = true
 tracing.workspace = true
 glam.workspace = true
 piquel-log.workspace = true
+clap = { workspace = true, optional = true }
 
 dirk_threads.workspace = true
 dirk_utils.workspace = true
@@ -45,13 +46,17 @@ all-features = true
 rustdoc-args = ["-Zunstable-options", "--cfg", "docsrs"]
 
 [features]
-default = ["editor"]
+default = ["editor", "cli"]
 
 editor = [
     "dirk_engine/editor",
     "dirk_renderer/editor",
     "dep:dirk_editor",
 ]
+
+# Enhances the CLI of the engine.
+# When this feature is disabled, the engine just runs with DefaultPlugins
+cli = ["dep:clap"]
 
 # WORKSPACE CONFIGURATION
 
@@ -84,6 +89,7 @@ parking_lot = "0.12"
 tempfile = "3"
 slotmap = "1"
 signal-hook = "0.4"
+clap = { version = "4", features = ["derive"] }
 
 thiserror = "2"
 anyhow = "1"

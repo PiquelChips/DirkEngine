@@ -11,6 +11,7 @@ use dirk_engine::editor::{
 };
 
 mod settings;
+pub mod style;
 mod universe;
 
 #[cfg(test)]
@@ -43,6 +44,7 @@ impl dirk_engine::editor::EditorSubsystem for BuiltinEditorSubsystem {
         context: &mut dirk_engine::editor::EditorStartContext<'_>,
     ) -> anyhow::Result<()> {
         let services = context.editor;
+        services.add_style(style::default_editor_style());
         services.add_menu(MainMenu);
 
         settings::register_capabilities(services);
