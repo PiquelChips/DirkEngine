@@ -138,6 +138,7 @@ impl<'a> EditorRenderContext<'a> {
 pub struct EditorUiContext<'a> {
     /// Seconds elapsed since the previous engine tick.
     delta_time: f64,
+    commands: EditorCommandSender,
     /// Shared engine handle.
     pub handle: &'a EngineHandle,
     /// Read-only ECS universe.
@@ -151,6 +152,17 @@ impl EditorUiContext<'_> {
     #[must_use]
     pub fn delta_time(&self) -> f64 {
         self.delta_time
+    }
+
+    /// Requests that an editor window be opened.
+    pub fn open_window(&self, id: EditorWindowId) {
+        self.commands.open_window(id);
+    }
+
+    /// Returns the editor command sender for this UI pass.
+    #[must_use]
+    pub fn commands(&self) -> &EditorCommandSender {
+        &self.commands
     }
 }
 
@@ -489,9 +501,12 @@ impl EditorServicesState {
         context: &EditorRenderContext<'_>,
     ) -> anyhow::Result<()> {
         let (editor_commands, command_receiver) = mpsc::channel();
-        self.render_menus(ctx, context, EditorCommandSender::new(editor_commands))?;
+        let editor_commands = EditorCommandSender::new(editor_commands);
+
+        self.render_menus(ctx, context, &editor_commands)?;
         self.apply_commands(command_receiver.try_iter());
-        self.render_windows(ctx, context)?;
+        self.render_windows(ctx, context, &editor_commands)?;
+        self.apply_commands(command_receiver.try_iter());
         Ok(())
     }
 
@@ -499,16 +514,17 @@ impl EditorServicesState {
         &mut self,
         ctx: &egui::Context,
         context: &EditorRenderContext<'_>,
-        editor_commands: EditorCommandSender,
+        editor_commands: &EditorCommandSender,
     ) -> anyhow::Result<()> {
         if self.menus.is_empty() {
             return Ok(());
         }
 
         let windows = self.windows();
-        let mut menu_context = EditorMenuContext::new(&windows, editor_commands);
+        let mut menu_context = EditorMenuContext::new(&windows, (*editor_commands).clone());
         let mut context = EditorUiContext {
             delta_time: context.delta_time(),
+            commands: (*editor_commands).clone(),
             handle: context.handle,
             universe: context.universe,
             editor: context.editor,
@@ -536,6 +552,7 @@ impl EditorServicesState {
         &mut self,
         ctx: &egui::Context,
         context: &EditorRenderContext<'_>,
+        editor_commands: &EditorCommandSender,
     ) -> anyhow::Result<()> {
         for window in &mut self.windows {
             if !self
@@ -551,6 +568,7 @@ impl EditorServicesState {
             let mut result = Ok(());
             let mut context = EditorUiContext {
                 delta_time: context.delta_time(),
+                commands: (*editor_commands).clone(),
                 handle: context.handle,
                 universe: context.universe,
                 editor: context.editor,

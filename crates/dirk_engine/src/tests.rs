@@ -825,6 +825,22 @@ mod editor_tests {
     }
 
     #[test]
+    fn windows_can_request_other_windows_to_open_during_render() -> anyhow::Result<()> {
+        let services = EditorServices::new();
+        let target = services.add_window_fn(descriptor("target", false), |_ui, _context| Ok(()));
+        services.add_window_fn(descriptor("source", true), move |_ui, context| {
+            context.open_window(target);
+            Ok(())
+        });
+
+        let universe = Universe::builder().build();
+        render_services(&services, &universe)?;
+
+        assert_eq!(services.is_open(target), Some(true));
+        Ok(())
+    }
+
+    #[test]
     fn menu_capabilities_are_registered_in_registration_order() {
         let services = EditorServices::new();
 

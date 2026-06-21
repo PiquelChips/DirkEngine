@@ -5,6 +5,7 @@ use std::sync::mpsc::Sender;
 use crate::editor::EditorWindowId;
 
 /// Sends editor runtime commands from UI capabilities.
+#[derive(Clone)]
 pub struct EditorCommandSender {
     commands: Sender<EditorCommand>,
 }

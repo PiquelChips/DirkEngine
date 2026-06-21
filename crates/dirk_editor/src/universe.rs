@@ -40,11 +40,8 @@ pub fn register_capabilities(services: &EditorServices) {
             },
             move |ui, context| {
                 let entity_clicked = universe_windows.lock().entity_list_ui(ui, context.universe);
-                if entity_clicked
-                    && let Some(entity_details) = *entity_details_window.lock()
-                    && context.editor.is_open(entity_details) == Some(false)
-                {
-                    context.editor.set_open(entity_details, true);
+                if entity_clicked && let Some(entity_details) = *entity_details_window.lock() {
+                    context.open_window(entity_details);
                 }
                 Ok(())
             },
