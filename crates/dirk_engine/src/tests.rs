@@ -589,6 +589,7 @@ mod editor_tests {
             title: title.to_owned(),
             category: "Tests".to_owned(),
             default_open,
+            show_in_list: true,
         }
     }
 
@@ -768,6 +769,7 @@ mod editor_tests {
                 title: "zeta".to_owned(),
                 category: "Universe".to_owned(),
                 default_open: true,
+                show_in_list: true,
             },
             |_ui, _context| Ok(()),
         );
@@ -776,6 +778,7 @@ mod editor_tests {
                 title: "alpha".to_owned(),
                 category: "Editor".to_owned(),
                 default_open: false,
+                show_in_list: false,
             },
             |_ui, _context| Ok(()),
         );
@@ -788,12 +791,14 @@ mod editor_tests {
                     title: "zeta".to_owned(),
                     category: "Universe".to_owned(),
                     open: true,
+                    show_in_list: true,
                 },
                 EditorWindowInfo {
                     id: second,
                     title: "alpha".to_owned(),
                     category: "Editor".to_owned(),
                     open: false,
+                    show_in_list: false,
                 },
             ]
         );
@@ -804,6 +809,7 @@ mod editor_tests {
                 title: "alpha".to_owned(),
                 category: "Editor".to_owned(),
                 open: false,
+                show_in_list: false,
             })
         );
     }

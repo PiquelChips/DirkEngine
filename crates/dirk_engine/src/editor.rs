@@ -163,6 +163,19 @@ pub struct EditorWindowDescriptor {
     pub category: String,
     /// Whether the window starts open after registration.
     pub default_open: bool,
+    /// Whether the window is shown in the built-in Windows menu.
+    pub show_in_list: bool,
+}
+
+impl Default for EditorWindowDescriptor {
+    fn default() -> Self {
+        Self {
+            title: String::new(),
+            category: String::new(),
+            default_open: false,
+            show_in_list: true,
+        }
+    }
 }
 
 /// Static metadata for an editor menu capability.
@@ -183,6 +196,8 @@ pub struct EditorWindowInfo {
     pub category: String,
     /// Whether the window is currently open.
     pub open: bool,
+    /// Whether the window is shown in the built-in Windows menu.
+    pub show_in_list: bool,
 }
 
 /// Global editor state snapshot and controls available to menu capabilities.
@@ -570,6 +585,7 @@ impl EditorServicesState {
                     .window_states
                     .get(&window.id)
                     .is_some_and(|state| state.open),
+                show_in_list: window.descriptor.show_in_list,
             })
             .collect()
     }
