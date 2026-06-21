@@ -27,6 +27,9 @@ pub use dirk_world as world;
 
 pub mod demo;
 
+#[cfg(feature = "cli")]
+pub mod cli;
+
 /// Registers all the engine's default plugins.
 pub struct DefaultPlugins;
 
@@ -43,7 +46,6 @@ impl dirk_engine::EnginePlugin for DefaultPlugins {
         builder.with_plugin(player::PlayerPlugin)?;
         builder.with_plugin(world::WorldPlugin)?;
         builder.with_plugin(renderer::RendererPlugin)?;
-        builder.with_plugin(demo::DemoPlugin)?;
         Ok(())
     }
 }
