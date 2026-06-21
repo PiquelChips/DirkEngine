@@ -46,7 +46,6 @@ impl dirk_engine::EnginePlugin for DefaultPlugins {
         builder.with_plugin(player::PlayerPlugin)?;
         builder.with_plugin(world::WorldPlugin)?;
         builder.with_plugin(renderer::RendererPlugin)?;
-        builder.with_plugin(demo::DemoPlugin)?;
         Ok(())
     }
 }
