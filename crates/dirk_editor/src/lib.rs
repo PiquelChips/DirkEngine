@@ -2,6 +2,13 @@
 //!
 //! This also contains loads of utility functions for working with the Editor.
 
+use std::collections::BTreeMap;
+
+use dirk_engine::editor::{
+    EditorMenu, EditorMenuContext, EditorMenuDescriptor, EditorServices, EditorUiContext,
+    EditorWindow, EditorWindowDescriptor, EditorWindowId, EditorWindowInfo,
+};
+
 struct MainMenu;
 
 impl EditorMenu for MainMenu {
