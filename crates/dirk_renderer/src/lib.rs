@@ -595,15 +595,6 @@ impl Renderer {
             }),
         });
 
-        #[cfg(feature = "editor")]
-        {
-            let mut egui_pass = graph.add_pass("egui");
-            egui_pass.write_color_attachment(target, frame_graph::AttachmentInfo::load_store());
-            egui_pass.execute(Box::new(|device, cmd, _| {
-                self.egui.render(device, cmd, size, frame_index)
-            }));
-        }
-
         let mut copy_pass = graph.add_pass("copy scene to swapchain");
         copy_pass
             .read_transfer_src(target)
@@ -637,6 +628,15 @@ impl Renderer {
             );
             Ok(())
         }));
+
+        #[cfg(feature = "editor")]
+        {
+            let mut egui_pass = graph.add_pass("egui");
+            egui_pass.write_color_attachment(swapchain, frame_graph::AttachmentInfo::load_store());
+            egui_pass.execute(Box::new(|device, cmd, _| {
+                self.egui.render(device, cmd, size, frame_index)
+            }));
+        }
 
         let cmd = frame.command_pool.allocate_buffer()?;
         cmd.begin_command_buffer(&vk::CommandBufferBeginInfo::default())?;
