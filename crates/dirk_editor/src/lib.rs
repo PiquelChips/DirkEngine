@@ -80,3 +80,37 @@ fn grouped_window_menu_entries(
     }
     grouped.into_iter().collect()
 }
+
+/// Engine diagnostics window capability for the default editor package.
+pub struct EngineDiagnosticsWindow;
+
+impl EditorWindow for EngineDiagnosticsWindow {
+    fn descriptor(&self) -> EditorWindowDescriptor {
+        EditorWindowDescriptor {
+            title: "Engine".to_owned(),
+            category: "Editor".to_owned(),
+            default_open: true,
+            show_in_list: true,
+        }
+    }
+
+    fn ui(&mut self, ui: &mut egui::Ui, context: &mut EditorUiContext<'_>) -> anyhow::Result<()> {
+        let metadata = context.handle.metadata();
+
+        ui.label(format!(
+            "app: {} {}",
+            metadata.app_name(),
+            metadata.app_version()
+        ));
+        ui.label(format!(
+            "engine: {} {}",
+            metadata.engine_name(),
+            metadata.engine_version()
+        ));
+        ui.label(format!("frame: {}", context.handle.frame()));
+        ui.label(format!("status: {:?}", context.handle.status()));
+        ui.label(format!("delta: {:.2} ms", context.delta_time() * 1_000.0));
+        ui.label(format!("fps: {:.0}", 1.0 / context.delta_time()));
+        Ok(())
+    }
+}
