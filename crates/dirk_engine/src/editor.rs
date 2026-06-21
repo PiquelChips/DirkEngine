@@ -106,8 +106,6 @@ pub struct EditorRenderContext<'a> {
     pub handle: &'a EngineHandle,
     /// Read-only ECS universe.
     pub universe: &'a dirk_universe::Universe,
-    /// Shared editor services.
-    pub editor: &'a EditorServices,
 }
 
 impl<'a> EditorRenderContext<'a> {
@@ -117,13 +115,11 @@ impl<'a> EditorRenderContext<'a> {
         delta_time: f64,
         handle: &'a EngineHandle,
         universe: &'a dirk_universe::Universe,
-        editor: &'a EditorServices,
     ) -> Self {
         Self {
             delta_time,
             handle,
             universe,
-            editor,
         }
     }
 
@@ -143,8 +139,6 @@ pub struct EditorUiContext<'a> {
     pub handle: &'a EngineHandle,
     /// Read-only ECS universe.
     pub universe: &'a dirk_universe::Universe,
-    /// Shared editor services.
-    pub editor: &'a EditorServices,
 }
 
 impl EditorUiContext<'_> {
@@ -520,7 +514,6 @@ impl EditorServicesState {
             commands: (*editor_commands).clone(),
             handle: context.handle,
             universe: context.universe,
-            editor: context.editor,
         };
 
         let mut result = Ok(());
@@ -564,7 +557,6 @@ impl EditorServicesState {
                 commands: (*editor_commands).clone(),
                 handle: context.handle,
                 universe: context.universe,
-                editor: context.editor,
             };
 
             egui::Window::new(title.clone())

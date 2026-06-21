@@ -207,12 +207,7 @@ impl dirk_engine::Subsystem for Renderer {
         #[cfg(feature = "editor")]
         {
             let ctx = self.begin_frame();
-            let frame = dirk_engine::editor::EditorRenderContext::new(
-                delta_time,
-                handle,
-                universe,
-                &self.editor,
-            );
+            let frame = dirk_engine::editor::EditorRenderContext::new(delta_time, handle, universe);
 
             self.editor.render_ui(&ctx, &frame)?;
         }

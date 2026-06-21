@@ -578,7 +578,7 @@ mod editor_tests {
         });
 
         let handle = build_context().handle().clone();
-        let frame = EditorRenderContext::new(0.016, &handle, universe, services);
+        let frame = EditorRenderContext::new(0.016, &handle, universe);
         let result = services.render_ui(&ctx, &frame);
         let _ = ctx.end_pass();
         result
