@@ -505,6 +505,7 @@ dependencies = [
  "dirk_threads",
  "dirk_universe",
  "dirk_utils",
+ "egui",
  "parking_lot",
  "piquel-log",
  "signal-hook",

@@ -220,6 +220,7 @@ impl<'a> EditorMenuContext<'a> {
     }
 
     /// Returns the editor command sender for this UI pass.
+    #[must_use]
     pub fn commands(&self) -> &EditorCommandSender {
         &self.commands
     }
