@@ -5,16 +5,7 @@ use tracing::error;
 
 fn run() -> anyhow::Result<()> {
     let mut builder = dirk_engine::Engine::builder();
-
-    #[cfg(feature = "editor")]
-    builder.with_plugin(dirkengine::editor::EditorPlugin)?;
-    builder.with_plugin(dirkengine::assets::AssetsPlugin)?;
-    builder.with_plugin(dirkengine::platform::PlatformPlugin)?;
-    builder.with_plugin(dirkengine::player::PlayerPlugin)?;
-    builder.with_plugin(dirkengine::world::WorldPlugin)?;
-    builder.with_plugin(dirkengine::renderer::RendererPlugin)?;
-    builder.with_plugin(dirkengine::demo::DemoPlugin)?;
-
+    builder.with_plugin(dirkengine::DefaultPlugins)?;
     let engine = builder.build().context("build new engine")?;
 
     engine.run().context("run new engine")?;
