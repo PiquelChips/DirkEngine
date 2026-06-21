@@ -10,12 +10,23 @@ use std::{
 };
 
 use anyhow::Context as _;
+use egui_dock::{
+    DockArea, DockState, NodeIndex, Split, SurfaceIndex, TabViewer, tab_viewer::OnCloseResponse,
+};
 use parking_lot::Mutex;
 
 use crate::{EngineBuildContext, EngineHandle, Error, Result};
 
 pub mod commands;
 use commands::{EditorCommand, EditorCommandSender};
+
+/// The category that all universe-related windows have.
+pub const UNIVERSE_CATEGORY: &str = "Universe";
+/// Category reserved for viewports.
+pub const VIEWPORT_CATEGORY: &str = "Viewport";
+/// Category that all engine specific windows have.
+/// This includes settings, editor diagnostics, ...
+pub const EDITOR_CATEGORY: &str = "Editor";
 
 /// Editor lifecycle subsystem owned by the engine.
 pub trait EditorSubsystem: Send + 'static {
@@ -340,6 +351,7 @@ impl EditorServices {
         state
             .window_states
             .insert(id, WindowState { open: default_open });
+        state.rebuild_default_dock_layout();
         id
     }
 
@@ -447,6 +459,36 @@ impl EditorServices {
             .apply_commands(std::iter::once(EditorCommand::OpenWindow(id)));
     }
 
+    #[cfg(test)]
+    pub(crate) fn close_window_tab_for_tests(&self, id: EditorWindowId) {
+        self.state.lock().close_window_tab(id);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn dock_contains_window_for_tests(&self, id: EditorWindowId) -> bool {
+        self.state.lock().dock_contains_window(id)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn dock_tab_count_for_tests(&self) -> usize {
+        self.state.lock().dock_tab_count()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn window_is_closeable_for_tests(&self, id: EditorWindowId) -> bool {
+        self.state.lock().window_is_closeable(id)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn render_menu_for_tests(
+        &self,
+        title: &str,
+        ui: &mut egui::Ui,
+        context: &EditorRenderContext<'_>,
+    ) -> anyhow::Result<()> {
+        self.state.lock().render_menu_for_tests(title, ui, context)
+    }
+
     /// Renders editor menus and windows.
     ///
     /// # Errors
@@ -470,6 +512,7 @@ impl Default for EditorServices {
 struct EditorServicesState {
     windows: Vec<RegisteredWindow>,
     window_states: HashMap<EditorWindowId, WindowState>,
+    dock_state: DockState<EditorWindowId>,
     menus: Vec<RegisteredMenu>,
 }
 
@@ -478,6 +521,7 @@ impl EditorServicesState {
         Self {
             windows: Vec::new(),
             window_states: HashMap::new(),
+            dock_state: DockState::new(Vec::new()),
             menus: Vec::new(),
         }
     }
@@ -534,47 +578,66 @@ impl EditorServicesState {
 
         result
     }
+
+    #[cfg(test)]
+    fn render_menu_for_tests(
+        &mut self,
+        title: &str,
+        ui: &mut egui::Ui,
+        context: &EditorRenderContext<'_>,
+    ) -> anyhow::Result<()> {
+        let (editor_commands, command_receiver) = mpsc::channel();
+        let editor_commands = EditorCommandSender::new(editor_commands);
+        let windows = self.windows();
+        let mut menu_context = EditorMenuContext::new(&windows, editor_commands.clone());
+        let mut ui_context = EditorUiContext {
+            delta_time: context.delta_time(),
+            commands: editor_commands,
+            handle: context.handle,
+            universe: context.universe,
+        };
+
+        let Some(menu) = self.menus.iter_mut().find(|menu| menu.title == title) else {
+            return Err(anyhow::anyhow!("menu `{title}` is not registered"));
+        };
+
+        menu.menu
+            .ui(ui, &mut ui_context, &mut menu_context)
+            .with_context(|| format!("menu `{title}` failed to render"))?;
+        self.apply_commands(command_receiver.try_iter());
+        Ok(())
+    }
+
     fn render_windows(
         &mut self,
         ctx: &egui::Context,
         context: &EditorRenderContext<'_>,
         editor_commands: &EditorCommandSender,
     ) -> anyhow::Result<()> {
-        for window in &mut self.windows {
-            if !self
-                .window_states
-                .get(&window.id)
-                .is_some_and(|state| state.open)
-            {
-                continue;
-            }
+        self.sync_dock_tabs_with_open_windows();
 
-            let mut open = true;
-            let title = window.descriptor.title.clone();
-            let mut result = Ok(());
-            let mut context = EditorUiContext {
-                delta_time: context.delta_time(),
-                commands: (*editor_commands).clone(),
-                handle: context.handle,
-                universe: context.universe,
-            };
+        let mut result = Ok(());
+        let mut ui_context = EditorUiContext {
+            delta_time: context.delta_time(),
+            commands: (*editor_commands).clone(),
+            handle: context.handle,
+            universe: context.universe,
+        };
+        let mut tab_viewer = EditorDockTabViewer {
+            windows: &mut self.windows,
+            window_states: &mut self.window_states,
+            context: &mut ui_context,
+            result: &mut result,
+        };
 
-            egui::Window::new(title.clone())
-                .open(&mut open)
-                .show(ctx, |ui| {
-                    result = window
-                        .window
-                        .ui(ui, &mut context)
-                        .with_context(|| format!("window `{title}` failed to render"));
-                });
+        egui::CentralPanel::default().show(ctx, |ui| {
+            DockArea::new(&mut self.dock_state)
+                .style(egui_dock::Style::from_egui(ui.style()))
+                .show_leaf_collapse_buttons(false)
+                .show_inside(ui, &mut tab_viewer);
+        });
 
-            if let Some(state) = self.window_states.get_mut(&window.id) {
-                state.open = open;
-            }
-
-            result?;
-        }
-        Ok(())
+        result
     }
 
     fn windows(&self) -> Vec<EditorWindowInfo> {
@@ -599,10 +662,188 @@ impl EditorServicesState {
                 EditorCommand::OpenWindow(id) => {
                     if let Some(state) = self.window_states.get_mut(&id) {
                         state.open = true;
+                        self.insert_window_tab(id);
+                        self.focus_window_tab(id);
                     }
                 }
             }
         }
+    }
+
+    fn sync_dock_tabs_with_open_windows(&mut self) {
+        let open_windows = self.open_window_ids();
+
+        self.dock_state
+            .retain_tabs(|tab| open_windows.contains(tab));
+
+        for id in open_windows {
+            if !self.dock_contains_window(id) {
+                self.insert_window_tab(id);
+            }
+        }
+    }
+
+    fn rebuild_default_dock_layout(&mut self) {
+        let open_windows = self.open_window_ids();
+        self.dock_state = DockState::new(Vec::new());
+
+        let Some(center) = self.default_center_window(&open_windows) else {
+            return;
+        };
+
+        self.dock_state = DockState::new(vec![center]);
+
+        let right_windows: Vec<_> = open_windows
+            .iter()
+            .copied()
+            .filter(|id| *id != center && self.is_window_category(*id, UNIVERSE_CATEGORY))
+            .collect();
+        if !right_windows.is_empty() {
+            self.dock_state
+                .main_surface_mut()
+                .split_right(NodeIndex::root(), 0.75, right_windows);
+        }
+
+        let bottom_windows: Vec<_> = open_windows
+            .iter()
+            .copied()
+            .filter(|id| *id != center && self.is_window_category(*id, EDITOR_CATEGORY))
+            .collect();
+        if !bottom_windows.is_empty() {
+            if let Some((node, _tab)) = self.dock_state.main_surface().find_tab(&center) {
+                self.dock_state
+                    .main_surface_mut()
+                    .split_below(node, 0.70, bottom_windows);
+            } else {
+                for tab in bottom_windows {
+                    self.dock_state.push_to_first_leaf(tab);
+                }
+            }
+        }
+
+        for id in open_windows {
+            if !self.dock_contains_window(id) {
+                self.insert_window_tab(id);
+            }
+        }
+    }
+
+    fn open_window_ids(&self) -> Vec<EditorWindowId> {
+        self.windows
+            .iter()
+            .filter(|window| {
+                self.window_states
+                    .get(&window.id)
+                    .is_some_and(|state| state.open)
+            })
+            .map(|window| window.id)
+            .collect()
+    }
+
+    fn default_center_window(&self, open_windows: &[EditorWindowId]) -> Option<EditorWindowId> {
+        open_windows
+            .iter()
+            .copied()
+            .find(|id| self.is_window_category(*id, VIEWPORT_CATEGORY))
+            .or_else(|| open_windows.first().copied())
+    }
+
+    fn insert_window_tab(&mut self, id: EditorWindowId) {
+        if self.dock_contains_window(id) || !self.window_exists(id) {
+            return;
+        }
+
+        if self.dock_tab_count() == 0 {
+            self.dock_state.push_to_first_leaf(id);
+            return;
+        }
+
+        if let Some(descriptor) = self.window_descriptor(id) {
+            self.insert_near_category(id, &descriptor.category.clone());
+        } else {
+            self.dock_state.push_to_focused_leaf(id);
+        }
+    }
+
+    fn insert_near_category(&mut self, id: EditorWindowId, category: &str) {
+        if let Some((surface, node, _tab)) = self.find_dock_tab_by_category(category) {
+            self.dock_state
+                .set_focused_node_and_surface((surface, node));
+            self.dock_state.push_to_focused_leaf(id);
+            return;
+        }
+
+        let split = if category == EDITOR_CATEGORY {
+            Split::Below
+        } else {
+            Split::Right
+        };
+        self.dock_state.split(
+            (SurfaceIndex::main(), NodeIndex::root()),
+            split,
+            0.75,
+            egui_dock::Node::leaf(id),
+        );
+    }
+
+    fn focus_window_tab(&mut self, id: EditorWindowId) {
+        if let Some((surface, node, tab)) = self.dock_state.find_tab(&id) {
+            self.dock_state
+                .set_focused_node_and_surface((surface, node));
+            self.dock_state.set_active_tab((surface, node, tab));
+        }
+    }
+
+    #[cfg(test)]
+    fn close_window_tab(&mut self, id: EditorWindowId) {
+        if let Some(state) = self.window_states.get_mut(&id) {
+            state.open = false;
+        }
+        if let Some(index) = self.dock_state.find_tab(&id) {
+            self.dock_state.remove_tab(index);
+        }
+    }
+
+    fn dock_contains_window(&self, id: EditorWindowId) -> bool {
+        self.dock_state.find_tab(&id).is_some()
+    }
+
+    fn dock_tab_count(&self) -> usize {
+        self.dock_state
+            .iter_all_tabs()
+            .filter(|&(_index, tab)| self.window_exists(*tab))
+            .count()
+    }
+
+    #[cfg(test)]
+    fn window_is_closeable(&self, id: EditorWindowId) -> bool {
+        self.window_exists(id)
+    }
+
+    fn find_dock_tab_by_category(
+        &self,
+        category: &str,
+    ) -> Option<(SurfaceIndex, NodeIndex, egui_dock::TabIndex)> {
+        self.dock_state.find_tab_from(|tab| {
+            self.window_descriptor(*tab)
+                .is_some_and(|descriptor| descriptor.category == category)
+        })
+    }
+
+    fn is_window_category(&self, id: EditorWindowId, category: &str) -> bool {
+        self.window_descriptor(id)
+            .is_some_and(|descriptor| descriptor.category == category)
+    }
+
+    fn window_exists(&self, id: EditorWindowId) -> bool {
+        self.windows.iter().any(|window| window.id == id)
+    }
+
+    fn window_descriptor(&self, id: EditorWindowId) -> Option<&EditorWindowDescriptor> {
+        self.windows
+            .iter()
+            .find(|window| window.id == id)
+            .map(|window| &window.descriptor)
     }
 }
 
@@ -614,6 +855,55 @@ struct RegisteredWindow {
 
 struct WindowState {
     open: bool,
+}
+
+struct EditorDockTabViewer<'a, 'b> {
+    windows: &'a mut [RegisteredWindow],
+    window_states: &'a mut HashMap<EditorWindowId, WindowState>,
+    context: &'a mut EditorUiContext<'b>,
+    result: &'a mut anyhow::Result<()>,
+}
+
+impl TabViewer for EditorDockTabViewer<'_, '_> {
+    type Tab = EditorWindowId;
+
+    fn title(&mut self, tab: &mut Self::Tab) -> egui::WidgetText {
+        self.windows
+            .iter()
+            .find(|window| window.id == *tab)
+            .map_or_else(
+                || "<missing window>".into(),
+                |window| window.descriptor.title.clone().into(),
+            )
+    }
+
+    fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Self::Tab) {
+        if self.result.is_err() {
+            return;
+        }
+
+        let Some(window) = self.windows.iter_mut().find(|window| window.id == *tab) else {
+            ui.label("Window is no longer registered");
+            return;
+        };
+
+        let title = window.descriptor.title.clone();
+        *self.result = window
+            .window
+            .ui(ui, self.context)
+            .with_context(|| format!("window `{title}` failed to render"));
+    }
+
+    fn is_closeable(&self, _tab: &Self::Tab) -> bool {
+        true
+    }
+
+    fn on_close(&mut self, tab: &mut Self::Tab) -> OnCloseResponse {
+        if let Some(state) = self.window_states.get_mut(tab) {
+            state.open = false;
+        }
+        OnCloseResponse::Close
+    }
 }
 
 pub(crate) struct EditorRuntime {
