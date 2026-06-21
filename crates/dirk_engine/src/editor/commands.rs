@@ -1,20 +1,22 @@
 //! [`EditorCommand`]s. Menus can submit commands that will be run by the editor.
 
+use std::sync::mpsc::Sender;
+
 use crate::editor::EditorWindowId;
 
 /// Sends editor runtime commands from UI capabilities.
-pub struct EditorCommandSender<'a> {
-    commands: &'a mut Vec<EditorCommand>,
+pub struct EditorCommandSender {
+    commands: Sender<EditorCommand>,
 }
 
-impl<'a> EditorCommandSender<'a> {
-    pub(crate) fn new(commands: &'a mut Vec<EditorCommand>) -> Self {
+impl EditorCommandSender {
+    pub(crate) fn new(commands: Sender<EditorCommand>) -> Self {
         Self { commands }
     }
 
     /// Requests that an editor window be opened.
-    pub fn open_window(&mut self, id: EditorWindowId) {
-        self.commands.push(EditorCommand::OpenWindow(id));
+    pub fn open_window(&self, id: EditorWindowId) {
+        let _ = self.commands.send(EditorCommand::OpenWindow(id));
     }
 }
 

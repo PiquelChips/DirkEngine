@@ -5,6 +5,7 @@ use std::{
     sync::{
         Arc,
         atomic::{AtomicU64, Ordering},
+        mpsc,
     },
 };
 
@@ -187,11 +188,11 @@ pub struct EditorWindowInfo {
 /// Global editor state snapshot and controls available to menu capabilities.
 pub struct EditorMenuContext<'a> {
     windows: &'a [EditorWindowInfo],
-    commands: EditorCommandSender<'a>,
+    commands: EditorCommandSender,
 }
 
 impl<'a> EditorMenuContext<'a> {
-    fn new(windows: &'a [EditorWindowInfo], commands: EditorCommandSender<'a>) -> Self {
+    fn new(windows: &'a [EditorWindowInfo], commands: EditorCommandSender) -> Self {
         Self { windows, commands }
     }
 
@@ -219,8 +220,8 @@ impl<'a> EditorMenuContext<'a> {
     }
 
     /// Returns the editor command sender for this UI pass.
-    pub fn commands(&mut self) -> &mut EditorCommandSender<'a> {
-        &mut self.commands
+    pub fn commands(&self) -> &EditorCommandSender {
+        &self.commands
     }
 }
 
@@ -428,7 +429,7 @@ impl EditorServices {
     pub(crate) fn open_window_for_tests(&self, id: EditorWindowId) {
         self.state
             .lock()
-            .apply_commands(vec![EditorCommand::OpenWindow(id)]);
+            .apply_commands(std::iter::once(EditorCommand::OpenWindow(id)));
     }
 
     /// Renders editor menus and windows.
@@ -471,11 +472,10 @@ impl EditorServicesState {
         ctx: &egui::Context,
         context: &EditorRenderContext<'_>,
     ) -> anyhow::Result<()> {
-        let mut editor_commands = Vec::new();
-        self.render_menus(ctx, context, &mut editor_commands)?;
-        self.apply_commands(std::mem::take(&mut editor_commands));
+        let (editor_commands, command_receiver) = mpsc::channel();
+        self.render_menus(ctx, context, EditorCommandSender::new(editor_commands))?;
+        self.apply_commands(command_receiver.try_iter());
         self.render_windows(ctx, context)?;
-        self.apply_commands(editor_commands);
         Ok(())
     }
 
@@ -483,15 +483,14 @@ impl EditorServicesState {
         &mut self,
         ctx: &egui::Context,
         context: &EditorRenderContext<'_>,
-        editor_commands: &mut Vec<EditorCommand>,
+        editor_commands: EditorCommandSender,
     ) -> anyhow::Result<()> {
         if self.menus.is_empty() {
             return Ok(());
         }
 
         let windows = self.windows();
-        let mut menu_context =
-            EditorMenuContext::new(&windows, EditorCommandSender::new(editor_commands));
+        let mut menu_context = EditorMenuContext::new(&windows, editor_commands);
         let mut context = EditorUiContext {
             delta_time: context.delta_time(),
             handle: context.handle,
@@ -574,7 +573,7 @@ impl EditorServicesState {
             .collect()
     }
 
-    fn apply_commands(&mut self, commands: Vec<EditorCommand>) {
+    fn apply_commands(&mut self, commands: impl IntoIterator<Item = EditorCommand>) {
         for command in commands {
             match command {
                 EditorCommand::OpenWindow(id) => {
