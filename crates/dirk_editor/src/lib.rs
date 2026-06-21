@@ -10,6 +10,7 @@ use dirk_engine::editor::{
 };
 
 mod settings;
+mod universe;
 
 struct MainMenu;
 
