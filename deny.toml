@@ -87,11 +87,7 @@ allow-workspace = true
 deny = []
 
 # Certain crates/versions that will be skipped when doing duplicate detection.
-skip = [
-    { crate = "foldhash@0.1.5", reason = "pulled in by petgraph 0.8 via naga's SPIR-V input feature" },
-    { crate = "hashbrown@0.15.5", reason = "pulled in by petgraph 0.8 via naga's SPIR-V input feature" },
-    { crate = "spirv@0.3.0+sdk-1.3.268.0", reason = "pulled in by rust-gpu/cargo-gpu-install and rspirv-reflect for shader build reflection" },
-]
+skip = []
 
 # Like skip but with entire direct & transitive dependency tree of crate
 skip-tree = [
