@@ -9,7 +9,11 @@ use clap::Parser;
 #[command(about = "DirkEngine CLI")]
 struct Cli {
     /// Enable debug logging.
-    #[arg(long = "no-demo")]
+    #[arg(short = 'v', long = "verbose", global = true)]
+    verbose: bool,
+
+    /// Disable the demo world.
+    #[arg(long = "no-demo", global = true)]
     no_demo: bool,
 }
 
@@ -22,6 +26,10 @@ pub fn run() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     let mut builder = dirk_engine::Engine::builder();
+
+    if cli.verbose {
+        builder.with_log_level(piquel_log::LogLevel::Trace);
+    }
 
     #[cfg(feature = "editor")]
     builder.with_plugin(dirk_editor::EditorPlugin)?;
