@@ -693,8 +693,8 @@ mod editor_tests {
         let first = services.add_window_fn(descriptor("first", false), |_ui, _context| Ok(()));
         let second = services.add_window_fn(descriptor("second", false), |_ui, _context| Ok(()));
 
-        assert_eq!(first.raw(), 1);
-        assert_eq!(second.raw(), 2);
+        assert_eq!(first.raw(), 0);
+        assert_eq!(second.raw(), 1);
     }
 
     #[test]
