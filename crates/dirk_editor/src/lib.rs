@@ -12,6 +12,9 @@ use dirk_engine::editor::{
 mod settings;
 mod universe;
 
+#[cfg(test)]
+mod tests;
+
 /// Registers the built-in editor subsystem package with the engine.
 pub struct EditorPlugin;
 
