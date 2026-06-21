@@ -478,7 +478,7 @@ mod editor_tests {
 
     use super::*;
     use crate::editor::{
-        EditorMenuDescriptor, EditorRenderContext, EditorServices, EditorSubsystem,
+        EditorMenuDescriptor, EditorRenderContext, EditorServices, EditorStyle, EditorSubsystem,
         EditorTickContext, EditorWindowDescriptor, EditorWindowInfo,
     };
 
@@ -726,6 +726,100 @@ mod editor_tests {
         render_services(&services, &universe)?;
 
         assert_eq!(*calls.lock(), vec!["first", "second", "third"]);
+        Ok(())
+    }
+
+    #[test]
+    fn editor_style_is_applied_before_registered_capabilities_render() -> anyhow::Result<()> {
+        let services = EditorServices::new();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed_window_fill = Arc::new(Mutex::new(None));
+        let styled_window_fill = egui::Color32::from_rgb(0x4a, 0x12, 0x7f);
+
+        {
+            let calls = Arc::clone(&calls);
+            services.set_style(EditorStyle::new(move |ctx| {
+                calls.fetch_add(1, Ordering::Relaxed);
+                ctx.style_mut(|style| {
+                    style.visuals.window_fill = styled_window_fill;
+                });
+            }));
+        }
+        {
+            let observed_window_fill = Arc::clone(&observed_window_fill);
+            services.add_window_fn(descriptor("styled", true), move |ui, _context| {
+                *observed_window_fill.lock() = Some(ui.visuals().window_fill);
+                Ok(())
+            });
+        }
+
+        let universe = Universe::builder().build();
+        render_services(&services, &universe)?;
+
+        assert_eq!(calls.load(Ordering::Relaxed), 1);
+        assert_eq!(*observed_window_fill.lock(), Some(styled_window_fill));
+        Ok(())
+    }
+
+    #[test]
+    fn editor_styles_stack_in_registration_order() -> anyhow::Result<()> {
+        let services = EditorServices::new();
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let observed_window_fill = Arc::new(Mutex::new(None));
+        let first_window_fill = egui::Color32::from_rgb(0x10, 0x20, 0x30);
+        let second_window_fill = egui::Color32::from_rgb(0x40, 0x50, 0x60);
+
+        {
+            let calls = Arc::clone(&calls);
+            services.add_style(EditorStyle::new(move |ctx| {
+                calls.lock().push("first");
+                ctx.style_mut(|style| {
+                    style.visuals.window_fill = first_window_fill;
+                });
+            }));
+        }
+        {
+            let calls = Arc::clone(&calls);
+            services.add_style(EditorStyle::new(move |ctx| {
+                calls.lock().push("second");
+                ctx.style_mut(|style| {
+                    style.visuals.window_fill = second_window_fill;
+                });
+            }));
+        }
+        {
+            let observed_window_fill = Arc::clone(&observed_window_fill);
+            services.add_window_fn(descriptor("stacked", true), move |ui, _context| {
+                *observed_window_fill.lock() = Some(ui.visuals().window_fill);
+                Ok(())
+            });
+        }
+
+        let universe = Universe::builder().build();
+        render_services(&services, &universe)?;
+
+        assert_eq!(*calls.lock(), vec!["first", "second"]);
+        assert_eq!(*observed_window_fill.lock(), Some(second_window_fill));
+        Ok(())
+    }
+
+    #[test]
+    fn editor_style_can_be_cleared() -> anyhow::Result<()> {
+        let services = EditorServices::new();
+        let calls = Arc::new(AtomicUsize::new(0));
+
+        {
+            let calls = Arc::clone(&calls);
+            services.set_style(EditorStyle::new(move |_ctx| {
+                calls.fetch_add(1, Ordering::Relaxed);
+            }));
+        }
+        services.clear_style();
+
+        let universe = Universe::builder().build();
+        render_services(&services, &universe)?;
+
+        assert_eq!(calls.load(Ordering::Relaxed), 0);
         Ok(())
     }
 

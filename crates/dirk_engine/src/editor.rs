@@ -302,6 +302,29 @@ pub trait EditorMenu: Send + 'static {
     ) -> anyhow::Result<()>;
 }
 
+/// Generic editor style hook.
+#[derive(Clone)]
+pub struct EditorStyle {
+    apply: Arc<dyn Fn(&egui::Context) + Send + Sync + 'static>,
+}
+
+impl EditorStyle {
+    /// Creates a style hook from a callback.
+    pub fn new<F>(apply: F) -> Self
+    where
+        F: Fn(&egui::Context) + Send + Sync + 'static,
+    {
+        Self {
+            apply: Arc::new(apply),
+        }
+    }
+
+    /// Applies this style hook to an egui context.
+    pub fn apply(&self, ctx: &egui::Context) {
+        (self.apply)(ctx);
+    }
+}
+
 /// Shared state with editor services.
 ///
 /// Services are extensions of the editor. Notably, windows & menus.
@@ -378,6 +401,21 @@ impl EditorServices {
             + 'static,
     {
         self.add_menu(FnEditorMenu { descriptor, ui })
+    }
+
+    /// Replaces the style stack with one style hook.
+    pub fn set_style(&self, style: impl Into<EditorStyle>) {
+        self.state.lock().styles = vec![style.into()];
+    }
+
+    /// Adds a style hook to the style stack.
+    pub fn add_style(&self, style: impl Into<EditorStyle>) {
+        self.state.lock().styles.push(style.into());
+    }
+
+    /// Clears the configured editor style hooks.
+    pub fn clear_style(&self) {
+        self.state.lock().styles.clear();
     }
 
     /// Returns whether a registered window is currently open.
@@ -457,6 +495,11 @@ impl EditorServices {
         ctx: &egui::Context,
         context: &EditorRenderContext<'_>,
     ) -> anyhow::Result<()> {
+        let styles = self.state.lock().styles.clone();
+        for style in styles {
+            style.apply(ctx);
+        }
+
         self.state.lock().render(ctx, context)
     }
 }
@@ -471,6 +514,7 @@ struct EditorServicesState {
     windows: Vec<RegisteredWindow>,
     window_states: HashMap<EditorWindowId, WindowState>,
     menus: Vec<RegisteredMenu>,
+    styles: Vec<EditorStyle>,
 }
 
 impl EditorServicesState {
@@ -479,6 +523,7 @@ impl EditorServicesState {
             windows: Vec::new(),
             window_states: HashMap::new(),
             menus: Vec::new(),
+            styles: Vec::new(),
         }
     }
 
