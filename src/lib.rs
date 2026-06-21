@@ -3,6 +3,9 @@
 
 #[doc(inline)]
 pub use dirk_assets as assets;
+#[cfg(feature = "editor")]
+#[doc(inline)]
+pub use dirk_editor as editor;
 #[doc(inline)]
 pub use dirk_engine as engine;
 #[doc(inline)]

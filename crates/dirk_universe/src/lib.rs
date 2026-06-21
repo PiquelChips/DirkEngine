@@ -3,6 +3,7 @@
 use std::{
     any::TypeId,
     collections::{HashMap, HashSet},
+    fmt::Debug,
 };
 
 use crate::{
@@ -27,6 +28,16 @@ pub use entity::{Entity, EntityBuilder};
 mod world;
 use tracing::warn;
 pub use world::{World, WorldBuilder, WorldId};
+
+/// Read-only information about one component attached to an entity.
+pub struct ComponentInfo<'a> {
+    /// Component [`TypeId`].
+    pub type_id: TypeId,
+    /// Fully-qualified Rust component type name.
+    pub type_name: &'static str,
+    /// Debug view of the component value.
+    pub debug: &'a dyn Debug,
+}
 
 /// This struct is the manager for all the worlds.
 pub struct Universe {
@@ -364,6 +375,42 @@ impl Universe {
     #[must_use]
     pub fn world(&self, world: WorldId) -> Option<&World> {
         self.worlds.get(&world)
+    }
+
+    /// Returns all live worlds.
+    pub fn worlds(&self) -> impl Iterator<Item = &World> {
+        self.worlds.values()
+    }
+
+    /// Returns all live entities with their current world.
+    pub fn entities(&self) -> impl Iterator<Item = (Entity, WorldId)> + '_ {
+        self.entities
+            .iter()
+            .map(|(entity, world)| (*entity, *world))
+    }
+
+    /// Returns all live entities currently in `world`.
+    pub fn entities_in_world(&self, world: WorldId) -> impl Iterator<Item = Entity> + '_ {
+        self.entities
+            .iter()
+            .filter_map(move |(entity, entity_world)| {
+                if *entity_world == world {
+                    Some(*entity)
+                } else {
+                    None
+                }
+            })
+    }
+
+    /// Returns read-only component information for `entity`.
+    pub fn component_infos(&self, entity: Entity) -> impl Iterator<Item = ComponentInfo<'_>> {
+        self.components
+            .get_all(entity)
+            .map(|(type_id, component)| ComponentInfo {
+                type_id,
+                type_name: component.component_type_name(),
+                debug: component,
+            })
     }
 
     /// Returns the [`WorldId`] of the [`Entity`]'s [`World`].
