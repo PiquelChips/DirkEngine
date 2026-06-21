@@ -494,6 +494,13 @@ dependencies = [
 [[package]]
 name = "dirk_editor"
 version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "dirk_engine",
+ "dirk_universe",
+ "egui",
+ "parking_lot",
+]
 
 [[package]]
 name = "dirk_engine"
