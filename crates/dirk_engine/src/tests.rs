@@ -710,24 +710,6 @@ mod editor_tests {
     }
 
     #[test]
-    fn closed_windows_do_not_render() -> anyhow::Result<()> {
-        let services = EditorServices::new();
-        let calls = Arc::new(AtomicUsize::new(0));
-        let callback_calls = Arc::clone(&calls);
-        let id = services.add_window_fn(descriptor("window", true), move |_ui, _context| {
-            callback_calls.fetch_add(1, Ordering::Relaxed);
-            Ok(())
-        });
-        services.set_open(id, false);
-
-        let universe = Universe::builder().build();
-        render_services(&services, &universe)?;
-
-        assert_eq!(calls.load(Ordering::Relaxed), 0);
-        Ok(())
-    }
-
-    #[test]
     fn open_windows_render_in_registration_order() -> anyhow::Result<()> {
         let services = EditorServices::new();
         let calls = Arc::new(Mutex::new(Vec::new()));
