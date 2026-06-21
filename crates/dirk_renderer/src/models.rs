@@ -210,7 +210,8 @@ impl ModelRegistry {
         let set = material_alloc.allocate()?;
 
         DescriptorWriter::new(&device.device)
-            .combined_image_sampler(&set, 0, texture.image.view(), texture.sampler)
+            .sampled_image(&set, 0, texture.image.view())
+            .sampler(&set, 1, texture.sampler)
             .flush();
 
         Ok((
@@ -311,7 +312,9 @@ impl ModelRegistry {
 
         let mut writer = DescriptorWriter::new(&self.device.device);
         for (_, set, view, sampler) in &pending {
-            writer = writer.combined_image_sampler(set, 0, *view, *sampler);
+            writer = writer
+                .sampled_image(set, 0, *view)
+                .sampler(set, 1, *sampler);
         }
         writer.flush();
 

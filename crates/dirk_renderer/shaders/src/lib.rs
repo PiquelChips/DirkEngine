@@ -3,8 +3,9 @@
 #![allow(clippy::too_many_arguments)]
 
 use spirv_std::{
+    Sampler,
     glam::{Vec2, Vec3, Vec4},
-    image::{Image2d, SampledImage},
+    image::Image2d,
     spirv,
 };
 
@@ -28,11 +29,13 @@ pub fn main_vs(
 
 #[spirv(fragment)]
 pub fn main_fs(
-    #[spirv(descriptor_set = 2, binding = 0)] tex_sampler: &SampledImage<Image2d>,
+    #[spirv(descriptor_set = 2, binding = 0)] texture: &Image2d,
+    #[spirv(descriptor_set = 2, binding = 1)] sampler: &Sampler,
     #[spirv(location = 0)] frag_tex_coord: Vec2,
     #[spirv(location = 1)] frag_normal: Vec3,
     #[spirv(location = 0)] out_color: &mut Vec4,
 ) {
     let diffuse = 0.35 + 0.65 * frag_normal.z.abs();
-    *out_color = tex_sampler.sample(frag_tex_coord) * Vec4::new(diffuse, diffuse, diffuse, 1.0);
+    *out_color =
+        texture.sample(*sampler, frag_tex_coord) * Vec4::new(diffuse, diffuse, diffuse, 1.0);
 }

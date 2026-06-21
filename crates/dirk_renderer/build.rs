@@ -6,8 +6,10 @@ use cargo_gpu_install::{
     spirv_builder::{ModuleResult, SpirvMetadata},
 };
 use naga::{
-    AddressSpace, ArraySize, Binding, Expression, GlobalVariable, Handle, ImageClass, Module,
-    Scalar, ScalarKind, ShaderStage, Type, TypeInner, VectorSize, front::spv,
+    AddressSpace, ArraySize, Binding, GlobalVariable, Handle, ImageClass, Module, Scalar,
+    ScalarKind, ShaderStage, Type, TypeInner, VectorSize,
+    front::spv,
+    valid::{Capabilities, ValidationFlags, Validator},
 };
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{format_ident, quote};
@@ -126,17 +128,21 @@ fn reflect_shader_naga(entrypoint: &str, bytes: &[u8]) -> anyhow::Result<Reflect
         .find(|entry| entry.name == entrypoint)
         .ok_or_else(|| anyhow!("SPIR-V module did not contain entry point `{entrypoint}`"))?;
 
-    let used_globals = naga_entry_point_globals(entry);
-    let has_bound_globals = module
+    let entry_index = module
+        .entry_points
+        .iter()
+        .position(|entry| entry.name == entrypoint)
+        .ok_or_else(|| anyhow!("SPIR-V module did not contain entry point `{entrypoint}`"))?;
+    let mut validator = Validator::new(ValidationFlags::all(), Capabilities::all());
+    let module_info = validator
+        .validate(&module)
+        .with_context(|| format!("failed to validate Naga module for `{entrypoint}`"))?;
+    let entry_info = module_info.get_entry_point(entry_index);
+    let used_globals = module
         .global_variables
         .iter()
-        .any(|(_, global)| global.binding.is_some());
-    let has_used_bound_globals = used_globals
-        .iter()
-        .any(|handle| module.global_variables[*handle].binding.is_some());
-    if has_bound_globals && !has_used_bound_globals {
-        bail!("naga did not expose used descriptor globals for shader entry point `{entrypoint}`");
-    }
+        .filter_map(|(handle, _)| (!entry_info[handle].is_empty()).then_some(handle))
+        .collect::<HashSet<_>>();
     let set_layouts = reflect_descriptor_sets(entrypoint, entry.stage, &module, &used_globals)?;
     let vertex_inputs = if entry.stage == ShaderStage::Vertex {
         reflect_vertex_inputs(entrypoint, entry, &module.types)?
@@ -179,18 +185,6 @@ fn parse_spirv(bytes: &[u8]) -> anyhow::Result<SpirvModule> {
     let mut loader = Loader::new();
     Parser::new(bytes, &mut loader).parse()?;
     Ok(loader.module())
-}
-
-fn naga_entry_point_globals(entry: &naga::EntryPoint) -> HashSet<Handle<GlobalVariable>> {
-    entry
-        .function
-        .expressions
-        .iter()
-        .filter_map(|(_, expression)| match expression {
-            Expression::GlobalVariable(handle) => Some(*handle),
-            _ => None,
-        })
-        .collect()
 }
 
 fn reflect_descriptor_sets(
@@ -245,7 +239,7 @@ fn descriptor_for_global(
                 class: ImageClass::Sampled { .. } | ImageClass::Depth { .. },
                 ..
             },
-        ) => "COMBINED_IMAGE_SAMPLER",
+        ) => "SAMPLED_IMAGE",
         (
             AddressSpace::Handle,
             TypeInner::Image {
@@ -256,10 +250,7 @@ fn descriptor_for_global(
             "shader `{entrypoint}` uses storage image resource `{}`; storage image descriptors are not supported by shader generation yet",
             global.name.as_deref().unwrap_or("<unnamed>")
         ),
-        (AddressSpace::Handle, TypeInner::Sampler { .. }) => bail!(
-            "shader `{entrypoint}` uses standalone sampler resource `{}`; separate sampler descriptors are not supported by shader generation yet",
-            global.name.as_deref().unwrap_or("<unnamed>")
-        ),
+        (AddressSpace::Handle, TypeInner::Sampler { .. }) => "SAMPLER",
         (AddressSpace::Storage { .. }, _) => bail!(
             "shader `{entrypoint}` uses storage resource `{}`; storage descriptors are not supported by shader generation yet",
             global.name.as_deref().unwrap_or("<unnamed>")
@@ -669,13 +660,9 @@ impl<'a> RawReflection<'a> {
                         "shader `{entrypoint}` uses a storage image descriptor; storage image descriptors are not supported yet"
                     )
                 }
-                bail!(
-                    "shader `{entrypoint}` uses a separate sampled image descriptor; only combined image samplers are supported"
-                )
+                Ok("SAMPLED_IMAGE")
             }
-            Op::TypeSampler => bail!(
-                "shader `{entrypoint}` uses a standalone sampler descriptor; separate sampler descriptors are not supported"
-            ),
+            Op::TypeSampler => Ok("SAMPLER"),
             _ => bail!(
                 "shader `{entrypoint}` uses unsupported uniform-constant descriptor opcode {:?}",
                 instruction.class.opcode

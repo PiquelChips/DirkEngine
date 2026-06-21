@@ -35,13 +35,22 @@ impl SetLayout for ObjectSet {
 pub struct MaterialSet;
 
 impl SetLayout for MaterialSet {
-    const BINDINGS: &'static [vk::DescriptorSetLayoutBinding<'static>] =
-        &[vk::DescriptorSetLayoutBinding {
+    const BINDINGS: &'static [vk::DescriptorSetLayoutBinding<'static>] = &[
+        vk::DescriptorSetLayoutBinding {
             binding: 0,
-            descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+            descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
             descriptor_count: 1,
             stage_flags: vk::ShaderStageFlags::FRAGMENT,
             p_immutable_samplers: ::core::ptr::null(),
             _marker: PhantomData,
-        }];
+        },
+        vk::DescriptorSetLayoutBinding {
+            binding: 1,
+            descriptor_type: vk::DescriptorType::SAMPLER,
+            descriptor_count: 1,
+            stage_flags: vk::ShaderStageFlags::FRAGMENT,
+            p_immutable_samplers: ::core::ptr::null(),
+            _marker: PhantomData,
+        },
+    ];
 }
