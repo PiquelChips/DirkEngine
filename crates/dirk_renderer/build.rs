@@ -379,7 +379,7 @@ impl<'a> RawReflection<'a> {
                 binding,
                 descriptor_type: descriptor.descriptor_type,
                 descriptor_count: descriptor.descriptor_count,
-                stage_flags: stage_flags(stage)?,
+                stage_flags: stage_flags(stage),
             });
         }
 
@@ -698,12 +698,12 @@ fn sampled_image_mode(instruction: &Instruction) -> Option<u32> {
     literal_u32(instruction, TYPE_IMAGE_SAMPLED_OPERAND)
 }
 
-fn stage_flags(stage: ShaderStage) -> anyhow::Result<&'static str> {
-    Ok(match stage {
+fn stage_flags(stage: ShaderStage) -> &'static str {
+    match stage {
         ShaderStage::Vertex => "VERTEX",
         ShaderStage::Fragment => "FRAGMENT",
         ShaderStage::Compute => "COMPUTE",
-    })
+    }
 }
 
 fn shader_type_name(entrypoint: &str, stage: ShaderStage) -> anyhow::Result<String> {
@@ -738,7 +738,7 @@ fn shader_type_name(entrypoint: &str, stage: ShaderStage) -> anyhow::Result<Stri
             ensure_entrypoint_suffix_matches_stage(entrypoint, stage, ShaderStage::Compute)?;
             "CS"
         }
-        _ => shader_stage_suffix(stage)?,
+        _ => shader_stage_suffix(stage),
     });
     Ok(name)
 }
@@ -757,12 +757,12 @@ fn ensure_entrypoint_suffix_matches_stage(
     }
 }
 
-fn shader_stage_suffix(stage: ShaderStage) -> anyhow::Result<&'static str> {
-    Ok(match stage {
+fn shader_stage_suffix(stage: ShaderStage) -> &'static str {
+    match stage {
         ShaderStage::Vertex => "VS",
         ShaderStage::Fragment => "FS",
         ShaderStage::Compute => "CS",
-    })
+    }
 }
 
 fn generate_shader_module(shaders: &[ReflectedShader]) -> anyhow::Result<TokenStream> {
