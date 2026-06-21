@@ -5,12 +5,6 @@ use cargo_gpu_install::{
     install::Install,
     spirv_builder::{ModuleResult, SpirvMetadata},
 };
-use naga::{
-    AddressSpace, ArraySize, Binding, GlobalVariable, Handle, ImageClass, Module, Scalar,
-    ScalarKind, ShaderStage, Type, TypeInner, VectorSize,
-    front::spv,
-    valid::{Capabilities, ValidationFlags, Validator},
-};
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{format_ident, quote};
 use rspirv_reflect::rspirv::{
@@ -102,61 +96,47 @@ struct ReflectedDescriptor {
     descriptor_count: u32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ShaderStage {
+    Vertex,
+    Fragment,
+    Compute,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum ScalarKind {
+    Sint,
+    Uint,
+    Float,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct Scalar {
+    kind: ScalarKind,
+    width: u8,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum VectorSize {
+    Bi,
+    Tri,
+    Quad,
+}
+
+impl From<VectorSize> for u32 {
+    fn from(size: VectorSize) -> Self {
+        match size {
+            VectorSize::Bi => 2,
+            VectorSize::Tri => 3,
+            VectorSize::Quad => 4,
+        }
+    }
+}
+
 fn reflect_shader(entrypoint: &str, spv_path: &Path) -> anyhow::Result<ReflectedShader> {
     let bytes = fs::read(spv_path)
         .with_context(|| format!("failed to read SPIR-V for shader entry point `{entrypoint}`"))?;
-    reflect_shader_naga(entrypoint, &bytes).or_else(|naga_err| {
-        println!(
-            "cargo:warning=naga reflection failed for `{entrypoint}`, falling back to SPIR-V instruction reflection: {naga_err:#}"
-        );
-        reflect_shader_spirv(entrypoint, &bytes)
-    })
-}
-
-fn reflect_shader_naga(entrypoint: &str, bytes: &[u8]) -> anyhow::Result<ReflectedShader> {
-    let module = spv::parse_u8_slice(
-        bytes,
-        &spv::Options {
-            strict_capabilities: false,
-            ..spv::Options::default()
-        },
-    )
-    .with_context(|| format!("failed to parse SPIR-V for shader entry point `{entrypoint}`"))?;
-    let entry = module
-        .entry_points
-        .iter()
-        .find(|entry| entry.name == entrypoint)
-        .ok_or_else(|| anyhow!("SPIR-V module did not contain entry point `{entrypoint}`"))?;
-
-    let entry_index = module
-        .entry_points
-        .iter()
-        .position(|entry| entry.name == entrypoint)
-        .ok_or_else(|| anyhow!("SPIR-V module did not contain entry point `{entrypoint}`"))?;
-    let mut validator = Validator::new(ValidationFlags::all(), Capabilities::all());
-    let module_info = validator
-        .validate(&module)
-        .with_context(|| format!("failed to validate Naga module for `{entrypoint}`"))?;
-    let entry_info = module_info.get_entry_point(entry_index);
-    let used_globals = module
-        .global_variables
-        .iter()
-        .filter_map(|(handle, _)| (!entry_info[handle].is_empty()).then_some(handle))
-        .collect::<HashSet<_>>();
-    let set_layouts = reflect_descriptor_sets(entrypoint, entry.stage, &module, &used_globals)?;
-    let vertex_inputs = if entry.stage == ShaderStage::Vertex {
-        reflect_vertex_inputs(entrypoint, entry, &module.types)?
-    } else {
-        Vec::new()
-    };
-
-    Ok(ReflectedShader {
-        entrypoint: entrypoint.to_owned(),
-        type_name: shader_type_name(entrypoint, entry.stage)?,
-        stage: entry.stage,
-        set_layouts,
-        vertex_inputs,
-    })
+    reflect_shader_spirv(entrypoint, &bytes)
 }
 
 fn reflect_shader_spirv(entrypoint: &str, bytes: &[u8]) -> anyhow::Result<ReflectedShader> {
@@ -187,135 +167,6 @@ fn parse_spirv(bytes: &[u8]) -> anyhow::Result<SpirvModule> {
     Ok(loader.module())
 }
 
-fn reflect_descriptor_sets(
-    entrypoint: &str,
-    stage: ShaderStage,
-    module: &Module,
-    used_globals: &HashSet<Handle<GlobalVariable>>,
-) -> anyhow::Result<Vec<Vec<DescriptorBinding>>> {
-    let mut sets = BTreeMap::<u32, Vec<DescriptorBinding>>::new();
-    for (handle, global) in module.global_variables.iter() {
-        if !used_globals.contains(&handle) {
-            continue;
-        }
-        let Some(binding) = global.binding else {
-            continue;
-        };
-        let descriptor = descriptor_for_global(entrypoint, &module.types, global)?;
-        sets.entry(binding.group)
-            .or_default()
-            .push(DescriptorBinding {
-                binding: binding.binding,
-                descriptor_type: descriptor.descriptor_type,
-                descriptor_count: descriptor.descriptor_count,
-                stage_flags: stage_flags(stage)?,
-            });
-    }
-
-    let Some(max_set) = sets.keys().next_back().copied() else {
-        return Ok(Vec::new());
-    };
-
-    let mut layouts = Vec::new();
-    for set in 0..=max_set {
-        let mut bindings = sets.remove(&set).unwrap_or_default();
-        bindings.sort_by_key(|binding| binding.binding);
-        layouts.push(bindings);
-    }
-    Ok(layouts)
-}
-
-fn descriptor_for_global(
-    entrypoint: &str,
-    types: &naga::UniqueArena<Type>,
-    global: &naga::GlobalVariable,
-) -> anyhow::Result<ReflectedDescriptor> {
-    let (inner, descriptor_count) = strip_binding_array(entrypoint, types, global.ty)?;
-    let descriptor_type = match (global.space, inner) {
-        (AddressSpace::Uniform, _) => "UNIFORM_BUFFER",
-        (
-            AddressSpace::Handle,
-            TypeInner::Image {
-                class: ImageClass::Sampled { .. } | ImageClass::Depth { .. },
-                ..
-            },
-        ) => "SAMPLED_IMAGE",
-        (
-            AddressSpace::Handle,
-            TypeInner::Image {
-                class: ImageClass::Storage { .. },
-                ..
-            },
-        ) => bail!(
-            "shader `{entrypoint}` uses storage image resource `{}`; storage image descriptors are not supported by shader generation yet",
-            global.name.as_deref().unwrap_or("<unnamed>")
-        ),
-        (AddressSpace::Handle, TypeInner::Sampler { .. }) => "SAMPLER",
-        (AddressSpace::Storage { .. }, _) => bail!(
-            "shader `{entrypoint}` uses storage resource `{}`; storage descriptors are not supported by shader generation yet",
-            global.name.as_deref().unwrap_or("<unnamed>")
-        ),
-        _ => bail!(
-            "shader `{entrypoint}` uses unsupported resource `{}` in address space {:?} with type {:?}",
-            global.name.as_deref().unwrap_or("<unnamed>"),
-            global.space,
-            inner
-        ),
-    };
-    Ok(ReflectedDescriptor {
-        descriptor_type,
-        descriptor_count,
-    })
-}
-
-fn strip_binding_array<'types>(
-    entrypoint: &str,
-    types: &'types naga::UniqueArena<Type>,
-    ty: Handle<Type>,
-) -> anyhow::Result<(&'types TypeInner, u32)> {
-    match &types[ty].inner {
-        TypeInner::BindingArray { base, size } => {
-            let descriptor_count = array_size_to_descriptor_count(entrypoint, *size)?;
-            let (inner, nested_count) = strip_binding_array(entrypoint, types, *base)?;
-            Ok((
-                inner,
-                descriptor_count.checked_mul(nested_count).ok_or_else(|| {
-                    anyhow!("shader `{entrypoint}` descriptor array count overflowed u32")
-                })?,
-            ))
-        }
-        inner => Ok((inner, 1)),
-    }
-}
-
-fn array_size_to_descriptor_count(entrypoint: &str, size: ArraySize) -> anyhow::Result<u32> {
-    match size {
-        ArraySize::Constant(count) => Ok(count.get()),
-        ArraySize::Pending(_) => bail!(
-            "shader `{entrypoint}` uses override-sized descriptor arrays, which are not supported"
-        ),
-        ArraySize::Dynamic => bail!(
-            "shader `{entrypoint}` uses runtime-sized descriptor arrays, which are not supported"
-        ),
-    }
-}
-
-fn reflect_vertex_inputs(
-    entrypoint: &str,
-    entry: &naga::EntryPoint,
-    types: &naga::UniqueArena<Type>,
-) -> anyhow::Result<Vec<VertexInput>> {
-    let mut reflected = Vec::new();
-    for argument in &entry.function.arguments {
-        let Some(Binding::Location { location, .. }) = argument.binding else {
-            continue;
-        };
-        let (format, size) = vertex_format(entrypoint, location, argument.ty, types)?;
-        reflected.push((location, format, size));
-    }
-    build_vertex_inputs(entrypoint, reflected)
-}
-
 fn build_vertex_inputs(
     entrypoint: &str,
     mut reflected: Vec<(u32, &'static str, u32)>,
@@ -336,29 +187,6 @@ fn build_vertex_inputs(
             .ok_or_else(|| anyhow!("shader `{entrypoint}` vertex input stride overflowed u32"))?;
     }
     Ok(inputs)
-}
-
-fn vertex_format(
-    entrypoint: &str,
-    location: u32,
-    ty: Handle<Type>,
-    types: &naga::UniqueArena<Type>,
-) -> anyhow::Result<(&'static str, u32)> {
-    let inner = &types[ty].inner;
-    match inner {
-        TypeInner::Scalar(scalar) => scalar_format(entrypoint, location, None, *scalar),
-        TypeInner::Vector { size, scalar } => {
-            scalar_format(entrypoint, location, Some(*size), *scalar)
-        }
-        TypeInner::Matrix { .. } => {
-            bail!(
-                "shader `{entrypoint}` location {location} uses a matrix vertex input, which is not supported"
-            )
-        }
-        _ => bail!(
-            "shader `{entrypoint}` location {location} uses unsupported vertex input type {inner:?}"
-        ),
-    }
 }
 
 fn scalar_format(
@@ -871,12 +699,11 @@ fn sampled_image_mode(instruction: &Instruction) -> Option<u32> {
 }
 
 fn stage_flags(stage: ShaderStage) -> anyhow::Result<&'static str> {
-    match stage {
-        ShaderStage::Vertex => Ok("VERTEX"),
-        ShaderStage::Fragment => Ok("FRAGMENT"),
-        ShaderStage::Compute => Ok("COMPUTE"),
-        _ => bail!("unsupported shader stage {stage:?}"),
-    }
+    Ok(match stage {
+        ShaderStage::Vertex => "VERTEX",
+        ShaderStage::Fragment => "FRAGMENT",
+        ShaderStage::Compute => "COMPUTE",
+    })
 }
 
 fn shader_type_name(entrypoint: &str, stage: ShaderStage) -> anyhow::Result<String> {
@@ -931,12 +758,11 @@ fn ensure_entrypoint_suffix_matches_stage(
 }
 
 fn shader_stage_suffix(stage: ShaderStage) -> anyhow::Result<&'static str> {
-    match stage {
-        ShaderStage::Vertex => Ok("VS"),
-        ShaderStage::Fragment => Ok("FS"),
-        ShaderStage::Compute => Ok("CS"),
-        _ => bail!("unsupported shader stage {stage:?}"),
-    }
+    Ok(match stage {
+        ShaderStage::Vertex => "VS",
+        ShaderStage::Fragment => "FS",
+        ShaderStage::Compute => "CS",
+    })
 }
 
 fn generate_shader_module(shaders: &[ReflectedShader]) -> anyhow::Result<TokenStream> {
@@ -1019,7 +845,6 @@ fn generate_shader(shader: &ReflectedShader) -> anyhow::Result<TokenStream> {
         ShaderStage::Fragment => quote! {
             impl FragmentShader for #type_name {}
         },
-        _ => unreachable!("unsupported shader stage should fail before code generation"),
     };
 
     Ok(quote! {

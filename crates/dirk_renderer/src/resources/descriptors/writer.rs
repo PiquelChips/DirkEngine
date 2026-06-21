@@ -14,16 +14,12 @@ enum WriteOp {
         offset: vk::DeviceSize,
         range: vk::DeviceSize,
     },
-    SampledImage {
+    CombinedImageSampler {
         set: vk::DescriptorSet,
         binding: u32,
         view: vk::ImageView,
-        image_layout: vk::ImageLayout,
-    },
-    Sampler {
-        set: vk::DescriptorSet,
-        binding: u32,
         sampler: vk::Sampler,
+        image_layout: vk::ImageLayout,
     },
 }
 
@@ -61,35 +57,21 @@ impl<'dev> DescriptorWriter<'dev> {
         self
     }
 
-    /// Adds a sampled image descriptor write.
-    pub fn sampled_image<L: SetLayout>(
+    /// Adds a combined image sampler descriptor write.
+    pub fn combined_image_sampler<L: SetLayout>(
         mut self,
         set: &DescriptorSet<L>,
         binding: u32,
         view: vk::ImageView,
+        sampler: vk::Sampler,
     ) -> Self {
-        debug_assert_binding::<L>(binding, vk::DescriptorType::SAMPLED_IMAGE);
-        self.ops.push(WriteOp::SampledImage {
+        debug_assert_binding::<L>(binding, vk::DescriptorType::COMBINED_IMAGE_SAMPLER);
+        self.ops.push(WriteOp::CombinedImageSampler {
             set: set.raw(),
             binding,
             view,
-            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-        });
-        self
-    }
-
-    /// Adds a sampler descriptor write.
-    pub fn sampler<L: SetLayout>(
-        mut self,
-        set: &DescriptorSet<L>,
-        binding: u32,
-        sampler: vk::Sampler,
-    ) -> Self {
-        debug_assert_binding::<L>(binding, vk::DescriptorType::SAMPLER);
-        self.ops.push(WriteOp::Sampler {
-            set: set.raw(),
-            binding,
             sampler,
+            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
         });
         self
     }
@@ -118,17 +100,18 @@ impl<'dev> DescriptorWriter<'dev> {
                             .range(*range),
                     );
                 }
-                WriteOp::SampledImage {
-                    view, image_layout, ..
+                WriteOp::CombinedImageSampler {
+                    view,
+                    sampler,
+                    image_layout,
+                    ..
                 } => {
                     image_infos.push(
                         vk::DescriptorImageInfo::default()
                             .image_layout(*image_layout)
-                            .image_view(*view),
+                            .image_view(*view)
+                            .sampler(*sampler),
                     );
-                }
-                WriteOp::Sampler { sampler, .. } => {
-                    image_infos.push(vk::DescriptorImageInfo::default().sampler(*sampler));
                 }
             }
         }
@@ -148,20 +131,11 @@ impl<'dev> DescriptorWriter<'dev> {
                     buffer_index += 1;
                     write
                 }
-                WriteOp::SampledImage { set, binding, .. } => {
+                WriteOp::CombinedImageSampler { set, binding, .. } => {
                     let write = vk::WriteDescriptorSet::default()
                         .dst_set(*set)
                         .dst_binding(*binding)
-                        .descriptor_type(vk::DescriptorType::SAMPLED_IMAGE)
-                        .image_info(&image_infos[image_index..=image_index]);
-                    image_index += 1;
-                    write
-                }
-                WriteOp::Sampler { set, binding, .. } => {
-                    let write = vk::WriteDescriptorSet::default()
-                        .dst_set(*set)
-                        .dst_binding(*binding)
-                        .descriptor_type(vk::DescriptorType::SAMPLER)
+                        .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
                         .image_info(&image_infos[image_index..=image_index]);
                     image_index += 1;
                     write
