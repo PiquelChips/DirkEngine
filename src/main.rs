@@ -12,7 +12,7 @@ fn run() -> anyhow::Result<()> {
     );
     let mut builder = dirk_engine::Engine::builder();
     builder.with_plugin(dirkengine::DefaultPlugins)?;
-    builder.with_plugin(demo::DemoPlugin)?;
+    builder.with_plugin(dirkengine::demo::DemoPlugin)?;
     let engine = builder.build().context("build new engine")?;
 
     engine.run().context("run new engine")?;
