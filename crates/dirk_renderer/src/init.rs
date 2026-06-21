@@ -192,7 +192,8 @@ impl Renderer {
             vk::PhysicalDeviceFeatures::default().sampler_anisotropy(true);
         let mut vulkan12_features = vk::PhysicalDeviceVulkan12Features::default()
             .buffer_device_address(true)
-            .vulkan_memory_model(true);
+            .vulkan_memory_model(true)
+            .timeline_semaphore(true);
         let mut vulkan13_features = vk::PhysicalDeviceVulkan13Features::default()
             .dynamic_rendering(true)
             .synchronization2(true);
