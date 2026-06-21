@@ -478,8 +478,9 @@ mod editor_tests {
 
     use super::*;
     use crate::editor::{
-        EditorMenuDescriptor, EditorRenderContext, EditorServices, EditorSubsystem,
-        EditorTickContext, EditorWindowDescriptor, EditorWindowInfo,
+        EDITOR_CATEGORY, EditorMenuDescriptor, EditorRenderContext, EditorServices,
+        EditorSubsystem, EditorTickContext, EditorWindowDescriptor, EditorWindowInfo,
+        UNIVERSE_CATEGORY,
     };
 
     struct FirstEditorSubsystem {
@@ -567,21 +568,33 @@ mod editor_tests {
         }
     }
 
-    fn render_services(services: &EditorServices, universe: &Universe) -> anyhow::Result<()> {
+    fn render_services_with_input(
+        services: &EditorServices,
+        universe: &Universe,
+        raw_input: egui::RawInput,
+    ) -> anyhow::Result<()> {
         let ctx = egui::Context::default();
-        ctx.begin_pass(egui::RawInput {
-            screen_rect: Some(egui::Rect::from_min_size(
-                egui::Pos2::ZERO,
-                egui::vec2(800.0, 600.0),
-            )),
-            ..egui::RawInput::default()
-        });
+        ctx.begin_pass(raw_input);
 
         let handle = build_context().handle().clone();
         let frame = EditorRenderContext::new(0.016, &handle, universe);
         let result = services.render_ui(&ctx, &frame);
         let _ = ctx.end_pass();
         result
+    }
+
+    fn render_services(services: &EditorServices, universe: &Universe) -> anyhow::Result<()> {
+        render_services_with_input(
+            services,
+            universe,
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(800.0, 600.0),
+                )),
+                ..egui::RawInput::default()
+            },
+        )
     }
 
     fn descriptor(title: &str, default_open: bool) -> EditorWindowDescriptor {
@@ -710,23 +723,87 @@ mod editor_tests {
     }
 
     #[test]
-    fn open_windows_render_in_registration_order() -> anyhow::Result<()> {
+    fn default_open_windows_are_inserted_into_dock_state() {
+        let services = EditorServices::new();
+
+        let first = services.add_window_fn(descriptor("first", true), |_ui, _context| Ok(()));
+        let second = services.add_window_fn(descriptor("second", true), |_ui, _context| Ok(()));
+        let closed = services.add_window_fn(descriptor("closed", false), |_ui, _context| Ok(()));
+
+        assert!(services.dock_contains_window_for_tests(first));
+        assert!(services.dock_contains_window_for_tests(second));
+        assert!(!services.dock_contains_window_for_tests(closed));
+        assert_eq!(services.dock_tab_count_for_tests(), 2);
+    }
+
+    #[test]
+    fn open_windows_render_through_dock_tabs() -> anyhow::Result<()> {
         let services = EditorServices::new();
         let calls = Arc::new(Mutex::new(Vec::new()));
 
-        for label in ["first", "second", "third"] {
-            let calls = Arc::clone(&calls);
-            services.add_window_fn(descriptor(label, true), move |_ui, _context| {
-                calls.lock().push(label);
-                Ok(())
-            });
-        }
+        let calls_for_window = Arc::clone(&calls);
+        services.add_window_fn(descriptor("window", true), move |_ui, _context| {
+            calls_for_window.lock().push("window");
+            Ok(())
+        });
 
         let universe = Universe::builder().build();
         render_services(&services, &universe)?;
 
-        assert_eq!(*calls.lock(), vec!["first", "second", "third"]);
+        assert_eq!(*calls.lock(), vec!["window"]);
         Ok(())
+    }
+
+    #[test]
+    fn closed_windows_do_not_render() -> anyhow::Result<()> {
+        let services = EditorServices::new();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let calls_for_window = Arc::clone(&calls);
+        let id = services.add_window_fn(descriptor("window", true), move |_ui, _context| {
+            calls_for_window.fetch_add(1, Ordering::Relaxed);
+            Ok(())
+        });
+
+        services.close_window_tab_for_tests(id);
+
+        let universe = Universe::builder().build();
+        render_services(&services, &universe)?;
+
+        assert_eq!(calls.load(Ordering::Relaxed), 0);
+        assert_eq!(services.is_open(id), Some(false));
+        assert!(!services.dock_contains_window_for_tests(id));
+        Ok(())
+    }
+
+    #[test]
+    fn closing_a_tab_sets_window_open_state_false() {
+        let services = EditorServices::new();
+        let id = services.add_window_fn(descriptor("window", true), |_ui, _context| Ok(()));
+
+        services.close_window_tab_for_tests(id);
+
+        assert_eq!(services.is_open(id), Some(false));
+        assert!(!services.dock_contains_window_for_tests(id));
+    }
+
+    #[test]
+    fn opening_a_closed_window_readds_its_tab() {
+        let services = EditorServices::new();
+        let id = services.add_window_fn(descriptor("window", true), |_ui, _context| Ok(()));
+        services.close_window_tab_for_tests(id);
+
+        services.open_window_for_tests(id);
+
+        assert_eq!(services.is_open(id), Some(true));
+        assert!(services.dock_contains_window_for_tests(id));
+    }
+
+    #[test]
+    fn all_windows_are_closeable() {
+        let services = EditorServices::new();
+        let id = services.add_window_fn(descriptor("window", false), |_ui, _context| Ok(()));
+
+        assert!(services.window_is_closeable_for_tests(id));
     }
 
     #[test]
@@ -749,7 +826,7 @@ mod editor_tests {
         let first = services.add_window_fn(
             EditorWindowDescriptor {
                 title: "zeta".to_owned(),
-                category: "Universe".to_owned(),
+                category: UNIVERSE_CATEGORY.to_owned(),
                 default_open: true,
                 show_in_list: true,
             },
@@ -758,7 +835,7 @@ mod editor_tests {
         let second = services.add_window_fn(
             EditorWindowDescriptor {
                 title: "alpha".to_owned(),
-                category: "Editor".to_owned(),
+                category: EDITOR_CATEGORY.to_owned(),
                 default_open: false,
                 show_in_list: false,
             },
@@ -771,14 +848,14 @@ mod editor_tests {
                 EditorWindowInfo {
                     id: first,
                     title: "zeta".to_owned(),
-                    category: "Universe".to_owned(),
+                    category: UNIVERSE_CATEGORY.to_owned(),
                     open: true,
                     show_in_list: true,
                 },
                 EditorWindowInfo {
                     id: second,
                     title: "alpha".to_owned(),
-                    category: "Editor".to_owned(),
+                    category: EDITOR_CATEGORY.to_owned(),
                     open: false,
                     show_in_list: false,
                 },
@@ -789,7 +866,7 @@ mod editor_tests {
             Some(EditorWindowInfo {
                 id: second,
                 title: "alpha".to_owned(),
-                category: "Editor".to_owned(),
+                category: EDITOR_CATEGORY.to_owned(),
                 open: false,
                 show_in_list: false,
             })
@@ -804,6 +881,7 @@ mod editor_tests {
         services.open_window_for_tests(id);
 
         assert_eq!(services.is_open(id), Some(true));
+        assert!(services.dock_contains_window_for_tests(id));
     }
 
     #[test]
@@ -839,5 +917,42 @@ mod editor_tests {
         }
 
         assert_eq!(services.menu_titles(), vec!["first", "second", "third"]);
+    }
+
+    #[test]
+    fn menu_commands_still_open_windows() -> anyhow::Result<()> {
+        let services = EditorServices::new();
+        let target = services.add_window_fn(descriptor("target", false), |_ui, _context| Ok(()));
+        services.add_menu_fn(
+            EditorMenuDescriptor {
+                title: "Open".to_owned(),
+            },
+            move |_ui, _context, editor| {
+                editor.open_window(target);
+                Ok(())
+            },
+        );
+
+        let universe = Universe::builder().build();
+        let ctx = egui::Context::default();
+        ctx.begin_pass(egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(800.0, 600.0),
+            )),
+            ..egui::RawInput::default()
+        });
+        let handle = build_context().handle().clone();
+        let frame = EditorRenderContext::new(0.016, &handle, &universe);
+        let mut result = Ok(());
+        egui::CentralPanel::default().show(&ctx, |ui| {
+            result = services.render_menu_for_tests("Open", ui, &frame);
+        });
+        let _ = ctx.end_pass();
+        result?;
+
+        assert_eq!(services.is_open(target), Some(true));
+        assert!(services.dock_contains_window_for_tests(target));
+        Ok(())
     }
 }
