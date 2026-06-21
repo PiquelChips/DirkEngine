@@ -386,13 +386,6 @@ impl EditorServices {
         self.add_menu(FnEditorMenu { descriptor, ui })
     }
 
-    /// Updates a registered window's open state.
-    pub fn set_open(&self, id: EditorWindowId, open: bool) {
-        if let Some(state) = self.state.lock().window_states.get_mut(&id) {
-            state.open = open;
-        }
-    }
-
     /// Returns whether a registered window is currently open.
     #[must_use]
     pub fn is_open(&self, id: EditorWindowId) -> Option<bool> {
