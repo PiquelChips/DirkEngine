@@ -15,8 +15,10 @@ use crate::{
 /// The renderer records work against [`Self::image`] and then consumes this
 /// value with [`Self::present`] after the render-finished semaphore has been
 /// signalled.
-pub struct RenderImage<'a> {
-    pub image: &'a SwapchainImage,
+pub struct RenderImage {
+    /// The Image to be rendered too. The RenderImage does not own this image.
+    pub image: vk::Image,
+    pub view: vk::ImageView,
     pub image_index: u32,
 
     pub image_available_semaphore: vk::Semaphore,
@@ -26,7 +28,7 @@ pub struct RenderImage<'a> {
     swapchain: vk::SwapchainKHR,
 }
 
-impl RenderImage<'_> {
+impl RenderImage {
     /// Presents the acquired swapchain image.
     pub fn present(self) -> Result<()> {
         let wait_semaphores = [self.render_finished_semaphore];
@@ -91,7 +93,7 @@ impl Swapchain {
     }
 
     /// Acquires the next image and returns the semaphores required to render it.
-    pub fn acquire_next_image(&mut self) -> Result<RenderImage<'_>> {
+    pub fn acquire_next_image(&mut self) -> Result<RenderImage> {
         self.semaphore_index = (self.semaphore_index + 1) % self.semaphores.len();
         let (render_finished_semaphore, image_available_semaphore) =
             self.semaphores[self.semaphore_index];
@@ -110,7 +112,8 @@ impl Swapchain {
         }
 
         Ok(RenderImage {
-            image: &self.images[image_index as usize],
+            image: self.images[image_index as usize].image(),
+            view: self.images[image_index as usize].view(),
             image_index,
             image_available_semaphore,
             render_finished_semaphore,

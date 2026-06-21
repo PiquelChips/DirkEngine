@@ -59,7 +59,7 @@ impl Window {
     pub fn extent(&self) -> vk::Extent2D {
         self.swapchain.extent()
     }
-    pub fn next_image(&mut self) -> Result<RenderImage<'_>> {
+    pub fn next_image(&mut self) -> Result<RenderImage> {
         self.swapchain.acquire_next_image()
     }
     pub fn resize(&mut self, extent: vk::Extent2D) -> Result<()> {
