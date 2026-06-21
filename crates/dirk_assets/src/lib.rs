@@ -27,7 +27,7 @@ use std::{
     future::Future,
     path::{Path, PathBuf},
     pin::Pin,
-    sync::Arc,
+    sync::{Arc, Weak},
     task::{Context, Poll},
 };
 use tokio::task::JoinHandle as TaskJoinHandle;
@@ -425,6 +425,9 @@ struct AssetRegistryInner {
     ///
     /// [`load_asset::<T>`]: AssetRegistry::load_asset
     load_dispatchers: RwLock<HashMap<TypeId, Box<dyn Any + Send + Sync>>>,
+
+    /// Weak references to currently live assets.
+    loaded_assets: RwLock<HashMap<AssetHandle, Box<dyn Any + Send + Sync>>>,
 }
 
 impl AssetRegistry {
@@ -457,6 +460,7 @@ impl AssetRegistry {
             workers,
 
             load_dispatchers: RwLock::new(HashMap::new()),
+            loaded_assets: RwLock::new(HashMap::new()),
         };
 
         let assets_path = PathBuf::from(ASSETS_PATH).canonicalize()?;
@@ -482,6 +486,7 @@ impl AssetRegistry {
             .collect();
 
         for InternalAssetUnloaded(handle) in unloaded {
+            self.clear_loaded_asset(&handle);
             self.inner
                 .unload_dispatcher
                 .dispatch(AssetUnloaded { handle });
@@ -519,6 +524,10 @@ impl AssetRegistry {
             return Err(Error::TypeMismatch(handle.raw().to_owned()));
         }
 
+        if let Some(typed_handle) = self.cached_handle::<T>(&handle) {
+            return Ok(typed_handle);
+        }
+
         let config = self
             .asset_config::<T>(&handle)
             .ok_or_else(|| Error::NotFound(handle.raw().to_owned()))?;
@@ -529,8 +538,29 @@ impl AssetRegistry {
             self.inner.event_manager.register(),
         ));
 
+        self.cache_handle(&typed_handle);
         self.dispatch_loaded(typed_handle.clone());
         Ok(typed_handle)
+    }
+
+    fn cached_handle<T: Asset>(&self, handle: &AssetHandle) -> Option<Handle<T>> {
+        let cached = self.inner.loaded_assets.read();
+        let weak = cached
+            .get(handle)?
+            .downcast_ref::<Weak<Mutex<AssetRef<T>>>>()?;
+
+        weak.upgrade().map(Handle::from_inner)
+    }
+
+    fn cache_handle<T: Asset>(&self, handle: &Handle<T>) {
+        self.inner
+            .loaded_assets
+            .write()
+            .insert(handle.handle(), Box::new(handle.downgrade()));
+    }
+
+    fn clear_loaded_asset(&self, handle: &AssetHandle) {
+        self.inner.loaded_assets.write().remove(handle);
     }
 
     fn dispatch_loaded<T: Asset>(&self, handle: Handle<T>) {

@@ -1023,6 +1023,57 @@ mod registry {
     }
 
     #[test]
+    fn load_asset_reuses_live_asset_without_reloading_from_disk() {
+        with_temp_fixtures("cached_load", |_registry, _events, sub| {
+            let dir = PathBuf::from(ASSETS_PATH).join(sub);
+            write_model_fixture(&dir, "cached");
+
+            let workers = WorkerPool::new("test");
+            let events2 = EventManager::new(workers.clone());
+            let r2 = AssetRegistry::init(&events2, workers).unwrap();
+
+            let raw = format!("{sub}/cached.dirkasset");
+            let handle_id = AssetHandle::from_raw(raw, AssetType::Model);
+            let first = wait_for_load(r2.load_asset::<Model>(&handle_id)).unwrap();
+
+            fs::remove_file(dir.join("cached.gltf")).unwrap();
+
+            let second = wait_for_load(r2.load_asset::<Model>(&handle_id))
+                .expect("cached live asset should load after source file is removed");
+
+            assert_eq!(
+                first.get().unwrap().gltf.scenes().count(),
+                second.get().unwrap().gltf.scenes().count()
+            );
+        });
+    }
+
+    #[test]
+    fn load_asset_does_not_fire_loaded_event_for_cached_asset() {
+        with_temp_fixtures("cached_event", |_registry, _events, sub| {
+            let dir = PathBuf::from(ASSETS_PATH).join(sub);
+            write_model_fixture(&dir, "cached_ship");
+
+            let workers = WorkerPool::new("test");
+            let events2 = EventManager::new(workers.clone());
+            let mut loaded_consumer = events2.subscribe::<AssetLoaded<Model>>();
+            let r2 = AssetRegistry::init(&events2, workers).unwrap();
+
+            let raw = format!("{sub}/cached_ship.dirkasset");
+            let handle_id = AssetHandle::from_raw(raw, AssetType::Model);
+            let _first = wait_for_load(r2.load_asset::<Model>(&handle_id)).unwrap();
+            let _second = wait_for_load(r2.load_asset::<Model>(&handle_id)).unwrap();
+
+            std::thread::sleep(std::time::Duration::from_millis(5));
+            assert_eq!(
+                loaded_consumer.consume_all().count(),
+                1,
+                "AssetLoaded should only fire for the initial load"
+            );
+        });
+    }
+
+    #[test]
     fn loaded_event_handle_gives_access_to_model_data() {
         with_temp_fixtures("event_data", |_registry, _events, sub| {
             let dir = PathBuf::from(ASSETS_PATH).join(sub);
@@ -1078,6 +1129,32 @@ mod registry {
             assert!(
                 fired[0].handle.raw().contains("barrel"),
                 "Unloaded event must carry the correct handle"
+            );
+        });
+    }
+
+    #[test]
+    fn tick_clears_cached_asset_after_unload() {
+        with_temp_fixtures("tick_cache_clear", |_registry, _events, sub| {
+            let dir = PathBuf::from(ASSETS_PATH).join(sub);
+            write_model_fixture(&dir, "cleared");
+
+            let workers = WorkerPool::new("test");
+            let events2 = EventManager::new(workers.clone());
+            let r2 = AssetRegistry::init(&events2, workers).unwrap();
+
+            let raw = format!("{sub}/cleared.dirkasset");
+            let handle_id = AssetHandle::from_raw(raw, AssetType::Model);
+            let handle = wait_for_load(r2.load_asset::<Model>(&handle_id)).unwrap();
+            assert_eq!(r2.inner.loaded_assets.read().len(), 1);
+
+            drop(handle);
+            std::thread::sleep(std::time::Duration::from_millis(5));
+            r2.tick();
+
+            assert!(
+                r2.inner.loaded_assets.read().is_empty(),
+                "unload processing should clear weak cache entries"
             );
         });
     }
@@ -1192,7 +1269,7 @@ mod registry {
     }
 
     #[test]
-    fn loading_same_handle_twice_creates_independent_handles() {
+    fn loading_same_handle_twice_reuses_live_handle() {
         with_temp_fixtures("double_load", |_registry, _events, sub| {
             let dir = PathBuf::from(ASSETS_PATH).join(sub);
             write_model_fixture(&dir, "rock");
@@ -1211,11 +1288,11 @@ mod registry {
             )
             .unwrap();
 
-            // Both handles are independent; taking from one must not affect the other.
+            // Both handles share the same live asset. Taking from one must affect the other.
             h1.take().unwrap();
             assert!(
-                h2.take().is_ok(),
-                "Second handle is independent; take must succeed"
+                matches!(h2.take(), Err(Error::AlreadyTaken)),
+                "Second handle should share the already-taken asset data"
             );
         });
     }
