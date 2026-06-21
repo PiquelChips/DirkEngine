@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use parking_lot::Mutex;
 
-use crate::{EditorServices, EditorWindowDescriptor};
+use crate::{EditorServices, EditorWindowDescriptor, UNIVERSE_CATEGORY};
 
 use dirk_universe::{Entity, Universe, WorldId};
 
@@ -17,7 +17,7 @@ pub fn register_capabilities(services: &EditorServices) {
         services.add_window_fn(
             EditorWindowDescriptor {
                 title: "Worlds".to_owned(),
-                category: "Universe".to_owned(),
+                category: UNIVERSE_CATEGORY.to_owned(),
                 default_open: false,
                 show_in_list: true,
             },
@@ -34,7 +34,7 @@ pub fn register_capabilities(services: &EditorServices) {
         services.add_window_fn(
             EditorWindowDescriptor {
                 title: "Entities".to_owned(),
-                category: "Universe".to_owned(),
+                category: UNIVERSE_CATEGORY.to_owned(),
                 default_open: true,
                 show_in_list: true,
             },
@@ -51,7 +51,7 @@ pub fn register_capabilities(services: &EditorServices) {
     let entity_details = services.add_window_fn(
         EditorWindowDescriptor {
             title: "Entity Details".to_owned(),
-            category: "Universe".to_owned(),
+            category: UNIVERSE_CATEGORY.to_owned(),
             default_open: true,
             show_in_list: true,
         },
