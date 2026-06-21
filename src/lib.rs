@@ -27,6 +27,9 @@ pub use dirk_world as world;
 
 pub mod demo;
 
+#[cfg(feature = "cli")]
+pub mod cli;
+
 /// Registers all the engine's default plugins.
 pub struct DefaultPlugins;
 

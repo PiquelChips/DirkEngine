@@ -1,9 +1,15 @@
 //! Entrypoint for exercising the new plugin/subsystem engine runtime.
 
-use anyhow::Context;
-use tracing::error;
+#[cfg(feature = "cli")]
+use dirkengine::cli::run;
 
+#[cfg(not(feature = "cli"))]
 fn run() -> anyhow::Result<()> {
+    use anyhow::Context;
+
+    println!(
+        "you are running the base cli. to run the advanced cli, enable the \"cli\" cargo feature"
+    );
     let mut builder = dirk_engine::Engine::builder();
     builder.with_plugin(dirkengine::DefaultPlugins)?;
     let engine = builder.build().context("build new engine")?;
@@ -16,7 +22,7 @@ fn main() {
     match run() {
         Ok(()) => {}
         Err(err) => {
-            error!("{err:#}");
+            tracing::error!("{err:#}");
             panic!("Error: {err:#}");
         }
     }
