@@ -87,6 +87,8 @@ impl dirk_engine::EnginePlugin for RendererPlugin {
         builder.add_subsystem(|ctx| {
             let platform_windows = ctx.resource::<dirk_platform::PlatformWindows>()?;
             #[cfg(feature = "editor")]
+            let editor = ctx.resource::<dirk_engine::editor::EditorServices>()?;
+            #[cfg(feature = "editor")]
             let input_router = ctx.resource::<dirk_platform::InputRouter>()?;
 
             let create_info = RendererCreateInfo::from_engine_metadata(ctx.handle().metadata())?;
@@ -99,6 +101,8 @@ impl dirk_engine::EnginePlugin for RendererPlugin {
                 platform_windows.clone(),
                 #[cfg(feature = "editor")]
                 input_router,
+                #[cfg(feature = "editor")]
+                editor,
             )?;
 
             ctx.extend_universe(renderer.universe_builder());
@@ -165,6 +169,9 @@ struct Renderer {
     egui_window: Option<WindowId>,
     #[cfg(feature = "editor")]
     input_router: dirk_platform::InputRouter,
+    /// Editor window registry rendered through egui.
+    #[cfg(feature = "editor")]
+    editor: dirk_engine::editor::EditorServices,
     /// Maps each live [`PlayerId`] to its proxy.
     players: HashMap<PlayerId, PlayerProxy>,
 
@@ -193,14 +200,26 @@ impl dirk_engine::Subsystem for Renderer {
     fn tick(
         &mut self,
         delta_time: f64,
-        _handle: &dirk_engine::EngineHandle,
-        _universe: &mut dirk_universe::Universe,
+        handle: &dirk_engine::EngineHandle,
+        universe: &mut dirk_universe::Universe,
     ) -> anyhow::Result<()> {
         self.tick(delta_time)?;
         #[cfg(feature = "editor")]
         {
             let ctx = self.begin_frame();
-            self.render_ui(delta_time, &ctx);
+            let frame = dirk_engine::editor::EditorRenderContext::new(
+                delta_time,
+                handle,
+                universe,
+                &self.editor,
+            );
+
+            self.editor.render_ui(&ctx, &frame)?;
+        }
+
+        #[cfg(not(feature = "editor"))]
+        {
+            let _ = (handle, universe);
         }
 
         self.end_frame().context("rendering")?;
@@ -210,17 +229,6 @@ impl dirk_engine::Subsystem for Renderer {
 }
 
 impl Renderer {
-    // TODO: shouldn't be here
-    #[cfg(feature = "editor")]
-    #[allow(clippy::unused_self)]
-    fn render_ui(&self, delta_time: f64, ctx: &egui::Context) {
-        egui::Window::new("DirkEngine").show(ctx, |ui| {
-            ui.label("egui is rendering through DirkEngine");
-            ui.separator();
-            ui.label(format!("delta: {:.2} ms", delta_time * 1_000.0));
-        });
-    }
-
     /// Renderer initialisation. Creates all Vulkan & other renderer objects.
     ///
     /// # Errors
@@ -232,6 +240,7 @@ impl Renderer {
         event_manager: &dirk_events::EventManager,
         platform_windows: PlatformWindows,
         #[cfg(feature = "editor")] input_router: dirk_platform::InputRouter,
+        #[cfg(feature = "editor")] editor: dirk_engine::editor::EditorServices,
     ) -> Result<Self> {
         info!("Intializing Vulkan...");
 
@@ -319,6 +328,8 @@ impl Renderer {
             egui_window: None,
             #[cfg(feature = "editor")]
             input_router,
+            #[cfg(feature = "editor")]
+            editor,
 
             frames,
             current_frame,
