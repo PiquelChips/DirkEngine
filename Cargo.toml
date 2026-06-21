@@ -47,7 +47,11 @@ rustdoc-args = ["-Zunstable-options", "--cfg", "docsrs"]
 [features]
 default = ["editor"]
 
-editor = ["dirk_engine/editor", "dirk_renderer/editor", "dep:dirk_editor"]
+editor = [
+    "dirk_engine/editor",
+    "dirk_renderer/editor",
+    "dep:dirk_editor",
+]
 
 # WORKSPACE CONFIGURATION
 
