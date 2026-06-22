@@ -775,6 +775,38 @@ impl Renderer {
 
     // EXTRA UTILS
 
+    fn find_player_entity(
+        universe: &dirk_universe::Universe,
+        player: PlayerId,
+    ) -> Option<(Entity, WorldId)> {
+        universe.entities().find(|(entity, _world)| {
+            universe
+                .component::<PlayerId>(*entity)
+                .is_some_and(|entity_player| *entity_player == player)
+        })
+    }
+    fn bind_viewport_to_entity(&mut self, player: PlayerId, entity: Entity) {
+        let world = self.scene_manager.entity_world(entity);
+        if let Some(viewport) = self.viewports.get_mut(&player) {
+            viewport.camera = Some(entity);
+            viewport.world = world;
+        }
+    }
+    fn update_viewport_world_for_camera(&mut self, camera: Entity, world: WorldId) {
+        for viewport in self.viewports.values_mut() {
+            if viewport.camera == Some(camera) {
+                viewport.world = Some(world);
+            }
+        }
+    }
+    fn clear_viewports_for_camera(&mut self, camera: Entity) {
+        for viewport in self.viewports.values_mut() {
+            if viewport.camera == Some(camera) {
+                viewport.camera = None;
+                viewport.world = None;
+            }
+        }
+    }
     fn create_sampler(device: &RenderDevice, mip_levels: u32) -> Result<vk::Sampler> {
         let props = unsafe {
             device
