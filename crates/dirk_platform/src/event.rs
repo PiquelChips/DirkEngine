@@ -338,6 +338,31 @@ mod tests {
     }
 
     #[test]
+    fn router_drains_input_events_in_fifo_order() {
+        let router = InputRouter::default();
+        router.push_input_event(InputEvent::PointerLeft { id: window_id(1) });
+        router.push_input_event(InputEvent::PointerLeft { id: window_id(2) });
+
+        let events = router.drain_input_events();
+
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].id(), &window_id(1));
+        assert_eq!(events[1].id(), &window_id(2));
+        assert!(router.drain_input_events().is_empty());
+    }
+
+    #[test]
+    fn router_direct_input_dispatch_is_enabled_by_default() {
+        let router = InputRouter::default();
+
+        assert!(router.direct_input_dispatch_enabled());
+
+        router.set_direct_input_dispatch(false);
+
+        assert!(!router.direct_input_dispatch_enabled());
+    }
+
+    #[test]
     fn router_capture_is_scoped_by_window_id() {
         let router = InputRouter::default();
         router.set_capture(
