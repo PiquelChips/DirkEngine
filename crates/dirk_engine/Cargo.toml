@@ -24,12 +24,13 @@ dirk_events.workspace = true
 dirk_universe.workspace = true
 dirk_utils.workspace = true
 egui = { workspace = true, optional = true }
+egui_dock = { workspace = true, optional = true }
 
 [build-dependencies]
 dirk_build.workspace = true
 
 [features]
-editor = ["dep:egui"]
+editor = ["dep:egui", "dep:egui_dock"]
 
 [lints]
 workspace = true

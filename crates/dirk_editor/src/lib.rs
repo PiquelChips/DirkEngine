@@ -5,8 +5,9 @@
 use std::collections::BTreeMap;
 
 use dirk_engine::editor::{
-    EditorMenu, EditorMenuContext, EditorMenuDescriptor, EditorServices, EditorUiContext,
-    EditorWindow, EditorWindowDescriptor, EditorWindowId, EditorWindowInfo,
+    EDITOR_CATEGORY, EditorMenu, EditorMenuContext, EditorMenuDescriptor, EditorServices,
+    EditorUiContext, EditorWindow, EditorWindowDescriptor, EditorWindowId, EditorWindowInfo,
+    UNIVERSE_CATEGORY,
 };
 
 mod settings;
@@ -133,7 +134,7 @@ impl EditorWindow for EngineDiagnosticsWindow {
     fn descriptor(&self) -> EditorWindowDescriptor {
         EditorWindowDescriptor {
             title: "Engine".to_owned(),
-            category: "Editor".to_owned(),
+            category: EDITOR_CATEGORY.to_owned(),
             default_open: true,
             show_in_list: true,
         }

@@ -1,10 +1,8 @@
 use std::sync::{Arc, OnceLock};
 
-use dirk_engine::editor::EditorStyle;
-use dirk_engine::editor::EditorSubsystem as _;
+use dirk_engine::editor::{EDITOR_CATEGORY, EditorStyle, EditorSubsystem as _, UNIVERSE_CATEGORY};
 
-use crate::style::EditorPalette;
-use crate::style::default_editor_style;
+use crate::style::{EditorPalette, default_editor_style};
 
 fn begin_egui_pass(ctx: &egui::Context) {
     ctx.begin_pass(egui::RawInput {
@@ -104,6 +102,13 @@ fn builtin_editor_subsystem_registers_expected_default_capabilities() -> anyhow:
         services.window_titles(),
         vec!["Settings", "Engine", "Worlds", "Entities", "Entity Details",]
     );
+    let open_windows = services
+        .windows()
+        .into_iter()
+        .filter(|window| window.open)
+        .map(|window| window.title)
+        .collect::<Vec<_>>();
+    assert_eq!(open_windows, vec!["Engine", "Entities", "Entity Details"]);
 
     let ctx = egui::Context::default();
     begin_egui_pass(&ctx);
@@ -131,7 +136,7 @@ fn window_list_menu_groups_categories_and_windows_alphabetically() {
     services.add_window_fn(
         crate::EditorWindowDescriptor {
             title: "zeta".to_owned(),
-            category: "Universe".to_owned(),
+            category: UNIVERSE_CATEGORY.to_owned(),
             default_open: true,
             show_in_list: true,
         },
@@ -140,7 +145,7 @@ fn window_list_menu_groups_categories_and_windows_alphabetically() {
     services.add_window_fn(
         crate::EditorWindowDescriptor {
             title: "alpha".to_owned(),
-            category: "Editor".to_owned(),
+            category: EDITOR_CATEGORY.to_owned(),
             default_open: true,
             show_in_list: true,
         },
@@ -149,7 +154,7 @@ fn window_list_menu_groups_categories_and_windows_alphabetically() {
     services.add_window_fn(
         crate::EditorWindowDescriptor {
             title: "beta".to_owned(),
-            category: "Editor".to_owned(),
+            category: EDITOR_CATEGORY.to_owned(),
             default_open: true,
             show_in_list: true,
         },
@@ -158,7 +163,7 @@ fn window_list_menu_groups_categories_and_windows_alphabetically() {
     services.add_window_fn(
         crate::EditorWindowDescriptor {
             title: "alpha".to_owned(),
-            category: "Universe".to_owned(),
+            category: UNIVERSE_CATEGORY.to_owned(),
             default_open: true,
             show_in_list: true,
         },
@@ -167,7 +172,7 @@ fn window_list_menu_groups_categories_and_windows_alphabetically() {
     services.add_window_fn(
         crate::EditorWindowDescriptor {
             title: "hidden".to_owned(),
-            category: "Settings".to_owned(),
+            category: EDITOR_CATEGORY.to_owned(),
             default_open: false,
             show_in_list: false,
         },
@@ -191,11 +196,11 @@ fn window_list_menu_groups_categories_and_windows_alphabetically() {
         grouped_titles,
         vec![
             (
-                "Editor".to_owned(),
+                EDITOR_CATEGORY.to_owned(),
                 vec!["alpha".to_owned(), "beta".to_owned()],
             ),
             (
-                "Universe".to_owned(),
+                UNIVERSE_CATEGORY.to_owned(),
                 vec!["alpha".to_owned(), "zeta".to_owned()],
             ),
         ]

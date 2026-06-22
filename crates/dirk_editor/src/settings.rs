@@ -1,6 +1,6 @@
 use crate::{
-    EditorMenu, EditorMenuContext, EditorMenuDescriptor, EditorServices, EditorUiContext,
-    EditorWindow, EditorWindowDescriptor, EditorWindowId,
+    EDITOR_CATEGORY, EditorMenu, EditorMenuContext, EditorMenuDescriptor, EditorServices,
+    EditorUiContext, EditorWindow, EditorWindowDescriptor, EditorWindowId,
 };
 
 pub fn register_capabilities(services: &EditorServices) {
@@ -47,7 +47,7 @@ impl EditorWindow for EditorSettingsWindow {
     fn descriptor(&self) -> EditorWindowDescriptor {
         EditorWindowDescriptor {
             title: "Settings".to_owned(),
-            category: "Settings".to_owned(),
+            category: EDITOR_CATEGORY.to_owned(),
             default_open: false,
             show_in_list: false,
         }
