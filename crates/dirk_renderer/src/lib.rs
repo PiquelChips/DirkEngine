@@ -20,13 +20,14 @@ use ash::{
     vk,
 };
 
+#[cfg(feature = "editor")]
+use dirk_platform::WindowInputEvent;
 use dirk_platform::{PlatformEvent, WindowEvent, WindowId};
 use dirk_player::PlayerId;
-
 #[cfg(feature = "editor")]
-use dirk_platform::InputEvent;
-#[cfg(feature = "editor")]
-use dirk_player::PlayerInput;
+use dirk_player::PlayerInputSender;
+#[cfg(not(feature = "editor"))]
+use dirk_player::PlayerPresentationAssignments;
 
 use dirk_universe::{Entity, Universe, UniverseBuilder, WorldId};
 use dirk_utils::Version;
@@ -97,13 +98,16 @@ impl dirk_engine::EnginePlugin for RendererPlugin {
     fn build(&self, builder: &mut dirk_engine::EngineBuilder) -> anyhow::Result<()> {
         builder.with_plugin(dirk_platform::PlatformPlugin)?;
         builder.with_plugin(dirk_assets::AssetsPlugin)?;
+        builder.with_plugin(dirk_player::PlayerPlugin)?;
 
         builder.add_subsystem(|ctx| {
             let platform_windows = ctx.resource::<dirk_platform::PlatformWindows>()?;
             #[cfg(feature = "editor")]
             let editor = ctx.resource::<dirk_engine::editor::EditorServices>()?;
+            #[cfg(not(feature = "editor"))]
+            let presentation_assignments = ctx.resource::<PlayerPresentationAssignments>()?;
             #[cfg(feature = "editor")]
-            let input_router = ctx.resource::<dirk_platform::InputRouter>()?;
+            let player_input_sender = ctx.resource::<PlayerInputSender>()?;
 
             let create_info = RendererCreateInfo::from_engine_metadata(ctx.handle().metadata())?;
 
@@ -113,8 +117,10 @@ impl dirk_engine::EnginePlugin for RendererPlugin {
                 &main_window,
                 ctx.events(),
                 platform_windows.clone(),
+                #[cfg(not(feature = "editor"))]
+                presentation_assignments,
                 #[cfg(feature = "editor")]
-                input_router,
+                player_input_sender,
                 #[cfg(feature = "editor")]
                 editor,
             )?;
@@ -171,7 +177,10 @@ struct Renderer {
     // Heavy renderer state:
     /// All of the [`window::Window`]s constructed from [`platform::Window`]s.
     windows: HashMap<WindowId, Window>,
+    window_order: Vec<WindowId>,
     platform_windows: PlatformWindows,
+    #[cfg(not(feature = "editor"))]
+    presentation_assignments: PlayerPresentationAssignments,
     /// All of the internal [`world::World`] representations.
     scene_manager: SceneManager,
     /// The management for all the models.
@@ -182,9 +191,7 @@ struct Renderer {
     #[cfg(feature = "editor")]
     egui_window: Option<WindowId>,
     #[cfg(feature = "editor")]
-    input_router: dirk_platform::InputRouter,
-    #[cfg(feature = "editor")]
-    player_input_dispatcher: dirk_events::Dispatcher<PlayerInput>,
+    egui_input_consumer: dirk_events::Consumer<WindowInputEvent>,
     /// Editor window registry rendered through egui.
     #[cfg(feature = "editor")]
     editor: dirk_engine::editor::EditorServices,
@@ -221,6 +228,10 @@ struct ViewportRenderSubmission {
     rendered_players: Vec<PlayerId>,
 }
 
+fn sort_window_ids(ids: &mut [WindowId]) {
+    ids.sort_unstable_by_key(|id| id.into_raw());
+}
+
 impl dirk_engine::Subsystem for Renderer {
     fn name(&self) -> &'static str {
         "renderer"
@@ -239,9 +250,7 @@ impl dirk_engine::Subsystem for Renderer {
             let frame = dirk_engine::editor::EditorRenderContext::new(delta_time, handle, universe);
 
             self.viewport_editor.sync_ready_state(&self.viewports);
-            self.viewport_editor.begin_frame();
             self.editor.render_ui(&ctx, &frame)?;
-            self.route_editor_input();
         }
 
         #[cfg(not(feature = "editor"))]
@@ -266,7 +275,8 @@ impl Renderer {
         window: &dirk_platform::Window,
         event_manager: &dirk_events::EventManager,
         platform_windows: PlatformWindows,
-        #[cfg(feature = "editor")] input_router: dirk_platform::InputRouter,
+        #[cfg(not(feature = "editor"))] presentation_assignments: PlayerPresentationAssignments,
+        #[cfg(feature = "editor")] player_input_sender: PlayerInputSender,
         #[cfg(feature = "editor")] editor: dirk_engine::editor::EditorServices,
     ) -> Result<Self> {
         info!("Intializing Vulkan...");
@@ -334,9 +344,7 @@ impl Renderer {
         #[cfg(feature = "editor")]
         let egui = EguiState::new(&render_device)?;
         #[cfg(feature = "editor")]
-        let viewport_editor = ViewportEditor::new(&render_device)?;
-        #[cfg(feature = "editor")]
-        input_router.set_direct_input_dispatch(false);
+        let viewport_editor = ViewportEditor::new(&render_device, player_input_sender)?;
 
         let windows = {
             let window = Window::build(&render_device, window)?;
@@ -344,12 +352,17 @@ impl Renderer {
             windows.insert(window.id(), window);
             windows
         };
+        let mut window_order = windows.keys().copied().collect::<Vec<_>>();
+        sort_window_ids(&mut window_order);
 
         Ok(Self {
             render_device,
 
             windows,
+            window_order,
             platform_windows,
+            #[cfg(not(feature = "editor"))]
+            presentation_assignments,
             scene_manager,
             viewports: HashMap::new(),
             models,
@@ -358,13 +371,11 @@ impl Renderer {
             #[cfg(feature = "editor")]
             egui_window: None,
             #[cfg(feature = "editor")]
-            input_router,
-            #[cfg(feature = "editor")]
-            player_input_dispatcher: event_manager.register(),
-            #[cfg(feature = "editor")]
             editor,
             #[cfg(feature = "editor")]
             viewport_editor,
+            #[cfg(feature = "editor")]
+            egui_input_consumer: event_manager.subscribe(),
 
             frames,
             current_frame,
@@ -404,14 +415,7 @@ impl Renderer {
 
     #[cfg(feature = "editor")]
     fn primary_window_id(&self) -> Option<WindowId> {
-        self.viewports
-            .values()
-            .find_map(|viewport| {
-                self.windows
-                    .contains_key(&viewport.window)
-                    .then_some(viewport.window)
-            })
-            .or_else(|| self.windows.keys().next().copied())
+        self.window_order.first().copied()
     }
 
     #[cfg(feature = "editor")]
@@ -422,10 +426,9 @@ impl Renderer {
             .unwrap_or_else(|| WindowId::from_raw(0));
         let extent = self.primary_extent();
         let events = self
-            .input_router
-            .drain_ui_events()
-            .into_iter()
-            .filter(|event| event.id() == window_id)
+            .egui_input_consumer
+            .consume_all()
+            .filter(|event| event.window == window_id)
             .collect();
 
         let (native_pixels_per_point, focused, theme) = {
@@ -447,37 +450,6 @@ impl Renderer {
             theme,
             events,
         }
-    }
-
-    #[cfg(feature = "editor")]
-    fn route_editor_input(&mut self) {
-        let Some(window_id) = self.egui_window else {
-            let _ = self.input_router.drain_input_events();
-            return;
-        };
-        let pixels_per_point = self.native_pixels_per_point(window_id);
-        let events = self
-            .input_router
-            .drain_input_events()
-            .into_iter()
-            .filter(|event| *event.id() == window_id)
-            .collect::<Vec<InputEvent>>();
-
-        for event in self
-            .viewport_editor
-            .route_input_events(window_id, pixels_per_point, events)
-        {
-            self.player_input_dispatcher.dispatch(event);
-        }
-    }
-
-    #[cfg(feature = "editor")]
-    #[allow(clippy::cast_possible_truncation)]
-    fn native_pixels_per_point(&self, window_id: WindowId) -> f32 {
-        let windows = self.platform_windows.windows();
-        windows
-            .get(&window_id)
-            .map_or(1.0, |window| window.scale_factor() as f32)
     }
 
     /// Returns a [`UniverseBuilder`] that is populated with [`Renderer`] systems.
@@ -514,19 +486,17 @@ impl Renderer {
     /// world (unless in [`WorldEvent::Created`] or [`WorldEvent::Destroyed`].
     fn tick(&mut self, _delta_time: f64) -> Result<()> {
         for event in self.player_spawn_consumer.consume_all() {
-            let Some(window) = self.windows.get(&event.window) else {
-                return Err(Error::WindowDoesNotExist(event.window));
-            };
-
             #[cfg(feature = "editor")]
             self.viewport_editor.remove_viewport(event.id, &self.editor);
 
             let viewport = Viewport::new(
                 &self.render_device,
                 event.id,
-                event.window,
                 ViewportSettings::new(
-                    window.extent(),
+                    vk::Extent2D {
+                        width: 1,
+                        height: 1,
+                    },
                     self.render_device.properties.surface_format.format,
                 ),
             )?;
@@ -562,15 +532,19 @@ impl Renderer {
 
                     let window = window::Window::build(&self.render_device, plat_window)?;
                     self.windows.insert(window.id(), window);
+                    self.window_order.push(id);
+                    sort_window_ids(&mut self.window_order);
 
                     debug!("created renderer window with id {}", id.into_raw());
                 }
                 PlatformEvent::WindowDestroyed { id } => {
                     // in case the window was not destroyed by WindowCloseRequested
                     self.windows.remove(&id);
+                    self.window_order.retain(|window| *window != id);
                 }
                 PlatformEvent::WindowCloseRequested { id } => {
                     self.windows.remove(&id);
+                    self.window_order.retain(|window| *window != id);
                 }
             }
         }
@@ -608,12 +582,7 @@ impl Renderer {
     /// Vulkan errors can occur during rendering
     fn end_frame(&mut self) -> Result<()> {
         #[cfg(feature = "editor")]
-        {
-            let capture = self.egui.end_frame();
-            if let Some(window_id) = self.egui_window {
-                self.input_router.set_capture(window_id, capture);
-            }
-        }
+        self.egui.end_frame();
 
         let frame_index = self.current_frame();
         self.render_device.flush_deletions();
@@ -626,7 +595,7 @@ impl Renderer {
                 .apply_resize_requests(&mut self.viewports, &mut self.egui)?;
         }
         #[cfg(not(feature = "editor"))]
-        self.resize_fullscreen_viewports()?;
+        self.update_non_editor_presentation()?;
 
         self.frames[frame_index].fence.wait(u64::MAX)?;
         self.frames[frame_index].submitted_command_buffers.clear();
@@ -798,7 +767,7 @@ impl Renderer {
             }
 
             #[cfg(not(feature = "editor"))]
-            if let Some(viewport) = self.first_viewport_for_window(target.window) {
+            if let Some(viewport) = self.assigned_viewport_for_window(target.window) {
                 let rendered_this_frame = viewport_submission.is_some_and(|submission| {
                     submission.rendered_players.contains(&viewport.player())
                 });
@@ -876,16 +845,15 @@ impl Renderer {
     }
 
     #[cfg(not(feature = "editor"))]
-    fn resize_fullscreen_viewports(&mut self) -> Result<()> {
-        let fullscreen_viewports = self
-            .windows
-            .iter()
-            .filter_map(|(window_id, window)| {
-                self.first_viewport_for_window(*window_id)
-                    .map(|viewport| (viewport.player(), window.extent()))
-            })
-            .collect::<Vec<_>>();
-        for (player, extent) in fullscreen_viewports {
+    fn update_non_editor_presentation(&mut self) -> Result<()> {
+        let assignments = self.current_non_editor_assignments();
+        self.presentation_assignments.set(assignments.clone());
+
+        for (window_id, player) in assignments {
+            let Some(window) = self.windows.get(&window_id) else {
+                continue;
+            };
+            let extent = window.extent();
             if let Some(viewport) = self.viewports.get_mut(&player) {
                 viewport.resize(&self.render_device, extent)?;
             }
@@ -895,10 +863,22 @@ impl Renderer {
     }
 
     #[cfg(not(feature = "editor"))]
-    fn first_viewport_for_window(&self, window: WindowId) -> Option<&Viewport> {
-        self.viewports
-            .values()
-            .find(|viewport| viewport.window == window)
+    fn current_non_editor_assignments(&self) -> Vec<(WindowId, PlayerId)> {
+        let mut players = self.viewports.keys().copied().collect::<Vec<_>>();
+        players.sort_unstable();
+        self.window_order
+            .iter()
+            .copied()
+            .filter(|window| self.windows.contains_key(window))
+            .zip(players)
+            .collect()
+    }
+
+    #[cfg(not(feature = "editor"))]
+    fn assigned_viewport_for_window(&self, window: WindowId) -> Option<&Viewport> {
+        self.presentation_assignments
+            .player_for_window(window)
+            .and_then(|player| self.viewports.get(&player))
     }
 
     fn submit_frame(

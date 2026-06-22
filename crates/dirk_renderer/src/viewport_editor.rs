@@ -4,8 +4,8 @@ use ash::vk;
 use dirk_engine::editor::{
     EditorServices, EditorWindowDescriptor, EditorWindowId, VIEWPORT_CATEGORY,
 };
-use dirk_platform::{InputEvent, WindowId};
-use dirk_player::{PlayerId, PlayerInput};
+use dirk_input::{ButtonState, InputEvent, egui::input_events_from_egui_response};
+use dirk_player::{PlayerId, PlayerInputSender};
 use parking_lot::Mutex;
 
 use crate::{
@@ -53,6 +53,7 @@ impl SetLayout for ViewportTextureSet {
 
 pub struct ViewportEditor {
     state: Arc<Mutex<ViewportEditorState>>,
+    input_sender: PlayerInputSender,
     windows: HashMap<PlayerId, EditorWindowId>,
     textures: HashMap<PlayerId, ViewportTextureBinding>,
     retired_textures: Vec<RetiredViewportTextureBinding>,
@@ -62,9 +63,10 @@ pub struct ViewportEditor {
 }
 
 impl ViewportEditor {
-    pub fn new(device: &RenderDevice) -> Result<Self> {
+    pub fn new(device: &RenderDevice, input_sender: PlayerInputSender) -> Result<Self> {
         Ok(Self {
             state: Arc::new(Mutex::new(ViewportEditorState::default())),
+            input_sender,
             windows: HashMap::new(),
             textures: HashMap::new(),
             retired_textures: Vec::new(),
@@ -105,6 +107,7 @@ impl ViewportEditor {
         );
 
         let state = Arc::clone(&self.state);
+        let input_sender = self.input_sender.clone();
         let descriptor = EditorWindowDescriptor {
             title: format!("Viewport {player}"),
             category: VIEWPORT_CATEGORY.to_owned(),
@@ -112,7 +115,7 @@ impl ViewportEditor {
             show_in_list: true,
         };
         let window_id = editor.add_window_fn(descriptor, move |ui, _context| {
-            draw_viewport_window(ui, &state, player);
+            draw_viewport_window(ui, &state, &input_sender, player);
             Ok(())
         });
 
@@ -203,21 +206,6 @@ impl ViewportEditor {
             }
         }
     }
-
-    pub fn begin_frame(&self) {
-        self.state.lock().clear_input_regions();
-    }
-
-    pub fn route_input_events(
-        &self,
-        window: WindowId,
-        pixels_per_point: f32,
-        events: impl IntoIterator<Item = InputEvent>,
-    ) -> Vec<PlayerInput> {
-        self.state
-            .lock()
-            .route_input_events(window, pixels_per_point, events)
-    }
 }
 
 impl Drop for ViewportEditor {
@@ -231,11 +219,8 @@ impl Drop for ViewportEditor {
 #[derive(Default)]
 pub struct ViewportEditorState {
     entries: HashMap<PlayerId, ViewportEditorEntry>,
-    input_regions: HashMap<PlayerId, egui::Rect>,
-    focused: Option<PlayerId>,
-    hovered: Option<PlayerId>,
-    pointer_capture: Option<PlayerId>,
-    last_pointer_position: Option<glam::DVec2>,
+    previous_pointers: HashMap<PlayerId, egui::Pos2>,
+    pointer_captures: HashMap<PlayerId, bool>,
 }
 
 impl ViewportEditorState {
@@ -287,252 +272,33 @@ impl ViewportEditorState {
         }
     }
 
-    fn clear_input_regions(&mut self) {
-        self.input_regions.clear();
+    fn previous_pointer(&self, player: PlayerId) -> Option<egui::Pos2> {
+        self.previous_pointers.get(&player).copied()
     }
 
-    fn set_input_region(&mut self, player: PlayerId, rect: egui::Rect) {
-        self.input_regions.insert(player, rect);
-    }
-
-    fn route_input_events(
-        &mut self,
-        window: WindowId,
-        pixels_per_point: f32,
-        events: impl IntoIterator<Item = InputEvent>,
-    ) -> Vec<PlayerInput> {
-        events
-            .into_iter()
-            .flat_map(|event| self.route_input_event(window, pixels_per_point, event))
-            .collect()
-    }
-
-    fn route_input_event(
-        &mut self,
-        window: WindowId,
-        pixels_per_point: f32,
-        event: InputEvent,
-    ) -> Vec<PlayerInput> {
-        match event {
-            InputEvent::PointerMoved { position, .. } => {
-                self.last_pointer_position = Some(position);
-                self.route_pointer_moved(window, pixels_per_point, position)
-            }
-            InputEvent::MouseButtonPressed {
-                button, position, ..
-            } => self.route_pointer_button(window, pixels_per_point, button, position, true),
-            InputEvent::MouseButtonReleased {
-                button, position, ..
-            } => self.route_pointer_button(window, pixels_per_point, button, position, false),
-            InputEvent::MouseWheelScrolled { delta, .. } => self
-                .target_for_wheel(pixels_per_point)
-                .map_or_else(Vec::new, |player| {
-                    vec![PlayerInput {
-                        id: player,
-                        event: InputEvent::MouseWheelScrolled { id: window, delta },
-                    }]
-                }),
-            InputEvent::KeyPressed {
-                key,
-                physical_key,
-                modifiers,
-                repeat,
-                ..
-            } => self.focused.map_or_else(Vec::new, |player| {
-                vec![PlayerInput {
-                    id: player,
-                    event: InputEvent::KeyPressed {
-                        id: window,
-                        key,
-                        physical_key,
-                        modifiers,
-                        repeat,
-                    },
-                }]
-            }),
-            InputEvent::KeyReleased {
-                key,
-                physical_key,
-                modifiers,
-                ..
-            } => self.focused.map_or_else(Vec::new, |player| {
-                vec![PlayerInput {
-                    id: player,
-                    event: InputEvent::KeyReleased {
-                        id: window,
-                        key,
-                        physical_key,
-                        modifiers,
-                    },
-                }]
-            }),
-            InputEvent::ModifiersChanged { modifiers, .. } => {
-                self.focused.map_or_else(Vec::new, |player| {
-                    vec![PlayerInput {
-                        id: player,
-                        event: InputEvent::ModifiersChanged {
-                            id: window,
-                            modifiers,
-                        },
-                    }]
-                })
-            }
-            InputEvent::PointerLeft { .. } => self.route_pointer_left(window),
-            InputEvent::PointerEntered { .. } => Vec::new(),
-        }
-    }
-
-    fn route_pointer_moved(
-        &mut self,
-        window: WindowId,
-        pixels_per_point: f32,
-        position: glam::DVec2,
-    ) -> Vec<PlayerInput> {
-        let target = self
-            .pointer_capture
-            .or_else(|| self.player_at_position(position, pixels_per_point));
-        let mut routed = self.update_hover(window, target);
-        if let Some(player) = target {
-            routed.push(PlayerInput {
-                id: player,
-                event: InputEvent::PointerMoved {
-                    id: window,
-                    position: self.local_position(player, position, pixels_per_point),
-                },
-            });
-        }
-        routed
-    }
-
-    fn route_pointer_button(
-        &mut self,
-        window: WindowId,
-        pixels_per_point: f32,
-        button: dirk_platform::ButtonSource,
-        position: glam::DVec2,
-        pressed: bool,
-    ) -> Vec<PlayerInput> {
-        self.last_pointer_position = Some(position);
-        let target = if pressed {
-            self.player_at_position(position, pixels_per_point)
+    fn set_previous_pointer(&mut self, player: PlayerId, position: Option<egui::Pos2>) {
+        if let Some(position) = position {
+            self.previous_pointers.insert(player, position);
         } else {
-            self.pointer_capture
-                .or_else(|| self.player_at_position(position, pixels_per_point))
-        };
-
-        let mut routed = self.update_hover(window, target);
-        if let Some(player) = target {
-            if pressed {
-                self.focused = Some(player);
-                self.pointer_capture = Some(player);
-            } else if self.pointer_capture == Some(player) {
-                self.pointer_capture = None;
-            }
-
-            let position = self.local_position(player, position, pixels_per_point);
-            let event = if pressed {
-                InputEvent::MouseButtonPressed {
-                    id: window,
-                    button,
-                    position,
-                }
-            } else {
-                InputEvent::MouseButtonReleased {
-                    id: window,
-                    button,
-                    position,
-                }
-            };
-            routed.push(PlayerInput { id: player, event });
-        } else if !pressed {
-            self.pointer_capture = None;
+            self.previous_pointers.remove(&player);
         }
-
-        routed
     }
 
-    fn route_pointer_left(&mut self, window: WindowId) -> Vec<PlayerInput> {
-        let mut routed = Vec::new();
-        let previous_hover = self.hovered.take();
-        if let Some(player) = previous_hover {
-            routed.push(PlayerInput {
-                id: player,
-                event: InputEvent::PointerLeft { id: window },
-            });
-        }
-        if let Some(player) = self.pointer_capture.take()
-            && Some(player) != previous_hover
-        {
-            routed.push(PlayerInput {
-                id: player,
-                event: InputEvent::PointerLeft { id: window },
-            });
-        }
-        self.last_pointer_position = None;
-        routed
+    fn pointer_captured(&self, player: PlayerId) -> bool {
+        self.pointer_captures.get(&player).copied().unwrap_or(false)
     }
 
-    fn update_hover(&mut self, window: WindowId, target: Option<PlayerId>) -> Vec<PlayerInput> {
-        if self.hovered == target {
-            return Vec::new();
-        }
-
-        let mut routed = Vec::new();
-        if let Some(previous) = self.hovered.replace_or_clear(target) {
-            routed.push(PlayerInput {
-                id: previous,
-                event: InputEvent::PointerLeft { id: window },
-            });
-        }
-        if let Some(player) = target {
-            routed.push(PlayerInput {
-                id: player,
-                event: InputEvent::PointerEntered { id: window },
-            });
-        }
-        routed
+    fn pointer_capture_state(&self, player: PlayerId) -> (bool, Option<egui::Pos2>) {
+        let captured = self.pointer_captured(player);
+        let previous = captured.then(|| self.previous_pointer(player)).flatten();
+        (captured, previous)
     }
 
-    fn target_for_wheel(&self, pixels_per_point: f32) -> Option<PlayerId> {
-        self.pointer_capture.or_else(|| {
-            self.last_pointer_position
-                .and_then(|position| self.player_at_position(position, pixels_per_point))
-        })
-    }
-
-    fn player_at_position(&self, position: glam::DVec2, pixels_per_point: f32) -> Option<PlayerId> {
-        let position = position_to_points(position, pixels_per_point);
-        self.input_regions
-            .iter()
-            .find_map(|(player, rect)| rect.contains(position).then_some(*player))
-    }
-
-    fn local_position(
-        &self,
-        player: PlayerId,
-        position: glam::DVec2,
-        pixels_per_point: f32,
-    ) -> glam::DVec2 {
-        let Some(rect) = self.input_regions.get(&player) else {
-            return position;
-        };
-        let scale = f64::from(pixels_per_point.max(f32::EPSILON));
-        glam::dvec2(
-            position.x - (f64::from(rect.min.x) * scale),
-            position.y - (f64::from(rect.min.y) * scale),
-        )
-    }
-}
-
-trait ReplaceOrClear<T> {
-    fn replace_or_clear(&mut self, value: Option<T>) -> Option<T>;
-}
-
-impl<T> ReplaceOrClear<T> for Option<T> {
-    fn replace_or_clear(&mut self, value: Option<T>) -> Option<T> {
-        match value {
-            Some(value) => self.replace(value),
-            None => self.take(),
+    fn set_pointer_captured(&mut self, player: PlayerId, captured: bool) {
+        if captured {
+            self.pointer_captures.insert(player, true);
+        } else {
+            self.pointer_captures.remove(&player);
         }
     }
 }
@@ -540,6 +306,7 @@ impl<T> ReplaceOrClear<T> for Option<T> {
 fn draw_viewport_window(
     ui: &mut egui::Ui,
     state: &Arc<Mutex<ViewportEditorState>>,
+    input_sender: &PlayerInputSender,
     player: PlayerId,
 ) {
     let available = ui.available_size_before_wrap();
@@ -558,21 +325,46 @@ fn draw_viewport_window(
         return;
     };
 
-    if entry.ready {
-        let response =
-            ui.add(egui::Image::new((entry.texture_id, available)).sense(egui::Sense::drag()));
-        state.lock().set_input_region(player, response.rect);
-    } else {
+    if !entry.ready {
         ui.centered_and_justified(|ui| {
             ui.label("Waiting for camera");
         });
+        return;
     }
-}
 
-#[allow(clippy::cast_possible_truncation)]
-fn position_to_points(position: glam::DVec2, pixels_per_point: f32) -> egui::Pos2 {
-    let scale = f64::from(pixels_per_point.max(f32::EPSILON));
-    egui::Pos2::new((position.x / scale) as f32, (position.y / scale) as f32)
+    let response = ui
+        .add(egui::Image::new((entry.texture_id, available)).sense(egui::Sense::click_and_drag()));
+    let (was_captured, previous_pointer) = state.lock().pointer_capture_state(player);
+    let events = input_events_from_egui_response(ui, &response, previous_pointer);
+    for event in &events {
+        input_sender.send(player, event.clone());
+    }
+    let mut captured = was_captured;
+    for event in &events {
+        match event {
+            InputEvent::PointerButton {
+                state: ButtonState::Pressed,
+                ..
+            } => captured = true,
+            InputEvent::PointerButton {
+                state: ButtonState::Released,
+                ..
+            }
+            | InputEvent::PointerLeft => captured = false,
+            InputEvent::Key { .. }
+            | InputEvent::PointerMoved { .. }
+            | InputEvent::PointerEntered
+            | InputEvent::Scroll { .. } => {}
+        }
+    }
+    let latest_pointer = ui.input(|input| input.pointer.latest_pos());
+    let mut state = state.lock();
+    state.set_pointer_captured(player, captured);
+    if captured {
+        state.set_previous_pointer(player, latest_pointer);
+    } else {
+        state.set_previous_pointer(player, None);
+    }
 }
 
 fn extent_from_points(size: egui::Vec2, pixels_per_point: f32) -> vk::Extent2D {
@@ -745,113 +537,6 @@ mod tests {
         assert_eq!(windows.get(&player(0)), Some(&first));
         assert_eq!(windows.get(&player(1)), Some(&second));
         assert_eq!(windows.len(), 2);
-    }
-
-    #[test]
-    fn pointer_button_inside_viewport_routes_to_player_with_local_position() {
-        let mut state = ViewportEditorState::default();
-        let window = window_id(1);
-        state.set_input_region(
-            player(0),
-            egui::Rect::from_min_size(egui::pos2(10.0, 20.0), egui::vec2(100.0, 80.0)),
-        );
-
-        let routed = state.route_input_events(
-            window,
-            2.0,
-            [InputEvent::MouseButtonPressed {
-                id: window,
-                button: dirk_platform::ButtonSource::Mouse(dirk_platform::MouseButton::Right),
-                position: glam::dvec2(30.0, 50.0),
-            }],
-        );
-
-        assert_eq!(routed.len(), 2);
-        assert_eq!(routed[0].id, player(0));
-        assert!(matches!(
-            routed[0].event,
-            InputEvent::PointerEntered { id } if id == window
-        ));
-        assert!(matches!(
-            &routed[1].event,
-            InputEvent::MouseButtonPressed { position, .. }
-                if *position == glam::dvec2(10.0, 10.0)
-        ));
-    }
-
-    #[test]
-    fn keyboard_input_routes_to_focused_viewport() {
-        let mut state = ViewportEditorState::default();
-        let window = window_id(1);
-        state.set_input_region(
-            player(0),
-            egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(100.0, 80.0)),
-        );
-        state.route_input_events(
-            window,
-            1.0,
-            [InputEvent::MouseButtonPressed {
-                id: window,
-                button: dirk_platform::ButtonSource::Mouse(dirk_platform::MouseButton::Right),
-                position: glam::DVec2::ZERO,
-            }],
-        );
-
-        let routed = state.route_input_events(
-            window,
-            1.0,
-            [InputEvent::KeyPressed {
-                id: window,
-                key: dirk_platform::Key::Character("w".into()),
-                physical_key: dirk_platform::PhysicalKey::Code(dirk_platform::KeyCode::KeyW),
-                modifiers: dirk_platform::ModifiersState::empty(),
-                repeat: false,
-            }],
-        );
-
-        assert_eq!(routed.len(), 1);
-        assert_eq!(routed[0].id, player(0));
-        assert!(matches!(routed[0].event, InputEvent::KeyPressed { .. }));
-    }
-
-    #[test]
-    fn captured_pointer_keeps_routing_after_moving_outside_viewport() {
-        let mut state = ViewportEditorState::default();
-        let window = window_id(1);
-        state.set_input_region(
-            player(0),
-            egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(100.0, 100.0)),
-        );
-        state.route_input_events(
-            window,
-            1.0,
-            [InputEvent::MouseButtonPressed {
-                id: window,
-                button: dirk_platform::ButtonSource::Mouse(dirk_platform::MouseButton::Right),
-                position: glam::dvec2(10.0, 10.0),
-            }],
-        );
-
-        let routed = state.route_input_events(
-            window,
-            1.0,
-            [InputEvent::PointerMoved {
-                id: window,
-                position: glam::dvec2(200.0, 150.0),
-            }],
-        );
-
-        assert_eq!(routed.len(), 1);
-        assert_eq!(routed[0].id, player(0));
-        assert!(matches!(
-            &routed[0].event,
-            InputEvent::PointerMoved { position, .. }
-                if *position == glam::dvec2(200.0, 150.0)
-        ));
-    }
-
-    fn window_id(raw: usize) -> WindowId {
-        WindowId::from_raw(raw)
     }
 
     fn ready_from_flags(renderable: bool, rendered: bool) -> bool {

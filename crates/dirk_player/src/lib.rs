@@ -9,7 +9,10 @@ use std::{
 
 use dirk_engine::{EngineBuilder, EngineHandle, EnginePlugin, Subsystem};
 use dirk_events::{Dispatcher, EventManager};
-use dirk_platform::{InputEvent, WindowId};
+#[cfg(not(feature = "editor"))]
+use dirk_platform::WindowId;
+#[cfg(not(feature = "editor"))]
+use dirk_platform::WindowInputEvent;
 use dirk_universe::components::Component;
 use input::InputContext;
 use parking_lot::{MappedRwLockReadGuard, MappedRwLockWriteGuard, RwLock, RwLockReadGuard};
@@ -17,7 +20,8 @@ use parking_lot::{MappedRwLockReadGuard, MappedRwLockWriteGuard, RwLock, RwLockR
 mod events;
 pub mod input;
 mod movement;
-pub use events::{PlayerDespawned, PlayerInput, PlayerSpawned};
+use events::PlayerInput;
+pub use events::{PlayerDespawned, PlayerSpawned};
 pub use movement::{DEFAULT_PLAYER_LOOK_SENSITIVITY, DEFAULT_PLAYER_MOVE_SPEED};
 
 use crate::movement::PlayerMovementSystem;
@@ -34,6 +38,9 @@ impl EnginePlugin for PlayerPlugin {
         builder.add_subsystem(|ctx| {
             let players = PlayerManager::new(ctx.events());
             ctx.add_resource(players.registry())?;
+            ctx.add_resource(players.input_sender())?;
+            #[cfg(not(feature = "editor"))]
+            ctx.add_resource(players.presentation_assignments())?;
             ctx.extend_universe(
                 dirk_universe::Universe::builder()
                     .with_ticking_system(PlayerMovementSystem::new(players.registry.input_state())),
@@ -62,7 +69,7 @@ impl EnginePlugin for PlayerPlugin {
 ///
 /// To find a player's entity, query for [`PlayerId`] in the universe and match
 /// the value.  To find which player owns an entity, read its `PlayerId` component.
-#[derive(Component, Clone, Copy, Debug, Default, Hash, Eq, PartialEq)]
+#[derive(Component, Clone, Copy, Debug, Default, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub struct PlayerId(u32);
 
 impl Display for PlayerId {
@@ -97,7 +104,6 @@ impl AddAssign<u32> for PlayerId {
 /// [`PlayerRegistry::get_player_mut`].
 pub struct PlayerHandle {
     id: PlayerId,
-    window: WindowId,
     input: InputContext,
 }
 
@@ -106,14 +112,6 @@ impl PlayerHandle {
     #[must_use]
     pub fn id(&self) -> PlayerId {
         self.id
-    }
-
-    /// Returns the [`WindowId`] this player is associated with.
-    ///
-    /// [`Window`]: dirk_platform::Window
-    #[must_use]
-    pub fn window(&self) -> WindowId {
-        self.window
     }
 
     /// Returns the current hard-coded movement input for this player.
@@ -136,8 +134,8 @@ impl PlayerHandle {
 /// # Lifecycle
 ///
 /// ```text
-/// new_player(window)   ──► PlayerSpawned      — game code spawns ECS entity
-/// remove_player(id)    ──► PlayerDespawned    — game code despawns ECS entity
+/// new_player()      ──► PlayerSpawned      — game code spawns ECS entity
+/// remove_player(id) ──► PlayerDespawned    — game code despawns ECS entity
 /// ```
 ///
 /// The public [`PlayerRegistry`] exposes player creation and lookup, while this
@@ -145,8 +143,12 @@ impl PlayerHandle {
 /// for player movement systems.
 struct PlayerManager {
     registry: PlayerRegistry,
-    input_consumer: dirk_events::Consumer<InputEvent>,
     player_input_consumer: dirk_events::Consumer<PlayerInput>,
+    input_sender: PlayerInputSender,
+    #[cfg(not(feature = "editor"))]
+    presentation_assignments: PlayerPresentationAssignments,
+    #[cfg(not(feature = "editor"))]
+    window_input_consumer: dirk_events::Consumer<WindowInputEvent>,
 }
 
 /// Shared player registry owned by the player subsystem.
@@ -179,15 +181,34 @@ impl PlayerManager {
 
         Self {
             registry,
-            input_consumer: events.subscribe(),
             player_input_consumer: events.subscribe(),
+            input_sender: PlayerInputSender {
+                dispatcher: events.register(),
+            },
+            #[cfg(not(feature = "editor"))]
+            presentation_assignments: PlayerPresentationAssignments::default(),
+            #[cfg(not(feature = "editor"))]
+            window_input_consumer: events.subscribe(),
         }
     }
 
     /// Returns a shared registry for creating and removing players.
     #[must_use]
-    pub fn registry(&self) -> PlayerRegistry {
+    fn registry(&self) -> PlayerRegistry {
         self.registry.clone()
+    }
+
+    /// Returns a shared player input sender.
+    #[must_use]
+    fn input_sender(&self) -> PlayerInputSender {
+        self.input_sender.clone()
+    }
+
+    /// Returns shared presentation assignments.
+    #[must_use]
+    #[cfg(not(feature = "editor"))]
+    fn presentation_assignments(&self) -> PlayerPresentationAssignments {
+        self.presentation_assignments.clone()
     }
 }
 
@@ -203,16 +224,18 @@ impl Subsystem for PlayerManager {
         _handle: &EngineHandle,
         _universe: &mut dirk_universe::Universe,
     ) -> anyhow::Result<()> {
-        let events = self.input_consumer.consume_all().collect::<Vec<_>>();
+        #[cfg(not(feature = "editor"))]
+        for event in self.window_input_consumer.consume_all() {
+            if let Some(player) = self
+                .presentation_assignments
+                .player_for_window(event.window)
+            {
+                self.input_sender.send(player, event.event);
+            }
+        }
+
         let player_events = self.player_input_consumer.consume_all().collect::<Vec<_>>();
         let mut state = self.registry.state.write();
-        for event in events {
-            state
-                .players
-                .values_mut()
-                .filter(|p| p.window == *event.id())
-                .for_each(|p| p.input.handle_event(&event));
-        }
         for event in player_events {
             if let Some(player) = state.players.get_mut(&event.id) {
                 player.input.handle_event(&event.event);
@@ -241,13 +264,13 @@ impl PlayerRegistry {
         self.input_state.clone()
     }
 
-    /// Creates a new player assigned to `window` and fires [`PlayerSpawned`].
+    /// Creates a new player and fires [`PlayerSpawned`].
     ///
     /// # Returns
     ///
     /// The [`PlayerId`] of the new player.
     #[must_use]
-    pub fn new_player(&self, window: WindowId) -> PlayerId {
+    pub fn new_player(&self) -> PlayerId {
         let id = {
             let mut state = self.state.write();
             let id = Self::allocate_id(&mut state);
@@ -255,7 +278,6 @@ impl PlayerRegistry {
                 id,
                 PlayerHandle {
                     id,
-                    window,
                     input: InputContext::new(),
                 },
             );
@@ -269,8 +291,7 @@ impl PlayerRegistry {
                 look: glam::DVec2::ZERO,
             },
         );
-        self.spawned_dispatcher
-            .dispatch(PlayerSpawned { id, window });
+        self.spawned_dispatcher.dispatch(PlayerSpawned { id });
         id
     }
 
@@ -343,12 +364,46 @@ pub struct PlayerInputState {
     frames: Arc<RwLock<HashMap<PlayerId, PlayerInputFrame>>>,
 }
 
+/// Cloneable sender for targeted player input.
+#[derive(Clone)]
+pub struct PlayerInputSender {
+    dispatcher: Dispatcher<PlayerInput>,
+}
+
+impl PlayerInputSender {
+    /// Sends input to one player.
+    pub fn send(&self, id: PlayerId, event: dirk_input::InputEvent) {
+        self.dispatcher.dispatch(PlayerInput { id, event });
+    }
+}
+
+/// Window-to-player presentation assignments used by non-editor input routing.
+#[cfg(not(feature = "editor"))]
+#[derive(Clone, Default)]
+pub struct PlayerPresentationAssignments {
+    assignments: Arc<RwLock<HashMap<WindowId, PlayerId>>>,
+}
+
+#[cfg(not(feature = "editor"))]
+impl PlayerPresentationAssignments {
+    /// Replaces all assignments.
+    pub fn set(&self, assignments: Vec<(WindowId, PlayerId)>) {
+        *self.assignments.write() = assignments.into_iter().collect();
+    }
+
+    /// Returns the player assigned to a window.
+    #[must_use]
+    pub fn player_for_window(&self, window: WindowId) -> Option<PlayerId> {
+        self.assignments.read().get(&window).copied()
+    }
+}
+
 /// Per-frame input values for one player.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct PlayerInputFrame {
     /// Movement intent in local player space.
     pub movement: glam::Vec3,
-    /// Pointer-look delta in physical pixels.
+    /// Pointer-look delta in normalized viewport units.
     pub look: glam::DVec2,
 }
 

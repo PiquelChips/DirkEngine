@@ -1,5 +1,4 @@
 use ash::vk;
-use dirk_platform::WindowId;
 use dirk_player::PlayerId;
 use dirk_universe::{Entity, WorldId};
 use gpu_allocator::MemoryLocation;
@@ -33,7 +32,6 @@ impl From<TextureState> for TextureStateDesc {
 
 pub(crate) struct Viewport {
     player: PlayerId,
-    pub window: WindowId,
     pub camera: Option<Entity>,
     pub world: Option<WorldId>,
     settings: ViewportSettings,
@@ -48,14 +46,12 @@ impl Viewport {
     pub fn new(
         device: &RenderDevice,
         player: PlayerId,
-        window: WindowId,
         settings: ViewportSettings,
     ) -> Result<Self> {
         let settings = settings.clamped();
 
         Ok(Self {
             player,
-            window,
             camera: None,
             world: None,
             settings,
