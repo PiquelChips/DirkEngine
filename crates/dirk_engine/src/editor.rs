@@ -376,11 +376,18 @@ impl EditorServices {
             .insert(id, WindowState { open: default_open });
         if default_open {
             if state.dock_layout_bootstrapped {
-                state.insert_window_tab(id);
+                if state.is_window_category(id, VIEWPORT_CATEGORY)
+                    && state.find_dock_tab_by_category(VIEWPORT_CATEGORY).is_none()
+                {
+                    state.rebuild_default_dock_layout();
+                } else {
+                    state.insert_window_tab(id);
+                }
             } else {
                 state.rebuild_default_dock_layout();
             }
         }
+
         id
     }
 
