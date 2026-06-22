@@ -199,6 +199,9 @@ impl SceneManager {
     pub fn destroy_scene(&mut self, world: WorldId) {
         self.scenes.remove(&world);
     }
+    pub fn entity_world(&self, entity: Entity) -> Option<WorldId> {
+        self.entities.get(&entity).copied()
+    }
     pub fn create_proxy(&mut self, entity: Entity, world: WorldId) -> Result<()> {
         let proxy = SceneProxy::build(self)?;
         self.proxies.insert(entity, proxy);
@@ -253,6 +256,7 @@ impl SceneManager {
             .entities
             .remove(&entity);
         self.proxies.remove(&entity);
+        self.entities.remove(&entity);
         Ok(())
     }
 }
