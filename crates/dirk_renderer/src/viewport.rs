@@ -41,6 +41,7 @@ pub(crate) struct Viewport {
     output_state: TextureState,
     render_semaphore: TimelineSemaphore,
     last_render_value: u64,
+    output_has_rendered: bool,
 }
 
 impl Viewport {
@@ -62,15 +63,25 @@ impl Viewport {
             output_state: Viewport::undefined_state(),
             render_semaphore: TimelineSemaphore::create(&device.device, 0)?,
             last_render_value: 0,
+            output_has_rendered: false,
         })
     }
 
     pub fn player(&self) -> PlayerId {
         self.player
     }
-
     pub fn settings(&self) -> &ViewportSettings {
         &self.settings
+    }
+
+    pub fn output_view(&self) -> vk::ImageView {
+        self.output.view()
+    }
+    pub fn is_renderable(&self) -> bool {
+        self.world.is_some() && self.camera.is_some()
+    }
+    pub fn has_rendered(&self) -> bool {
+        self.output_has_rendered
     }
 
     pub fn resize(&mut self, device: &RenderDevice, extent: vk::Extent2D) -> Result<()> {
@@ -82,7 +93,6 @@ impl Viewport {
             },
         )
     }
-
     pub fn reconfigure(&mut self, device: &RenderDevice, settings: ViewportSettings) -> Result<()> {
         let settings = settings.clamped();
         if self.settings == settings {
@@ -91,6 +101,8 @@ impl Viewport {
 
         self.settings = settings;
         self.output = Self::create_output(device, &self.settings)?;
+        self.output_state = Self::undefined_state();
+        self.output_has_rendered = false;
         Ok(())
     }
 
@@ -115,6 +127,7 @@ impl Viewport {
     pub fn mark_render_submitted(&mut self, value: u64) {
         self.last_render_value = value;
         self.output_state = Self::shader_read_state();
+        self.output_has_rendered = true;
     }
 
     fn undefined_state() -> TextureState {
