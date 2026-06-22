@@ -17,7 +17,7 @@ use parking_lot::{MappedRwLockReadGuard, MappedRwLockWriteGuard, RwLock, RwLockR
 mod events;
 pub mod input;
 mod movement;
-pub use events::{PlayerDespawned, PlayerSpawned};
+pub use events::{PlayerDespawned, PlayerInput, PlayerSpawned};
 pub use movement::{DEFAULT_PLAYER_LOOK_SENSITIVITY, DEFAULT_PLAYER_MOVE_SPEED};
 
 use crate::movement::PlayerMovementSystem;
@@ -146,6 +146,7 @@ impl PlayerHandle {
 struct PlayerManager {
     registry: PlayerRegistry,
     input_consumer: dirk_events::Consumer<InputEvent>,
+    player_input_consumer: dirk_events::Consumer<PlayerInput>,
 }
 
 /// Shared player registry owned by the player subsystem.
@@ -179,6 +180,7 @@ impl PlayerManager {
         Self {
             registry,
             input_consumer: events.subscribe(),
+            player_input_consumer: events.subscribe(),
         }
     }
 
@@ -202,6 +204,7 @@ impl Subsystem for PlayerManager {
         _universe: &mut dirk_universe::Universe,
     ) -> anyhow::Result<()> {
         let events = self.input_consumer.consume_all().collect::<Vec<_>>();
+        let player_events = self.player_input_consumer.consume_all().collect::<Vec<_>>();
         let mut state = self.registry.state.write();
         for event in events {
             state
@@ -209,6 +212,11 @@ impl Subsystem for PlayerManager {
                 .values_mut()
                 .filter(|p| p.window == *event.id())
                 .for_each(|p| p.input.handle_event(&event));
+        }
+        for event in player_events {
+            if let Some(player) = state.players.get_mut(&event.id) {
+                player.input.handle_event(&event.event);
+            }
         }
         for player in state.players.values() {
             self.registry.input_state.set(
