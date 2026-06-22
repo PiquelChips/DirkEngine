@@ -35,16 +35,18 @@ pub struct EguiFrameInput {
 
 impl EguiState {
     pub fn new(device: &RenderDevice) -> Result<Self> {
+        let surface_format = device.properties.surface_format.format;
         let renderer = egui_ash_renderer::Renderer::with_default_allocator(
             &device.instance,
             device.physical_device,
             device.device.clone(),
             DynamicRendering {
-                color_attachment_format: device.properties.surface_format.format,
+                color_attachment_format: surface_format,
                 depth_attachment_format: None,
             },
             Options {
                 in_flight_frames: MAX_FRAMES_IN_FLIGHT,
+                srgb_framebuffer: is_srgb_format(surface_format),
                 ..Options::default()
             },
         )?;
@@ -160,6 +162,13 @@ struct EguiPaintData {
     textures_delta: TexturesDelta,
     primitives: Vec<ClippedPrimitive>,
     pixels_per_point: f32,
+}
+
+fn is_srgb_format(format: vk::Format) -> bool {
+    matches!(
+        format,
+        vk::Format::R8G8B8A8_SRGB | vk::Format::B8G8R8A8_SRGB | vk::Format::A8B8G8R8_SRGB_PACK32
+    )
 }
 
 fn translate_events(
@@ -509,6 +518,20 @@ mod tests {
 
     fn window_id(raw: usize) -> WindowId {
         WindowId::from_raw(raw)
+    }
+
+    #[test]
+    fn detects_common_srgb_formats() {
+        assert!(is_srgb_format(vk::Format::R8G8B8A8_SRGB));
+        assert!(is_srgb_format(vk::Format::B8G8R8A8_SRGB));
+        assert!(is_srgb_format(vk::Format::A8B8G8R8_SRGB_PACK32));
+    }
+
+    #[test]
+    fn does_not_treat_unorm_formats_as_srgb() {
+        assert!(!is_srgb_format(vk::Format::R8G8B8A8_UNORM));
+        assert!(!is_srgb_format(vk::Format::B8G8R8A8_UNORM));
+        assert!(!is_srgb_format(vk::Format::A8B8G8R8_UNORM_PACK32));
     }
 
     #[test]
