@@ -3,7 +3,7 @@ use ash::vk;
 use crate::{
     physical_device,
     resources::{
-        command_pool::{CommandPool, Graphics},
+        command_pool::{CommandBuffer, CommandPool, Graphics},
         sync::Fence,
     },
     shaders::metadata::VertexInput,
@@ -49,6 +49,8 @@ pub fn make_version(version: dirk_utils::Version) -> u32 {
 pub struct Frame {
     /// Command pool to allocate command buffers on every frame
     pub command_pool: CommandPool<Graphics>,
+    /// Submitted command buffers kept alive until this frame's fence completes.
+    pub submitted_command_buffers: Vec<CommandBuffer>,
     /// Main synchronization fence
     pub fence: Fence,
     // TODO: have one primary command buffer that is allocated once and
@@ -58,6 +60,7 @@ pub struct Frame {
 
 impl Drop for Frame {
     fn drop(&mut self) {
+        self.submitted_command_buffers.clear();
         self.command_pool.destroy();
     }
 }
