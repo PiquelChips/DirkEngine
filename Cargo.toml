@@ -102,6 +102,7 @@ dirk_utils    = { version = "0.1.0", path = "crates/dirk_utils" }
 dirk_events   = { version = "0.1.0", path = "crates/dirk_events" }
 dirk_proc     = { version = "0.1.0", path = "crates/dirk_proc" }
 dirk_platform = { version = "0.1.0", path = "crates/dirk_platform" }
+dirk_input    = { version = "0.1.0", path = "crates/dirk_input" }
 dirk_renderer = { version = "0.1.0", path = "crates/dirk_renderer" }
 dirk_assets   = { version = "0.1.0", path = "crates/dirk_assets" }
 dirk_world    = { version = "0.1.0", path = "crates/dirk_world" }

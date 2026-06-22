@@ -1,0 +1,23 @@
+[package]
+name = "dirk_input"
+description = "DirkEngine input API"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+homepage.workspace = true
+authors.workspace = true
+documentation.workspace = true
+
+[dependencies]
+glam.workspace = true
+egui = { workspace = true, optional = true }
+
+[features]
+default = []
+egui = ["dep:egui"]
+
+[lints]
+workspace = true
