@@ -119,6 +119,14 @@ impl EguiState {
         Ok(())
     }
 
+    pub fn add_user_texture(&mut self, set: vk::DescriptorSet) -> TextureId {
+        self.renderer.add_user_texture(set)
+    }
+
+    pub fn remove_user_texture(&mut self, id: TextureId) {
+        self.renderer.remove_user_texture(id);
+    }
+
     pub fn render(
         &mut self,
         device: &RenderDevice,
