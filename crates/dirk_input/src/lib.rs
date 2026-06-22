@@ -340,3 +340,98 @@ impl InputState {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn character_keys_are_normalized_to_lowercase() {
+        assert_eq!(
+            LogicalKey::character("W"),
+            LogicalKey::Character("w".to_owned())
+        );
+    }
+
+    #[test]
+    fn default_player_map_uses_wasd_space_and_c() {
+        let map = InputMap::default_player();
+
+        assert!(
+            map.right
+                .negative
+                .bindings
+                .contains(&InputBinding::Key(LogicalKey::Character("a".to_owned())))
+        );
+        assert!(
+            map.right
+                .positive
+                .bindings
+                .contains(&InputBinding::Key(LogicalKey::Character("d".to_owned())))
+        );
+        assert!(
+            map.forward
+                .negative
+                .bindings
+                .contains(&InputBinding::Key(LogicalKey::Character("s".to_owned())))
+        );
+        assert!(
+            map.forward
+                .positive
+                .bindings
+                .contains(&InputBinding::Key(LogicalKey::Character("w".to_owned())))
+        );
+        assert!(
+            map.up
+                .negative
+                .bindings
+                .contains(&InputBinding::Key(LogicalKey::Character("c".to_owned())))
+        );
+        assert!(
+            map.up
+                .positive
+                .bindings
+                .contains(&InputBinding::Key(LogicalKey::Named(NamedKey::Space)))
+        );
+    }
+
+    #[test]
+    fn opposing_axes_cancel() {
+        let map = InputMap::default_player();
+        let mut input = InputState::default();
+        input.handle_event(&InputEvent::PointerButton {
+            button: PointerButton::Secondary,
+            state: ButtonState::Pressed,
+            position: NormalizedPosition::new(glam::Vec2::ZERO),
+        });
+        input.handle_event(&InputEvent::Key {
+            key: LogicalKey::character("a"),
+            state: ButtonState::Pressed,
+            repeat: false,
+            modifiers: Modifiers::default(),
+        });
+        input.handle_event(&InputEvent::Key {
+            key: LogicalKey::character("d"),
+            state: ButtonState::Pressed,
+            repeat: false,
+            modifiers: Modifiers::default(),
+        });
+
+        assert_eq!(map.movement(&input).x, 0.0);
+    }
+
+    #[test]
+    fn pointer_left_releases_held_pointer_buttons() {
+        let mut input = InputState::default();
+        let binding = InputBinding::PointerButton(PointerButton::Secondary);
+        input.handle_event(&InputEvent::PointerButton {
+            button: PointerButton::Secondary,
+            state: ButtonState::Pressed,
+            position: NormalizedPosition::new(glam::Vec2::ZERO),
+        });
+
+        input.handle_event(&InputEvent::PointerLeft);
+
+        assert!(!input.is_held(&binding));
+    }
+}
