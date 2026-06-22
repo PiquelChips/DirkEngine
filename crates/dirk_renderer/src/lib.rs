@@ -618,8 +618,6 @@ impl Renderer {
         }
 
         let frame_index = self.current_frame();
-        self.frames[frame_index].fence.wait(u64::MAX)?;
-        self.frames[frame_index].fence.reset()?;
         self.render_device.flush_deletions();
         #[cfg(feature = "editor")]
         {
@@ -640,6 +638,8 @@ impl Renderer {
             viewport_submission.as_ref(),
         )?;
 
+        self.frames[frame_index].fence.wait(u64::MAX)?;
+        self.frames[frame_index].fence.reset()?;
         self.submit_frame(
             frame_index,
             viewport_submission.as_ref(),
