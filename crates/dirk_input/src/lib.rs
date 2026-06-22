@@ -205,3 +205,77 @@ impl InputAxis {
         }
     }
 }
+
+/// Default player movement action map.
+/// TODO: this should be customizable
+#[derive(Debug, Clone)]
+pub struct InputMap {
+    /// Gate action for movement/look.
+    pub movement_gate: InputAction,
+    /// Right/left movement axis.
+    pub right: InputAxis,
+    /// Up/down movement axis.
+    pub up: InputAxis,
+    /// Forward/back movement axis.
+    pub forward: InputAxis,
+}
+
+impl InputMap {
+    /// Creates the default player map.
+    #[must_use]
+    pub fn default_player() -> Self {
+        Self::default()
+    }
+
+    /// Reads movement from the supplied input state.
+    #[must_use]
+    pub fn movement(&self, input: &InputState) -> glam::Vec3 {
+        if !input.action_active(&self.movement_gate) {
+            return glam::Vec3::ZERO;
+        }
+
+        glam::vec3(
+            input.axis_value(&self.right),
+            input.axis_value(&self.up),
+            input.axis_value(&self.forward),
+        )
+    }
+}
+
+impl Default for InputMap {
+    fn default() -> Self {
+        Self {
+            movement_gate: InputAction::new(
+                "move_gate",
+                [InputBinding::PointerButton(PointerButton::Secondary)],
+            ),
+            right: InputAxis::digital(
+                "move_right",
+                InputAction::new("move_left", [InputBinding::Key(LogicalKey::character("a"))]),
+                InputAction::new(
+                    "move_right",
+                    [InputBinding::Key(LogicalKey::character("d"))],
+                ),
+            ),
+            up: InputAxis::digital(
+                "move_up",
+                InputAction::new("move_down", [InputBinding::Key(LogicalKey::character("c"))]),
+                InputAction::new(
+                    "move_up",
+                    [InputBinding::Key(LogicalKey::Named(NamedKey::Space))],
+                ),
+            ),
+            forward: InputAxis::digital(
+                "move_forward",
+                InputAction::new(
+                    "move_backward",
+                    [InputBinding::Key(LogicalKey::character("s"))],
+                ),
+                InputAction::new(
+                    "move_forward",
+                    [InputBinding::Key(LogicalKey::character("w"))],
+                ),
+            ),
+        }
+    }
+}
