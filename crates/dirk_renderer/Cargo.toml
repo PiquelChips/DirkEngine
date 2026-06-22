@@ -20,6 +20,7 @@ pastey.workspace = true
 
 dirk_utils.workspace = true
 dirk_engine.workspace = true
+dirk_input.workspace = true
 dirk_platform.workspace = true
 dirk_player.workspace = true
 dirk_universe.workspace = true
@@ -52,6 +53,7 @@ default = []
 
 editor = [
     "dirk_engine/editor",
+    "dirk_input/egui",
     "dep:egui",
     "dep:egui-ash-renderer",
 ]
