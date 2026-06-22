@@ -96,3 +96,19 @@ pub struct Modifiers {
     /// Super/Command/Windows.
     pub super_key: bool,
 }
+
+/// Viewport-local normalized pointer position.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct NormalizedPosition(pub glam::Vec2);
+
+impl NormalizedPosition {
+    /// Creates a clamped normalized position.
+    #[must_use]
+    pub fn new(position: glam::Vec2) -> Self {
+        Self(position.clamp(glam::Vec2::ZERO, glam::Vec2::ONE))
+    }
+}
+
+/// Viewport-local normalized delta.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct NormalizedDelta(pub glam::Vec2);
