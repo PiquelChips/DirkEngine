@@ -2,3 +2,97 @@
 
 #[cfg(feature = "egui")]
 pub mod egui;
+
+/// Whether a button-like input is pressed or released.
+#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
+pub enum ButtonState {
+    /// The input is pressed.
+    Pressed,
+    /// The input is released.
+    Released,
+}
+
+/// Keyboard input after layout mapping.
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+pub enum LogicalKey {
+    /// A text-producing key. Stored lower-case for binding comparison.
+    Character(String),
+    /// A named non-text key.
+    Named(NamedKey),
+}
+
+impl LogicalKey {
+    /// Creates a normalized character key.
+    #[must_use]
+    pub fn character(text: impl AsRef<str>) -> Self {
+        Self::Character(text.as_ref().to_lowercase())
+    }
+}
+
+/// Named logical keyboard keys used by engine bindings.
+#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
+pub enum NamedKey {
+    /// Escape.
+    Escape,
+    /// Tab.
+    Tab,
+    /// Enter/Return.
+    Enter,
+    /// Backspace.
+    Backspace,
+    /// Space.
+    Space,
+    /// Up arrow.
+    ArrowUp,
+    /// Down arrow.
+    ArrowDown,
+    /// Left arrow.
+    ArrowLeft,
+    /// Right arrow.
+    ArrowRight,
+    /// Home.
+    Home,
+    /// End.
+    End,
+    /// Page up.
+    PageUp,
+    /// Page down.
+    PageDown,
+    /// Insert.
+    Insert,
+    /// Delete.
+    Delete,
+    /// Function key, numbered from 1.
+    Function(u8),
+}
+
+/// Pointer or mouse button.
+#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
+pub enum PointerButton {
+    /// Primary pointer button, usually left mouse.
+    Primary,
+    /// Secondary pointer button, usually right mouse.
+    Secondary,
+    /// Middle pointer button.
+    Middle,
+    /// Back/extra button.
+    Back,
+    /// Forward/extra button.
+    Forward,
+    /// Any other button code.
+    Other(u16),
+}
+
+/// Keyboard modifiers active during an input event.
+#[derive(Debug, Default, Clone, Copy, Eq, Hash, PartialEq)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct Modifiers {
+    /// Alt/Option.
+    pub alt: bool,
+    /// Control.
+    pub ctrl: bool,
+    /// Shift.
+    pub shift: bool,
+    /// Super/Command/Windows.
+    pub super_key: bool,
+}
