@@ -3,14 +3,15 @@
 use std::{
     collections::HashMap,
     sync::{
+        Arc,
         atomic::{AtomicU64, Ordering},
-        mpsc, Arc,
+        mpsc,
     },
 };
 
 use anyhow::Context as _;
 use egui_dock::{
-    tab_viewer::OnCloseResponse, DockArea, DockState, NodeIndex, Split, SurfaceIndex, TabViewer,
+    DockArea, DockState, NodeIndex, Split, SurfaceIndex, TabViewer, tab_viewer::OnCloseResponse,
 };
 use parking_lot::Mutex;
 
