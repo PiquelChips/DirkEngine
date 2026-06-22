@@ -391,7 +391,6 @@ impl EditorServices {
     /// Returns `true` when the window existed and was removed. This removes the
     /// window metadata, open state, and any matching dock tab without affecting
     /// menus or other windows.
-    #[must_use]
     pub fn remove_window(&self, id: EditorWindowId) -> bool {
         self.state.lock().remove_window(id)
     }
