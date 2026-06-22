@@ -3,6 +3,8 @@
 #[cfg(feature = "egui")]
 pub mod egui;
 
+use std::collections::HashSet;
+
 /// Whether a button-like input is pressed or released.
 #[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
 pub enum ButtonState {
@@ -276,6 +278,65 @@ impl Default for InputMap {
                     [InputBinding::Key(LogicalKey::character("w"))],
                 ),
             ),
+        }
+    }
+}
+
+/// Current held input state.
+#[derive(Debug, Default)]
+pub struct InputState {
+    held: HashSet<InputBinding>,
+}
+
+impl InputState {
+    /// Applies an input event to held input state.
+    pub fn handle_event(&mut self, event: &InputEvent) {
+        match event {
+            InputEvent::Key { key, state, .. } => {
+                self.set(InputBinding::Key(key.clone()), *state);
+            }
+            InputEvent::PointerButton { button, state, .. } => {
+                self.set(InputBinding::PointerButton(*button), *state);
+            }
+            InputEvent::PointerMoved { .. }
+            | InputEvent::PointerEntered
+            | InputEvent::Scroll { .. } => {}
+            // release held keys
+            InputEvent::PointerLeft => {
+                self.held
+                    .retain(|binding| !matches!(binding, InputBinding::PointerButton(_)));
+            }
+        }
+    }
+
+    /// Returns whether a binding is held.
+    #[must_use]
+    pub fn is_held(&self, binding: &InputBinding) -> bool {
+        self.held.contains(binding)
+    }
+
+    /// Returns whether an action is active.
+    #[must_use]
+    pub fn action_active(&self, action: &InputAction) -> bool {
+        action.bindings.iter().any(|binding| self.is_held(binding))
+    }
+
+    /// Returns a digital axis value in `[-1, 1]`.
+    #[must_use]
+    pub fn axis_value(&self, axis: &InputAxis) -> f32 {
+        let positive = f32::from(u8::from(self.action_active(&axis.positive)));
+        let negative = f32::from(u8::from(self.action_active(&axis.negative)));
+        positive - negative
+    }
+
+    fn set(&mut self, binding: InputBinding, state: ButtonState) {
+        match state {
+            ButtonState::Pressed => {
+                self.held.insert(binding);
+            }
+            ButtonState::Released => {
+                self.held.remove(&binding);
+            }
         }
     }
 }
