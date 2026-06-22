@@ -10,8 +10,8 @@ use crate::{PlayerId, PlayerInputState};
 
 /// Default movement speed in world units per second.
 pub const DEFAULT_PLAYER_MOVE_SPEED: f64 = 350.0;
-/// Default pointer-look sensitivity, in radians per physical pixel.
-pub const DEFAULT_PLAYER_LOOK_SENSITIVITY: f32 = 0.0025;
+/// Default pointer-look sensitivity, in radians per normalized viewport unit.
+pub const DEFAULT_PLAYER_LOOK_SENSITIVITY: f32 = 0.5;
 
 /// Applies player movement input to entities that have a [`PlayerId`] and
 /// [`dirk_world::components::Transform`].
