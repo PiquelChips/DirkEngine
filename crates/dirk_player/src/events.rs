@@ -1,7 +1,7 @@
 //! All player-related events.
 
 use dirk_events::Event;
-use dirk_platform::{InputEvent, WindowId};
+use dirk_input::InputEvent;
 
 use crate::PlayerId;
 
@@ -46,11 +46,12 @@ pub struct PlayerDespawned {
 }
 
 /// Input routed to a specific player.
+/// TODO: see about removing this event
 #[derive(Event, Debug, Clone)]
 #[event("player {id} input")]
-pub struct PlayerInput {
+pub(crate) struct PlayerInput {
     /// The player that should receive this input event.
     pub id: PlayerId,
-    /// The platform input event translated into the player's input space.
+    /// The input event translated into the player's input space.
     pub event: InputEvent,
 }
