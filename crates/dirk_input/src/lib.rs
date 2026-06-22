@@ -109,6 +109,23 @@ pub struct Modifiers {
     pub super_key: bool,
 }
 
+#[cfg(feature = "egui")]
+impl Into<::egui::Modifiers> for Modifiers {
+    fn into(self) -> ::egui::Modifiers {
+        ::egui::Modifiers {
+            alt: self.alt,
+            ctrl: self.ctrl,
+            shift: self.shift,
+            mac_cmd: cfg!(target_os = "macos") && self.super_key,
+            command: if cfg!(target_os = "macos") {
+                self.super_key
+            } else {
+                self.ctrl
+            },
+        }
+    }
+}
+
 /// Viewport-local normalized pointer position.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct NormalizedPosition(pub glam::Vec2);
