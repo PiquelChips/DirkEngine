@@ -519,8 +519,7 @@ impl Renderer {
             };
 
             #[cfg(feature = "editor")]
-            self.viewport_editor
-                .remove_viewport(event.id, &self.editor, &mut self.egui);
+            self.viewport_editor.remove_viewport(event.id, &self.editor);
 
             let viewport = Viewport::new(
                 &self.render_device,
@@ -539,8 +538,7 @@ impl Renderer {
 
         for event in self.player_despawn_consumer.consume_all() {
             #[cfg(feature = "editor")]
-            self.viewport_editor
-                .remove_viewport(event.id, &self.editor, &mut self.egui);
+            self.viewport_editor.remove_viewport(event.id, &self.editor);
             self.viewports.remove(&event.id);
         }
 

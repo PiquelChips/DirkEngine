@@ -61,7 +61,7 @@ impl Viewport {
             settings,
             output: Self::create_output(device, &settings)?,
             output_state: Viewport::undefined_state(),
-            render_semaphore: TimelineSemaphore::create(&device.device, 0)?,
+            render_semaphore: TimelineSemaphore::create(device, 0)?,
             last_render_value: 0,
             output_has_rendered: false,
         })

@@ -82,7 +82,7 @@ impl ViewportEditor {
         egui: &mut EguiState,
     ) -> Result<()> {
         if self.windows.contains_key(&player) || self.textures.contains_key(&player) {
-            self.remove_viewport(player, editor, egui);
+            self.remove_viewport(player, editor);
         }
 
         let descriptor_set = self.descriptor_allocator.allocate()?;
@@ -127,17 +127,15 @@ impl ViewportEditor {
         Ok(())
     }
 
-    pub fn remove_viewport(
-        &mut self,
-        player: PlayerId,
-        editor: &EditorServices,
-        egui: &mut EguiState,
-    ) {
+    pub fn remove_viewport(&mut self, player: PlayerId, editor: &EditorServices) {
         if let Some(window) = self.windows.remove(&player) {
             editor.remove_window(window);
         }
         if let Some(binding) = self.textures.remove(&player) {
-            egui.remove_user_texture(binding.texture_id);
+            self.retired_textures.push(RetiredViewportTextureBinding {
+                binding,
+                frames_remaining: MAX_FRAMES_IN_FLIGHT + 1,
+            });
         }
         self.state.lock().remove(player);
     }
