@@ -20,8 +20,14 @@ use ash::{
     vk,
 };
 
-use dirk_platform::{InputEvent, PlatformEvent, WindowEvent, WindowId};
-use dirk_player::{PlayerId, PlayerInput};
+use dirk_platform::{PlatformEvent, WindowEvent, WindowId};
+use dirk_player::PlayerId;
+
+#[cfg(feature = "editor")]
+use dirk_platform::InputEvent;
+#[cfg(feature = "editor")]
+use dirk_player::PlayerInput;
+
 use dirk_universe::{Entity, Universe, UniverseBuilder, WorldId};
 use dirk_utils::Version;
 use tracing::{debug, info};
