@@ -2,8 +2,7 @@ use std::sync::{Arc, OnceLock};
 
 use dirk_engine::editor::{EDITOR_CATEGORY, EditorStyle, EditorSubsystem as _, UNIVERSE_CATEGORY};
 
-use crate::style::EditorPalette;
-use crate::style::default_editor_style;
+use crate::style::{EditorPalette, default_editor_style};
 
 fn begin_egui_pass(ctx: &egui::Context) {
     ctx.begin_pass(egui::RawInput {

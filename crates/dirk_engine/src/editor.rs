@@ -3,15 +3,14 @@
 use std::{
     collections::HashMap,
     sync::{
-        Arc,
         atomic::{AtomicU64, Ordering},
-        mpsc,
+        mpsc, Arc,
     },
 };
 
 use anyhow::Context as _;
 use egui_dock::{
-    DockArea, DockState, NodeIndex, Split, SurfaceIndex, TabViewer, tab_viewer::OnCloseResponse,
+    tab_viewer::OnCloseResponse, DockArea, DockState, NodeIndex, Split, SurfaceIndex, TabViewer,
 };
 use parking_lot::Mutex;
 
@@ -374,7 +373,13 @@ impl EditorServices {
         state
             .window_states
             .insert(id, WindowState { open: default_open });
-        state.rebuild_default_dock_layout();
+        if default_open {
+            if state.dock_layout_bootstrapped {
+                state.insert_window_tab(id);
+            } else {
+                state.rebuild_default_dock_layout();
+            }
+        }
         id
     }
 
@@ -509,6 +514,11 @@ impl EditorServices {
     }
 
     #[cfg(test)]
+    pub(crate) fn bootstrap_default_dock_layout_for_tests(&self) {
+        self.state.lock().bootstrap_default_dock_layout();
+    }
+
+    #[cfg(test)]
     pub(crate) fn close_window_tab_for_tests(&self, id: EditorWindowId) {
         self.state.lock().close_window_tab(id);
     }
@@ -521,6 +531,20 @@ impl EditorServices {
     #[cfg(test)]
     pub(crate) fn dock_tab_count_for_tests(&self) -> usize {
         self.state.lock().dock_tab_count()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn dock_windows_share_leaf_for_tests(
+        &self,
+        first: EditorWindowId,
+        second: EditorWindowId,
+    ) -> bool {
+        self.state.lock().dock_windows_share_leaf(first, second)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn move_window_to_first_dock_leaf_for_tests(&self, id: EditorWindowId) {
+        self.state.lock().move_window_to_first_dock_leaf(id);
     }
 
     #[cfg(test)]
@@ -567,6 +591,7 @@ struct EditorServicesState {
     windows: Vec<RegisteredWindow>,
     window_states: HashMap<EditorWindowId, WindowState>,
     dock_state: DockState<EditorWindowId>,
+    dock_layout_bootstrapped: bool,
     menus: Vec<RegisteredMenu>,
     styles: Vec<EditorStyle>,
 }
@@ -577,6 +602,7 @@ impl EditorServicesState {
             windows: Vec::new(),
             window_states: HashMap::new(),
             dock_state: DockState::new(Vec::new()),
+            dock_layout_bootstrapped: false,
             menus: Vec::new(),
             styles: Vec::new(),
         }
@@ -670,6 +696,7 @@ impl EditorServicesState {
         context: &EditorRenderContext<'_>,
         editor_commands: &EditorCommandSender,
     ) -> anyhow::Result<()> {
+        self.bootstrap_default_dock_layout();
         self.sync_dock_tabs_with_open_windows();
 
         let mut result = Ok(());
@@ -748,6 +775,15 @@ impl EditorServicesState {
                 self.insert_window_tab(id);
             }
         }
+    }
+
+    fn bootstrap_default_dock_layout(&mut self) {
+        if self.dock_layout_bootstrapped {
+            return;
+        }
+
+        self.rebuild_default_dock_layout();
+        self.dock_layout_bootstrapped = true;
     }
 
     fn rebuild_default_dock_layout(&mut self) {
@@ -883,6 +919,28 @@ impl EditorServicesState {
     }
 
     #[cfg(test)]
+    fn dock_windows_share_leaf(&self, first: EditorWindowId, second: EditorWindowId) -> bool {
+        let first = self
+            .dock_state
+            .find_tab(&first)
+            .map(|(surface, node, _tab)| (surface, node));
+        let second = self
+            .dock_state
+            .find_tab(&second)
+            .map(|(surface, node, _tab)| (surface, node));
+
+        first.is_some() && first == second
+    }
+
+    #[cfg(test)]
+    fn move_window_to_first_dock_leaf(&mut self, id: EditorWindowId) {
+        if let Some(index) = self.dock_state.find_tab(&id) {
+            self.dock_state.remove_tab(index);
+            self.dock_state.push_to_first_leaf(id);
+        }
+    }
+
+    #[cfg(test)]
     fn window_is_closeable(&self, id: EditorWindowId) -> bool {
         self.window_exists(id)
     }
@@ -1007,6 +1065,7 @@ impl EditorRuntime {
                 .start(&mut context)
                 .map_err(|source| Error::EditorSubsystemFailedStart { name, source })?;
         }
+        self.services.state.lock().bootstrap_default_dock_layout();
         Ok(())
     }
 
