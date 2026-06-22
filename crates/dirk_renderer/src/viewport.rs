@@ -33,9 +33,9 @@ impl From<TextureState> for TextureStateDesc {
 
 pub(crate) struct Viewport {
     player: PlayerId,
-    window: WindowId,
-    camera: Option<Entity>,
-    world: Option<WorldId>,
+    pub window: WindowId,
+    pub camera: Option<Entity>,
+    pub world: Option<WorldId>,
     settings: ViewportSettings,
     output: Image,
     output_state: TextureState,
@@ -44,7 +44,7 @@ pub(crate) struct Viewport {
 }
 
 impl Viewport {
-    pub(crate) fn new(
+    pub fn new(
         device: &RenderDevice,
         player: PlayerId,
         window: WindowId,
@@ -65,34 +65,15 @@ impl Viewport {
         })
     }
 
-    pub(crate) fn player(&self) -> PlayerId {
+    pub fn player(&self) -> PlayerId {
         self.player
     }
 
-    pub(crate) fn camera(&self) -> Option<Entity> {
-        self.camera
-    }
-
-    pub(crate) fn world(&self) -> Option<WorldId> {
-        self.world
-    }
-
-    pub(crate) fn settings(&self) -> &ViewportSettings {
+    pub fn settings(&self) -> &ViewportSettings {
         &self.settings
     }
 
-    pub(crate) fn sync_from_player(
-        &mut self,
-        window: WindowId,
-        camera: Option<Entity>,
-        world: Option<WorldId>,
-    ) {
-        self.window = window;
-        self.camera = camera;
-        self.world = world;
-    }
-
-    pub(crate) fn resize(&mut self, device: &RenderDevice, extent: vk::Extent2D) -> Result<()> {
+    pub fn resize(&mut self, device: &RenderDevice, extent: vk::Extent2D) -> Result<()> {
         self.reconfigure(
             device,
             ViewportSettings {
@@ -102,11 +83,7 @@ impl Viewport {
         )
     }
 
-    pub(crate) fn reconfigure(
-        &mut self,
-        device: &RenderDevice,
-        settings: ViewportSettings,
-    ) -> Result<()> {
+    pub fn reconfigure(&mut self, device: &RenderDevice, settings: ViewportSettings) -> Result<()> {
         let settings = settings.clamped();
         if self.settings == settings {
             return Ok(());
@@ -117,7 +94,7 @@ impl Viewport {
         Ok(())
     }
 
-    pub(crate) fn import(&self) -> ImportedTexture {
+    pub fn import(&self) -> ImportedTexture {
         ImportedTexture {
             image: self.output.image(),
             view: self.output.view(),
@@ -127,15 +104,15 @@ impl Viewport {
         }
     }
 
-    pub(crate) fn next_render_value(&self) -> u64 {
+    pub fn next_render_value(&self) -> u64 {
         self.last_render_value + 1
     }
 
-    pub(crate) fn render_semaphore(&self) -> vk::Semaphore {
+    pub fn render_semaphore(&self) -> vk::Semaphore {
         self.render_semaphore.raw()
     }
 
-    pub(crate) fn mark_render_submitted(&mut self, value: u64) {
+    pub fn mark_render_submitted(&mut self, value: u64) {
         self.last_render_value = value;
         self.output_state = Self::shader_read_state();
     }

@@ -221,10 +221,10 @@ impl ComponentSystem for RendererPlayerSystem {
     ) {
         let id = *component;
         self.sender.enqueue_command(move |renderer| {
-            let Some(player) = renderer.players.get_mut(&id) else {
+            let Some(viewport) = renderer.viewports.get_mut(&id) else {
                 return Ok(());
             };
-            player.entity = Some(entity);
+            viewport.camera = Some(entity);
             Ok(())
         });
     }
@@ -239,12 +239,12 @@ impl ComponentSystem for RendererPlayerSystem {
         let old_id = *old;
         let new_id = *new;
         self.sender.enqueue_command(move |renderer| {
-            if let Some(old) = renderer.players.get_mut(&old_id) {
-                old.entity = None;
+            if let Some(old) = renderer.viewports.get_mut(&old_id) {
+                old.camera = None;
             }
 
-            if let Some(new) = renderer.players.get_mut(&new_id) {
-                new.entity = Some(entity);
+            if let Some(new) = renderer.viewports.get_mut(&new_id) {
+                new.camera = Some(entity);
             }
             Ok(())
         });
@@ -258,8 +258,8 @@ impl ComponentSystem for RendererPlayerSystem {
     ) {
         let player_id = *component;
         self.sender.enqueue_command(move |renderer| {
-            if let Some(player) = renderer.players.get_mut(&player_id) {
-                player.entity = None;
+            if let Some(viewport) = renderer.viewports.get_mut(&player_id) {
+                viewport.camera = None;
             }
             Ok(())
         });

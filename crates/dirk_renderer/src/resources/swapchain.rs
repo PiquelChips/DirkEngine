@@ -4,6 +4,7 @@ use ash::vk;
 
 use crate::{
     Error, Result,
+    frame_graph::{ImportedTexture, TextureStateDesc},
     resources::{
         device::{Garbage, RenderDevice},
         sync::Fence,
@@ -44,6 +45,25 @@ impl RenderImage {
         }
 
         Ok(())
+    }
+    /// Returns [`ImportedTexture`] to use this [`RenderImage`] in a
+    /// frame graph.
+    pub fn import(&self) -> ImportedTexture {
+        ImportedTexture {
+            image: self.image,
+            view: self.view,
+            aspect_flags: vk::ImageAspectFlags::COLOR,
+            initial_state: TextureStateDesc {
+                layout: vk::ImageLayout::UNDEFINED,
+                stage: vk::PipelineStageFlags2::TOP_OF_PIPE,
+                access: vk::AccessFlags2::empty(),
+            },
+            final_state: TextureStateDesc {
+                layout: vk::ImageLayout::PRESENT_SRC_KHR,
+                stage: vk::PipelineStageFlags2::BOTTOM_OF_PIPE,
+                access: vk::AccessFlags2::empty(),
+            },
+        }
     }
 }
 
