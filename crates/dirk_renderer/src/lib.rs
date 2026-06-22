@@ -22,7 +22,7 @@ use ash::{
 
 use dirk_platform::{PlatformEvent, WindowEvent, WindowId};
 use dirk_player::PlayerId;
-use dirk_universe::{Universe, UniverseBuilder};
+use dirk_universe::{Entity, Universe, UniverseBuilder, WorldId};
 use dirk_utils::Version;
 use tracing::{debug, info};
 
@@ -71,6 +71,11 @@ mod shaders;
 
 mod viewport;
 use viewport::{Viewport, ViewportSettings};
+
+#[cfg(feature = "editor")]
+mod viewport_editor;
+#[cfg(feature = "editor")]
+use viewport_editor::ViewportEditor;
 
 mod frame_graph;
 use frame_graph::{RenderGraph, TextureDesc};
@@ -175,6 +180,8 @@ struct Renderer {
     /// Editor window registry rendered through egui.
     #[cfg(feature = "editor")]
     editor: dirk_engine::editor::EditorServices,
+    #[cfg(feature = "editor")]
+    viewport_editor: ViewportEditor,
     /// Player-owned internal scene render outputs.
     viewports: HashMap<PlayerId, Viewport>,
 
@@ -201,6 +208,11 @@ struct PresentationTarget {
     image: RenderImage,
 }
 
+struct ViewportRenderSubmission {
+    command_buffer: CommandBuffer,
+    rendered_players: Vec<PlayerId>,
+}
+
 impl dirk_engine::Subsystem for Renderer {
     fn name(&self) -> &'static str {
         "renderer"
@@ -218,6 +230,7 @@ impl dirk_engine::Subsystem for Renderer {
             let ctx = self.begin_frame();
             let frame = dirk_engine::editor::EditorRenderContext::new(delta_time, handle, universe);
 
+            self.viewport_editor.sync_ready_state(&self.viewports);
             self.editor.render_ui(&ctx, &frame)?;
         }
 
@@ -310,6 +323,8 @@ impl Renderer {
         let scene_manager = SceneManager::init(&render_device)?;
         #[cfg(feature = "editor")]
         let egui = EguiState::new(&render_device)?;
+        #[cfg(feature = "editor")]
+        let viewport_editor = ViewportEditor::new(&render_device)?;
 
         let windows = {
             let window = Window::build(&render_device, window)?;
@@ -334,6 +349,8 @@ impl Renderer {
             input_router,
             #[cfg(feature = "editor")]
             editor,
+            #[cfg(feature = "editor")]
+            viewport_editor,
 
             frames,
             current_frame,
@@ -456,6 +473,10 @@ impl Renderer {
                 return Err(Error::WindowDoesNotExist(event.window));
             };
 
+            #[cfg(feature = "editor")]
+            self.viewport_editor
+                .remove_viewport(event.id, &self.editor, &mut self.egui);
+
             let viewport = Viewport::new(
                 &self.render_device,
                 event.id,
@@ -465,10 +486,16 @@ impl Renderer {
                     self.render_device.properties.surface_format.format,
                 ),
             )?;
+            #[cfg(feature = "editor")]
+            self.viewport_editor
+                .add_viewport(event.id, &viewport, &self.editor, &mut self.egui)?;
             self.viewports.insert(event.id, viewport);
         }
 
         for event in self.player_despawn_consumer.consume_all() {
+            #[cfg(feature = "editor")]
+            self.viewport_editor
+                .remove_viewport(event.id, &self.editor, &mut self.egui);
             self.viewports.remove(&event.id);
         }
 
@@ -550,22 +577,32 @@ impl Renderer {
         self.frames[frame_index].fence.reset()?;
         self.render_device.flush_deletions();
         #[cfg(feature = "editor")]
-        self.egui.free_textures_for_frame(frame_index)?;
+        {
+            self.egui.free_textures_for_frame(frame_index)?;
+            self.viewport_editor
+                .release_retired_textures(&mut self.egui);
+            self.viewport_editor
+                .apply_resize_requests(&mut self.viewports, &mut self.egui)?;
+        }
 
-        let viewport_cmd = self.record_viewport_graph(frame_index)?;
+        let viewport_submission = self.record_viewport_graph(frame_index)?;
         let presentation_targets = self.acquire_presentation_targets()?;
         let presentation_cmd =
             self.record_presentation_graph(frame_index, &presentation_targets)?;
 
         self.submit_frame(
             frame_index,
-            viewport_cmd.as_ref(),
+            viewport_submission.as_ref(),
             presentation_cmd.as_ref(),
             &presentation_targets,
         )?;
 
-        for viewport in self.viewports.values_mut() {
-            viewport.mark_render_submitted(viewport.next_render_value());
+        if let Some(submission) = viewport_submission {
+            for player in submission.rendered_players {
+                if let Some(viewport) = self.viewports.get_mut(&player) {
+                    viewport.mark_render_submitted(viewport.next_render_value());
+                }
+            }
         }
 
         for target in presentation_targets {
@@ -580,19 +617,27 @@ impl Renderer {
         Ok(())
     }
 
-    fn record_viewport_graph(&self, frame_index: usize) -> Result<Option<CommandBuffer>> {
+    fn record_viewport_graph(
+        &self,
+        frame_index: usize,
+    ) -> Result<Option<ViewportRenderSubmission>> {
         if self.viewports.is_empty() {
             return Ok(None);
         }
 
         let mut graph = RenderGraph::new();
+        let mut rendered_players = Vec::new();
         for viewport in self.viewports.values() {
+            if !viewport.is_renderable() {
+                continue;
+            }
             let Some(world) = viewport.world else {
                 continue;
             };
             let Some(camera) = viewport.camera else {
                 continue;
             };
+            rendered_players.push(viewport.player());
 
             let output = graph.import_texture(TextureDesc {
                 width: viewport.settings().extent.width,
@@ -621,12 +666,19 @@ impl Renderer {
             );
         }
 
+        if rendered_players.is_empty() {
+            return Ok(None);
+        }
+
         let cmd = self.frames[frame_index].command_pool.allocate_buffer()?;
         cmd.begin_command_buffer(&vk::CommandBufferBeginInfo::default())?;
         graph.run(&self.render_device, &cmd)?;
         cmd.end_command_buffer()?;
 
-        Ok(Some(cmd))
+        Ok(Some(ViewportRenderSubmission {
+            command_buffer: cmd,
+            rendered_players,
+        }))
     }
 
     fn acquire_presentation_targets(&mut self) -> Result<Vec<PresentationTarget>> {
@@ -702,34 +754,49 @@ impl Renderer {
     fn submit_frame(
         &self,
         frame_index: usize,
-        viewport_cmd: Option<&resources::command_pool::CommandBuffer>,
+        viewport_submission: Option<&ViewportRenderSubmission>,
         presentation_cmd: Option<&resources::command_pool::CommandBuffer>,
         presentation_targets: &[PresentationTarget],
     ) -> Result<()> {
         let mut submits = Vec::new();
 
-        let timeline_signal_semaphores = self
-            .viewports
-            .values()
-            .map(viewport::Viewport::render_semaphore)
+        // VIEWPORTS
+
+        // all the viewports that were rendered too this frame
+        let rendered_viewports = viewport_submission.map_or_else(Vec::new, |submission| {
+            submission
+                .rendered_players
+                .iter()
+                .filter_map(|player| self.viewports.get(player))
+                .collect::<Vec<_>>()
+        });
+
+        // timeline semaphores to signal for viewports
+        let timeline_signal_semaphores = rendered_viewports
+            .iter()
+            .map(|viewport| viewport.render_semaphore())
             .collect::<Vec<_>>();
-        let timeline_signal_values = self
-            .viewports
-            .values()
-            .map(viewport::Viewport::next_render_value)
+        // values to signal said semaphores too
+        let timeline_signal_values = rendered_viewports
+            .iter()
+            .map(|viewport| viewport.next_render_value())
             .collect::<Vec<_>>();
+        // submit info for the viewport timeline semaphores
         let mut timeline_info = vk::TimelineSemaphoreSubmitInfo::default()
             .signal_semaphore_values(&timeline_signal_values);
 
-        if let Some(cmd) = viewport_cmd {
+        // actually create the submit info for the viewport rendering
+        if let Some(submission) = viewport_submission {
             let mut submit = vk::SubmitInfo::default()
-                .command_buffers(std::slice::from_ref(cmd))
+                .command_buffers(std::slice::from_ref(&submission.command_buffer))
                 .signal_semaphores(&timeline_signal_semaphores);
             if !timeline_signal_semaphores.is_empty() {
                 submit = submit.push_next(&mut timeline_info);
             }
             submits.push(submit);
         }
+
+        // WINDOWS
 
         let image_available_semaphores = presentation_targets
             .iter()
@@ -739,19 +806,42 @@ impl Renderer {
             .iter()
             .map(|target| target.image.render_finished_semaphore)
             .collect::<Vec<_>>();
-        let wait_stages = presentation_targets
+
+        // wait on image available semaphores & viewport timeline semaphores
+        let mut wait_semaphores = image_available_semaphores.clone();
+        wait_semaphores.extend(timeline_signal_semaphores.iter().copied());
+
+        // wait values: 0 for image vailable, timeline signal values otherwise
+        let mut wait_values = vec![0; image_available_semaphores.len()];
+        wait_values.extend(timeline_signal_values.iter().copied());
+
+        // submit info for the window timeline semaphores
+        let mut presentation_timeline_info =
+            vk::TimelineSemaphoreSubmitInfo::default().wait_semaphore_values(&wait_values);
+
+        // all presentation targets wait on COLOR_ATTACHMENT_OUTPUT
+        let mut wait_stages = presentation_targets
             .iter()
             .map(|_| vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
             .collect::<Vec<_>>();
+        // all viewports wait on FRAGMENT_SHADER
+        wait_stages.extend(
+            timeline_signal_semaphores
+                .iter()
+                .map(|_| vk::PipelineStageFlags::FRAGMENT_SHADER),
+        );
 
+        // actually create the submit info for window rendering
         if let Some(cmd) = presentation_cmd {
-            submits.push(
-                vk::SubmitInfo::default()
-                    .command_buffers(std::slice::from_ref(cmd))
-                    .wait_semaphores(&image_available_semaphores)
-                    .wait_dst_stage_mask(&wait_stages)
-                    .signal_semaphores(&render_finished_semaphores),
-            );
+            let mut submit = vk::SubmitInfo::default()
+                .command_buffers(std::slice::from_ref(cmd))
+                .wait_semaphores(&wait_semaphores)
+                .wait_dst_stage_mask(&wait_stages)
+                .signal_semaphores(&render_finished_semaphores);
+            if !timeline_signal_semaphores.is_empty() {
+                submit = submit.push_next(&mut presentation_timeline_info);
+            }
+            submits.push(submit);
         }
 
         if submits.is_empty() {
