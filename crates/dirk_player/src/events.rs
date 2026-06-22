@@ -11,25 +11,11 @@ use crate::PlayerId;
 ///
 /// Game code should respond by spawning an ECS entity with a [`PlayerId`]
 /// component to link the player to their in-world representation.
-///
-/// # Example
-///
-/// ```rust
-/// # use dirk_player::PlayerSpawned;
-/// # use dirk_events::Consumer;
-/// # fn example(mut consumer: Consumer<PlayerSpawned>) {
-/// for event in consumer.consume_all() {
-///     // Spawn an entity and attach event.id as a component.
-/// }
-/// # }
-/// ```
 #[derive(Event, Debug, Clone)]
 #[event("player {id} spawned")]
 pub struct PlayerSpawned {
     /// The ID of the newly created player.
     pub id: PlayerId,
-    /// The Window the player is rendered too.
-    pub window: WindowId,
 }
 
 /// Fired when a player is removed via [`PlayerRegistry::remove_player`].
