@@ -12,20 +12,17 @@ pub fn input_events_from_egui_response(
     response: &egui::Response,
     previous_pointer: Option<egui::Pos2>,
 ) -> Vec<InputEvent> {
-    if response.clicked() {
-        response.request_focus();
-    }
-
     // if the pointer is currently routing input
     let pointer_routes = response.hovered()
         || response.dragged()
         || response.is_pointer_button_down_on()
         || previous_pointer.is_some();
     // if the keyboard is currently routing input
-    let keyboard_routes = response.has_focus();
+    let keyboard_routes = response.has_focus() || previous_pointer.is_some();
     let rect = response.rect;
     let size = rect.size();
     let mut out = Vec::new();
+    let mut request_focus = response.clicked();
 
     ui.input(|input| {
         for event in &input.events {
@@ -42,6 +39,9 @@ pub fn input_events_from_egui_response(
                     pressed,
                     ..
                 } if pointer_routes || rect.contains(*pos) => {
+                    if *pressed {
+                        request_focus = true;
+                    }
                     out.push(InputEvent::PointerButton {
                         button: pointer_button(*button),
                         state: ButtonState::from(*pressed),
@@ -79,6 +79,10 @@ pub fn input_events_from_egui_response(
             }
         }
     });
+
+    if request_focus {
+        response.request_focus();
+    }
 
     out
 }
