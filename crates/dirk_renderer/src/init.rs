@@ -226,6 +226,7 @@ impl Renderer {
             let fence = Fence::signaled(device)?;
             Ok(Frame {
                 command_pool,
+                submitted_command_buffers: Vec::new(),
                 fence,
             })
         };

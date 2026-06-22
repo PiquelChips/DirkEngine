@@ -628,6 +628,9 @@ impl Renderer {
         #[cfg(not(feature = "editor"))]
         self.resize_fullscreen_viewports()?;
 
+        self.frames[frame_index].fence.wait(u64::MAX)?;
+        self.frames[frame_index].submitted_command_buffers.clear();
+
         let viewport_submission = self.record_viewport_graph(frame_index)?;
         let presentation_targets = self.acquire_presentation_targets()?;
         let presentation_cmd = self.record_presentation_graph(
@@ -636,7 +639,6 @@ impl Renderer {
             viewport_submission.as_ref(),
         )?;
 
-        self.frames[frame_index].fence.wait(u64::MAX)?;
         self.frames[frame_index].fence.reset()?;
         self.submit_frame(
             frame_index,
@@ -651,6 +653,12 @@ impl Renderer {
                     viewport.mark_render_submitted(viewport.next_render_value());
                 }
             }
+            self.frames[frame_index]
+                .submitted_command_buffers
+                .push(submission.command_buffer);
+        }
+        if let Some(cmd) = presentation_cmd {
+            self.frames[frame_index].submitted_command_buffers.push(cmd);
         }
 
         for target in presentation_targets {
