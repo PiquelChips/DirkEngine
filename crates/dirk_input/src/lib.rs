@@ -110,17 +110,17 @@ pub struct Modifiers {
 }
 
 #[cfg(feature = "egui")]
-impl Into<::egui::Modifiers> for Modifiers {
-    fn into(self) -> ::egui::Modifiers {
-        ::egui::Modifiers {
-            alt: self.alt,
-            ctrl: self.ctrl,
-            shift: self.shift,
-            mac_cmd: cfg!(target_os = "macos") && self.super_key,
+impl From<Modifiers> for ::egui::Modifiers {
+    fn from(value: Modifiers) -> Self {
+        Self {
+            alt: value.alt,
+            ctrl: value.ctrl,
+            shift: value.shift,
+            mac_cmd: cfg!(target_os = "macos") && value.super_key,
             command: if cfg!(target_os = "macos") {
-                self.super_key
+                value.super_key
             } else {
-                self.ctrl
+                value.ctrl
             },
         }
     }
@@ -149,6 +149,7 @@ impl NormalizedPosition {
     }
 }
 
+#[cfg(feature = "egui")]
 fn normalize_component(value: f32, extent: f32) -> f32 {
     value / extent.max(f32::EPSILON)
 }
