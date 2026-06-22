@@ -51,6 +51,7 @@ default = ["editor", "cli"]
 
 editor = [
     "dirk_engine/editor",
+    "dirk_player/editor",
     "dirk_renderer/editor",
     "dep:dirk_editor",
 ]
