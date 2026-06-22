@@ -127,10 +127,14 @@ impl PlatformHandler {
                         id,
                         modifiers: self.modifiers,
                     });
-                self.input_dispatch.dispatch(InputEvent::ModifiersChanged {
+                let event = InputEvent::ModifiersChanged {
                     id,
                     modifiers: self.modifiers,
-                });
+                };
+                self.input_router.push_input_event(event.clone());
+                if self.input_router.direct_input_dispatch_enabled() {
+                    self.input_dispatch.dispatch(event);
+                }
             }
             WindowEvent::KeyboardInput {
                 event,
@@ -161,9 +165,12 @@ impl PlatformHandler {
         let position = glam::dvec2(position.x, position.y);
         self.input_router
             .push_ui_event(UiInputEvent::PointerMoved { id, position });
-        if !self.input_router.captures_pointer(id) {
-            self.input_dispatch
-                .dispatch(InputEvent::PointerMoved { id, position });
+        let event = InputEvent::PointerMoved { id, position };
+        self.input_router.push_input_event(event.clone());
+        if self.input_router.direct_input_dispatch_enabled()
+            && !self.input_router.captures_pointer(id)
+        {
+            self.input_dispatch.dispatch(event);
         }
     }
 
@@ -173,15 +180,22 @@ impl PlatformHandler {
             id,
             position: glam::dvec2(position.x, position.y),
         });
-        self.input_dispatch
-            .dispatch(InputEvent::PointerEntered { id });
+        let event = InputEvent::PointerEntered { id };
+        self.input_router.push_input_event(event.clone());
+        if self.input_router.direct_input_dispatch_enabled() {
+            self.input_dispatch.dispatch(event);
+        }
     }
 
     fn dispatch_pointer_left(&self, id: WindowId) {
         trace!("Pointer left Window={id:?}");
         self.input_router
             .push_ui_event(UiInputEvent::PointerGone { id });
-        self.input_dispatch.dispatch(InputEvent::PointerLeft { id });
+        let event = InputEvent::PointerLeft { id };
+        self.input_router.push_input_event(event.clone());
+        if self.input_router.direct_input_dispatch_enabled() {
+            self.input_dispatch.dispatch(event);
+        }
     }
 
     fn dispatch_pointer_button(
@@ -202,13 +216,6 @@ impl PlatformHandler {
                 pressed,
                 modifiers: self.modifiers,
             });
-        if !self
-            .input_router
-            .should_dispatch_pointer_button(id, pressed)
-        {
-            return;
-        }
-
         let event = match state {
             ElementState::Pressed => InputEvent::MouseButtonPressed {
                 id,
@@ -221,7 +228,14 @@ impl PlatformHandler {
                 position,
             },
         };
-        self.input_dispatch.dispatch(event);
+        self.input_router.push_input_event(event.clone());
+        if self.input_router.direct_input_dispatch_enabled()
+            && self
+                .input_router
+                .should_dispatch_pointer_button(id, pressed)
+        {
+            self.input_dispatch.dispatch(event);
+        }
     }
 
     fn dispatch_mouse_wheel(&self, id: WindowId, delta: &winit::event::MouseScrollDelta) {
@@ -232,9 +246,12 @@ impl PlatformHandler {
             delta: delta.clone(),
             modifiers: self.modifiers,
         });
-        if !self.input_router.captures_pointer(id) {
-            self.input_dispatch
-                .dispatch(InputEvent::MouseWheelScrolled { id, delta });
+        let event = InputEvent::MouseWheelScrolled { id, delta };
+        self.input_router.push_input_event(event.clone());
+        if self.input_router.direct_input_dispatch_enabled()
+            && !self.input_router.captures_pointer(id)
+        {
+            self.input_dispatch.dispatch(event);
         }
     }
 
@@ -268,25 +285,32 @@ impl PlatformHandler {
                     "Key pressed: {:?} (repeat={})",
                     event.logical_key, event.repeat
                 );
-                if !self.input_router.should_dispatch_key(id, pressed) {
-                    return;
-                }
-                self.input_dispatch.dispatch(InputEvent::KeyPressed {
+                let event = InputEvent::KeyPressed {
                     id,
                     key: event.logical_key.clone(),
                     physical_key: event.physical_key,
                     modifiers,
                     repeat: event.repeat,
-                });
+                };
+                self.input_router.push_input_event(event.clone());
+                if self.input_router.direct_input_dispatch_enabled()
+                    && self.input_router.should_dispatch_key(id, pressed)
+                {
+                    self.input_dispatch.dispatch(event);
+                }
             }
             ElementState::Released => {
                 trace!("Key released: {:?}", event.logical_key);
-                self.input_dispatch.dispatch(InputEvent::KeyReleased {
+                let event = InputEvent::KeyReleased {
                     id,
                     key: event.logical_key.clone(),
                     physical_key: event.physical_key,
                     modifiers,
-                });
+                };
+                self.input_router.push_input_event(event.clone());
+                if self.input_router.direct_input_dispatch_enabled() {
+                    self.input_dispatch.dispatch(event);
+                }
             }
         }
     }
