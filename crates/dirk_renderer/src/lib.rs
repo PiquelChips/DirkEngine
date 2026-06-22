@@ -584,11 +584,16 @@ impl Renderer {
             self.viewport_editor
                 .apply_resize_requests(&mut self.viewports, &mut self.egui)?;
         }
+        #[cfg(not(feature = "editor"))]
+        self.resize_fullscreen_viewports()?;
 
         let viewport_submission = self.record_viewport_graph(frame_index)?;
         let presentation_targets = self.acquire_presentation_targets()?;
-        let presentation_cmd =
-            self.record_presentation_graph(frame_index, &presentation_targets)?;
+        let presentation_cmd = self.record_presentation_graph(
+            frame_index,
+            &presentation_targets,
+            viewport_submission.as_ref(),
+        )?;
 
         self.submit_frame(
             frame_index,
@@ -704,6 +709,9 @@ impl Renderer {
         &mut self,
         frame_index: usize,
         targets: &[PresentationTarget],
+        #[cfg_attr(feature = "editor", allow(unused_variables))] viewport_submission: Option<
+            &ViewportRenderSubmission,
+        >,
     ) -> Result<Option<resources::command_pool::CommandBuffer>> {
         if targets.is_empty() {
             return Ok(None);
@@ -713,11 +721,17 @@ impl Renderer {
         #[cfg(feature = "editor")]
         let mut egui_target = None;
         for target in targets {
+            #[cfg(feature = "editor")]
+            let swapchain_usage = vk::ImageUsageFlags::COLOR_ATTACHMENT;
+            #[cfg(not(feature = "editor"))]
+            let swapchain_usage =
+                vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_DST;
+
             let swapchain = graph.import_texture(TextureDesc {
                 width: target.extent.width,
                 height: target.extent.height,
                 format: self.render_device.properties.surface_format.format,
-                usage: vk::ImageUsageFlags::COLOR_ATTACHMENT,
+                usage: swapchain_usage,
                 samples: vk::SampleCountFlags::TYPE_1,
                 imported: Some(target.image.import()),
             });
@@ -730,6 +744,65 @@ impl Renderer {
             #[cfg(feature = "editor")]
             if Some(target.window) == self.egui_window {
                 egui_target = Some((swapchain, target.extent));
+            }
+
+            #[cfg(not(feature = "editor"))]
+            if let Some(viewport) = self.first_viewport_for_window(target.window) {
+                let rendered_this_frame = viewport_submission.is_some_and(|submission| {
+                    submission.rendered_players.contains(&viewport.player())
+                });
+                if viewport.has_rendered() || rendered_this_frame {
+                    let viewport_extent = viewport.settings().extent;
+                    let target_extent = target.extent;
+                    let viewport_source = graph.import_texture(TextureDesc {
+                        width: viewport_extent.width,
+                        height: viewport_extent.height,
+                        format: viewport.settings().format,
+                        usage: vk::ImageUsageFlags::COLOR_ATTACHMENT
+                            | vk::ImageUsageFlags::SAMPLED
+                            | vk::ImageUsageFlags::TRANSFER_SRC,
+                        samples: vk::SampleCountFlags::TYPE_1,
+                        imported: Some(if rendered_this_frame {
+                            viewport.import_after_render()
+                        } else {
+                            viewport.import()
+                        }),
+                    });
+
+                    let mut copy_pass = graph.add_pass("copy scene to swapchain");
+                    copy_pass
+                        .read_transfer_src(viewport_source)
+                        .write_transfer_dst(swapchain);
+                    copy_pass.execute(Box::new(move |_, cmd, images| {
+                        let region = vk::ImageCopy::default()
+                            .src_subresource(vk::ImageSubresourceLayers {
+                                aspect_mask: vk::ImageAspectFlags::COLOR,
+                                mip_level: 0,
+                                base_array_layer: 0,
+                                layer_count: 1,
+                            })
+                            .dst_subresource(vk::ImageSubresourceLayers {
+                                aspect_mask: vk::ImageAspectFlags::COLOR,
+                                mip_level: 0,
+                                base_array_layer: 0,
+                                layer_count: 1,
+                            })
+                            .extent(vk::Extent3D {
+                                width: target_extent.width,
+                                height: target_extent.height,
+                                depth: 1,
+                            });
+
+                        cmd.copy_image(
+                            images[viewport_source.index()].image,
+                            vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                            images[swapchain.index()].image,
+                            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                            &[region],
+                        );
+                        Ok(())
+                    }));
+                }
             }
         }
 
@@ -749,6 +822,32 @@ impl Renderer {
         cmd.end_command_buffer()?;
 
         Ok(Some(cmd))
+    }
+
+    #[cfg(not(feature = "editor"))]
+    fn resize_fullscreen_viewports(&mut self) -> Result<()> {
+        let fullscreen_viewports = self
+            .windows
+            .iter()
+            .filter_map(|(window_id, window)| {
+                self.first_viewport_for_window(*window_id)
+                    .map(|viewport| (viewport.player(), window.extent()))
+            })
+            .collect::<Vec<_>>();
+        for (player, extent) in fullscreen_viewports {
+            if let Some(viewport) = self.viewports.get_mut(&player) {
+                viewport.resize(&self.render_device, extent)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    #[cfg(not(feature = "editor"))]
+    fn first_viewport_for_window(&self, window: WindowId) -> Option<&Viewport> {
+        self.viewports
+            .values()
+            .find(|viewport| viewport.window == window)
     }
 
     fn submit_frame(
@@ -824,11 +923,16 @@ impl Renderer {
             .iter()
             .map(|_| vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
             .collect::<Vec<_>>();
-        // all viewports wait on FRAGMENT_SHADER
+
+        // all viewports wait on FRAGMENT_SHADER or TRANSFER when not in editor
+        #[cfg(feature = "editor")]
+        let viewport_wait_stage = vk::PipelineStageFlags::FRAGMENT_SHADER;
+        #[cfg(not(feature = "editor"))]
+        let viewport_wait_stage = vk::PipelineStageFlags::TRANSFER;
         wait_stages.extend(
             timeline_signal_semaphores
                 .iter()
-                .map(|_| vk::PipelineStageFlags::FRAGMENT_SHADER),
+                .map(|_| viewport_wait_stage),
         );
 
         // actually create the submit info for window rendering
@@ -865,16 +969,6 @@ impl Renderer {
 
     // EXTRA UTILS
 
-    fn find_player_entity(
-        universe: &dirk_universe::Universe,
-        player: PlayerId,
-    ) -> Option<(Entity, WorldId)> {
-        universe.entities().find(|(entity, _world)| {
-            universe
-                .component::<PlayerId>(*entity)
-                .is_some_and(|entity_player| *entity_player == player)
-        })
-    }
     fn bind_viewport_to_entity(&mut self, player: PlayerId, entity: Entity) {
         let world = self.scene_manager.entity_world(entity);
         if let Some(viewport) = self.viewports.get_mut(&player) {

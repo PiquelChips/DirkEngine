@@ -116,6 +116,13 @@ impl Viewport {
         }
     }
 
+    #[cfg(not(feature = "editor"))]
+    pub fn import_after_render(&self) -> ImportedTexture {
+        let mut import = self.import();
+        import.initial_state = Self::shader_read_state().into();
+        import
+    }
+
     pub fn next_render_value(&self) -> u64 {
         self.last_render_value + 1
     }
