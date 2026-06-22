@@ -51,6 +51,7 @@ impl UniverseSystem for RendererUniverseSystem {
         self.sender.enqueue_command(move |renderer| {
             let manager = &mut renderer.scene_manager;
             manager.send_proxy(entity, new)?;
+            renderer.update_viewport_world_for_camera(entity, new);
             Ok(())
         });
     }
@@ -62,6 +63,7 @@ impl UniverseSystem for RendererUniverseSystem {
         entity: dirk_universe::Entity,
     ) {
         self.sender.enqueue_command(move |renderer| {
+            renderer.clear_viewports_for_camera(entity);
             let manager = &mut renderer.scene_manager;
             manager.destroy_proxy(entity)?;
             Ok(())
@@ -221,10 +223,7 @@ impl ComponentSystem for RendererPlayerSystem {
     ) {
         let id = *component;
         self.sender.enqueue_command(move |renderer| {
-            let Some(viewport) = renderer.viewports.get_mut(&id) else {
-                return Ok(());
-            };
-            viewport.camera = Some(entity);
+            renderer.bind_viewport_to_entity(id, entity);
             Ok(())
         });
     }
@@ -241,11 +240,10 @@ impl ComponentSystem for RendererPlayerSystem {
         self.sender.enqueue_command(move |renderer| {
             if let Some(old) = renderer.viewports.get_mut(&old_id) {
                 old.camera = None;
+                old.world = None;
             }
 
-            if let Some(new) = renderer.viewports.get_mut(&new_id) {
-                new.camera = Some(entity);
-            }
+            renderer.bind_viewport_to_entity(new_id, entity);
             Ok(())
         });
     }
@@ -260,6 +258,7 @@ impl ComponentSystem for RendererPlayerSystem {
         self.sender.enqueue_command(move |renderer| {
             if let Some(viewport) = renderer.viewports.get_mut(&player_id) {
                 viewport.camera = None;
+                viewport.world = None;
             }
             Ok(())
         });
