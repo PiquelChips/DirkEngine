@@ -73,7 +73,7 @@ mod viewport;
 use viewport::{Viewport, ViewportSettings};
 
 mod frame_graph;
-use frame_graph::{ImportedTexture, RenderGraph, TextureDesc, TextureStateDesc};
+use frame_graph::{RenderGraph, TextureDesc};
 
 /// Registers renderer integration with the engine.
 pub struct RendererPlugin;
@@ -711,12 +711,12 @@ impl Renderer {
         let timeline_signal_semaphores = self
             .viewports
             .values()
-            .map(|viewport| viewport.render_semaphore())
+            .map(viewport::Viewport::render_semaphore)
             .collect::<Vec<_>>();
         let timeline_signal_values = self
             .viewports
             .values()
-            .map(|viewport| viewport.next_render_value())
+            .map(viewport::Viewport::next_render_value)
             .collect::<Vec<_>>();
         let mut timeline_info = vk::TimelineSemaphoreSubmitInfo::default()
             .signal_semaphore_values(&timeline_signal_values);
