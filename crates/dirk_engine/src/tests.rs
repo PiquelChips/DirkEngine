@@ -737,6 +737,48 @@ mod editor_tests {
     }
 
     #[test]
+    fn default_open_windows_registered_after_bootstrap_preserve_existing_dock_layout() {
+        let services = EditorServices::new();
+
+        let viewport = services.add_window_fn(
+            EditorWindowDescriptor {
+                title: "viewport".to_owned(),
+                category: crate::editor::VIEWPORT_CATEGORY.to_owned(),
+                default_open: true,
+                show_in_list: true,
+            },
+            |_ui, _context| Ok(()),
+        );
+        let universe = services.add_window_fn(
+            EditorWindowDescriptor {
+                title: "universe".to_owned(),
+                category: UNIVERSE_CATEGORY.to_owned(),
+                default_open: true,
+                show_in_list: true,
+            },
+            |_ui, _context| Ok(()),
+        );
+        services.bootstrap_default_dock_layout_for_tests();
+        services.move_window_to_first_dock_leaf_for_tests(universe);
+
+        assert!(services.dock_windows_share_leaf_for_tests(viewport, universe));
+
+        let late = services.add_window_fn(
+            EditorWindowDescriptor {
+                title: "late universe".to_owned(),
+                category: UNIVERSE_CATEGORY.to_owned(),
+                default_open: true,
+                show_in_list: true,
+            },
+            |_ui, _context| Ok(()),
+        );
+
+        assert!(services.dock_contains_window_for_tests(late));
+        assert!(services.dock_windows_share_leaf_for_tests(viewport, universe));
+        assert!(services.dock_windows_share_leaf_for_tests(universe, late));
+    }
+
+    #[test]
     fn open_windows_render_through_dock_tabs() -> anyhow::Result<()> {
         let services = EditorServices::new();
         let calls = Arc::new(Mutex::new(Vec::new()));
