@@ -749,6 +749,7 @@ dependencies = [
  "dirk_editor",
  "dirk_engine",
  "dirk_events",
+ "dirk_input",
  "dirk_platform",
  "dirk_player",
  "dirk_renderer",
