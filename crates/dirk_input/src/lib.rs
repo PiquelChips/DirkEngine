@@ -112,3 +112,44 @@ impl NormalizedPosition {
 /// Viewport-local normalized delta.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct NormalizedDelta(pub glam::Vec2);
+
+/// Engine input event. Contains no platform window identity.
+#[derive(Debug, Clone, PartialEq)]
+pub enum InputEvent {
+    /// A logical key changed state.
+    Key {
+        /// Logical key after layout mapping.
+        key: LogicalKey,
+        /// Button state.
+        state: ButtonState,
+        /// Whether this is an OS-generated repeat.
+        repeat: bool,
+        /// Active keyboard modifiers.
+        modifiers: Modifiers,
+    },
+    /// The pointer moved.
+    PointerMoved {
+        /// Current clamped normalized position.
+        position: NormalizedPosition,
+        /// Normalized delta since the previous pointer position.
+        delta: NormalizedDelta,
+    },
+    /// The pointer entered the input region.
+    PointerEntered,
+    /// The pointer left the input region.
+    PointerLeft,
+    /// A pointer button changed state.
+    PointerButton {
+        /// Pointer button.
+        button: PointerButton,
+        /// Button state.
+        state: ButtonState,
+        /// Current clamped normalized position.
+        position: NormalizedPosition,
+    },
+    /// Scroll wheel or trackpad input, normalized by viewport/window size.
+    Scroll {
+        /// Normalized scroll delta.
+        delta: NormalizedDelta,
+    },
+}
