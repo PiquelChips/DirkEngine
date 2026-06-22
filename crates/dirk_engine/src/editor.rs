@@ -20,6 +20,9 @@ use crate::{EngineBuildContext, EngineHandle, Error, Result};
 pub mod commands;
 use commands::{EditorCommand, EditorCommandSender};
 
+#[cfg(test)]
+mod tests;
+
 /// The category that all universe-related windows have.
 pub const UNIVERSE_CATEGORY: &str = "Universe";
 /// Category reserved for viewports.
@@ -496,62 +499,6 @@ impl EditorServices {
             .collect()
     }
 
-    #[cfg(test)]
-    pub(crate) fn open_window_for_tests(&self, id: EditorWindowId) {
-        self.state
-            .lock()
-            .apply_commands(std::iter::once(EditorCommand::OpenWindow(id)));
-    }
-
-    #[cfg(test)]
-    pub(crate) fn bootstrap_default_dock_layout_for_tests(&self) {
-        self.state.lock().bootstrap_default_dock_layout();
-    }
-
-    #[cfg(test)]
-    pub(crate) fn close_window_tab_for_tests(&self, id: EditorWindowId) {
-        self.state.lock().close_window_tab(id);
-    }
-
-    #[cfg(test)]
-    pub(crate) fn dock_contains_window_for_tests(&self, id: EditorWindowId) -> bool {
-        self.state.lock().dock_contains_window(id)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn dock_tab_count_for_tests(&self) -> usize {
-        self.state.lock().dock_tab_count()
-    }
-
-    #[cfg(test)]
-    pub(crate) fn dock_windows_share_leaf_for_tests(
-        &self,
-        first: EditorWindowId,
-        second: EditorWindowId,
-    ) -> bool {
-        self.state.lock().dock_windows_share_leaf(first, second)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn move_window_to_first_dock_leaf_for_tests(&self, id: EditorWindowId) {
-        self.state.lock().move_window_to_first_dock_leaf(id);
-    }
-
-    #[cfg(test)]
-    pub(crate) fn window_is_closeable_for_tests(&self, id: EditorWindowId) -> bool {
-        self.state.lock().window_is_closeable(id)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn render_menu_for_tests(
-        &self,
-        title: &str,
-        ui: &mut egui::Ui,
-        context: &EditorRenderContext<'_>,
-    ) -> anyhow::Result<()> {
-        self.state.lock().render_menu_for_tests(title, ui, context)
-    }
-
     /// Renders editor menus and windows.
     ///
     /// # Errors
@@ -649,35 +596,6 @@ impl EditorServicesState {
         });
 
         result
-    }
-
-    #[cfg(test)]
-    fn render_menu_for_tests(
-        &mut self,
-        title: &str,
-        ui: &mut egui::Ui,
-        context: &EditorRenderContext<'_>,
-    ) -> anyhow::Result<()> {
-        let (editor_commands, command_receiver) = mpsc::channel();
-        let editor_commands = EditorCommandSender::new(editor_commands);
-        let windows = self.windows();
-        let mut menu_context = EditorMenuContext::new(&windows, editor_commands.clone());
-        let mut ui_context = EditorUiContext {
-            delta_time: context.delta_time(),
-            commands: editor_commands,
-            handle: context.handle,
-            universe: context.universe,
-        };
-
-        let Some(menu) = self.menus.iter_mut().find(|menu| menu.title == title) else {
-            return Err(anyhow::anyhow!("menu `{title}` is not registered"));
-        };
-
-        menu.menu
-            .ui(ui, &mut ui_context, &mut menu_context)
-            .with_context(|| format!("menu `{title}` failed to render"))?;
-        self.apply_commands(command_receiver.try_iter());
-        Ok(())
     }
 
     fn render_windows(
@@ -876,16 +794,6 @@ impl EditorServicesState {
         }
     }
 
-    #[cfg(test)]
-    fn close_window_tab(&mut self, id: EditorWindowId) {
-        if let Some(state) = self.window_states.get_mut(&id) {
-            state.open = false;
-        }
-        if let Some(index) = self.dock_state.find_tab(&id) {
-            self.dock_state.remove_tab(index);
-        }
-    }
-
     fn dock_contains_window(&self, id: EditorWindowId) -> bool {
         self.dock_state.find_tab(&id).is_some()
     }
@@ -895,33 +803,6 @@ impl EditorServicesState {
             .iter_all_tabs()
             .filter(|&(_index, tab)| self.window_exists(*tab))
             .count()
-    }
-
-    #[cfg(test)]
-    fn dock_windows_share_leaf(&self, first: EditorWindowId, second: EditorWindowId) -> bool {
-        let first = self
-            .dock_state
-            .find_tab(&first)
-            .map(|(surface, node, _tab)| (surface, node));
-        let second = self
-            .dock_state
-            .find_tab(&second)
-            .map(|(surface, node, _tab)| (surface, node));
-
-        first.is_some() && first == second
-    }
-
-    #[cfg(test)]
-    fn move_window_to_first_dock_leaf(&mut self, id: EditorWindowId) {
-        if let Some(index) = self.dock_state.find_tab(&id) {
-            self.dock_state.remove_tab(index);
-            self.dock_state.push_to_first_leaf(id);
-        }
-    }
-
-    #[cfg(test)]
-    fn window_is_closeable(&self, id: EditorWindowId) -> bool {
-        self.window_exists(id)
     }
 
     fn find_dock_tab_by_category(
@@ -1021,11 +902,6 @@ impl EditorRuntime {
             services,
             subsystems,
         }
-    }
-
-    #[cfg(test)]
-    pub(crate) fn empty_for_tests() -> Self {
-        Self::new(EditorServices::new(), Vec::new())
     }
 
     pub(crate) fn start(
