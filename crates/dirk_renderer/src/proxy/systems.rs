@@ -238,7 +238,9 @@ impl ComponentSystem for RendererPlayerSystem {
         let old_id = *old;
         let new_id = *new;
         self.sender.enqueue_command(move |renderer| {
-            if let Some(old) = renderer.viewports.get_mut(&old_id) {
+            if let Some(old) = renderer.viewports.get_mut(&old_id)
+                && old.camera == Some(entity)
+            {
                 old.camera = None;
                 old.world = None;
             }
@@ -251,12 +253,14 @@ impl ComponentSystem for RendererPlayerSystem {
     fn removed(
         &self,
         _: &mut CommandBuffer,
-        _entity: dirk_universe::Entity,
+        entity: dirk_universe::Entity,
         component: &Self::Component,
     ) {
         let player_id = *component;
         self.sender.enqueue_command(move |renderer| {
-            if let Some(viewport) = renderer.viewports.get_mut(&player_id) {
+            if let Some(viewport) = renderer.viewports.get_mut(&player_id)
+                && viewport.camera == Some(entity)
+            {
                 viewport.camera = None;
                 viewport.world = None;
             }
