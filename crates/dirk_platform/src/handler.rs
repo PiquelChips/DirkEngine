@@ -1,14 +1,20 @@
+use std::collections::HashMap;
+
+use dirk_input::{
+    ButtonState, InputEvent, LogicalKey, Modifiers, NamedKey, NormalizedDelta, NormalizedPosition,
+    PointerButton,
+};
 use tracing::{debug, trace};
 use winit::{
     application::ApplicationHandler,
-    event::{ElementState, WindowEvent},
+    event::{ElementState, MouseScrollDelta, WindowEvent},
     event_loop::ActiveEventLoop,
-    keyboard::ModifiersState,
+    keyboard::{Key, ModifiersState, NamedKey as WinitNamedKey},
     window::{WindowAttributes, WindowId},
 };
 
 use crate::{
-    InputEvent, InputRouter, PlatformWindows, UiImeEvent, UiInputEvent, Window,
+    PlatformWindows, Window, WindowInputEvent,
     event::{PlatformEvent, WindowEvent as PlatformWindowEvent},
 };
 
@@ -19,30 +25,27 @@ pub struct PlatformHandler {
     /// Current keyboard modifier state, updated on every `ModifiersChanged` event.
     /// TODO: should only be tracked by input manager
     modifiers: ModifiersState,
+    /// The positions of the pointer on each window in pixels.
+    pointer_positions: HashMap<WindowId, glam::DVec2>,
 
     /// Dispatch [`PlatformEvent`]
     platform_dispatcher: dirk_events::Dispatcher<PlatformEvent>,
     /// Dispatch [`PlatformWindowEvent`]
     window_dispatcher: dirk_events::Dispatcher<PlatformWindowEvent>,
-    /// Dispatch [`InputEvent`]
-    input_dispatch: dirk_events::Dispatcher<InputEvent>,
-    input_router: InputRouter,
+    /// Dispatch [`WindowInputEvent`]
+    input_dispatch: dirk_events::Dispatcher<WindowInputEvent>,
 }
 
 impl PlatformHandler {
-    pub fn new(
-        events: &dirk_events::EventManager,
-        windows: PlatformWindows,
-        input_router: InputRouter,
-    ) -> Self {
+    pub fn new(events: &dirk_events::EventManager, windows: PlatformWindows) -> Self {
         Self {
             can_create_surfaces: false,
             windows,
             modifiers: ModifiersState::default(),
+            pointer_positions: HashMap::new(),
             platform_dispatcher: events.register(),
             window_dispatcher: events.register(),
             input_dispatch: events.register(),
-            input_router,
         }
     }
     fn create_window(&mut self, event_loop: &dyn ActiveEventLoop) -> anyhow::Result<WindowId> {
@@ -72,11 +75,13 @@ impl PlatformHandler {
             WindowEvent::CloseRequested => {
                 debug!("Close requested for Window={id:?}");
                 self.windows.remove(id);
+                self.pointer_positions.remove(&id);
                 self.platform_dispatcher
                     .dispatch(PlatformEvent::WindowCloseRequested { id });
             }
             WindowEvent::Destroyed => {
                 debug!("Window {id:?} destroyed");
+                self.pointer_positions.remove(&id);
                 self.platform_dispatcher
                     .dispatch(PlatformEvent::WindowDestroyed { id });
             }
@@ -93,11 +98,6 @@ impl PlatformHandler {
                     .dispatch(PlatformWindowEvent::ThemeChanged { id, theme: *theme });
             }
             WindowEvent::Focused(focused) => {
-                self.input_router
-                    .push_ui_event(UiInputEvent::WindowFocused {
-                        id,
-                        focused: *focused,
-                    });
                 self.window_dispatcher
                     .dispatch(PlatformWindowEvent::FocusChanged {
                         id,
@@ -122,19 +122,6 @@ impl PlatformHandler {
             WindowEvent::ModifiersChanged(new_modifiers) => {
                 self.modifiers = new_modifiers.state();
                 trace!("Modifiers changed to {:?}", self.modifiers);
-                self.input_router
-                    .push_ui_event(UiInputEvent::ModifiersChanged {
-                        id,
-                        modifiers: self.modifiers,
-                    });
-                let event = InputEvent::ModifiersChanged {
-                    id,
-                    modifiers: self.modifiers,
-                };
-                self.input_router.push_input_event(event.clone());
-                if self.input_router.direct_input_dispatch_enabled() {
-                    self.input_dispatch.dispatch(event);
-                }
             }
             WindowEvent::KeyboardInput {
                 event,
@@ -153,166 +140,140 @@ impl PlatformHandler {
                 ..
             } => self.dispatch_pointer_button(id, button, *state, position),
             WindowEvent::MouseWheel { delta, .. } => self.dispatch_mouse_wheel(id, delta),
-            WindowEvent::Ime(event) => self.dispatch_ime(id, event),
+            WindowEvent::Ime(_) => {}
             _ => return false,
         }
 
         true
     }
 
-    fn dispatch_pointer_moved(&self, id: WindowId, position: &winit::dpi::PhysicalPosition<f64>) {
+    fn dispatch_pointer_moved(
+        &mut self,
+        id: WindowId,
+        position: &winit::dpi::PhysicalPosition<f64>,
+    ) {
         trace!("Pointer moved to {position:?}");
-        let position = glam::dvec2(position.x, position.y);
-        self.input_router
-            .push_ui_event(UiInputEvent::PointerMoved { id, position });
-        let event = InputEvent::PointerMoved { id, position };
-        self.input_router.push_input_event(event.clone());
-        if self.input_router.direct_input_dispatch_enabled()
-            && !self.input_router.captures_pointer(id)
-        {
-            self.input_dispatch.dispatch(event);
-        }
+        let raw_position = glam::dvec2(position.x, position.y);
+        let delta = self
+            .pointer_positions
+            .insert(id, raw_position)
+            .map_or(glam::DVec2::ZERO, |previous| raw_position - previous);
+        let event = InputEvent::PointerMoved {
+            position: self.normalized_position(id, raw_position),
+            delta: self.normalized_delta(id, delta),
+        };
+        self.dispatch_input(id, event);
     }
 
-    fn dispatch_pointer_entered(&self, id: WindowId, position: &winit::dpi::PhysicalPosition<f64>) {
+    fn dispatch_pointer_entered(
+        &mut self,
+        id: WindowId,
+        position: &winit::dpi::PhysicalPosition<f64>,
+    ) {
         trace!("Pointer entered Window={id:?}");
-        self.input_router.push_ui_event(UiInputEvent::PointerMoved {
-            id,
-            position: glam::dvec2(position.x, position.y),
-        });
-        let event = InputEvent::PointerEntered { id };
-        self.input_router.push_input_event(event.clone());
-        if self.input_router.direct_input_dispatch_enabled() {
-            self.input_dispatch.dispatch(event);
-        }
+        self.pointer_positions
+            .insert(id, glam::dvec2(position.x, position.y));
+        self.dispatch_input(id, InputEvent::PointerEntered);
     }
 
-    fn dispatch_pointer_left(&self, id: WindowId) {
+    fn dispatch_pointer_left(&mut self, id: WindowId) {
         trace!("Pointer left Window={id:?}");
-        self.input_router
-            .push_ui_event(UiInputEvent::PointerGone { id });
-        let event = InputEvent::PointerLeft { id };
-        self.input_router.push_input_event(event.clone());
-        if self.input_router.direct_input_dispatch_enabled() {
-            self.input_dispatch.dispatch(event);
-        }
+        self.pointer_positions.remove(&id);
+        self.dispatch_input(id, InputEvent::PointerLeft);
     }
 
     fn dispatch_pointer_button(
-        &self,
+        &mut self,
         id: WindowId,
         button: &winit::event::ButtonSource,
         state: ElementState,
         position: &winit::dpi::PhysicalPosition<f64>,
     ) {
         trace!("Pointer button {button:?} {state:?} at {position:?}");
+        let Some(button) = pointer_button(button) else {
+            return;
+        };
         let position = glam::dvec2(position.x, position.y);
-        let pressed = state == ElementState::Pressed;
-        self.input_router
-            .push_ui_event(UiInputEvent::PointerButton {
-                id,
-                button: button.clone(),
-                position,
-                pressed,
-                modifiers: self.modifiers,
-            });
-        let event = match state {
-            ElementState::Pressed => InputEvent::MouseButtonPressed {
-                id,
-                button: button.clone(),
-                position,
-            },
-            ElementState::Released => InputEvent::MouseButtonReleased {
-                id,
-                button: button.clone(),
-                position,
-            },
-        };
-        self.input_router.push_input_event(event.clone());
-        if self.input_router.direct_input_dispatch_enabled()
-            && self
-                .input_router
-                .should_dispatch_pointer_button(id, pressed)
-        {
-            self.input_dispatch.dispatch(event);
-        }
-    }
-
-    fn dispatch_mouse_wheel(&self, id: WindowId, delta: &winit::event::MouseScrollDelta) {
-        trace!("Mouse wheel {delta:?}");
-        let delta: crate::ScrollDelta = (*delta).into();
-        self.input_router.push_ui_event(UiInputEvent::MouseWheel {
+        self.pointer_positions.insert(id, position);
+        self.dispatch_input(
             id,
-            delta: delta.clone(),
-            modifiers: self.modifiers,
-        });
-        let event = InputEvent::MouseWheelScrolled { id, delta };
-        self.input_router.push_input_event(event.clone());
-        if self.input_router.direct_input_dispatch_enabled()
-            && !self.input_router.captures_pointer(id)
-        {
-            self.input_dispatch.dispatch(event);
-        }
+            InputEvent::PointerButton {
+                button,
+                state: match state {
+                    ElementState::Pressed => ButtonState::Pressed,
+                    ElementState::Released => ButtonState::Released,
+                },
+                position: self.normalized_position(id, position),
+            },
+        );
     }
 
-    fn dispatch_ime(&self, id: WindowId, event: &winit::event::Ime) {
-        let event = match event {
-            winit::event::Ime::Enabled => UiImeEvent::Enabled,
-            winit::event::Ime::Preedit(text, _) => UiImeEvent::Preedit(text.clone()),
-            winit::event::Ime::Commit(text) => UiImeEvent::Commit(text.clone()),
-            winit::event::Ime::Disabled => UiImeEvent::Disabled,
-            winit::event::Ime::DeleteSurrounding { .. } => return,
+    fn dispatch_mouse_wheel(&self, id: WindowId, delta: &MouseScrollDelta) {
+        trace!("Mouse wheel {delta:?}");
+        let delta = match delta {
+            MouseScrollDelta::LineDelta(x, y) => glam::dvec2(f64::from(*x), f64::from(*y)),
+            MouseScrollDelta::PixelDelta(px) => glam::dvec2(px.x, px.y),
         };
-        self.input_router
-            .push_ui_event(UiInputEvent::Ime { id, event });
+        self.dispatch_input(
+            id,
+            InputEvent::Scroll {
+                delta: self.normalized_delta(id, delta),
+            },
+        );
     }
 
     fn dispatch_keyboard_input(&self, id: WindowId, event: &winit::event::KeyEvent) {
-        let modifiers = self.modifiers;
-        let pressed = event.state == ElementState::Pressed;
-        self.input_router.push_ui_event(UiInputEvent::Key {
+        let Some(key) = logical_key_from_winit(&event.logical_key) else {
+            return;
+        };
+        let state = match event.state {
+            ElementState::Pressed => ButtonState::Pressed,
+            ElementState::Released => ButtonState::Released,
+        };
+        trace!(
+            "Key {:?} {state:?} (repeat={})",
+            event.logical_key, event.repeat
+        );
+        self.dispatch_input(
             id,
-            key: event.logical_key.clone(),
-            physical_key: event.physical_key,
-            pressed,
-            repeat: event.repeat,
-            modifiers,
-            text: event.text.as_ref().map(ToString::to_string),
-        });
-        match event.state {
-            ElementState::Pressed => {
-                trace!(
-                    "Key pressed: {:?} (repeat={})",
-                    event.logical_key, event.repeat
-                );
-                let event = InputEvent::KeyPressed {
-                    id,
-                    key: event.logical_key.clone(),
-                    physical_key: event.physical_key,
-                    modifiers,
-                    repeat: event.repeat,
-                };
-                self.input_router.push_input_event(event.clone());
-                if self.input_router.direct_input_dispatch_enabled()
-                    && self.input_router.should_dispatch_key(id, pressed)
-                {
-                    self.input_dispatch.dispatch(event);
-                }
-            }
-            ElementState::Released => {
-                trace!("Key released: {:?}", event.logical_key);
-                let event = InputEvent::KeyReleased {
-                    id,
-                    key: event.logical_key.clone(),
-                    physical_key: event.physical_key,
-                    modifiers,
-                };
-                self.input_router.push_input_event(event.clone());
-                if self.input_router.direct_input_dispatch_enabled() {
-                    self.input_dispatch.dispatch(event);
-                }
-            }
-        }
+            InputEvent::Key {
+                key,
+                state,
+                repeat: event.repeat,
+                modifiers: modifiers_from_winit(self.modifiers),
+            },
+        );
+    }
+
+    fn dispatch_input(&self, window: WindowId, event: InputEvent) {
+        self.input_dispatch
+            .dispatch(WindowInputEvent { window, event });
+    }
+
+    fn normalized_position(&self, window: WindowId, position: glam::DVec2) -> NormalizedPosition {
+        let extent = self.window_extent(window);
+        NormalizedPosition::new(glam::vec2(
+            normalized_component(position.x, extent.x),
+            normalized_component(position.y, extent.y),
+        ))
+    }
+
+    fn normalized_delta(&self, window: WindowId, delta: glam::DVec2) -> NormalizedDelta {
+        let extent = self.window_extent(window);
+        NormalizedDelta(glam::vec2(
+            normalized_component(delta.x, extent.x),
+            normalized_component(delta.y, extent.y),
+        ))
+    }
+
+    fn window_extent(&self, window: WindowId) -> glam::DVec2 {
+        self.windows
+            .windows()
+            .get(&window)
+            .map_or(glam::DVec2::ONE, |window| {
+                let size = window.size();
+                glam::dvec2(f64::from(size.width.max(1)), f64::from(size.height.max(1)))
+            })
     }
 }
 
@@ -330,5 +291,117 @@ impl ApplicationHandler for PlatformHandler {
             return;
         }
         self.dispatch_input_event(id, &event);
+    }
+}
+
+#[allow(clippy::cast_possible_truncation)]
+fn normalized_component(value: f64, extent: f64) -> f32 {
+    (value / extent.max(f64::EPSILON)) as f32
+}
+
+fn modifiers_from_winit(modifiers: ModifiersState) -> Modifiers {
+    Modifiers {
+        alt: modifiers.alt_key(),
+        ctrl: modifiers.control_key(),
+        shift: modifiers.shift_key(),
+        super_key: modifiers.meta_key(),
+    }
+}
+
+pub(crate) fn logical_key_from_winit(key: &Key) -> Option<LogicalKey> {
+    Some(match key {
+        Key::Character(text) => {
+            let text: &str = text.as_ref();
+            if text == " " {
+                LogicalKey::Named(NamedKey::Space)
+            } else {
+                LogicalKey::character(text)
+            }
+        }
+        Key::Named(named) => LogicalKey::Named(named_key_from_winit(*named)?),
+        Key::Unidentified(_) | Key::Dead(_) => return None,
+    })
+}
+
+fn named_key_from_winit(key: WinitNamedKey) -> Option<NamedKey> {
+    Some(match key {
+        WinitNamedKey::Escape => NamedKey::Escape,
+        WinitNamedKey::Tab => NamedKey::Tab,
+        WinitNamedKey::Enter => NamedKey::Enter,
+        WinitNamedKey::Backspace => NamedKey::Backspace,
+        WinitNamedKey::ArrowUp => NamedKey::ArrowUp,
+        WinitNamedKey::ArrowDown => NamedKey::ArrowDown,
+        WinitNamedKey::ArrowLeft => NamedKey::ArrowLeft,
+        WinitNamedKey::ArrowRight => NamedKey::ArrowRight,
+        WinitNamedKey::Home => NamedKey::Home,
+        WinitNamedKey::End => NamedKey::End,
+        WinitNamedKey::PageUp => NamedKey::PageUp,
+        WinitNamedKey::PageDown => NamedKey::PageDown,
+        WinitNamedKey::Insert => NamedKey::Insert,
+        WinitNamedKey::Delete => NamedKey::Delete,
+        WinitNamedKey::F1 => NamedKey::Function(1),
+        WinitNamedKey::F2 => NamedKey::Function(2),
+        WinitNamedKey::F3 => NamedKey::Function(3),
+        WinitNamedKey::F4 => NamedKey::Function(4),
+        WinitNamedKey::F5 => NamedKey::Function(5),
+        WinitNamedKey::F6 => NamedKey::Function(6),
+        WinitNamedKey::F7 => NamedKey::Function(7),
+        WinitNamedKey::F8 => NamedKey::Function(8),
+        WinitNamedKey::F9 => NamedKey::Function(9),
+        WinitNamedKey::F10 => NamedKey::Function(10),
+        WinitNamedKey::F11 => NamedKey::Function(11),
+        WinitNamedKey::F12 => NamedKey::Function(12),
+        WinitNamedKey::F13 => NamedKey::Function(13),
+        WinitNamedKey::F14 => NamedKey::Function(14),
+        WinitNamedKey::F15 => NamedKey::Function(15),
+        WinitNamedKey::F16 => NamedKey::Function(16),
+        WinitNamedKey::F17 => NamedKey::Function(17),
+        WinitNamedKey::F18 => NamedKey::Function(18),
+        WinitNamedKey::F19 => NamedKey::Function(19),
+        WinitNamedKey::F20 => NamedKey::Function(20),
+        WinitNamedKey::F21 => NamedKey::Function(21),
+        WinitNamedKey::F22 => NamedKey::Function(22),
+        WinitNamedKey::F23 => NamedKey::Function(23),
+        WinitNamedKey::F24 => NamedKey::Function(24),
+        _ => return None,
+    })
+}
+
+fn pointer_button(button: &winit::event::ButtonSource) -> Option<PointerButton> {
+    Some(match button.clone().mouse_button()? {
+        winit::event::MouseButton::Left => PointerButton::Primary,
+        winit::event::MouseButton::Right => PointerButton::Secondary,
+        winit::event::MouseButton::Middle => PointerButton::Middle,
+        winit::event::MouseButton::Back => PointerButton::Back,
+        winit::event::MouseButton::Forward => PointerButton::Forward,
+        _ => return None,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn logical_key_conversion_ignores_physical_key_data() {
+        assert_eq!(
+            logical_key_from_winit(&Key::Character("W".into())),
+            Some(LogicalKey::Character("w".to_owned()))
+        );
+    }
+
+    #[test]
+    fn pointer_position_normalization_clamps_to_unit_range() {
+        let position = NormalizedPosition::new(glam::vec2(1.5, -1.0));
+
+        assert_eq!(position.0, glam::vec2(1.0, 0.0));
+    }
+
+    #[test]
+    fn normalized_pointer_delta_can_exceed_unit_range() {
+        assert_eq!(
+            NormalizedDelta(glam::vec2(2.0, -3.0)).0,
+            glam::vec2(2.0, -3.0)
+        );
     }
 }

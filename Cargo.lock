@@ -599,6 +599,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "dirk_input"
+version = "0.1.0"
+dependencies = [
+ "egui",
+ "glam",
+]
+
+[[package]]
 name = "dirk_platform"
 version = "0.1.0"
 dependencies = [
@@ -606,6 +614,7 @@ dependencies = [
  "dirk_build",
  "dirk_engine",
  "dirk_events",
+ "dirk_input",
  "dirk_universe",
  "glam",
  "parking_lot",
