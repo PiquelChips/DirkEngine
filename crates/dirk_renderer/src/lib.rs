@@ -20,8 +20,8 @@ use ash::{
     vk,
 };
 
-use dirk_platform::{PlatformEvent, WindowEvent, WindowId};
-use dirk_player::PlayerId;
+use dirk_platform::{InputEvent, PlatformEvent, WindowEvent, WindowId};
+use dirk_player::{PlayerId, PlayerInput};
 use dirk_universe::{Entity, Universe, UniverseBuilder, WorldId};
 use dirk_utils::Version;
 use tracing::{debug, info};
@@ -177,6 +177,8 @@ struct Renderer {
     egui_window: Option<WindowId>,
     #[cfg(feature = "editor")]
     input_router: dirk_platform::InputRouter,
+    #[cfg(feature = "editor")]
+    player_input_dispatcher: dirk_events::Dispatcher<PlayerInput>,
     /// Editor window registry rendered through egui.
     #[cfg(feature = "editor")]
     editor: dirk_engine::editor::EditorServices,
@@ -231,7 +233,9 @@ impl dirk_engine::Subsystem for Renderer {
             let frame = dirk_engine::editor::EditorRenderContext::new(delta_time, handle, universe);
 
             self.viewport_editor.sync_ready_state(&self.viewports);
+            self.viewport_editor.begin_frame();
             self.editor.render_ui(&ctx, &frame)?;
+            self.route_editor_input();
         }
 
         #[cfg(not(feature = "editor"))]
@@ -325,6 +329,8 @@ impl Renderer {
         let egui = EguiState::new(&render_device)?;
         #[cfg(feature = "editor")]
         let viewport_editor = ViewportEditor::new(&render_device)?;
+        #[cfg(feature = "editor")]
+        input_router.set_direct_input_dispatch(false);
 
         let windows = {
             let window = Window::build(&render_device, window)?;
@@ -347,6 +353,8 @@ impl Renderer {
             egui_window: None,
             #[cfg(feature = "editor")]
             input_router,
+            #[cfg(feature = "editor")]
+            player_input_dispatcher: event_manager.register(),
             #[cfg(feature = "editor")]
             editor,
             #[cfg(feature = "editor")]
@@ -433,6 +441,37 @@ impl Renderer {
             theme,
             events,
         }
+    }
+
+    #[cfg(feature = "editor")]
+    fn route_editor_input(&mut self) {
+        let Some(window_id) = self.egui_window else {
+            let _ = self.input_router.drain_input_events();
+            return;
+        };
+        let pixels_per_point = self.native_pixels_per_point(window_id);
+        let events = self
+            .input_router
+            .drain_input_events()
+            .into_iter()
+            .filter(|event| *event.id() == window_id)
+            .collect::<Vec<InputEvent>>();
+
+        for event in self
+            .viewport_editor
+            .route_input_events(window_id, pixels_per_point, events)
+        {
+            self.player_input_dispatcher.dispatch(event);
+        }
+    }
+
+    #[cfg(feature = "editor")]
+    #[allow(clippy::cast_possible_truncation)]
+    fn native_pixels_per_point(&self, window_id: WindowId) -> f32 {
+        let windows = self.platform_windows.windows();
+        windows
+            .get(&window_id)
+            .map_or(1.0, |window| window.scale_factor() as f32)
     }
 
     /// Returns a [`UniverseBuilder`] that is populated with [`Renderer`] systems.
