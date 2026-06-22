@@ -153,3 +153,55 @@ pub enum InputEvent {
         delta: NormalizedDelta,
     },
 }
+
+/// A raw input that can activate an [`InputAction`].
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+pub enum InputBinding {
+    /// A logical keyboard key.
+    Key(LogicalKey),
+    /// A pointer button.
+    PointerButton(PointerButton),
+}
+
+/// A named digital input that is active while any of its bindings are held.
+#[derive(Debug, Clone)]
+pub struct InputAction {
+    /// Stable action name.
+    pub name: String,
+    /// Bindings that activate this action.
+    pub bindings: Vec<InputBinding>,
+}
+
+impl InputAction {
+    /// Creates an action with the supplied bindings.
+    #[must_use]
+    pub fn new(name: impl Into<String>, bindings: impl Into<Vec<InputBinding>>) -> Self {
+        Self {
+            name: name.into(),
+            bindings: bindings.into(),
+        }
+    }
+}
+
+/// A named scalar axis composed from two digital actions.
+#[derive(Debug, Clone)]
+pub struct InputAxis {
+    /// Stable axis name.
+    pub name: String,
+    /// Negative direction action.
+    pub negative: InputAction,
+    /// Positive direction action.
+    pub positive: InputAction,
+}
+
+impl InputAxis {
+    /// Creates a digital axis.
+    #[must_use]
+    pub fn digital(name: impl Into<String>, negative: InputAction, positive: InputAction) -> Self {
+        Self {
+            name: name.into(),
+            negative,
+            positive,
+        }
+    }
+}
