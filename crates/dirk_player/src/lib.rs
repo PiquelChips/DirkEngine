@@ -9,6 +9,7 @@ use std::{
 
 use dirk_engine::{EngineBuilder, EngineHandle, EnginePlugin, Subsystem};
 use dirk_events::{Dispatcher, EventManager};
+#[cfg(not(feature = "editor"))]
 use dirk_platform::WindowId;
 #[cfg(not(feature = "editor"))]
 use dirk_platform::WindowInputEvent;
@@ -38,6 +39,7 @@ impl EnginePlugin for PlayerPlugin {
             let players = PlayerManager::new(ctx.events());
             ctx.add_resource(players.registry())?;
             ctx.add_resource(players.input_sender())?;
+            #[cfg(not(feature = "editor"))]
             ctx.add_resource(players.presentation_assignments())?;
             ctx.extend_universe(
                 dirk_universe::Universe::builder()
@@ -143,6 +145,7 @@ struct PlayerManager {
     registry: PlayerRegistry,
     player_input_consumer: dirk_events::Consumer<PlayerInput>,
     input_sender: PlayerInputSender,
+    #[cfg(not(feature = "editor"))]
     presentation_assignments: PlayerPresentationAssignments,
     #[cfg(not(feature = "editor"))]
     window_input_consumer: dirk_events::Consumer<WindowInputEvent>,
@@ -182,6 +185,7 @@ impl PlayerManager {
             input_sender: PlayerInputSender {
                 dispatcher: events.register(),
             },
+            #[cfg(not(feature = "editor"))]
             presentation_assignments: PlayerPresentationAssignments::default(),
             #[cfg(not(feature = "editor"))]
             window_input_consumer: events.subscribe(),
@@ -202,6 +206,7 @@ impl PlayerManager {
 
     /// Returns shared presentation assignments.
     #[must_use]
+    #[cfg(not(feature = "editor"))]
     fn presentation_assignments(&self) -> PlayerPresentationAssignments {
         self.presentation_assignments.clone()
     }
@@ -373,11 +378,13 @@ impl PlayerInputSender {
 }
 
 /// Window-to-player presentation assignments used by non-editor input routing.
+#[cfg(not(feature = "editor"))]
 #[derive(Clone, Default)]
 pub struct PlayerPresentationAssignments {
     assignments: Arc<RwLock<HashMap<WindowId, PlayerId>>>,
 }
 
+#[cfg(not(feature = "editor"))]
 impl PlayerPresentationAssignments {
     /// Replaces all assignments.
     pub fn set(&self, assignments: Vec<(WindowId, PlayerId)>) {

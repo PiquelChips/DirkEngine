@@ -23,9 +23,11 @@ use ash::{
 #[cfg(feature = "editor")]
 use dirk_platform::WindowInputEvent;
 use dirk_platform::{PlatformEvent, WindowEvent, WindowId};
+use dirk_player::PlayerId;
 #[cfg(feature = "editor")]
 use dirk_player::PlayerInputSender;
-use dirk_player::{PlayerId, PlayerPresentationAssignments};
+#[cfg(not(feature = "editor"))]
+use dirk_player::PlayerPresentationAssignments;
 
 use dirk_universe::{Entity, Universe, UniverseBuilder, WorldId};
 use dirk_utils::Version;
@@ -102,6 +104,7 @@ impl dirk_engine::EnginePlugin for RendererPlugin {
             let platform_windows = ctx.resource::<dirk_platform::PlatformWindows>()?;
             #[cfg(feature = "editor")]
             let editor = ctx.resource::<dirk_engine::editor::EditorServices>()?;
+            #[cfg(not(feature = "editor"))]
             let presentation_assignments = ctx.resource::<PlayerPresentationAssignments>()?;
             #[cfg(feature = "editor")]
             let player_input_sender = ctx.resource::<PlayerInputSender>()?;
@@ -114,6 +117,7 @@ impl dirk_engine::EnginePlugin for RendererPlugin {
                 &main_window,
                 ctx.events(),
                 platform_windows.clone(),
+                #[cfg(not(feature = "editor"))]
                 presentation_assignments,
                 #[cfg(feature = "editor")]
                 player_input_sender,
@@ -175,7 +179,7 @@ struct Renderer {
     windows: HashMap<WindowId, Window>,
     window_order: Vec<WindowId>,
     platform_windows: PlatformWindows,
-    #[cfg_attr(feature = "editor", allow(dead_code))]
+    #[cfg(not(feature = "editor"))]
     presentation_assignments: PlayerPresentationAssignments,
     /// All of the internal [`world::World`] representations.
     scene_manager: SceneManager,
@@ -271,7 +275,7 @@ impl Renderer {
         window: &dirk_platform::Window,
         event_manager: &dirk_events::EventManager,
         platform_windows: PlatformWindows,
-        presentation_assignments: PlayerPresentationAssignments,
+        #[cfg(not(feature = "editor"))] presentation_assignments: PlayerPresentationAssignments,
         #[cfg(feature = "editor")] player_input_sender: PlayerInputSender,
         #[cfg(feature = "editor")] editor: dirk_engine::editor::EditorServices,
     ) -> Result<Self> {
@@ -357,6 +361,7 @@ impl Renderer {
             windows,
             window_order,
             platform_windows,
+            #[cfg(not(feature = "editor"))]
             presentation_assignments,
             scene_manager,
             viewports: HashMap::new(),

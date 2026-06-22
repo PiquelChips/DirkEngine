@@ -13,8 +13,9 @@ provides:
 - `PlayerRegistry`, which allocates and tracks live players
 - `PlayerSpawned` and `PlayerDespawned` events for lifecycle integration
 - `PlayerInputSender`, which sends normalized targeted input to a player
-- `PlayerPresentationAssignments`, which maps platform windows to players for
-  non-editor presentation and input routing
+
+In non-editor builds, it also provides `PlayerPresentationAssignments`, which
+maps platform windows to players for presentation and input routing.
 
 Game code is responsible for responding to those events by spawning or
 despawning ECS entities with the corresponding `PlayerId` component.
