@@ -1,1 +1,186 @@
 //! egui input helpers.
+
+use crate::{
+    ButtonState, InputEvent, LogicalKey, Modifiers, NamedKey, NormalizedDelta, NormalizedPosition,
+    PointerButton, normalize_component,
+};
+
+/// Translates input owned by an egui viewport response into engine input events.
+#[must_use]
+pub fn input_events_from_egui_response(
+    ui: &egui::Ui,
+    response: &egui::Response,
+    previous_pointer: Option<egui::Pos2>,
+) -> Vec<InputEvent> {
+    if response.clicked() {
+        response.request_focus();
+    }
+
+    // if the pointer is currently routing input
+    let pointer_routes = response.hovered()
+        || response.dragged()
+        || response.is_pointer_button_down_on()
+        || previous_pointer.is_some();
+    // if the keyboard is currently routing input
+    let keyboard_routes = response.has_focus();
+    let rect = response.rect;
+    let size = rect.size();
+    let mut out = Vec::new();
+
+    ui.input(|input| {
+        for event in &input.events {
+            match event {
+                egui::Event::PointerMoved(pos) if pointer_routes => {
+                    out.push(InputEvent::PointerMoved {
+                        position: NormalizedPosition::from_egui(rect, *pos),
+                        delta: NormalizedDelta(normalized_delta(size, previous_pointer, *pos)),
+                    });
+                }
+                egui::Event::PointerButton {
+                    pos,
+                    button,
+                    pressed,
+                    ..
+                } if pointer_routes || rect.contains(*pos) => {
+                    out.push(InputEvent::PointerButton {
+                        button: pointer_button(*button),
+                        state: ButtonState::from(*pressed),
+                        position: NormalizedPosition::from_egui(rect, *pos),
+                    });
+                }
+                egui::Event::MouseWheel { delta, .. } if pointer_routes => {
+                    out.push(InputEvent::Scroll {
+                        delta: NormalizedDelta::from_egui(*delta, size),
+                    });
+                }
+                egui::Event::Key {
+                    key,
+                    pressed,
+                    repeat,
+                    modifiers,
+                    ..
+                } if keyboard_routes => {
+                    if let Some(key) = logical_key(*key) {
+                        out.push(InputEvent::Key {
+                            key,
+                            state: ButtonState::from(*pressed),
+                            repeat: *repeat,
+                            modifiers: modifiers_from_egui(*modifiers),
+                        });
+                    }
+                }
+                egui::Event::PointerGone if pointer_routes => {
+                    out.push(InputEvent::PointerLeft);
+                }
+                egui::Event::WindowFocused(false) if keyboard_routes => {
+                    out.push(InputEvent::PointerLeft);
+                }
+                _ => {}
+            }
+        }
+    });
+
+    out
+}
+
+fn normalized_delta(
+    size: egui::Vec2,
+    previous: Option<egui::Pos2>,
+    current: egui::Pos2,
+) -> glam::Vec2 {
+    previous.map_or(glam::Vec2::ZERO, |previous| {
+        let delta = current - previous;
+        glam::vec2(
+            normalize_component(delta.x, size.x),
+            normalize_component(delta.y, size.y),
+        )
+    })
+}
+
+fn pointer_button(button: egui::PointerButton) -> PointerButton {
+    match button {
+        egui::PointerButton::Primary => PointerButton::Primary,
+        egui::PointerButton::Secondary => PointerButton::Secondary,
+        egui::PointerButton::Middle => PointerButton::Middle,
+        egui::PointerButton::Extra1 => PointerButton::Back,
+        egui::PointerButton::Extra2 => PointerButton::Forward,
+    }
+}
+
+fn modifiers_from_egui(modifiers: egui::Modifiers) -> Modifiers {
+    Modifiers {
+        alt: modifiers.alt,
+        ctrl: modifiers.ctrl,
+        shift: modifiers.shift,
+        super_key: modifiers.mac_cmd || modifiers.command,
+    }
+}
+
+fn logical_key(key: egui::Key) -> Option<LogicalKey> {
+    Some(match key {
+        egui::Key::ArrowDown => LogicalKey::Named(NamedKey::ArrowDown),
+        egui::Key::ArrowLeft => LogicalKey::Named(NamedKey::ArrowLeft),
+        egui::Key::ArrowRight => LogicalKey::Named(NamedKey::ArrowRight),
+        egui::Key::ArrowUp => LogicalKey::Named(NamedKey::ArrowUp),
+        egui::Key::Escape => LogicalKey::Named(NamedKey::Escape),
+        egui::Key::Tab => LogicalKey::Named(NamedKey::Tab),
+        egui::Key::Backspace => LogicalKey::Named(NamedKey::Backspace),
+        egui::Key::Enter => LogicalKey::Named(NamedKey::Enter),
+        egui::Key::Space => LogicalKey::Named(NamedKey::Space),
+        egui::Key::Insert => LogicalKey::Named(NamedKey::Insert),
+        egui::Key::Delete => LogicalKey::Named(NamedKey::Delete),
+        egui::Key::Home => LogicalKey::Named(NamedKey::Home),
+        egui::Key::End => LogicalKey::Named(NamedKey::End),
+        egui::Key::PageUp => LogicalKey::Named(NamedKey::PageUp),
+        egui::Key::PageDown => LogicalKey::Named(NamedKey::PageDown),
+        egui::Key::A => LogicalKey::character("a"),
+        egui::Key::B => LogicalKey::character("b"),
+        egui::Key::C => LogicalKey::character("c"),
+        egui::Key::D => LogicalKey::character("d"),
+        egui::Key::E => LogicalKey::character("e"),
+        egui::Key::F => LogicalKey::character("f"),
+        egui::Key::G => LogicalKey::character("g"),
+        egui::Key::H => LogicalKey::character("h"),
+        egui::Key::I => LogicalKey::character("i"),
+        egui::Key::J => LogicalKey::character("j"),
+        egui::Key::K => LogicalKey::character("k"),
+        egui::Key::L => LogicalKey::character("l"),
+        egui::Key::M => LogicalKey::character("m"),
+        egui::Key::N => LogicalKey::character("n"),
+        egui::Key::O => LogicalKey::character("o"),
+        egui::Key::P => LogicalKey::character("p"),
+        egui::Key::Q => LogicalKey::character("q"),
+        egui::Key::R => LogicalKey::character("r"),
+        egui::Key::S => LogicalKey::character("s"),
+        egui::Key::T => LogicalKey::character("t"),
+        egui::Key::U => LogicalKey::character("u"),
+        egui::Key::V => LogicalKey::character("v"),
+        egui::Key::W => LogicalKey::character("w"),
+        egui::Key::X => LogicalKey::character("x"),
+        egui::Key::Y => LogicalKey::character("y"),
+        egui::Key::Z => LogicalKey::character("z"),
+        egui::Key::Num0 => LogicalKey::character("0"),
+        egui::Key::Num1 => LogicalKey::character("1"),
+        egui::Key::Num2 => LogicalKey::character("2"),
+        egui::Key::Num3 => LogicalKey::character("3"),
+        egui::Key::Num4 => LogicalKey::character("4"),
+        egui::Key::Num5 => LogicalKey::character("5"),
+        egui::Key::Num6 => LogicalKey::character("6"),
+        egui::Key::Num7 => LogicalKey::character("7"),
+        egui::Key::Num8 => LogicalKey::character("8"),
+        egui::Key::Num9 => LogicalKey::character("9"),
+        egui::Key::F1 => LogicalKey::Named(NamedKey::Function(1)),
+        egui::Key::F2 => LogicalKey::Named(NamedKey::Function(2)),
+        egui::Key::F3 => LogicalKey::Named(NamedKey::Function(3)),
+        egui::Key::F4 => LogicalKey::Named(NamedKey::Function(4)),
+        egui::Key::F5 => LogicalKey::Named(NamedKey::Function(5)),
+        egui::Key::F6 => LogicalKey::Named(NamedKey::Function(6)),
+        egui::Key::F7 => LogicalKey::Named(NamedKey::Function(7)),
+        egui::Key::F8 => LogicalKey::Named(NamedKey::Function(8)),
+        egui::Key::F9 => LogicalKey::Named(NamedKey::Function(9)),
+        egui::Key::F10 => LogicalKey::Named(NamedKey::Function(10)),
+        egui::Key::F11 => LogicalKey::Named(NamedKey::Function(11)),
+        egui::Key::F12 => LogicalKey::Named(NamedKey::Function(12)),
+        _ => return None, // TODO: other keys
+    })
+}
