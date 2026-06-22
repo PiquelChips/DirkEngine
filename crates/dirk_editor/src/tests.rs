@@ -1,6 +1,6 @@
 use std::sync::{Arc, OnceLock};
 
-use dirk_engine::editor::{EDITOR_CATEGORY, EditorSubsystem as _, UNIVERSE_CATEGORY};
+use dirk_engine::editor::{EDITOR_CATEGORY, EditorStyle, EditorSubsystem as _, UNIVERSE_CATEGORY};
 
 use crate::style::EditorPalette;
 use crate::style::default_editor_style;

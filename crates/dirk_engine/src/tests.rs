@@ -872,6 +872,43 @@ mod editor_tests {
     }
 
     #[test]
+    fn remove_window_removes_metadata_open_state_and_dock_tab() {
+        let services = EditorServices::new();
+        let id = services.add_window_fn(descriptor("window", true), |_ui, _context| Ok(()));
+
+        assert!(services.remove_window(id));
+
+        assert_eq!(services.window(id), None);
+        assert_eq!(services.is_open(id), None);
+        assert!(!services.dock_contains_window_for_tests(id));
+        assert_eq!(services.window_count(), 0);
+    }
+
+    #[test]
+    fn remove_window_returns_false_for_unknown_window() {
+        let services = EditorServices::new();
+        let id = services.add_window_fn(descriptor("window", true), |_ui, _context| Ok(()));
+
+        assert!(services.remove_window(id));
+        assert!(!services.remove_window(id));
+    }
+
+    #[test]
+    fn remove_window_keeps_other_windows_registered_and_docked() {
+        let services = EditorServices::new();
+        let removed = services.add_window_fn(descriptor("removed", true), |_ui, _context| Ok(()));
+        let kept = services.add_window_fn(descriptor("kept", true), |_ui, _context| Ok(()));
+
+        assert!(services.remove_window(removed));
+
+        assert_eq!(services.window_count(), 1);
+        assert_eq!(services.window_titles(), vec!["kept"]);
+        assert_eq!(services.is_open(kept), Some(true));
+        assert!(services.dock_contains_window_for_tests(kept));
+        assert!(!services.dock_contains_window_for_tests(removed));
+    }
+
+    #[test]
     fn all_windows_are_closeable() {
         let services = EditorServices::new();
         let id = services.add_window_fn(descriptor("window", false), |_ui, _context| Ok(()));

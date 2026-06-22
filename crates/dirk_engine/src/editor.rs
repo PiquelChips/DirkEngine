@@ -386,6 +386,16 @@ impl EditorServices {
         self.add_window(FnEditorWindow { descriptor, ui })
     }
 
+    /// Removes a registered editor-native window.
+    ///
+    /// Returns `true` when the window existed and was removed. This removes the
+    /// window metadata, open state, and any matching dock tab without affecting
+    /// menus or other windows.
+    #[must_use]
+    pub fn remove_window(&self, id: EditorWindowId) -> bool {
+        self.state.lock().remove_window(id)
+    }
+
     /// Registers an editor menu capability.
     pub fn add_menu<M>(&self, menu: M) -> EditorMenuId
     where
@@ -713,6 +723,17 @@ impl EditorServicesState {
                 }
             }
         }
+    }
+
+    fn remove_window(&mut self, id: EditorWindowId) -> bool {
+        let Some(index) = self.windows.iter().position(|window| window.id == id) else {
+            return false;
+        };
+
+        self.windows.remove(index);
+        self.window_states.remove(&id);
+        self.dock_state.retain_tabs(|tab| *tab != id);
+        true
     }
 
     fn sync_dock_tabs_with_open_windows(&mut self) {
