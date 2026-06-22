@@ -391,6 +391,8 @@ impl EditorServices {
     /// Returns `true` when the window existed and was removed. This removes the
     /// window metadata, open state, and any matching dock tab without affecting
     /// menus or other windows.
+    #[allow(clippy::must_use_candidata)]
+    // this function actually mutates state. clippy just can't tell as its a mutex
     pub fn remove_window(&self, id: EditorWindowId) -> bool {
         self.state.lock().remove_window(id)
     }

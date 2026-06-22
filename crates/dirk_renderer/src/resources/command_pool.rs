@@ -287,6 +287,7 @@ impl CommandBuffer {
             );
         }
     }
+    #[cfg_attr(feature = "editor", allow(unused))]
     pub fn copy_image(
         &self,
         src_image: vk::Image,

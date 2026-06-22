@@ -74,6 +74,7 @@ impl Viewport {
         &self.settings
     }
 
+    #[cfg_attr(not(feature = "editor"), allow(unused))]
     pub fn output_view(&self) -> vk::ImageView {
         self.output.view()
     }

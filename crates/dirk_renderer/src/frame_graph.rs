@@ -266,6 +266,7 @@ impl<'a> PassBuilder<'_, 'a> {
     }
 
     /// Declare `handle` as a transfer source.
+    #[cfg_attr(feature = "editor", allow(unused))]
     pub fn read_transfer_src(&mut self, handle: TextureHandle) -> &mut Self {
         self.pass.reads.push(TextureUsage {
             handle,
@@ -278,6 +279,7 @@ impl<'a> PassBuilder<'_, 'a> {
     }
 
     /// Declare `handle` as a transfer destination.
+    #[cfg_attr(feature = "editor", allow(unused))]
     pub fn write_transfer_dst(&mut self, handle: TextureHandle) -> &mut Self {
         self.pass.writes.push(TextureUsage {
             handle,
