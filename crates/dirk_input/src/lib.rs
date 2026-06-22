@@ -14,6 +14,16 @@ pub enum ButtonState {
     Released,
 }
 
+impl From<bool> for ButtonState {
+    fn from(value: bool) -> Self {
+        if value {
+            ButtonState::Pressed
+        } else {
+            ButtonState::Released
+        }
+    }
+}
+
 /// Keyboard input after layout mapping.
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub enum LogicalKey {
@@ -109,11 +119,38 @@ impl NormalizedPosition {
     pub fn new(position: glam::Vec2) -> Self {
         Self(position.clamp(glam::Vec2::ZERO, glam::Vec2::ONE))
     }
+
+    /// Creates a [`NormalizedPosition`] from a position & egui rect
+    #[cfg(feature = "egui")]
+    #[must_use]
+    pub fn from_egui(rect: ::egui::Rect, pos: ::egui::Pos2) -> Self {
+        let local = pos - rect.min;
+        Self::new(glam::vec2(
+            normalize_component(local.x, rect.width()),
+            normalize_component(local.y, rect.height()),
+        ))
+    }
+}
+
+fn normalize_component(value: f32, extent: f32) -> f32 {
+    value / extent.max(f32::EPSILON)
 }
 
 /// Viewport-local normalized delta.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct NormalizedDelta(pub glam::Vec2);
+
+impl NormalizedDelta {
+    /// Converts egui delta & size to a [`NormalizedDelta`].
+    #[cfg(feature = "egui")]
+    #[must_use]
+    pub fn from_egui(delta: ::egui::Vec2, size: ::egui::Vec2) -> Self {
+        Self(glam::vec2(
+            normalize_component(delta.x, size.x),
+            normalize_component(delta.y, size.y),
+        ))
+    }
+}
 
 /// Engine input event. Contains no platform window identity.
 #[derive(Debug, Clone, PartialEq)]
