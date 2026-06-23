@@ -65,12 +65,7 @@ impl Subsystem for AssetsSubsystem {
         "assets"
     }
 
-    fn tick(
-        &mut self,
-        _delta_time: f64,
-        _handle: &EngineHandle,
-        _universe: &mut dirk_universe::Universe,
-    ) -> anyhow::Result<()> {
+    fn tick(&mut self, _delta_time: f64, _handle: &EngineHandle) -> anyhow::Result<()> {
         self.registry.tick();
         Ok(())
     }

@@ -41,7 +41,7 @@ pub trait EditorSubsystem: Send + 'static {
     /// # Errors
     ///
     /// Returns an error if startup fails.
-    fn start(&mut self, _context: &mut EditorStartContext<'_>) -> anyhow::Result<()> {
+    fn start(&mut self, _engine: &EngineHandle, _editor: &EditorServices) -> anyhow::Result<()> {
         Ok(())
     }
 
@@ -50,7 +50,12 @@ pub trait EditorSubsystem: Send + 'static {
     /// # Errors
     ///
     /// Returns an error if ticking fails.
-    fn tick(&mut self, _context: &mut EditorTickContext<'_>) -> anyhow::Result<()> {
+    fn tick(
+        &mut self,
+        _engine: &EngineHandle,
+        _editor: &EditorServices,
+        _delta_time: f64,
+    ) -> anyhow::Result<()> {
         Ok(())
     }
 
@@ -59,7 +64,7 @@ pub trait EditorSubsystem: Send + 'static {
     /// # Errors
     ///
     /// Returns an error if shutdown fails.
-    fn shutdown(&mut self, _context: &mut EditorShutdownContext<'_>) -> anyhow::Result<()> {
+    fn shutdown(&mut self, _engine: &EngineHandle, _editor: &EditorServices) -> anyhow::Result<()> {
         Ok(())
     }
 }
@@ -72,69 +77,19 @@ pub struct EditorBuildContext<'a> {
     pub editor: &'a EditorServices,
 }
 
-/// Context passed to editor subsystem startup.
-pub struct EditorStartContext<'a> {
-    /// Shared engine handle.
-    pub engine: &'a EngineHandle,
-    /// Read-only ECS universe.
-    pub universe: &'a dirk_universe::Universe,
-    /// Shared editor services.
-    pub editor: &'a EditorServices,
-}
-
-/// Context passed to editor subsystem ticks.
-pub struct EditorTickContext<'a> {
-    /// Seconds elapsed since the previous engine tick.
-    delta_time: f64,
-    /// Shared engine handle.
-    pub engine: &'a EngineHandle,
-    /// Read-only ECS universe.
-    pub universe: &'a dirk_universe::Universe,
-    /// Shared editor services.
-    pub editor: &'a EditorServices,
-}
-
-impl EditorTickContext<'_> {
-    /// Returns the seconds elapsed since the previous engine tick.
-    #[must_use]
-    pub fn delta_time(&self) -> f64 {
-        self.delta_time
-    }
-}
-
-/// Context passed to editor subsystem shutdown.
-pub struct EditorShutdownContext<'a> {
-    /// Shared engine handle.
-    pub engine: &'a EngineHandle,
-    /// Read-only ECS universe.
-    pub universe: &'a dirk_universe::Universe,
-    /// Shared editor services.
-    pub editor: &'a EditorServices,
-}
-
 /// Per-frame context passed to editor rendering.
 pub struct EditorRenderContext<'a> {
     /// Seconds elapsed since the previous engine tick.
     delta_time: f64,
     /// Shared engine handle.
     pub handle: &'a EngineHandle,
-    /// Read-only ECS universe.
-    pub universe: &'a dirk_universe::Universe,
 }
 
 impl<'a> EditorRenderContext<'a> {
     /// Creates a context for rendering editor UI.
     #[must_use]
-    pub fn new(
-        delta_time: f64,
-        handle: &'a EngineHandle,
-        universe: &'a dirk_universe::Universe,
-    ) -> Self {
-        Self {
-            delta_time,
-            handle,
-            universe,
-        }
+    pub fn new(delta_time: f64, handle: &'a EngineHandle) -> Self {
+        Self { delta_time, handle }
     }
 
     /// Returns the seconds elapsed since the previous engine tick.
@@ -151,8 +106,6 @@ pub struct EditorUiContext<'a> {
     commands: EditorCommandSender,
     /// Shared engine handle.
     pub handle: &'a EngineHandle,
-    /// Read-only ECS universe.
-    pub universe: &'a dirk_universe::Universe,
 }
 
 impl EditorUiContext<'_> {
@@ -594,7 +547,6 @@ impl EditorServicesState {
             delta_time: context.delta_time(),
             commands: (*editor_commands).clone(),
             handle: context.handle,
-            universe: context.universe,
         };
 
         let mut result = Ok(());
@@ -630,7 +582,6 @@ impl EditorServicesState {
             delta_time: context.delta_time(),
             commands: (*editor_commands).clone(),
             handle: context.handle,
-            universe: context.universe,
         };
         let mut tab_viewer = EditorDockTabViewer {
             windows: &mut self.windows,
@@ -933,61 +884,32 @@ impl EditorRuntime {
         }
     }
 
-    pub(crate) fn start(
-        &mut self,
-        engine: &EngineHandle,
-        universe: &dirk_universe::Universe,
-    ) -> Result<()> {
+    pub(crate) fn start(&mut self, engine: &EngineHandle) -> Result<()> {
         for subsystem in &mut self.subsystems {
             let name = subsystem.name();
-            let mut context = EditorStartContext {
-                engine,
-                universe,
-                editor: &self.services,
-            };
             subsystem
-                .start(&mut context)
+                .start(engine, &self.services)
                 .map_err(|source| Error::EditorSubsystemFailedStart { name, source })?;
         }
         self.services.state.lock().bootstrap_default_dock_layout();
         Ok(())
     }
 
-    pub(crate) fn tick(
-        &mut self,
-        delta_time: f64,
-        engine: &EngineHandle,
-        universe: &dirk_universe::Universe,
-    ) -> crate::Result<()> {
+    pub(crate) fn tick(&mut self, delta_time: f64, engine: &EngineHandle) -> crate::Result<()> {
         for subsystem in &mut self.subsystems {
             let name = subsystem.name();
-            let mut context = EditorTickContext {
-                delta_time,
-                engine,
-                universe,
-                editor: &self.services,
-            };
             subsystem
-                .tick(&mut context)
+                .tick(engine, &self.services, delta_time)
                 .map_err(|source| Error::EditorSubsystemFailedTick { name, source })?;
         }
         Ok(())
     }
 
-    pub(crate) fn shutdown(
-        &mut self,
-        engine: &EngineHandle,
-        universe: &dirk_universe::Universe,
-    ) -> crate::Result<()> {
+    pub(crate) fn shutdown(&mut self, engine: &EngineHandle) -> crate::Result<()> {
         while let Some(mut subsystem) = self.subsystems.pop() {
             let name = subsystem.name();
-            let mut context = EditorShutdownContext {
-                engine,
-                universe,
-                editor: &self.services,
-            };
             subsystem
-                .shutdown(&mut context)
+                .shutdown(engine, &self.services)
                 .map_err(|source| Error::EditorSubsystemFailedShutdown { name, source })?;
         }
         Ok(())

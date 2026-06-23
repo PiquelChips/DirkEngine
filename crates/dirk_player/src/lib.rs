@@ -222,7 +222,6 @@ impl Subsystem for PlayerManager {
         &mut self,
         _delta_time: f64,
         _handle: &EngineHandle,
-        _universe: &mut dirk_universe::Universe,
     ) -> anyhow::Result<()> {
         #[cfg(not(feature = "editor"))]
         for event in self.window_input_consumer.consume_all() {

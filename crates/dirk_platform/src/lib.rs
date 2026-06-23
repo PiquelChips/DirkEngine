@@ -102,12 +102,7 @@ impl dirk_engine::Subsystem for Platform {
         "platform"
     }
 
-    fn tick(
-        &mut self,
-        _delta_time: f64,
-        handle: &dirk_engine::EngineHandle,
-        _universe: &mut dirk_universe::Universe,
-    ) -> anyhow::Result<()> {
+    fn tick(&mut self, _delta_time: f64, handle: &dirk_engine::EngineHandle) -> anyhow::Result<()> {
         match self
             .event_loop
             .pump_app_events(Some(Duration::ZERO), &mut self.handler)

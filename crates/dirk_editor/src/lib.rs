@@ -4,10 +4,13 @@
 
 use std::collections::BTreeMap;
 
-use dirk_engine::editor::{
-    EDITOR_CATEGORY, EditorMenu, EditorMenuContext, EditorMenuDescriptor, EditorServices,
-    EditorUiContext, EditorWindow, EditorWindowDescriptor, EditorWindowId, EditorWindowInfo,
-    UNIVERSE_CATEGORY,
+use dirk_engine::{
+    EngineHandle,
+    editor::{
+        EDITOR_CATEGORY, EditorMenu, EditorMenuContext, EditorMenuDescriptor, EditorServices,
+        EditorUiContext, EditorWindow, EditorWindowDescriptor, EditorWindowId, EditorWindowInfo,
+        UNIVERSE_CATEGORY,
+    },
 };
 
 mod settings;
@@ -39,11 +42,7 @@ impl dirk_engine::editor::EditorSubsystem for BuiltinEditorSubsystem {
         "builtin-editor"
     }
 
-    fn start(
-        &mut self,
-        context: &mut dirk_engine::editor::EditorStartContext<'_>,
-    ) -> anyhow::Result<()> {
-        let services = context.editor;
+    fn start(&mut self, _engine: &EngineHandle, services: &EditorServices) -> anyhow::Result<()> {
         services.add_style(style::default_editor_style());
         services.add_menu(MainMenu);
 

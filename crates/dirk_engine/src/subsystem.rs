@@ -18,8 +18,6 @@
 //!
 //! [`EngineBuildContext`]: crate::EngineBuildContext
 
-use dirk_universe::Universe;
-
 use crate::{EngineBuilder, EngineHandle};
 
 /// Builder-time extension point for engine features.
@@ -74,7 +72,7 @@ pub trait Subsystem {
     /// # Errors
     ///
     /// Returns an error if startup fails.
-    fn start(&mut self, _handle: &EngineHandle, _universe: &mut Universe) -> anyhow::Result<()> {
+    fn start(&mut self, _handle: &EngineHandle) -> anyhow::Result<()> {
         Ok(())
     }
 
@@ -85,12 +83,7 @@ pub trait Subsystem {
     /// # Errors
     ///
     /// Returns an error if the subsystem cannot complete its tick.
-    fn tick(
-        &mut self,
-        _delta_time: f64,
-        _handle: &EngineHandle,
-        _universe: &mut Universe,
-    ) -> anyhow::Result<()> {
+    fn tick(&mut self, _delta_time: f64, _handle: &EngineHandle) -> anyhow::Result<()> {
         Ok(())
     }
 
@@ -101,7 +94,7 @@ pub trait Subsystem {
     /// # Errors
     ///
     /// Returns an error if shutdown fails.
-    fn shutdown(&mut self, _handle: &EngineHandle, _universe: &mut Universe) -> anyhow::Result<()> {
+    fn shutdown(&mut self, _handle: &EngineHandle) -> anyhow::Result<()> {
         Ok(())
     }
 }
