@@ -1,5 +1,7 @@
 use std::any::TypeId;
 
+use tracing::warn;
+
 use crate::{
     Entity, EntityBuilder, UniverseHandle, WorldBuilder, WorldId,
     components::{AnyComponent, Component},
@@ -38,7 +40,9 @@ impl CommandBuffer {
     /// Will submit the [`CommandBuffer`] to the [`Universe`]'s queue.
     pub fn submit(self) {
         let sender = self.handle.buffer_sender.clone();
-        let _ = sender.send(self);
+        if sender.send(self).is_err() {
+            warn!("failed to submit CommandBuffer: receiver is closed");
+        }
     }
 
     /// Returns if the command buffer has had no submitted commands. This is useful to skip
