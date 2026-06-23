@@ -10,9 +10,8 @@ use crate::{
     EngineBuilder,
     editor::{
         EDITOR_CATEGORY, EditorMenuDescriptor, EditorRenderContext, EditorRuntime, EditorServices,
-        EditorServicesState, EditorStyle, EditorSubsystem, EditorTickContext,
-        EditorWindowDescriptor, EditorWindowId, EditorWindowInfo, UNIVERSE_CATEGORY,
-        commands::EditorCommand,
+        EditorServicesState, EditorStyle, EditorSubsystem, EditorWindowDescriptor, EditorWindowId,
+        EditorWindowInfo, UNIVERSE_CATEGORY, commands::EditorCommand,
     },
     errors::{Error, Result},
     tests::build_context,
@@ -62,8 +61,11 @@ impl EditorServices {
         title: &str,
         ui: &mut egui::Ui,
         context: &EditorRenderContext<'_>,
+        universe: &Universe,
     ) -> anyhow::Result<()> {
-        self.state.lock().render_menu_for_tests(title, ui, context)
+        self.state
+            .lock()
+            .render_menu_for_tests(title, ui, context, universe)
     }
 }
 
@@ -74,6 +76,7 @@ impl EditorServicesState {
         title: &str,
         ui: &mut egui::Ui,
         context: &EditorRenderContext<'_>,
+        universe: &Universe,
     ) -> anyhow::Result<()> {
         use std::sync::mpsc;
 
@@ -89,7 +92,7 @@ impl EditorServicesState {
             delta_time: context.delta_time(),
             commands: editor_commands,
             handle: context.handle,
-            universe: context.universe,
+            universe,
         };
 
         let Some(menu) = self.menus.iter_mut().find(|menu| menu.title == title) else {
@@ -159,20 +162,27 @@ impl EditorSubsystem for FirstEditorSubsystem {
 
     fn start(
         &mut self,
-        _context: &mut crate::editor::EditorStartContext<'_>,
+        _engine: &crate::EngineHandle,
+        _editor: &EditorServices,
     ) -> anyhow::Result<()> {
         self.events.lock().push("first-start");
         Ok(())
     }
 
-    fn tick(&mut self, _context: &mut EditorTickContext<'_>) -> anyhow::Result<()> {
+    fn tick(
+        &mut self,
+        _engine: &crate::EngineHandle,
+        _editor: &EditorServices,
+        _delta_time: f64,
+    ) -> anyhow::Result<()> {
         self.events.lock().push("first-tick");
         Ok(())
     }
 
     fn shutdown(
         &mut self,
-        _context: &mut crate::editor::EditorShutdownContext<'_>,
+        _engine: &crate::EngineHandle,
+        _editor: &EditorServices,
     ) -> anyhow::Result<()> {
         self.events.lock().push("first-shutdown");
         Ok(())
@@ -190,20 +200,27 @@ impl EditorSubsystem for SecondEditorSubsystem {
 
     fn start(
         &mut self,
-        _context: &mut crate::editor::EditorStartContext<'_>,
+        _engine: &crate::EngineHandle,
+        _editor: &EditorServices,
     ) -> anyhow::Result<()> {
         self.events.lock().push("second-start");
         Ok(())
     }
 
-    fn tick(&mut self, _context: &mut EditorTickContext<'_>) -> anyhow::Result<()> {
+    fn tick(
+        &mut self,
+        _engine: &crate::EngineHandle,
+        _editor: &EditorServices,
+        _delta_time: f64,
+    ) -> anyhow::Result<()> {
         self.events.lock().push("second-tick");
         Ok(())
     }
 
     fn shutdown(
         &mut self,
-        _context: &mut crate::editor::EditorShutdownContext<'_>,
+        _engine: &crate::EngineHandle,
+        _editor: &EditorServices,
     ) -> anyhow::Result<()> {
         self.events.lock().push("second-shutdown");
         Ok(())
@@ -227,7 +244,8 @@ impl EditorSubsystem for StartFailingEditorSubsystem {
 
     fn start(
         &mut self,
-        _context: &mut crate::editor::EditorStartContext<'_>,
+        _engine: &crate::EngineHandle,
+        _editor: &EditorServices,
     ) -> anyhow::Result<()> {
         Err(anyhow::anyhow!("editor start failed"))
     }
@@ -242,8 +260,8 @@ fn render_services_with_input(
     ctx.begin_pass(raw_input);
 
     let handle = build_context().handle().clone();
-    let frame = EditorRenderContext::new(0.016, &handle, universe);
-    let result = services.render_ui(&ctx, &frame);
+    let frame = EditorRenderContext::new(0.016, &handle);
+    let result = services.render_ui(&ctx, &frame, universe);
     let _ = ctx.end_pass();
     result
 }
@@ -723,10 +741,10 @@ fn menu_commands_still_open_windows() -> anyhow::Result<()> {
         ..egui::RawInput::default()
     });
     let handle = build_context().handle().clone();
-    let frame = EditorRenderContext::new(0.016, &handle, &universe);
+    let frame = EditorRenderContext::new(0.016, &handle);
     let mut result = Ok(());
     egui::CentralPanel::default().show(&ctx, |ui| {
-        result = services.render_menu_for_tests("Open", ui, &frame);
+        result = services.render_menu_for_tests("Open", ui, &frame, &universe);
     });
     let _ = ctx.end_pass();
     result?;
