@@ -21,6 +21,15 @@ use crate::{
     },
 };
 
+pub(crate) struct SceneRenderSettings {
+    pub extent: vk::Extent2D,
+    pub format: vk::Format,
+    pub clear_color: [f32; 4],
+    pub fov_y_radians: f32,
+    pub near: f32,
+    pub far: f32,
+}
+
 /// This is the renderer proxy for the [`Universe`]. It also has
 /// most of the rendering state needed to render each scene.
 pub struct SceneManager {
@@ -30,8 +39,7 @@ pub struct SceneManager {
     entities: HashMap<Entity, WorldId>,
     proxies: HashMap<Entity, SceneProxy>,
 
-    // TODO: see about centralising the different pipelines (link with
-    // descriptor layouts, ...)
+    // TODO: see about centralising the different pipelines
     graphics_pipeline: GraphicsPipeline<MainPipelineSpec>,
 
     scene_alloc: DescriptorAllocator<SceneSet>,
@@ -60,12 +68,12 @@ impl SceneManager {
         models: &'a ModelRegistry,
         world: WorldId,
         camera: Entity,
-        size: vk::Extent2D,
+        settings: SceneRenderSettings,
         target: TextureHandle,
     ) {
         let depth = graph.create_texture(TextureDesc {
-            width: size.width,
-            height: size.height,
+            width: settings.extent.width,
+            height: settings.extent.height,
             format: self.device.properties.depth_format,
             usage: vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
             samples: self.device.properties.msaa_samples,
@@ -75,9 +83,9 @@ impl SceneManager {
         let msaa_color = (self.device.properties.msaa_samples != vk::SampleCountFlags::TYPE_1)
             .then(|| {
                 graph.create_texture(TextureDesc {
-                    width: size.width,
-                    height: size.height,
-                    format: self.device.properties.surface_format.format,
+                    width: settings.extent.width,
+                    height: settings.extent.height,
+                    format: settings.format,
                     usage: vk::ImageUsageFlags::TRANSIENT_ATTACHMENT
                         | vk::ImageUsageFlags::COLOR_ATTACHMENT,
                     samples: self.device.properties.msaa_samples,
@@ -86,18 +94,19 @@ impl SceneManager {
             });
 
         let mut pass = graph.add_pass("scene");
+        let [r, g, b, a] = settings.clear_color;
         if let Some(msaa_color) = msaa_color {
             pass.write_color_attachment_with_resolve(
                 msaa_color,
                 target,
-                AttachmentInfo::clear_color(0., 0., 0., 1.),
+                AttachmentInfo::clear_color(r, g, b, a),
             );
         } else {
-            pass.write_color_attachment(target, AttachmentInfo::clear_color(0., 0., 0., 1.));
+            pass.write_color_attachment(target, AttachmentInfo::clear_color(r, g, b, a));
         }
         pass.write_depth_attachment(depth, AttachmentInfo::clear_discard_depth(1., 0));
         pass.execute(Box::new(move |_, cmd, _| {
-            self.record_scene_draws(models, cmd, world, size, camera)
+            self.record_scene_draws(models, cmd, world, &settings, camera)
         }));
     }
     fn record_scene_draws(
@@ -105,7 +114,7 @@ impl SceneManager {
         models: &ModelRegistry,
         cmd: &CommandBuffer,
         world: WorldId,
-        size: vk::Extent2D,
+        settings: &SceneRenderSettings,
         camera: Entity,
     ) -> Result<()> {
         let frame = self.device.current_frame();
@@ -133,12 +142,12 @@ impl SceneManager {
             let proj = {
                 // `width` & `height` aren't large enough for this to matter
                 #[allow(clippy::cast_precision_loss)]
-                let aspect = size.width as f32 / size.height.max(1) as f32;
+                let aspect = settings.extent.width as f32 / settings.extent.height.max(1) as f32;
                 let mut proj = glam::Mat4::perspective_rh(
-                    45_f32.to_radians(), // FOV
-                    aspect,              // Aspect Ratio
-                    0.1,                 // near clip
-                    100_000.0,           // far clip
+                    settings.fov_y_radians,
+                    aspect,
+                    settings.near,
+                    settings.far,
                 );
                 // Vulkan NDC has Y pointing down; flip the projection accordingly.
                 proj.y_axis.y *= -1.0;
@@ -158,15 +167,15 @@ impl SceneManager {
         // the window size never gets anywhere near 2^23
         #[allow(clippy::cast_precision_loss)]
         let viewport = vk::Viewport::default()
-            .width(size.width as f32)
-            .height(size.height as f32)
+            .width(settings.extent.width as f32)
+            .height(settings.extent.height as f32)
             .min_depth(0.)
             .max_depth(1.);
         cmd.set_viewport(0, &[viewport]);
 
         let scissor = vk::Rect2D::default()
             .offset(vk::Offset2D::default())
-            .extent(size);
+            .extent(settings.extent);
         cmd.set_scissor(0, &[scissor]);
 
         for proxy in &proxies {
@@ -190,6 +199,9 @@ impl SceneManager {
     pub fn destroy_scene(&mut self, world: WorldId) {
         self.scenes.remove(&world);
     }
+    pub fn entity_world(&self, entity: Entity) -> Option<WorldId> {
+        self.entities.get(&entity).copied()
+    }
     pub fn create_proxy(&mut self, entity: Entity, world: WorldId) -> Result<()> {
         let proxy = SceneProxy::build(self)?;
         self.proxies.insert(entity, proxy);
@@ -204,10 +216,6 @@ impl SceneManager {
     }
     pub fn get_proxy_mut(&mut self, entity: Entity) -> Option<&mut SceneProxy> {
         self.proxies.get_mut(&entity)
-    }
-    #[must_use]
-    pub fn entity_world(&self, entity: Entity) -> Option<WorldId> {
-        self.entities.get(&entity).copied()
     }
     pub fn send_proxy(&mut self, entity: Entity, to: WorldId) -> Result<()> {
         let world = self
@@ -248,6 +256,7 @@ impl SceneManager {
             .entities
             .remove(&entity);
         self.proxies.remove(&entity);
+        self.entities.remove(&entity);
         Ok(())
     }
 }

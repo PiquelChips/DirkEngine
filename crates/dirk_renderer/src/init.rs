@@ -52,6 +52,7 @@ impl Renderer {
             .require_extensions(DEVICE_EXTENSIONS)
             .require(|info| info.features.geometry_shader == vk::TRUE)
             .require(|info| info.vulkan12_features.vulkan_memory_model == vk::TRUE)
+            .require(|info| info.vulkan12_features.timeline_semaphore == vk::TRUE)
             .select(instance, surface_loader, surface)
             .ok_or(Error::NoDeviceFound)?;
 
@@ -192,7 +193,8 @@ impl Renderer {
             vk::PhysicalDeviceFeatures::default().sampler_anisotropy(true);
         let mut vulkan12_features = vk::PhysicalDeviceVulkan12Features::default()
             .buffer_device_address(true)
-            .vulkan_memory_model(true);
+            .vulkan_memory_model(true)
+            .timeline_semaphore(true);
         let mut vulkan13_features = vk::PhysicalDeviceVulkan13Features::default()
             .dynamic_rendering(true)
             .synchronization2(true);
@@ -224,6 +226,7 @@ impl Renderer {
             let fence = Fence::signaled(device)?;
             Ok(Frame {
                 command_pool,
+                submitted_command_buffers: Vec::new(),
                 fence,
             })
         };

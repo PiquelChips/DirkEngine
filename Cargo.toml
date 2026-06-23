@@ -26,6 +26,7 @@ dirk_threads.workspace = true
 dirk_utils.workspace = true
 dirk_events.workspace = true
 dirk_platform.workspace = true
+dirk_input.workspace = true
 dirk_renderer.workspace = true
 dirk_universe.workspace = true
 dirk_world.workspace = true
@@ -50,6 +51,7 @@ default = ["editor", "cli"]
 
 editor = [
     "dirk_engine/editor",
+    "dirk_player/editor",
     "dirk_renderer/editor",
     "dep:dirk_editor",
 ]
@@ -102,6 +104,7 @@ dirk_utils    = { version = "0.1.0", path = "crates/dirk_utils" }
 dirk_events   = { version = "0.1.0", path = "crates/dirk_events" }
 dirk_proc     = { version = "0.1.0", path = "crates/dirk_proc" }
 dirk_platform = { version = "0.1.0", path = "crates/dirk_platform" }
+dirk_input    = { version = "0.1.0", path = "crates/dirk_input" }
 dirk_renderer = { version = "0.1.0", path = "crates/dirk_renderer" }
 dirk_assets   = { version = "0.1.0", path = "crates/dirk_assets" }
 dirk_world    = { version = "0.1.0", path = "crates/dirk_world" }

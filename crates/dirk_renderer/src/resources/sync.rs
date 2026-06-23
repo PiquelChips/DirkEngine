@@ -2,6 +2,8 @@
 
 use ash::{Device, prelude::VkResult, vk};
 
+use crate::resources::device::{Garbage, RenderDevice};
+
 /// RAII wrapper for a Vulkan fence.
 pub struct Fence {
     device: Device,
@@ -59,5 +61,55 @@ impl Drop for Fence {
         unsafe {
             self.device.destroy_fence(self.raw, None);
         }
+    }
+}
+
+/// RAII wrapper for a Vulkan timeline semaphore.
+pub struct TimelineSemaphore {
+    device: RenderDevice,
+    raw: vk::Semaphore,
+}
+
+impl TimelineSemaphore {
+    /// Creates a timeline semaphore with the supplied initial counter value.
+    pub fn create(device: &RenderDevice, initial_value: u64) -> VkResult<Self> {
+        let mut type_info = vk::SemaphoreTypeCreateInfo::default()
+            .semaphore_type(vk::SemaphoreType::TIMELINE)
+            .initial_value(initial_value);
+        let info = vk::SemaphoreCreateInfo::default().push_next(&mut type_info);
+        let raw = unsafe { device.device.create_semaphore(&info, None)? };
+
+        Ok(Self {
+            device: device.clone(),
+            raw,
+        })
+    }
+
+    /// Returns the raw Vulkan semaphore handle.
+    pub fn raw(&self) -> vk::Semaphore {
+        self.raw
+    }
+
+    /// Waits until the timeline semaphore reaches at least `value`.
+    #[allow(unused)]
+    pub fn wait(&self, value: u64, timeout: u64) -> VkResult<()> {
+        let semaphores = [self.raw];
+        let values = [value];
+        let info = vk::SemaphoreWaitInfo::default()
+            .semaphores(&semaphores)
+            .values(&values);
+        unsafe { self.device.device.wait_semaphores(&info, timeout) }
+    }
+
+    /// Returns the current timeline counter value.
+    #[allow(unused)]
+    pub fn value(&self) -> VkResult<u64> {
+        unsafe { self.device.device.get_semaphore_counter_value(self.raw) }
+    }
+}
+
+impl Drop for TimelineSemaphore {
+    fn drop(&mut self) {
+        self.device.destroy(Garbage::Semaphore(self.raw));
     }
 }

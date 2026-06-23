@@ -51,6 +51,7 @@ impl UniverseSystem for RendererUniverseSystem {
         self.sender.enqueue_command(move |renderer| {
             let manager = &mut renderer.scene_manager;
             manager.send_proxy(entity, new)?;
+            renderer.update_viewport_world_for_camera(entity, new);
             Ok(())
         });
     }
@@ -62,6 +63,7 @@ impl UniverseSystem for RendererUniverseSystem {
         entity: dirk_universe::Entity,
     ) {
         self.sender.enqueue_command(move |renderer| {
+            renderer.clear_viewports_for_camera(entity);
             let manager = &mut renderer.scene_manager;
             manager.destroy_proxy(entity)?;
             Ok(())
@@ -221,10 +223,7 @@ impl ComponentSystem for RendererPlayerSystem {
     ) {
         let id = *component;
         self.sender.enqueue_command(move |renderer| {
-            let Some(player) = renderer.players.get_mut(&id) else {
-                return Ok(());
-            };
-            player.entity = Some(entity);
+            renderer.bind_viewport_to_entity(id, entity);
             Ok(())
         });
     }
@@ -239,13 +238,14 @@ impl ComponentSystem for RendererPlayerSystem {
         let old_id = *old;
         let new_id = *new;
         self.sender.enqueue_command(move |renderer| {
-            if let Some(old) = renderer.players.get_mut(&old_id) {
-                old.entity = None;
+            if let Some(old) = renderer.viewports.get_mut(&old_id)
+                && old.camera == Some(entity)
+            {
+                old.camera = None;
+                old.world = None;
             }
 
-            if let Some(new) = renderer.players.get_mut(&new_id) {
-                new.entity = Some(entity);
-            }
+            renderer.bind_viewport_to_entity(new_id, entity);
             Ok(())
         });
     }
@@ -253,13 +253,16 @@ impl ComponentSystem for RendererPlayerSystem {
     fn removed(
         &self,
         _: &mut CommandBuffer,
-        _entity: dirk_universe::Entity,
+        entity: dirk_universe::Entity,
         component: &Self::Component,
     ) {
         let player_id = *component;
         self.sender.enqueue_command(move |renderer| {
-            if let Some(player) = renderer.players.get_mut(&player_id) {
-                player.entity = None;
+            if let Some(viewport) = renderer.viewports.get_mut(&player_id)
+                && viewport.camera == Some(entity)
+            {
+                viewport.camera = None;
+                viewport.world = None;
             }
             Ok(())
         });

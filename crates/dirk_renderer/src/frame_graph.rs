@@ -45,6 +45,7 @@ pub struct TextureDesc {
 
 /// Carries the physical `VkImage`/`VkImageView` for resources that live
 /// outside the graph (swapchain images being the canonical example).
+#[derive(Clone, Copy)]
 pub struct ImportedTexture {
     /// Externally-owned Vulkan image.
     pub image: vk::Image,
@@ -52,11 +53,18 @@ pub struct ImportedTexture {
     pub view: vk::ImageView,
     /// Aspect mask covered by the imported image.
     pub aspect_flags: vk::ImageAspectFlags,
-    /// Layout the image is in *before* the first pass touches it.
-    pub initial_layout: vk::ImageLayout,
-    /// Layout the image must be in *after* all passes have executed
-    /// (e.g. `PRESENT_SRC_KHR` for swapchain images).
-    pub final_layout: vk::ImageLayout,
+    /// Synchronization state the image is in before the first pass touches it.
+    pub initial_state: TextureStateDesc,
+    /// Synchronization state the image must be in after all passes execute.
+    pub final_state: TextureStateDesc,
+}
+
+/// External texture synchronization state at a graph boundary.
+#[derive(Clone, Copy)]
+pub struct TextureStateDesc {
+    pub layout: vk::ImageLayout,
+    pub stage: vk::PipelineStageFlags2,
+    pub access: vk::AccessFlags2,
 }
 
 /// Resolved Vulkan handles for a graph texture.
@@ -258,6 +266,7 @@ impl<'a> PassBuilder<'_, 'a> {
     }
 
     /// Declare `handle` as a transfer source.
+    #[cfg_attr(feature = "editor", allow(unused))]
     pub fn read_transfer_src(&mut self, handle: TextureHandle) -> &mut Self {
         self.pass.reads.push(TextureUsage {
             handle,
@@ -270,6 +279,7 @@ impl<'a> PassBuilder<'_, 'a> {
     }
 
     /// Declare `handle` as a transfer destination.
+    #[cfg_attr(feature = "editor", allow(unused))]
     pub fn write_transfer_dst(&mut self, handle: TextureHandle) -> &mut Self {
         self.pass.writes.push(TextureUsage {
             handle,
@@ -455,15 +465,16 @@ impl<'a> RenderGraph<'a> {
         for (idx, desc) in self.textures.iter().enumerate() {
             if let Some(imported) = &desc.imported {
                 let state = &states[idx];
-                if state.layout != imported.final_layout {
+                let final_state = ResourceState::from_state_desc(imported.final_state);
+                if state != &final_state {
                     final_barriers.push(ImageBarrier {
                         handle: texture_handle(idx),
                         old_layout: state.layout,
-                        new_layout: imported.final_layout,
+                        new_layout: final_state.layout,
                         src_stage: state.stage,
-                        dst_stage: vk::PipelineStageFlags2::BOTTOM_OF_PIPE,
+                        dst_stage: final_state.stage,
                         src_access: state.access,
-                        dst_access: vk::AccessFlags2::empty(),
+                        dst_access: final_state.access,
                     });
                 }
             }
@@ -486,7 +497,7 @@ impl Default for RenderGraph<'_> {
 /// The last-known synchronisation state of a single texture.
 /// Tracks exactly the three fields needed to fill out a
 /// `VkImageMemoryBarrier2`.
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 struct ResourceState {
     layout: vk::ImageLayout,
     stage: vk::PipelineStageFlags2,
@@ -495,13 +506,21 @@ struct ResourceState {
 
 impl ResourceState {
     fn from_desc(desc: &TextureDesc) -> Self {
+        desc.imported.as_ref().map_or(
+            Self {
+                layout: vk::ImageLayout::UNDEFINED,
+                stage: vk::PipelineStageFlags2::TOP_OF_PIPE,
+                access: vk::AccessFlags2::empty(),
+            },
+            |imported| Self::from_state_desc(imported.initial_state),
+        )
+    }
+
+    fn from_state_desc(desc: TextureStateDesc) -> Self {
         Self {
-            layout: desc
-                .imported
-                .as_ref()
-                .map_or(vk::ImageLayout::UNDEFINED, |i| i.initial_layout),
-            stage: vk::PipelineStageFlags2::TOP_OF_PIPE,
-            access: vk::AccessFlags2::empty(),
+            layout: desc.layout,
+            stage: desc.stage,
+            access: desc.access,
         }
     }
 }
@@ -547,8 +566,7 @@ struct CompiledGraph<'a> {
     textures: Vec<TextureDesc>,
     passes: Vec<CompiledPass<'a>>,
     /// Barriers emitted *after* the last pass – primarily used to transition
-    /// imported textures to their required `final_layout` (e.g.
-    /// `PRESENT_SRC_KHR`).
+    /// imported textures to their required final state.
     final_barriers: Vec<ImageBarrier>,
 }
 
@@ -806,6 +824,39 @@ mod tests {
         }
     }
 
+    fn texture_state(
+        layout: vk::ImageLayout,
+        stage: vk::PipelineStageFlags2,
+        access: vk::AccessFlags2,
+    ) -> TextureStateDesc {
+        TextureStateDesc {
+            layout,
+            stage,
+            access,
+        }
+    }
+
+    fn imported_color_desc(
+        usage: vk::ImageUsageFlags,
+        initial_state: TextureStateDesc,
+        final_state: TextureStateDesc,
+    ) -> TextureDesc {
+        TextureDesc {
+            width: 64,
+            height: 64,
+            format: vk::Format::B8G8R8A8_UNORM,
+            usage,
+            samples: vk::SampleCountFlags::TYPE_1,
+            imported: Some(ImportedTexture {
+                image: vk::Image::null(),
+                view: vk::ImageView::null(),
+                aspect_flags: vk::ImageAspectFlags::COLOR,
+                initial_state,
+                final_state,
+            }),
+        }
+    }
+
     #[test]
     fn compile_transitions_color_attachment_to_transfer_src() {
         let mut graph = RenderGraph::new();
@@ -839,20 +890,19 @@ mod tests {
     #[test]
     fn compile_transitions_imported_swapchain_to_transfer_dst_then_present() {
         let mut graph = RenderGraph::new();
-        let swapchain = graph.import_texture(TextureDesc {
-            width: 64,
-            height: 64,
-            format: vk::Format::B8G8R8A8_UNORM,
-            usage: vk::ImageUsageFlags::TRANSFER_DST,
-            samples: vk::SampleCountFlags::TYPE_1,
-            imported: Some(ImportedTexture {
-                image: vk::Image::null(),
-                view: vk::ImageView::null(),
-                aspect_flags: vk::ImageAspectFlags::COLOR,
-                initial_layout: vk::ImageLayout::UNDEFINED,
-                final_layout: vk::ImageLayout::PRESENT_SRC_KHR,
-            }),
-        });
+        let swapchain = graph.import_texture(imported_color_desc(
+            vk::ImageUsageFlags::TRANSFER_DST,
+            texture_state(
+                vk::ImageLayout::UNDEFINED,
+                vk::PipelineStageFlags2::TOP_OF_PIPE,
+                vk::AccessFlags2::empty(),
+            ),
+            texture_state(
+                vk::ImageLayout::PRESENT_SRC_KHR,
+                vk::PipelineStageFlags2::BOTTOM_OF_PIPE,
+                vk::AccessFlags2::empty(),
+            ),
+        ));
 
         graph.add_pass("copy").write_transfer_dst(swapchain);
 
@@ -880,6 +930,95 @@ mod tests {
             vk::ImageLayout::TRANSFER_DST_OPTIMAL
         );
         assert_eq!(final_barrier.new_layout, vk::ImageLayout::PRESENT_SRC_KHR);
+        assert_eq!(
+            final_barrier.dst_stage,
+            vk::PipelineStageFlags2::BOTTOM_OF_PIPE
+        );
+        assert_eq!(final_barrier.dst_access, vk::AccessFlags2::empty());
+    }
+
+    #[test]
+    fn compile_transitions_imported_viewport_output_to_shader_read_final_state() {
+        let mut graph = RenderGraph::new();
+        let viewport = graph.import_texture(imported_color_desc(
+            vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::SAMPLED,
+            texture_state(
+                vk::ImageLayout::UNDEFINED,
+                vk::PipelineStageFlags2::TOP_OF_PIPE,
+                vk::AccessFlags2::empty(),
+            ),
+            texture_state(
+                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                vk::PipelineStageFlags2::FRAGMENT_SHADER,
+                vk::AccessFlags2::SHADER_READ,
+            ),
+        ));
+
+        graph
+            .add_pass("scene")
+            .write_color_attachment(viewport, AttachmentInfo::clear_color(0., 0., 0., 1.));
+
+        let compiled = graph.compile();
+        let final_barrier = compiled
+            .final_barriers
+            .iter()
+            .find(|barrier| barrier.handle == viewport)
+            .expect("final barrier should make viewport shader-readable");
+        assert_eq!(
+            final_barrier.old_layout,
+            vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL
+        );
+        assert_eq!(
+            final_barrier.new_layout,
+            vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL
+        );
+        assert_eq!(
+            final_barrier.dst_stage,
+            vk::PipelineStageFlags2::FRAGMENT_SHADER
+        );
+        assert_eq!(final_barrier.dst_access, vk::AccessFlags2::SHADER_READ);
+    }
+
+    #[test]
+    fn compile_reused_imported_viewport_starts_from_tracked_shader_read_state() {
+        let mut graph = RenderGraph::new();
+        let viewport = graph.import_texture(imported_color_desc(
+            vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::SAMPLED,
+            texture_state(
+                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                vk::PipelineStageFlags2::FRAGMENT_SHADER,
+                vk::AccessFlags2::SHADER_READ,
+            ),
+            texture_state(
+                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                vk::PipelineStageFlags2::FRAGMENT_SHADER,
+                vk::AccessFlags2::SHADER_READ,
+            ),
+        ));
+
+        graph
+            .add_pass("scene")
+            .write_color_attachment(viewport, AttachmentInfo::clear_color(0., 0., 0., 1.));
+
+        let compiled = graph.compile();
+        let scene_barrier = compiled.passes[0]
+            .pre_barriers
+            .iter()
+            .find(|barrier| barrier.handle == viewport)
+            .expect("scene pass should transition from tracked viewport state");
+        assert_eq!(
+            scene_barrier.old_layout,
+            vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL
+        );
+        assert_eq!(
+            scene_barrier.src_stage,
+            vk::PipelineStageFlags2::FRAGMENT_SHADER
+        );
+        assert_eq!(scene_barrier.src_access, vk::AccessFlags2::SHADER_READ);
+        assert_eq!(
+            scene_barrier.new_layout,
+            vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL
+        );
     }
 
     #[test]

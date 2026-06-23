@@ -4,6 +4,7 @@ use ash::vk;
 
 use crate::{
     Error, Result,
+    frame_graph::{ImportedTexture, TextureStateDesc},
     resources::{
         device::{Garbage, RenderDevice},
         sync::Fence,
@@ -15,8 +16,10 @@ use crate::{
 /// The renderer records work against [`Self::image`] and then consumes this
 /// value with [`Self::present`] after the render-finished semaphore has been
 /// signalled.
-pub struct RenderImage<'a> {
-    pub image: &'a SwapchainImage,
+pub struct RenderImage {
+    /// The image to render to. `RenderImage` does not own this image.
+    pub image: vk::Image,
+    pub view: vk::ImageView,
     pub image_index: u32,
 
     pub image_available_semaphore: vk::Semaphore,
@@ -26,7 +29,7 @@ pub struct RenderImage<'a> {
     swapchain: vk::SwapchainKHR,
 }
 
-impl RenderImage<'_> {
+impl RenderImage {
     /// Presents the acquired swapchain image.
     pub fn present(self) -> Result<()> {
         let wait_semaphores = [self.render_finished_semaphore];
@@ -42,6 +45,25 @@ impl RenderImage<'_> {
         }
 
         Ok(())
+    }
+    /// Returns [`ImportedTexture`] to use this [`RenderImage`] in a
+    /// frame graph.
+    pub fn import(&self) -> ImportedTexture {
+        ImportedTexture {
+            image: self.image,
+            view: self.view,
+            aspect_flags: vk::ImageAspectFlags::COLOR,
+            initial_state: TextureStateDesc {
+                layout: vk::ImageLayout::UNDEFINED,
+                stage: vk::PipelineStageFlags2::TOP_OF_PIPE,
+                access: vk::AccessFlags2::empty(),
+            },
+            final_state: TextureStateDesc {
+                layout: vk::ImageLayout::PRESENT_SRC_KHR,
+                stage: vk::PipelineStageFlags2::BOTTOM_OF_PIPE,
+                access: vk::AccessFlags2::empty(),
+            },
+        }
     }
 }
 
@@ -91,7 +113,7 @@ impl Swapchain {
     }
 
     /// Acquires the next image and returns the semaphores required to render it.
-    pub fn acquire_next_image(&mut self) -> Result<RenderImage<'_>> {
+    pub fn acquire_next_image(&mut self) -> Result<RenderImage> {
         self.semaphore_index = (self.semaphore_index + 1) % self.semaphores.len();
         let (render_finished_semaphore, image_available_semaphore) =
             self.semaphores[self.semaphore_index];
@@ -110,7 +132,8 @@ impl Swapchain {
         }
 
         Ok(RenderImage {
-            image: &self.images[image_index as usize],
+            image: self.images[image_index as usize].image(),
+            view: self.images[image_index as usize].view(),
             image_index,
             image_available_semaphore,
             render_finished_semaphore,

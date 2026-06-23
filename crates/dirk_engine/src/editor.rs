@@ -379,11 +379,18 @@ impl EditorServices {
             .insert(id, WindowState { open: default_open });
         if default_open {
             if state.dock_layout_bootstrapped {
-                state.insert_window_tab(id);
+                if state.is_window_category(id, VIEWPORT_CATEGORY)
+                    && state.find_dock_tab_by_category(VIEWPORT_CATEGORY).is_none()
+                {
+                    state.rebuild_default_dock_layout();
+                } else {
+                    state.insert_window_tab(id);
+                }
             } else {
                 state.rebuild_default_dock_layout();
             }
         }
+
         id
     }
 
@@ -393,6 +400,17 @@ impl EditorServices {
         F: FnMut(&mut egui::Ui, &mut EditorUiContext<'_>) -> anyhow::Result<()> + Send + 'static,
     {
         self.add_window(FnEditorWindow { descriptor, ui })
+    }
+
+    /// Removes a registered editor-native window.
+    ///
+    /// Returns `true` when the window existed and was removed. This removes the
+    /// window metadata, open state, and any matching dock tab without affecting
+    /// menus or other windows.
+    #[allow(clippy::must_use_candidate)]
+    // this function actually mutates state. clippy just can't tell as its a mutex
+    pub fn remove_window(&self, id: EditorWindowId) -> bool {
+        self.state.lock().remove_window(id)
     }
 
     /// Registers an editor menu capability.
@@ -659,6 +677,17 @@ impl EditorServicesState {
                 }
             }
         }
+    }
+
+    fn remove_window(&mut self, id: EditorWindowId) -> bool {
+        let Some(index) = self.windows.iter().position(|window| window.id == id) else {
+            return false;
+        };
+
+        self.windows.remove(index);
+        self.window_states.remove(&id);
+        self.dock_state.retain_tabs(|tab| *tab != id);
+        true
     }
 
     fn sync_dock_tabs_with_open_windows(&mut self) {

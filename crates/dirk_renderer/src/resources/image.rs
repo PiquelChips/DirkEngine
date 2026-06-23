@@ -93,6 +93,9 @@ impl Image {
     pub fn view(&self) -> vk::ImageView {
         self.view
     }
+    pub fn aspect_flags(&self) -> vk::ImageAspectFlags {
+        self.aspect_flags
+    }
 
     pub fn upload_texture(device: &RenderDevice, tex: &gltf::image::Data) -> Result<Texture> {
         let pixels = match tex.format {

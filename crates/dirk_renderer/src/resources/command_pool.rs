@@ -287,6 +287,7 @@ impl CommandBuffer {
             );
         }
     }
+    #[cfg_attr(feature = "editor", allow(unused))]
     pub fn copy_image(
         &self,
         src_image: vk::Image,
@@ -341,16 +342,18 @@ impl CommandBuffer {
 
         let submit_result = self.submit(queues, info, Some(&fence));
         if submit_result.is_ok() {
-            let wait_result = fence.wait(u64::MAX);
-            if wait_result.is_ok() {
-                unsafe {
-                    self.device
-                        .free_command_buffers(self.pool, std::slice::from_ref(&self.buff));
-                }
-            }
-            wait_result
+            fence.wait(u64::MAX)
         } else {
             submit_result
+        }
+    }
+}
+
+impl Drop for CommandBuffer {
+    fn drop(&mut self) {
+        unsafe {
+            self.device
+                .free_command_buffers(self.pool, std::slice::from_ref(&self.buff));
         }
     }
 }

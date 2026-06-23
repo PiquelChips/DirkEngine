@@ -1,6 +1,6 @@
 [package]
-name = "dirk_platform"
-description = "DirkEngine platform API"
+name = "dirk_input"
+description = "DirkEngine input API"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -12,21 +12,15 @@ authors.workspace = true
 documentation.workspace = true
 
 [dependencies]
-tracing.workspace = true
-anyhow.workspace = true
-thiserror.workspace = true
-winit.workspace = true
-parking_lot.workspace = true
-
-dirk_events.workspace = true
-dirk_engine.workspace = true
-dirk_input.workspace = true
-dirk_universe.workspace = true
-
 glam.workspace = true
+egui = { workspace = true, optional = true }
 
 [build-dependencies]
 dirk_build.workspace = true
+
+[features]
+default = []
+egui = ["dep:egui"]
 
 [lints]
 workspace = true

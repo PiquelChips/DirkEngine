@@ -21,7 +21,6 @@ impl EnginePlugin for DemoPlugin {
         builder.add_subsystem(|ctx| {
             Ok(Demo {
                 players: ctx.resource::<dirk_player::PlayerRegistry>()?,
-                windows: ctx.resource::<dirk_platform::PlatformWindows>()?,
                 started: false,
             })
         });
@@ -32,7 +31,6 @@ impl EnginePlugin for DemoPlugin {
 /// A basic demo [`Subsystem`].
 struct Demo {
     players: dirk_player::PlayerRegistry,
-    windows: dirk_platform::PlatformWindows,
     started: bool,
 }
 
@@ -47,7 +45,7 @@ impl Subsystem for Demo {
         }
 
         let world_id = create_test_world(universe).context("create test world")?;
-        let player = self.players.new_player(self.windows.main_window().id());
+        let player = self.players.new_player();
 
         universe.spawn_entity(
             world_id,
