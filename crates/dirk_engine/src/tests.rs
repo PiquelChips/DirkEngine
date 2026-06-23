@@ -179,6 +179,35 @@ impl Subsystem for ReadingSubsystem {
     }
 }
 
+struct UniverseHandleSubsystem {
+    handle: dirk_universe::UniverseHandle,
+    world: Arc<Mutex<Option<dirk_universe::WorldId>>>,
+}
+
+impl Subsystem for UniverseHandleSubsystem {
+    fn name(&self) -> &'static str {
+        "universe-handle"
+    }
+
+    fn start(&mut self, _handle: &EngineHandle, _universe: &mut Universe) -> anyhow::Result<()> {
+        let mut command_buffer = self.handle.command_buffer();
+        let world = command_buffer.create_world(dirk_universe::World::builder("resource-world"));
+        command_buffer.submit();
+        *self.world.lock() = Some(world);
+        Ok(())
+    }
+
+    fn tick(
+        &mut self,
+        _delta_time: f64,
+        handle: &EngineHandle,
+        _universe: &mut Universe,
+    ) -> anyhow::Result<()> {
+        handle.exit();
+        Ok(())
+    }
+}
+
 pub(crate) fn build_context() -> EngineBuildContext {
     let workers = WorkerPool::new("dirk-engine-test");
     let events = EventManager::new(workers.clone());
@@ -464,5 +493,34 @@ fn subsystem_factories_publish_and_read_resources_and_lifecycle_still_runs() -> 
         ]
     );
 
+    Ok(())
+}
+
+#[test]
+fn universe_handle_is_available_as_engine_resource() -> Result<()> {
+    let world = Arc::new(Mutex::new(None));
+    let mut builder = EngineBuilder::new();
+
+    {
+        let world = Arc::clone(&world);
+        builder.add_subsystem(move |ctx| {
+            Ok(UniverseHandleSubsystem {
+                handle: ctx.resource::<dirk_universe::UniverseHandle>()?,
+                world,
+            })
+        });
+    }
+
+    let mut engine = builder.build()?;
+    let status = engine.tick()?;
+    assert_eq!(status, EngineStatus::ExitRequested);
+
+    let world = world.lock().expect("subsystem should record created world");
+    assert_eq!(
+        engine.universe.world(world).map(dirk_universe::World::name),
+        Some("resource-world")
+    );
+
+    engine.shutdown()?;
     Ok(())
 }

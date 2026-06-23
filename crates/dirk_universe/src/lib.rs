@@ -88,15 +88,11 @@ impl Universe {
 
     #[must_use]
     fn build(builder: UniverseBuilder) -> Self {
-        let (sender, receiver) = mpsc::channel();
         let universe = Self {
             worlds: HashMap::new(),
             entities: HashMap::new(),
-            handle: UniverseHandle {
-                allocator: Allocator::new(),
-                buffer_sender: sender,
-            },
-            buffer_receiver: receiver,
+            handle: builder.handle,
+            buffer_receiver: builder.buffer_receiver,
             universe_systems: builder.universe_systems,
             ticking_systems: builder.ticking_systems,
             entity_systems: builder.entity_systems,
@@ -450,8 +446,9 @@ impl Universe {
 }
 
 /// Builder struct used to construct a [`Universe`].
-#[derive(Default)]
 pub struct UniverseBuilder {
+    handle: UniverseHandle,
+    buffer_receiver: Receiver<CommandBuffer>,
     worlds: Vec<WorldBuilder>,
     universe_systems: UniverseSystemStorage,
     ticking_systems: TickingSystemStorage,
@@ -462,7 +459,25 @@ pub struct UniverseBuilder {
 impl UniverseBuilder {
     #[must_use]
     fn new() -> Self {
-        Self::default()
+        let (sender, receiver) = mpsc::channel();
+        Self {
+            handle: UniverseHandle {
+                allocator: Allocator::new(),
+                buffer_sender: sender,
+            },
+            buffer_receiver: receiver,
+            worlds: Vec::new(),
+            universe_systems: UniverseSystemStorage::default(),
+            ticking_systems: TickingSystemStorage::default(),
+            entity_systems: EntitySystemStorage::default(),
+            component_systems: ComponentSystemStorage::default(),
+        }
+    }
+
+    /// Returns the handle that will access the built [`Universe`].
+    #[must_use]
+    pub fn handle(&self) -> UniverseHandle {
+        self.handle.clone()
     }
 
     /// Will build a new [`Universe`] from the current builder.
@@ -532,6 +547,12 @@ impl UniverseBuilder {
         }
 
         self
+    }
+}
+
+impl Default for UniverseBuilder {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

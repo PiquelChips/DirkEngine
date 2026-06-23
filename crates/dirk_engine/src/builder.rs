@@ -250,6 +250,7 @@ impl EngineBuilder {
             handle: handle.clone(),
             builder: Universe::builder(),
         };
+        context.add_resource(context.builder.handle())?;
 
         #[cfg(feature = "editor")]
         let editor_services = {
