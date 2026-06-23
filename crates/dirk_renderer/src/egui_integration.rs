@@ -1,14 +1,9 @@
 use std::time::Instant;
 
 use ash::vk;
-use dirk_input::{
-    ButtonState, InputEvent, LogicalKey, NamedKey, NormalizedDelta, NormalizedPosition,
-    PointerButton,
-};
+use dirk_input::{ButtonState, InputEvent};
 use dirk_platform::{Theme, WindowId, WindowInputEvent};
-use egui::{
-    ClippedPrimitive, Context, Pos2, TextureId, TexturesDelta, Vec2, ViewportId, ViewportInfo,
-};
+use egui::{ClippedPrimitive, Context, TextureId, TexturesDelta, ViewportId, ViewportInfo};
 use egui_ash_renderer::{DynamicRendering, Options};
 
 use crate::{
@@ -72,7 +67,10 @@ impl EguiState {
         );
         let events = translate_events(
             input.window_id,
-            input.extent,
+            glam::UVec2 {
+                x: input.extent.width,
+                y: input.extent.height,
+            },
             native_pixels_per_point,
             input.events.as_slice(),
         );
@@ -170,7 +168,7 @@ fn is_srgb_format(format: vk::Format) -> bool {
 
 fn translate_events(
     window_id: WindowId,
-    extent: vk::Extent2D,
+    extent: glam::UVec2,
     native_pixels_per_point: f32,
     events: &[WindowInputEvent],
 ) -> Vec<egui::Event> {
@@ -191,7 +189,7 @@ fn translate_events(
 
 fn append_translated_event(
     out: &mut Vec<egui::Event>,
-    extent: vk::Extent2D,
+    extent: glam::UVec2,
     native_pixels_per_point: f32,
     event: &InputEvent,
 ) {
@@ -203,7 +201,7 @@ fn append_translated_event(
             modifiers,
         } => {
             let modifiers = egui::Modifiers::from(*modifiers);
-            if let Some(key) = key_to_egui(key) {
+            if let Some(key) = key.to_egui() {
                 out.push(egui::Event::Key {
                     key,
                     physical_key: None,
@@ -222,11 +220,9 @@ fn append_translated_event(
             }
         }
         InputEvent::PointerMoved { position, .. } => {
-            out.push(egui::Event::PointerMoved(position_to_egui(
-                *position,
-                extent,
-                native_pixels_per_point,
-            )));
+            out.push(egui::Event::PointerMoved(
+                position.to_egui(extent, native_pixels_per_point),
+            ));
         }
         InputEvent::PointerEntered => {}
         InputEvent::PointerLeft => {
@@ -239,8 +235,8 @@ fn append_translated_event(
             modifiers,
         } => {
             out.push(egui::Event::PointerButton {
-                pos: position_to_egui(*position, extent, native_pixels_per_point),
-                button: button_to_egui(*button),
+                pos: position.to_egui(extent, native_pixels_per_point),
+                button: egui::PointerButton::from(*button),
                 pressed: *state == ButtonState::Pressed,
                 modifiers: egui::Modifiers::from(*modifiers),
             });
@@ -252,142 +248,21 @@ fn append_translated_event(
         } => {
             out.push(egui::Event::MouseWheel {
                 unit: egui::MouseWheelUnit::from(*unit),
-                delta: delta_to_egui(*delta, extent, native_pixels_per_point),
+                delta: delta.to_egui(extent, native_pixels_per_point),
                 modifiers: egui::Modifiers::from(*modifiers),
             });
         }
     }
 }
 
-fn key_to_egui(key: &LogicalKey) -> Option<egui::Key> {
-    match key {
-        LogicalKey::Character(text) => text.chars().next().and_then(char_to_egui_key),
-        LogicalKey::Named(named) => named_key_to_egui(*named),
-    }
-}
-
-fn named_key_to_egui(key: NamedKey) -> Option<egui::Key> {
-    Some(match key {
-        NamedKey::ArrowDown => egui::Key::ArrowDown,
-        NamedKey::ArrowLeft => egui::Key::ArrowLeft,
-        NamedKey::ArrowRight => egui::Key::ArrowRight,
-        NamedKey::ArrowUp => egui::Key::ArrowUp,
-        NamedKey::Escape => egui::Key::Escape,
-        NamedKey::Tab => egui::Key::Tab,
-        NamedKey::Backspace => egui::Key::Backspace,
-        NamedKey::Enter => egui::Key::Enter,
-        NamedKey::Space => egui::Key::Space,
-        NamedKey::Insert => egui::Key::Insert,
-        NamedKey::Delete => egui::Key::Delete,
-        NamedKey::Home => egui::Key::Home,
-        NamedKey::End => egui::Key::End,
-        NamedKey::PageUp => egui::Key::PageUp,
-        NamedKey::PageDown => egui::Key::PageDown,
-        NamedKey::Function(1) => egui::Key::F1,
-        NamedKey::Function(2) => egui::Key::F2,
-        NamedKey::Function(3) => egui::Key::F3,
-        NamedKey::Function(4) => egui::Key::F4,
-        NamedKey::Function(5) => egui::Key::F5,
-        NamedKey::Function(6) => egui::Key::F6,
-        NamedKey::Function(7) => egui::Key::F7,
-        NamedKey::Function(8) => egui::Key::F8,
-        NamedKey::Function(9) => egui::Key::F9,
-        NamedKey::Function(10) => egui::Key::F10,
-        NamedKey::Function(11) => egui::Key::F11,
-        NamedKey::Function(12) => egui::Key::F12,
-        NamedKey::Function(13) => egui::Key::F13,
-        NamedKey::Function(14) => egui::Key::F14,
-        NamedKey::Function(15) => egui::Key::F15,
-        NamedKey::Function(16) => egui::Key::F16,
-        NamedKey::Function(17) => egui::Key::F17,
-        NamedKey::Function(18) => egui::Key::F18,
-        NamedKey::Function(19) => egui::Key::F19,
-        NamedKey::Function(_) => return None,
-    })
-}
-
-fn char_to_egui_key(character: char) -> Option<egui::Key> {
-    Some(match character.to_ascii_lowercase() {
-        'a' => egui::Key::A,
-        'b' => egui::Key::B,
-        'c' => egui::Key::C,
-        'd' => egui::Key::D,
-        'e' => egui::Key::E,
-        'f' => egui::Key::F,
-        'g' => egui::Key::G,
-        'h' => egui::Key::H,
-        'i' => egui::Key::I,
-        'j' => egui::Key::J,
-        'k' => egui::Key::K,
-        'l' => egui::Key::L,
-        'm' => egui::Key::M,
-        'n' => egui::Key::N,
-        'o' => egui::Key::O,
-        'p' => egui::Key::P,
-        'q' => egui::Key::Q,
-        'r' => egui::Key::R,
-        's' => egui::Key::S,
-        't' => egui::Key::T,
-        'u' => egui::Key::U,
-        'v' => egui::Key::V,
-        'w' => egui::Key::W,
-        'x' => egui::Key::X,
-        'y' => egui::Key::Y,
-        'z' => egui::Key::Z,
-        '0' => egui::Key::Num0,
-        '1' => egui::Key::Num1,
-        '2' => egui::Key::Num2,
-        '3' => egui::Key::Num3,
-        '4' => egui::Key::Num4,
-        '5' => egui::Key::Num5,
-        '6' => egui::Key::Num6,
-        '7' => egui::Key::Num7,
-        '8' => egui::Key::Num8,
-        '9' => egui::Key::Num9,
-        _ => return None,
-    })
-}
-
-fn button_to_egui(button: PointerButton) -> egui::PointerButton {
-    match button {
-        PointerButton::Primary => egui::PointerButton::Primary,
-        PointerButton::Secondary => egui::PointerButton::Secondary,
-        PointerButton::Middle => egui::PointerButton::Middle,
-        PointerButton::Back | PointerButton::Other(_) => egui::PointerButton::Extra1,
-        PointerButton::Forward => egui::PointerButton::Extra2,
-    }
-}
-
-#[allow(clippy::cast_precision_loss)]
-fn position_to_egui(
-    position: NormalizedPosition,
-    extent: vk::Extent2D,
-    native_pixels_per_point: f32,
-) -> Pos2 {
-    let scale = native_pixels_per_point.max(f32::EPSILON);
-    Pos2::new(
-        position.0.x * extent.width as f32 / scale,
-        position.0.y * extent.height as f32 / scale,
-    )
-}
-
-#[allow(clippy::cast_precision_loss)]
-fn delta_to_egui(
-    delta: NormalizedDelta,
-    extent: vk::Extent2D,
-    native_pixels_per_point: f32,
-) -> Vec2 {
-    let scale = native_pixels_per_point.max(f32::EPSILON);
-    Vec2::new(
-        delta.0.x * extent.width as f32 / scale,
-        delta.0.y * extent.height as f32 / scale,
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dirk_input::{Modifiers, ScrollUnit};
+    use dirk_input::{
+        LogicalKey, Modifiers, NamedKey, NormalizedDelta, NormalizedPosition, PointerButton,
+        ScrollUnit,
+    };
+    use egui::{Pos2, Vec2};
 
     fn window_id(raw: usize) -> WindowId {
         WindowId::from_raw(raw)
@@ -404,10 +279,7 @@ mod tests {
     fn pointer_positions_are_scaled_from_normalized_to_points() {
         let events = translate_events(
             window_id(1),
-            vk::Extent2D {
-                width: 200,
-                height: 100,
-            },
+            glam::UVec2 { x: 200, y: 100 },
             2.0,
             &[WindowInputEvent {
                 window: window_id(1),
@@ -429,10 +301,7 @@ mod tests {
         let modifiers = Modifiers::default();
         let events = translate_events(
             window_id(1),
-            vk::Extent2D {
-                width: 100,
-                height: 100,
-            },
+            glam::UVec2 { x: 100, y: 100 },
             1.0,
             &[WindowInputEvent {
                 window: window_id(1),
@@ -464,10 +333,7 @@ mod tests {
     fn space_key_press_emits_text_event() {
         let events = translate_events(
             window_id(1),
-            vk::Extent2D {
-                width: 100,
-                height: 100,
-            },
+            glam::UVec2 { x: 100, y: 100 },
             1.0,
             &[WindowInputEvent {
                 window: window_id(1),
@@ -491,10 +357,7 @@ mod tests {
         };
         let events = translate_events(
             window_id(1),
-            vk::Extent2D {
-                width: 100,
-                height: 100,
-            },
+            glam::UVec2 { x: 100, y: 100 },
             1.0,
             &[
                 WindowInputEvent {
@@ -544,10 +407,7 @@ mod tests {
         };
         let events = translate_events(
             window_id(1),
-            vk::Extent2D {
-                width: 100,
-                height: 100,
-            },
+            glam::UVec2 { x: 100, y: 100 },
             1.0,
             &[WindowInputEvent {
                 window: window_id(1),
@@ -581,10 +441,7 @@ mod tests {
         };
         let events = translate_events(
             window_id(1),
-            vk::Extent2D {
-                width: 2,
-                height: 4,
-            },
+            glam::UVec2 { x: 2, y: 4 },
             1.0,
             &[WindowInputEvent {
                 window: window_id(1),

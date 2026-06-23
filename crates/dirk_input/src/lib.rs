@@ -115,28 +115,6 @@ pub enum ScrollUnit {
     Page,
 }
 
-#[cfg(feature = "egui")]
-impl From<::egui::MouseWheelUnit> for ScrollUnit {
-    fn from(value: ::egui::MouseWheelUnit) -> Self {
-        match value {
-            ::egui::MouseWheelUnit::Point => Self::Point,
-            ::egui::MouseWheelUnit::Line => Self::Line,
-            ::egui::MouseWheelUnit::Page => Self::Page,
-        }
-    }
-}
-
-#[cfg(feature = "egui")]
-impl From<ScrollUnit> for ::egui::MouseWheelUnit {
-    fn from(value: ScrollUnit) -> Self {
-        match value {
-            ScrollUnit::Point => Self::Point,
-            ScrollUnit::Line => Self::Line,
-            ScrollUnit::Page => Self::Page,
-        }
-    }
-}
-
 /// Keyboard modifiers active during an input event.
 #[derive(Debug, Default, Clone, Copy, Eq, Hash, PartialEq)]
 #[allow(clippy::struct_excessive_bools)]
@@ -151,35 +129,6 @@ pub struct Modifiers {
     pub super_key: bool,
 }
 
-#[cfg(feature = "egui")]
-impl From<::egui::Modifiers> for Modifiers {
-    fn from(value: ::egui::Modifiers) -> Self {
-        Self {
-            alt: value.alt,
-            ctrl: value.ctrl || ((!cfg!(platform_macos)) && value.command),
-            shift: value.shift,
-            super_key: value.mac_cmd || (cfg!(platform_macos) && value.command),
-        }
-    }
-}
-
-#[cfg(feature = "egui")]
-impl From<Modifiers> for ::egui::Modifiers {
-    fn from(value: Modifiers) -> Self {
-        Self {
-            alt: value.alt,
-            ctrl: value.ctrl,
-            shift: value.shift,
-            mac_cmd: cfg!(platform_macos) && value.super_key,
-            command: if cfg!(platform_macos) {
-                value.super_key
-            } else {
-                value.ctrl
-            },
-        }
-    }
-}
-
 /// Viewport-local normalized pointer position.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct NormalizedPosition(pub glam::Vec2);
@@ -190,39 +139,11 @@ impl NormalizedPosition {
     pub fn new(position: glam::Vec2) -> Self {
         Self(position.clamp(glam::Vec2::ZERO, glam::Vec2::ONE))
     }
-
-    /// Creates a [`NormalizedPosition`] from a position & egui rect
-    #[cfg(feature = "egui")]
-    #[must_use]
-    pub fn from_egui(rect: ::egui::Rect, pos: ::egui::Pos2) -> Self {
-        let local = pos - rect.min;
-        Self::new(glam::vec2(
-            normalize_component(local.x, rect.width()),
-            normalize_component(local.y, rect.height()),
-        ))
-    }
-}
-
-#[cfg(feature = "egui")]
-fn normalize_component(value: f32, extent: f32) -> f32 {
-    value / extent.max(f32::EPSILON)
 }
 
 /// Viewport-local normalized delta.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct NormalizedDelta(pub glam::Vec2);
-
-impl NormalizedDelta {
-    /// Converts egui delta & size to a [`NormalizedDelta`].
-    #[cfg(feature = "egui")]
-    #[must_use]
-    pub fn from_egui(delta: ::egui::Vec2, size: ::egui::Vec2) -> Self {
-        Self(glam::vec2(
-            normalize_component(delta.x, size.x),
-            normalize_component(delta.y, size.y),
-        ))
-    }
-}
 
 /// Engine input event. Contains no platform window identity.
 #[derive(Debug, Clone, PartialEq)]
