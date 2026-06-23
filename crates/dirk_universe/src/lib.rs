@@ -28,6 +28,8 @@ pub use entity::{Entity, EntityBuilder};
 mod world;
 pub use world::{World, WorldBuilder, WorldId};
 
+mod allocator;
+
 /// Read-only information about one component attached to an entity.
 pub struct ComponentInfo<'a> {
     /// Component [`TypeId`].
