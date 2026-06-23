@@ -13,7 +13,7 @@ use dirk_events::{Dispatcher, EventManager};
 use dirk_platform::WindowId;
 #[cfg(not(feature = "editor"))]
 use dirk_platform::WindowInputEvent;
-use dirk_universe::components::Component;
+use dirk_universe::{Universe, components::Component};
 use input::InputContext;
 use parking_lot::{MappedRwLockReadGuard, MappedRwLockWriteGuard, RwLock, RwLockReadGuard};
 
@@ -222,6 +222,7 @@ impl Subsystem for PlayerManager {
         &mut self,
         _delta_time: f64,
         _handle: &EngineHandle,
+        _universe: &Universe,
     ) -> anyhow::Result<()> {
         #[cfg(not(feature = "editor"))]
         for event in self.window_input_consumer.consume_all() {

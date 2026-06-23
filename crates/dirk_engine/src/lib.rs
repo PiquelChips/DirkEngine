@@ -269,7 +269,7 @@ impl Engine {
             let subsystem = &mut self.subsystems[index];
             let name = subsystem.name();
             subsystem
-                .tick(delta_time, &self.handle)
+                .tick(delta_time, &self.handle, &self.universe)
                 .map_err(|source| Error::SubsystemFailedTick { name, source })?;
 
             self.process_commands();

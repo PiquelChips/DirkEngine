@@ -2,6 +2,7 @@
 
 use std::time::Duration;
 
+use dirk_universe::Universe;
 use tracing::info;
 use winit::event_loop::{
     EventLoop,
@@ -102,7 +103,12 @@ impl dirk_engine::Subsystem for Platform {
         "platform"
     }
 
-    fn tick(&mut self, _delta_time: f64, handle: &dirk_engine::EngineHandle) -> anyhow::Result<()> {
+    fn tick(
+        &mut self,
+        _delta_time: f64,
+        handle: &dirk_engine::EngineHandle,
+        _universe: &Universe,
+    ) -> anyhow::Result<()> {
         match self
             .event_loop
             .pump_app_events(Some(Duration::ZERO), &mut self.handler)

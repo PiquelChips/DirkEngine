@@ -4,6 +4,7 @@
 mod tests;
 
 mod errors;
+use dirk_universe::Universe;
 pub use errors::{Error, Result};
 
 mod events;
@@ -65,7 +66,12 @@ impl Subsystem for AssetsSubsystem {
         "assets"
     }
 
-    fn tick(&mut self, _delta_time: f64, _handle: &EngineHandle) -> anyhow::Result<()> {
+    fn tick(
+        &mut self,
+        _delta_time: f64,
+        _handle: &EngineHandle,
+        _universe: &Universe,
+    ) -> anyhow::Result<()> {
         self.registry.tick();
         Ok(())
     }

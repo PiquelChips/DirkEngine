@@ -237,7 +237,12 @@ impl dirk_engine::Subsystem for Renderer {
         "renderer"
     }
 
-    fn tick(&mut self, delta_time: f64, handle: &dirk_engine::EngineHandle) -> anyhow::Result<()> {
+    fn tick(
+        &mut self,
+        delta_time: f64,
+        handle: &dirk_engine::EngineHandle,
+        universe: &Universe,
+    ) -> anyhow::Result<()> {
         self.tick(delta_time)?;
         #[cfg(feature = "editor")]
         {
@@ -245,7 +250,7 @@ impl dirk_engine::Subsystem for Renderer {
             let frame = dirk_engine::editor::EditorRenderContext::new(delta_time, handle);
 
             self.viewport_editor.sync_ready_state(&self.viewports);
-            self.editor.render_ui(&ctx, &frame)?;
+            self.editor.render_ui(&ctx, &frame, universe)?;
         }
 
         #[cfg(not(feature = "editor"))]

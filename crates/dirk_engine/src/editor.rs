@@ -10,6 +10,7 @@ use std::{
 };
 
 use anyhow::Context as _;
+use dirk_universe::Universe;
 use egui_dock::{
     DockArea, DockState, NodeIndex, Split, SurfaceIndex, TabViewer, tab_viewer::OnCloseResponse,
 };
@@ -106,6 +107,8 @@ pub struct EditorUiContext<'a> {
     commands: EditorCommandSender,
     /// Shared engine handle.
     pub handle: &'a EngineHandle,
+    /// The Universe
+    universe: &'a Universe,
 }
 
 impl EditorUiContext<'_> {
@@ -118,6 +121,12 @@ impl EditorUiContext<'_> {
     /// Requests that an editor window be opened.
     pub fn open_window(&self, id: EditorWindowId) {
         self.commands.open_window(id);
+    }
+
+    /// Returns an immutable reference to the [`Universe`].
+    #[must_use]
+    pub fn universe(&self) -> &Universe {
+        self.universe
     }
 
     /// Returns the editor command sender for this UI pass.
@@ -479,13 +488,14 @@ impl EditorServices {
         &self,
         ctx: &egui::Context,
         context: &EditorRenderContext<'_>,
+        universe: &Universe,
     ) -> anyhow::Result<()> {
         let styles = self.state.lock().styles.clone();
         for style in styles {
             style.apply(ctx);
         }
 
-        self.state.lock().render(ctx, context)
+        self.state.lock().render(ctx, context, universe)
     }
 }
 
@@ -520,13 +530,14 @@ impl EditorServicesState {
         &mut self,
         ctx: &egui::Context,
         context: &EditorRenderContext<'_>,
+        universe: &Universe,
     ) -> anyhow::Result<()> {
         let (editor_commands, command_receiver) = mpsc::channel();
         let editor_commands = EditorCommandSender::new(editor_commands);
 
-        self.render_menus(ctx, context, &editor_commands)?;
+        self.render_menus(ctx, context, &editor_commands, universe)?;
         self.apply_commands(command_receiver.try_iter());
-        self.render_windows(ctx, context, &editor_commands)?;
+        self.render_windows(ctx, context, &editor_commands, universe)?;
         self.apply_commands(command_receiver.try_iter());
         Ok(())
     }
@@ -536,6 +547,7 @@ impl EditorServicesState {
         ctx: &egui::Context,
         context: &EditorRenderContext<'_>,
         editor_commands: &EditorCommandSender,
+        universe: &Universe,
     ) -> anyhow::Result<()> {
         if self.menus.is_empty() {
             return Ok(());
@@ -547,6 +559,7 @@ impl EditorServicesState {
             delta_time: context.delta_time(),
             commands: (*editor_commands).clone(),
             handle: context.handle,
+            universe,
         };
 
         let mut result = Ok(());
@@ -573,6 +586,7 @@ impl EditorServicesState {
         ctx: &egui::Context,
         context: &EditorRenderContext<'_>,
         editor_commands: &EditorCommandSender,
+        universe: &Universe,
     ) -> anyhow::Result<()> {
         self.bootstrap_default_dock_layout();
         self.sync_dock_tabs_with_open_windows();
@@ -582,6 +596,7 @@ impl EditorServicesState {
             delta_time: context.delta_time(),
             commands: (*editor_commands).clone(),
             handle: context.handle,
+            universe,
         };
         let mut tab_viewer = EditorDockTabViewer {
             windows: &mut self.windows,
