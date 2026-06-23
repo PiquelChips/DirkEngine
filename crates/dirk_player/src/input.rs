@@ -81,6 +81,7 @@ mod tests {
                 button: PointerButton::Secondary,
                 state: ButtonState::Pressed,
                 position: NormalizedPosition::new(glam::Vec2::ZERO),
+                modifiers: Modifiers::default(),
             },
         );
         press_key(&mut input, "w");
@@ -104,6 +105,7 @@ mod tests {
                 button: PointerButton::Secondary,
                 state: ButtonState::Pressed,
                 position: NormalizedPosition::new(glam::Vec2::ZERO),
+                modifiers: Modifiers::default(),
             },
         );
         input.handle_event(&InputEvent::PointerMoved {
@@ -123,6 +125,7 @@ mod tests {
                 button: PointerButton::Secondary,
                 state: ButtonState::Pressed,
                 position: NormalizedPosition::new(glam::Vec2::ZERO),
+                modifiers: Modifiers::default(),
             },
         );
         press_key(&mut input, "w");

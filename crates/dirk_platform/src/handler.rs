@@ -204,6 +204,7 @@ impl PlatformHandler {
                     ElementState::Released => ButtonState::Released,
                 },
                 position: self.normalized_position(id, position),
+                modifiers: modifiers_from_winit(self.modifiers),
             },
         );
     }
@@ -218,6 +219,7 @@ impl PlatformHandler {
             id,
             InputEvent::Scroll {
                 delta: self.normalized_delta(id, delta),
+                modifiers: modifiers_from_winit(self.modifiers),
             },
         );
     }

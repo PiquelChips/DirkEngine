@@ -228,19 +228,23 @@ fn append_translated_event(
             button,
             state,
             position,
+            modifiers,
         } => {
             out.push(egui::Event::PointerButton {
                 pos: position_to_egui(*position, extent, native_pixels_per_point),
                 button: button_to_egui(*button),
                 pressed: *state == ButtonState::Pressed,
-                modifiers: egui::Modifiers::NONE,
+                modifiers: egui::Modifiers::from(*modifiers),
             });
         }
-        InputEvent::Scroll { delta } => {
+        InputEvent::Scroll {
+            delta,
+            modifiers,
+        } => {
             out.push(egui::Event::MouseWheel {
                 unit: MouseWheelUnit::Point,
                 delta: delta_to_egui(*delta, extent, native_pixels_per_point),
-                modifiers: egui::Modifiers::NONE,
+                modifiers: egui::Modifiers::from(*modifiers),
             });
         }
     }
@@ -409,4 +413,42 @@ mod tests {
             vec![egui::Event::PointerMoved(Pos2::new(50.0, 25.0))]
         );
     }
+
+    #[test]
+    fn pointer_buttons_preserve_modifiers() {
+        let modifiers = Modifiers {
+            alt: true,
+            ctrl: true,
+            shift: true,
+            super_key: false,
+        };
+        let events = translate_events(
+            window_id(1),
+            vk::Extent2D {
+                width: 100,
+                height: 100,
+            },
+            1.0,
+            &[WindowInputEvent {
+                window: window_id(1),
+                event: InputEvent::PointerButton {
+                    button: PointerButton::Primary,
+                    state: ButtonState::Pressed,
+                    position: NormalizedPosition::new(glam::vec2(0.25, 0.75)),
+                    modifiers,
+                },
+            }],
+        );
+
+        assert_eq!(
+            events,
+            vec![egui::Event::PointerButton {
+                pos: Pos2::new(25.0, 75.0),
+                button: egui::PointerButton::Primary,
+                pressed: true,
+                modifiers: modifiers.into(),
+            }]
+        );
+    }
+
 }

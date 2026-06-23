@@ -36,6 +36,7 @@ pub fn input_events_from_egui_response(
                 egui::Event::PointerButton {
                     pos,
                     button,
+                    modifiers,
                     pressed,
                     ..
                 } if pointer_routes || rect.contains(*pos) => {
@@ -46,11 +47,17 @@ pub fn input_events_from_egui_response(
                         button: pointer_button(*button),
                         state: ButtonState::from(*pressed),
                         position: NormalizedPosition::from_egui(rect, *pos),
+                        modifiers: Modifiers::from(*modifiers),
                     });
                 }
-                egui::Event::MouseWheel { delta, .. } if pointer_routes => {
+                egui::Event::MouseWheel {
+                    delta,
+                    modifiers,
+                    ..
+                } if pointer_routes => {
                     out.push(InputEvent::Scroll {
                         delta: NormalizedDelta::from_egui(*delta, size),
+                        modifiers: Modifiers::from(*modifiers),
                     });
                 }
                 egui::Event::Key {

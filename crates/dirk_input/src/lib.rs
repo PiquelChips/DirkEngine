@@ -215,11 +215,15 @@ pub enum InputEvent {
         state: ButtonState,
         /// Current clamped normalized position.
         position: NormalizedPosition,
+        /// Active keyboard modifiers.
+        modifiers: Modifiers,
     },
     /// Scroll wheel or trackpad input, normalized by viewport/window size.
     Scroll {
         /// Normalized scroll delta.
         delta: NormalizedDelta,
+        /// Active keyboard modifiers.
+        modifiers: Modifiers,
     },
 }
 
@@ -469,6 +473,7 @@ mod tests {
             button: PointerButton::Secondary,
             state: ButtonState::Pressed,
             position: NormalizedPosition::new(glam::Vec2::ZERO),
+            modifiers: Modifiers::default(),
         });
         input.handle_event(&InputEvent::Key {
             key: LogicalKey::character("a"),
@@ -494,6 +499,7 @@ mod tests {
             button: PointerButton::Secondary,
             state: ButtonState::Pressed,
             position: NormalizedPosition::new(glam::Vec2::ZERO),
+            modifiers: Modifiers::default(),
         });
 
         input.handle_event(&InputEvent::PointerLeft);
