@@ -110,6 +110,18 @@ pub struct Modifiers {
 }
 
 #[cfg(feature = "egui")]
+impl From<::egui::Modifiers> for Modifiers {
+    fn from(value: ::egui::Modifiers) -> Self {
+        Self {
+            alt: value.alt,
+            ctrl: value.ctrl || ((!cfg!(platform_macos)) && value.command),
+            shift: value.shift,
+            super_key: value.mac_cmd || (cfg!(platform_macos) && value.command),
+        }
+    }
+}
+
+#[cfg(feature = "egui")]
 impl From<Modifiers> for ::egui::Modifiers {
     fn from(value: Modifiers) -> Self {
         Self {

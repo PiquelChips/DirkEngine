@@ -65,7 +65,7 @@ pub fn input_events_from_egui_response(
                             key,
                             state: ButtonState::from(*pressed),
                             repeat: *repeat,
-                            modifiers: modifiers_from_egui(*modifiers),
+                            modifiers: Modifiers::from(*modifiers),
                         });
                     }
                 }
@@ -108,15 +108,6 @@ fn pointer_button(button: egui::PointerButton) -> PointerButton {
         egui::PointerButton::Middle => PointerButton::Middle,
         egui::PointerButton::Extra1 => PointerButton::Back,
         egui::PointerButton::Extra2 => PointerButton::Forward,
-    }
-}
-
-fn modifiers_from_egui(modifiers: egui::Modifiers) -> Modifiers {
-    Modifiers {
-        alt: modifiers.alt,
-        ctrl: modifiers.ctrl,
-        shift: modifiers.shift,
-        super_key: modifiers.mac_cmd || modifiers.command,
     }
 }
 
