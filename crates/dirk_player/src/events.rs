@@ -32,7 +32,6 @@ pub struct PlayerDespawned {
 }
 
 /// Input routed to a specific player.
-/// TODO: see about removing this event
 #[derive(Event, Debug, Clone)]
 #[event("player {id} input")]
 pub(crate) struct PlayerInput {
