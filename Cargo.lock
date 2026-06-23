@@ -602,6 +602,7 @@ dependencies = [
 name = "dirk_input"
 version = "0.1.0"
 dependencies = [
+ "dirk_build",
  "egui",
  "glam",
 ]

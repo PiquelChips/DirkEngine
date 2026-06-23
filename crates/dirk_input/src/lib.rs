@@ -116,8 +116,8 @@ impl From<Modifiers> for ::egui::Modifiers {
             alt: value.alt,
             ctrl: value.ctrl,
             shift: value.shift,
-            mac_cmd: cfg!(target_os = "macos") && value.super_key,
-            command: if cfg!(target_os = "macos") {
+            mac_cmd: cfg!(platform_macos) && value.super_key,
+            command: if cfg!(platform_macos) {
                 value.super_key
             } else {
                 value.ctrl
