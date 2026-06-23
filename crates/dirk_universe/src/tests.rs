@@ -2,13 +2,32 @@
 
 use std::any::TypeId;
 
-use crate::{CommandBuffer, Entity, Universe, World, components::Component, query::Query};
+use crate::{Entity, EntityBuilder, Universe, World, WorldId, components::Component, query::Query};
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Component)]
 struct Health(u32);
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Component)]
 struct Mana(u32);
+
+fn spawn_entity(universe: &mut Universe, world: WorldId, builder: EntityBuilder) -> Entity {
+    let mut command_buffer = universe.command_buffer();
+    let entity = command_buffer.spawn(world, builder);
+    universe.submit_buffer(command_buffer);
+    universe.tick(0.0);
+    entity
+}
+
+#[test]
+fn allocator_clones_share_world_and_entity_sequences() {
+    let allocator = crate::Allocator::new();
+    let clone = allocator.clone();
+
+    assert_eq!(allocator.allocate_world().raw(), 0);
+    assert_eq!(clone.allocate_world().raw(), 1);
+    assert_eq!(allocator.allocate_entity().raw(), 0);
+    assert_eq!(clone.allocate_entity().raw(), 1);
+}
 
 #[test]
 fn builder_creates_worlds_and_initial_entities() {
@@ -32,14 +51,14 @@ fn builder_creates_worlds_and_initial_entities() {
 }
 
 #[test]
-fn spawn_entity_in_missing_world_returns_none() {
+fn spawn_entity_in_missing_world_is_ignored() {
     let mut universe = Universe::builder().build();
     universe.tick(0.0);
     let missing = crate::WorldId::default() + 99;
 
-    let spawned = universe.spawn_entity(missing, Entity::builder());
+    let spawned = spawn_entity(&mut universe, missing, Entity::builder());
 
-    assert!(spawned.is_none());
+    assert!(!universe.is_alive(spawned));
     assert_eq!(universe.alive_count(), 0);
 }
 
@@ -54,17 +73,18 @@ fn query_filters_by_components_and_world_membership() {
     let world_a = crate::WorldId::default();
     let world_b = world_a + 1;
 
-    let e1 = universe
-        .spawn_entity(world_a, Entity::builder().with_component(Health(10)))
-        .expect("world exists");
-    let e2 = universe
-        .spawn_entity(
-            world_b,
-            Entity::builder()
-                .with_component(Health(20))
-                .with_component(Mana(5)),
-        )
-        .expect("world exists");
+    let e1 = spawn_entity(
+        &mut universe,
+        world_a,
+        Entity::builder().with_component(Health(10)),
+    );
+    let e2 = spawn_entity(
+        &mut universe,
+        world_b,
+        Entity::builder()
+            .with_component(Health(20))
+            .with_component(Mana(5)),
+    );
 
     let q = Query::empty()
         .with_component::<Health>()
@@ -82,9 +102,11 @@ fn component_getter_returns_expected_values() {
     universe.tick(0.0);
     let world = crate::WorldId::default();
 
-    let e = universe
-        .spawn_entity(world, Entity::builder().with_component(Health(123)))
-        .expect("world exists");
+    let e = spawn_entity(
+        &mut universe,
+        world,
+        Entity::builder().with_component(Health(123)),
+    );
 
     assert_eq!(universe.component::<Health>(e).map(|h| h.0), Some(123));
     assert_eq!(universe.component::<Mana>(e).map(|m| m.0), None);
@@ -120,12 +142,8 @@ fn entities_returns_live_entity_world_pairs() {
 
     let first_world = crate::WorldId::default();
     let second_world = first_world + 1;
-    let first = universe
-        .spawn_entity(first_world, Entity::builder())
-        .expect("world exists");
-    let second = universe
-        .spawn_entity(second_world, Entity::builder())
-        .expect("world exists");
+    let first = spawn_entity(&mut universe, first_world, Entity::builder());
+    let second = spawn_entity(&mut universe, second_world, Entity::builder());
 
     let mut entities: Vec<_> = universe
         .entities()
@@ -152,12 +170,8 @@ fn entities_in_world_filters_correctly() {
 
     let first_world = crate::WorldId::default();
     let second_world = first_world + 1;
-    let first = universe
-        .spawn_entity(first_world, Entity::builder())
-        .expect("world exists");
-    let _second = universe
-        .spawn_entity(second_world, Entity::builder())
-        .expect("world exists");
+    let first = spawn_entity(&mut universe, first_world, Entity::builder());
+    let _second = spawn_entity(&mut universe, second_world, Entity::builder());
 
     let entities: Vec<_> = universe
         .entities_in_world(first_world)
@@ -172,9 +186,11 @@ fn component_infos_exposes_type_name_and_debug_value() {
     let mut universe = Universe::builder().with_world(World::builder("w")).build();
     universe.tick(0.0);
     let world = crate::WorldId::default();
-    let entity = universe
-        .spawn_entity(world, Entity::builder().with_component(Health(77)))
-        .expect("world exists");
+    let entity = spawn_entity(
+        &mut universe,
+        world,
+        Entity::builder().with_component(Health(77)),
+    );
 
     let infos: Vec<_> = universe.component_infos(entity).collect();
 
@@ -194,14 +210,18 @@ fn inspection_helpers_update_after_despawn_and_world_destruction() {
 
     let first_world = crate::WorldId::default();
     let second_world = first_world + 1;
-    let despawned = universe
-        .spawn_entity(first_world, Entity::builder().with_component(Health(10)))
-        .expect("world exists");
-    let destroyed = universe
-        .spawn_entity(second_world, Entity::builder().with_component(Mana(20)))
-        .expect("world exists");
+    let despawned = spawn_entity(
+        &mut universe,
+        first_world,
+        Entity::builder().with_component(Health(10)),
+    );
+    let destroyed = spawn_entity(
+        &mut universe,
+        second_world,
+        Entity::builder().with_component(Mana(20)),
+    );
 
-    let mut command_buffer = CommandBuffer::new();
+    let mut command_buffer = universe.command_buffer();
     command_buffer.despawn(despawned);
     command_buffer.destroy_world(second_world);
     universe.submit_buffer(command_buffer);

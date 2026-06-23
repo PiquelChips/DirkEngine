@@ -2,9 +2,8 @@
 
 use std::f32::consts::PI;
 
-use anyhow::Context;
 use dirk_engine::{EngineHandle, EnginePlugin, Subsystem};
-use dirk_universe::{Entity, Universe, World};
+use dirk_universe::{CommandBuffer, Entity, Universe, World};
 
 /// An [`EnginePlugin`] with a basic demo world.
 pub struct DemoPlugin;
@@ -44,10 +43,12 @@ impl Subsystem for Demo {
             return Ok(());
         }
 
-        let world_id = create_test_world(universe).context("create test world")?;
+        let mut cmd = universe.command_buffer();
+
+        let world_id = create_test_world(&mut cmd);
         let player = self.players.new_player();
 
-        universe.spawn_entity(
+        cmd.spawn(
             world_id,
             Entity::builder().with_component(player).with_component(
                 dirk_world::components::Transform {
@@ -58,12 +59,14 @@ impl Subsystem for Demo {
             ),
         );
 
+        universe.submit_buffer(cmd);
+
         self.started = true;
         Ok(())
     }
 }
 
-fn create_test_world(universe: &mut Universe) -> anyhow::Result<dirk_universe::WorldId> {
+fn create_test_world(cmd: &mut CommandBuffer) -> dirk_universe::WorldId {
     use dirk_world::components::{Renderable, Transform};
 
     let duck_model = dirk_assets::AssetHandle::from_raw(
@@ -95,7 +98,5 @@ fn create_test_world(universe: &mut Universe) -> anyhow::Result<dirk_universe::W
         .with_entity(shrek_builder)
         .with_entity(duck_builder);
 
-    universe
-        .create_world(world_builder)
-        .context("world creation returned no id")
+    cmd.create_world(world_builder)
 }

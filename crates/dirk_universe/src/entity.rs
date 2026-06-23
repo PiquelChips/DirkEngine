@@ -15,6 +15,11 @@ use crate::components::{AnyComponent, Component};
 pub struct Entity(u64);
 
 impl Entity {
+    #[must_use]
+    pub(crate) fn new(id: u64) -> Self {
+        Self(id)
+    }
+
     /// Returns an empty [`EntityBuilder`].
     #[must_use]
     pub fn builder() -> EntityBuilder {

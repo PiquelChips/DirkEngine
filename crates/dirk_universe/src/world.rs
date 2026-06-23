@@ -11,7 +11,12 @@ use crate::{Entity, EntityBuilder};
 pub struct WorldId(u32);
 
 impl WorldId {
-    /// Returns the raw entity ID
+    #[must_use]
+    pub(crate) fn new(id: u32) -> Self {
+        Self(id)
+    }
+
+    /// Returns the raw world ID.
     #[must_use]
     pub fn raw(self) -> u32 {
         self.0

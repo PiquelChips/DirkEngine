@@ -1,12 +1,20 @@
 //! Integration tests for the `universe` crate.
 
-use dirk_universe::{Entity, Universe, World, components::Component};
+use dirk_universe::{Entity, EntityBuilder, Universe, World, WorldId, components::Component};
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Component)]
 struct Position(i32, i32);
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Component)]
 struct Hidden;
+
+fn spawn_entity(universe: &mut Universe, world: WorldId, builder: EntityBuilder) -> Entity {
+    let mut cmd = universe.command_buffer();
+    let entity = cmd.spawn(world, builder);
+    universe.submit_buffer(cmd);
+    universe.tick(0.0);
+    entity
+}
 
 #[test]
 fn universe_public_api_supports_entity_lifecycle_across_worlds() {
@@ -19,15 +27,17 @@ fn universe_public_api_supports_entity_lifecycle_across_worlds() {
     let overworld = dirk_universe::WorldId::default();
     let dungeon = overworld + 1;
 
-    let entity = universe
-        .spawn_entity(overworld, Entity::builder().with_component(Position(2, 3)))
-        .expect("entity should spawn");
+    let entity = spawn_entity(
+        &mut universe,
+        overworld,
+        Entity::builder().with_component(Position(2, 3)),
+    );
 
     assert!(universe.is_alive(entity));
     assert!(universe.is_in_world(overworld, entity));
     assert_eq!(universe.get_world(entity), Some(overworld));
 
-    let mut cmd = dirk_universe::CommandBuffer::new();
+    let mut cmd = universe.command_buffer();
     cmd.send(entity, dungeon);
     universe.submit_buffer(cmd);
     universe.tick(0.016);
@@ -35,7 +45,7 @@ fn universe_public_api_supports_entity_lifecycle_across_worlds() {
     assert!(universe.is_in_world(dungeon, entity));
     assert_eq!(universe.get_world(entity), Some(dungeon));
 
-    let mut cmd = dirk_universe::CommandBuffer::new();
+    let mut cmd = universe.command_buffer();
     cmd.despawn(entity);
     universe.submit_buffer(cmd);
     universe.tick(0.016);
@@ -49,9 +59,9 @@ fn buffered_spawns_are_applied_on_tick_and_components_are_readable() {
     universe.tick(0.0);
     let world = dirk_universe::WorldId::default();
 
-    let mut cmd = dirk_universe::CommandBuffer::new();
-    cmd.spawn(world, Entity::builder().with_component(Position(1, 1)));
-    cmd.spawn(
+    let mut cmd = universe.command_buffer();
+    let e0 = cmd.spawn(world, Entity::builder().with_component(Position(1, 1)));
+    let e1 = cmd.spawn(
         world,
         Entity::builder()
             .with_component(Position(9, 9))
@@ -62,9 +72,6 @@ fn buffered_spawns_are_applied_on_tick_and_components_are_readable() {
     universe.tick(0.016);
 
     assert_eq!(universe.alive_count(), 2);
-
-    let e0 = Entity::default();
-    let e1 = e0 + 1;
 
     assert_eq!(
         universe.component::<Position>(e0).map(|p| (p.0, p.1)),
@@ -77,4 +84,49 @@ fn buffered_spawns_are_applied_on_tick_and_components_are_readable() {
         Some((9, 9))
     );
     assert_eq!(universe.component::<Hidden>(e1).map(|_| true), Some(true));
+}
+
+#[test]
+fn public_command_buffers_allocate_unique_handles() {
+    let mut universe = Universe::builder().build();
+
+    let mut first_cmd = universe.command_buffer();
+    let first_world = first_cmd.create_world(World::builder("first"));
+    let first_entity = first_cmd.spawn(
+        first_world,
+        Entity::builder().with_component(Position(4, 8)),
+    );
+
+    let mut second_cmd = universe.command_buffer();
+    let second_world = second_cmd.create_world(World::builder("second"));
+    let second_entity = second_cmd.spawn(
+        second_world,
+        Entity::builder().with_component(Position(16, 32)),
+    );
+
+    universe.submit_buffer(first_cmd);
+    universe.submit_buffer(second_cmd);
+    universe.tick(0.016);
+
+    assert_ne!(first_world, second_world);
+    assert_ne!(first_entity, second_entity);
+    assert_eq!(universe.world(first_world).map(World::name), Some("first"));
+    assert_eq!(
+        universe.world(second_world).map(World::name),
+        Some("second")
+    );
+    assert!(universe.is_in_world(first_world, first_entity));
+    assert!(universe.is_in_world(second_world, second_entity));
+    assert_eq!(
+        universe
+            .component::<Position>(first_entity)
+            .map(|p| (p.0, p.1)),
+        Some((4, 8))
+    );
+    assert_eq!(
+        universe
+            .component::<Position>(second_entity)
+            .map(|p| (p.0, p.1)),
+        Some((16, 32))
+    );
 }
