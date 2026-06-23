@@ -39,6 +39,15 @@ impl LogicalKey {
     pub fn character(text: impl AsRef<str>) -> Self {
         Self::Character(text.as_ref().to_lowercase())
     }
+    /// Returns the text stored by the logical key
+    #[must_use]
+    pub fn text(&self) -> Option<&str> {
+        match self {
+            Self::Character(text) if !text.is_empty() => Some(text),
+            Self::Named(NamedKey::Space) => Some(" "),
+            _ => None,
+        }
+    }
 }
 
 /// Named logical keyboard keys used by engine bindings.
