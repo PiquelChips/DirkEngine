@@ -64,7 +64,8 @@ impl CommandBuffer {
     /// Will spawn a new [`Entity`] using the provided [`EntityBuilder`].
     /// Returns the handle of the new [`Entity`].
     ///
-    /// If None, then the [`World`] does not exist.
+    /// If the [`World`] does not exist when this command is applied, the
+    /// returned handle will not become alive.
     pub fn spawn(&mut self, world: WorldId, builder: EntityBuilder) -> Entity {
         let entity = self.alloc.allocate_entity();
         self.commands.push(Command::Spawn(entity, builder, world));

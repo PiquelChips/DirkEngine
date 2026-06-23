@@ -169,6 +169,12 @@ impl Universe {
                         warn!("cannot add entity {entity:?} as it already exists");
                         continue;
                     }
+                    let Some(world_ref) = self.worlds.get_mut(&world) else {
+                        warn!(
+                            "cannot add entity {entity:?} to world {world:?} as the world does not exist"
+                        );
+                        continue;
+                    };
 
                     self.entities.insert(entity, world);
 
@@ -180,13 +186,7 @@ impl Universe {
                         added_components.insert((entity, type_id));
                     });
 
-                    if let Some(world) = self.worlds.get_mut(&world) {
-                        world.alive.insert(entity);
-                    } else {
-                        warn!(
-                            "cannot add entity {entity:?} to world {world:?} as the world does not exit"
-                        );
-                    }
+                    world_ref.alive.insert(entity);
                 }
                 Command::Despawn(entity) => {
                     if !self.is_alive(entity) {
