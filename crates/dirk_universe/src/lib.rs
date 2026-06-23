@@ -5,28 +5,27 @@ use std::{
     collections::{HashMap, HashSet},
     fmt::Debug,
 };
-
-use crate::{
-    command_buffer::Command,
-    components::{AnyComponent, Component, Components},
-    systems::{
-        ComponentSystem, ComponentSystemStorage, EntitySystem, EntitySystemStorage, TickingSystem,
-        TickingSystemStorage, UniverseSystem, UniverseSystemStorage,
-    },
-};
+use tracing::warn;
 
 pub mod components;
+use components::{AnyComponent, Component, Components};
+
 pub mod query;
+
 pub mod systems;
+use systems::{
+    ComponentSystem, ComponentSystemStorage, EntitySystem, EntitySystemStorage, TickingSystem,
+    TickingSystemStorage, UniverseSystem, UniverseSystemStorage,
+};
 
 mod command_buffer;
+use command_buffer::Command;
 pub use command_buffer::CommandBuffer;
 
 mod entity;
 pub use entity::{Entity, EntityBuilder};
 
 mod world;
-use tracing::warn;
 pub use world::{World, WorldBuilder, WorldId};
 
 /// Read-only information about one component attached to an entity.
