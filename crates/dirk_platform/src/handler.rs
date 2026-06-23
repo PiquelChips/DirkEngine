@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use dirk_input::{
     ButtonState, InputEvent, LogicalKey, Modifiers, NamedKey, NormalizedDelta, NormalizedPosition,
-    PointerButton,
+    PointerButton, ScrollUnit,
 };
 use tracing::{debug, trace};
 use winit::{
@@ -211,14 +211,17 @@ impl PlatformHandler {
 
     fn dispatch_mouse_wheel(&self, id: WindowId, delta: &MouseScrollDelta) {
         trace!("Mouse wheel {delta:?}");
-        let delta = match delta {
-            MouseScrollDelta::LineDelta(x, y) => glam::dvec2(f64::from(*x), f64::from(*y)),
-            MouseScrollDelta::PixelDelta(px) => glam::dvec2(px.x, px.y),
+        let (delta, unit) = match delta {
+            MouseScrollDelta::LineDelta(x, y) => {
+                (glam::dvec2(f64::from(*x), f64::from(*y)), ScrollUnit::Line)
+            }
+            MouseScrollDelta::PixelDelta(px) => (glam::dvec2(px.x, px.y), ScrollUnit::Point),
         };
         self.dispatch_input(
             id,
             InputEvent::Scroll {
                 delta: self.normalized_delta(id, delta),
+                unit,
                 modifiers: modifiers_from_winit(self.modifiers),
             },
         );

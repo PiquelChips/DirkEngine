@@ -2,7 +2,7 @@
 
 use crate::{
     ButtonState, InputEvent, LogicalKey, Modifiers, NamedKey, NormalizedDelta, NormalizedPosition,
-    PointerButton, normalize_component,
+    PointerButton, ScrollUnit, normalize_component,
 };
 
 /// Translates input owned by an egui viewport response into engine input events.
@@ -51,12 +51,14 @@ pub fn input_events_from_egui_response(
                     });
                 }
                 egui::Event::MouseWheel {
+                    unit,
                     delta,
                     modifiers,
                     ..
                 } if pointer_routes => {
                     out.push(InputEvent::Scroll {
                         delta: NormalizedDelta::from_egui(*delta, size),
+                        unit: ScrollUnit::from(*unit),
                         modifiers: Modifiers::from(*modifiers),
                     });
                 }

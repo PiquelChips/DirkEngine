@@ -7,8 +7,7 @@ use dirk_input::{
 };
 use dirk_platform::{Theme, WindowId, WindowInputEvent};
 use egui::{
-    ClippedPrimitive, Context, MouseWheelUnit, Pos2, TextureId, TexturesDelta, Vec2, ViewportId,
-    ViewportInfo,
+    ClippedPrimitive, Context, Pos2, TextureId, TexturesDelta, Vec2, ViewportId, ViewportInfo,
 };
 use egui_ash_renderer::{DynamicRendering, Options};
 
@@ -239,10 +238,11 @@ fn append_translated_event(
         }
         InputEvent::Scroll {
             delta,
+            unit,
             modifiers,
         } => {
             out.push(egui::Event::MouseWheel {
-                unit: MouseWheelUnit::Point,
+                unit: egui::MouseWheelUnit::from(*unit),
                 delta: delta_to_egui(*delta, extent, native_pixels_per_point),
                 modifiers: egui::Modifiers::from(*modifiers),
             });
@@ -378,6 +378,7 @@ fn delta_to_egui(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use dirk_input::{Modifiers, ScrollUnit};
 
     fn window_id(raw: usize) -> WindowId {
         WindowId::from_raw(raw)
@@ -451,4 +452,38 @@ mod tests {
         );
     }
 
+    #[test]
+    fn scroll_events_preserve_unit_and_modifiers() {
+        let modifiers = Modifiers {
+            alt: false,
+            ctrl: true,
+            shift: false,
+            super_key: false,
+        };
+        let events = translate_events(
+            window_id(1),
+            vk::Extent2D {
+                width: 2,
+                height: 4,
+            },
+            1.0,
+            &[WindowInputEvent {
+                window: window_id(1),
+                event: InputEvent::Scroll {
+                    delta: NormalizedDelta(glam::vec2(0.5, 0.25)),
+                    unit: ScrollUnit::Line,
+                    modifiers,
+                },
+            }],
+        );
+
+        assert_eq!(
+            events,
+            vec![egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Line,
+                delta: Vec2::new(1.0, 1.0),
+                modifiers: modifiers.into(),
+            }]
+        );
+    }
 }

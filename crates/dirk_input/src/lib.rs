@@ -95,6 +95,39 @@ pub enum PointerButton {
     Other(u16),
 }
 
+/// Unit used by scroll wheel or trackpad input.
+#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
+pub enum ScrollUnit {
+    /// Logical pixels/points.
+    Point,
+    /// Text lines.
+    Line,
+    /// Pages.
+    Page,
+}
+
+#[cfg(feature = "egui")]
+impl From<::egui::MouseWheelUnit> for ScrollUnit {
+    fn from(value: ::egui::MouseWheelUnit) -> Self {
+        match value {
+            ::egui::MouseWheelUnit::Point => Self::Point,
+            ::egui::MouseWheelUnit::Line => Self::Line,
+            ::egui::MouseWheelUnit::Page => Self::Page,
+        }
+    }
+}
+
+#[cfg(feature = "egui")]
+impl From<ScrollUnit> for ::egui::MouseWheelUnit {
+    fn from(value: ScrollUnit) -> Self {
+        match value {
+            ScrollUnit::Point => Self::Point,
+            ScrollUnit::Line => Self::Line,
+            ScrollUnit::Page => Self::Page,
+        }
+    }
+}
+
 /// Keyboard modifiers active during an input event.
 #[derive(Debug, Default, Clone, Copy, Eq, Hash, PartialEq)]
 #[allow(clippy::struct_excessive_bools)]
@@ -222,6 +255,8 @@ pub enum InputEvent {
     Scroll {
         /// Normalized scroll delta.
         delta: NormalizedDelta,
+        /// Unit used by the scroll delta.
+        unit: ScrollUnit,
         /// Active keyboard modifiers.
         modifiers: Modifiers,
     },
