@@ -53,7 +53,7 @@ pub trait EnginePlugin {
 /// necessary.
 pub trait EngineResource: Clone + Send + Sync + 'static {}
 
-impl<T> EngineResource for T where T: Clone + Send + Sync + 'static {}
+impl<T: Clone + Send + Sync + 'static> EngineResource for T {}
 
 /// A runtime system owned and driven by the engine.
 ///
