@@ -370,8 +370,7 @@ impl InputState {
             | InputEvent::Scroll { .. } => {}
             // release held keys
             InputEvent::PointerLeft => {
-                self.held
-                    .retain(|binding| !matches!(binding, InputBinding::PointerButton(_)));
+                self.held.clear();
             }
         }
     }
