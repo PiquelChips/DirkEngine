@@ -78,3 +78,29 @@ fn buffered_spawns_are_applied_on_tick_and_components_are_readable() {
     );
     assert_eq!(universe.component::<Hidden>(e1).map(|_| true), Some(true));
 }
+
+#[test]
+fn allocator_handles_can_be_used_in_command_buffers() {
+    let mut universe = Universe::builder().build();
+    let allocator = universe.allocator();
+    let world = allocator.allocate_world();
+    let entity = allocator.allocate_entity();
+
+    let mut cmd = dirk_universe::CommandBuffer::new();
+    cmd.create_allocated_world(world, World::builder("allocated"));
+    cmd.spawn_allocated(
+        world,
+        entity,
+        Entity::builder().with_component(Position(4, 8)),
+    );
+    universe.submit_buffer(cmd);
+
+    universe.tick(0.016);
+
+    assert_eq!(universe.world(world).map(World::name), Some("allocated"));
+    assert!(universe.is_in_world(world, entity));
+    assert_eq!(
+        universe.component::<Position>(entity).map(|p| (p.0, p.1)),
+        Some((4, 8))
+    );
+}

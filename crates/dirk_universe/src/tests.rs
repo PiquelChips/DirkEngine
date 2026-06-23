@@ -11,6 +11,17 @@ struct Health(u32);
 struct Mana(u32);
 
 #[test]
+fn allocator_clones_share_world_and_entity_sequences() {
+    let allocator = crate::Allocator::new();
+    let clone = allocator.clone();
+
+    assert_eq!(allocator.allocate_world().raw(), 0);
+    assert_eq!(clone.allocate_world().raw(), 1);
+    assert_eq!(allocator.allocate_entity().raw(), 0);
+    assert_eq!(clone.allocate_entity().raw(), 1);
+}
+
+#[test]
 fn builder_creates_worlds_and_initial_entities() {
     let mut universe = Universe::builder()
         .with_world(World::builder("alpha").with_entity(Entity::builder()))

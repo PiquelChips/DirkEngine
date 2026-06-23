@@ -1,20 +1,20 @@
 use std::any::TypeId;
 
 use crate::{
-    Entity, EntityBuilder, WorldBuilder, WorldId,
+    Allocator, Entity, EntityBuilder, WorldBuilder, WorldId,
     components::{AnyComponent, Component},
 };
 
 /// A buffer to record edits to the [`Universe`].
-#[derive(Default)]
 pub struct CommandBuffer {
     commands: Vec<Command>,
+    alloc: Allocator,
 }
 
 pub(crate) enum Command {
-    CreateWorld(WorldBuilder),
+    CreateWorld(WorldId, String),
     DestroyWorld(WorldId),
-    Spawn(WorldId, EntityBuilder),
+    Spawn(Entity, EntityBuilder, WorldId),
     Despawn(Entity),
     Send(Entity, WorldId),
     SetComponent(Entity, Box<dyn AnyComponent>),
@@ -24,9 +24,13 @@ pub(crate) enum Command {
 impl CommandBuffer {
     /// Creates a new empty command buffer
     #[must_use]
-    pub fn new() -> Self {
-        Self::default()
+    pub(crate) fn new(alloc: Allocator) -> Self {
+        Self {
+            commands: Vec::new(),
+            alloc,
+        }
     }
+
     pub(crate) fn commands(self) -> Vec<Command> {
         self.commands
     }
@@ -40,9 +44,16 @@ impl CommandBuffer {
     // WORLD MANAGEMENT
 
     /// Will create a new empty world & return its ID.
-    pub fn create_world(&mut self, builder: WorldBuilder) {
-        self.commands.push(Command::CreateWorld(builder));
+    pub fn create_world(&mut self, builder: WorldBuilder) -> WorldId {
+        let id = self.alloc.allocate_world();
+        self.commands.push(Command::CreateWorld(id, builder.name));
+
+        for entity in builder.entities {
+            self.spawn(id, entity);
+        }
+        id
     }
+
     /// Will destroy the world & call all its destruction systems.
     pub fn destroy_world(&mut self, world: WorldId) {
         self.commands.push(Command::DestroyWorld(world));
@@ -54,9 +65,12 @@ impl CommandBuffer {
     /// Returns the handle of the new [`Entity`].
     ///
     /// If None, then the [`World`] does not exist.
-    pub fn spawn(&mut self, world: WorldId, builder: EntityBuilder) {
-        self.commands.push(Command::Spawn(world, builder));
+    pub fn spawn(&mut self, world: WorldId, builder: EntityBuilder) -> Entity {
+        let entity = self.alloc.allocate_entity();
+        self.commands.push(Command::Spawn(entity, builder, world));
+        entity
     }
+
     /// Will despawn the provided [`Entity`].
     ///
     /// Calls [`ComponentSystem::removed`] for every component still attached

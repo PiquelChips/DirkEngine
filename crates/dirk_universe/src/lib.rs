@@ -29,6 +29,7 @@ mod world;
 pub use world::{World, WorldBuilder, WorldId};
 
 mod allocator;
+use allocator::Allocator;
 
 /// Read-only information about one component attached to an entity.
 pub struct ComponentInfo<'a> {
@@ -43,10 +44,9 @@ pub struct ComponentInfo<'a> {
 /// This struct is the manager for all the worlds.
 pub struct Universe {
     worlds: HashMap<WorldId, World>,
-    next_world_id: WorldId,
-
     entities: HashMap<Entity, WorldId>,
-    next_entity_id: Entity,
+
+    allocator: Allocator,
 
     // this field starts with `universe`
     #[allow(clippy::struct_field_names)]
@@ -72,9 +72,8 @@ impl Universe {
     fn build(builder: UniverseBuilder) -> Self {
         let mut universe = Self {
             worlds: HashMap::new(),
-            next_world_id: WorldId::default(),
             entities: HashMap::new(),
-            next_entity_id: Entity::default(),
+            allocator: Allocator::new(),
             universe_systems: builder.universe_systems,
             ticking_systems: builder.ticking_systems,
             entity_systems: builder.entity_systems,
@@ -83,12 +82,18 @@ impl Universe {
             buffers: Vec::new(),
         };
 
-        let mut cmd = CommandBuffer::new();
+        let mut cmd = universe.command_buffer();
         for builder in builder.worlds {
             cmd.create_world(builder);
         }
         universe.submit_buffer(cmd);
         universe
+    }
+
+    /// Creates a new empty command buffer for this universe.
+    #[must_use]
+    pub fn command_buffer(&self) -> CommandBuffer {
+        CommandBuffer::new(self.allocator.clone())
     }
 
     /// Ticks every the entire [`Universe`].
@@ -99,7 +104,7 @@ impl Universe {
     /// was just created is not found in the [`Universe`].
     /// No panic should be caused by user error.
     pub fn tick(&mut self, delta_time: f64) {
-        let mut cmd = CommandBuffer::new();
+        let mut cmd = self.command_buffer();
 
         let buffers = std::mem::take(&mut self.buffers);
 
@@ -136,23 +141,13 @@ impl Universe {
 
         for command in commands {
             match command {
-                Command::CreateWorld(builder) => {
-                    let id = self.next_world_id;
-                    self.next_world_id += 1;
-
-                    let world = World::new(id, builder.name);
-                    self.worlds.insert(id, world);
-
-                    for builder in builder.entities {
-                        let entity = self.add_entity(id).expect("just created world");
-                        spawned_entities.insert(entity);
-
-                        builder.components.into_values().for_each(|component| {
-                            let type_id = component.component_type_id();
-                            self.components.insert_any(entity, component);
-                            added_components.insert((entity, type_id));
-                        });
+                Command::CreateWorld(id, name) => {
+                    if self.worlds.contains_key(&id) {
+                        warn!("cannot create world {id} as it already exists");
+                        continue;
                     }
+                    let world = World::new(id, name);
+                    self.worlds.insert(id, world);
 
                     created_worlds.insert(id);
                 }
@@ -169,11 +164,14 @@ impl Universe {
                     }
                     destroyed_worlds.insert(world.id());
                 }
-                Command::Spawn(world, builder) => {
-                    let Some(entity) = self.add_entity(world) else {
-                        warn!("cannot add entity to world {world} as it does not exist");
+                Command::Spawn(entity, builder, world) => {
+                    if self.is_alive(entity) {
+                        warn!("cannot add entity {entity:?} as it already exists");
                         continue;
-                    };
+                    }
+
+                    self.entities.insert(entity, world);
+
                     spawned_entities.insert(entity);
 
                     builder.components.into_values().for_each(|component| {
@@ -181,6 +179,14 @@ impl Universe {
                         self.components.insert_any(entity, component);
                         added_components.insert((entity, type_id));
                     });
+
+                    if let Some(world) = self.worlds.get_mut(&world) {
+                        world.alive.insert(entity);
+                    } else {
+                        warn!(
+                            "cannot add entity {entity:?} to world {world:?} as the world does not exit"
+                        );
+                    }
                 }
                 Command::Despawn(entity) => {
                     if !self.is_alive(entity) {
@@ -347,19 +353,6 @@ impl Universe {
         }
     }
 
-    /// Just adds an [`Entity`] to the `world` & returns its ID.
-    /// Returns `None` if the `world` does not exist.
-    fn add_entity(&mut self, world: WorldId) -> Option<Entity> {
-        let world = self.worlds.get_mut(&world)?;
-
-        let entity = self.next_entity_id;
-        self.next_entity_id += 1;
-        self.entities.insert(entity, world.id());
-
-        world.alive.insert(entity);
-        Some(entity)
-    }
-
     // COMMAND BUFFERS
 
     /// Will submit a buffer for execution.
@@ -443,41 +436,6 @@ impl Universe {
     #[must_use]
     pub fn component<C: Component>(&self, entity: Entity) -> Option<&C> {
         self.components.get(entity)
-    }
-
-    /// Will create a new [`World`] & return it [`WorldId`].
-    ///
-    /// The world creation runs immediately unlike when directly
-    /// submitting a [`CommandBuffer`].
-    pub fn create_world(&mut self, builder: WorldBuilder) -> Option<WorldId> {
-        let next_id = self.next_world_id;
-        let mut cmd = CommandBuffer::new();
-        self.run_commands(&mut cmd, vec![Command::CreateWorld(builder)]);
-        self.submit_buffer(cmd);
-        let new_next = self.next_world_id;
-
-        if next_id == new_next {
-            None
-        } else {
-            Some(next_id)
-        }
-    }
-
-    /// Will spawn a new [`Entity`] & return its ID.
-    ///
-    /// The spawning runs immediately unlike when directly submitting a [`CommandBuffer`].
-    pub fn spawn_entity(&mut self, world: WorldId, builder: EntityBuilder) -> Option<Entity> {
-        let next_id = self.next_entity_id;
-        let mut cmd = CommandBuffer::new();
-        self.run_commands(&mut cmd, vec![Command::Spawn(world, builder)]);
-        self.submit_buffer(cmd);
-        let new_next = self.next_entity_id;
-
-        if next_id == new_next {
-            None
-        } else {
-            Some(next_id)
-        }
     }
 }
 
