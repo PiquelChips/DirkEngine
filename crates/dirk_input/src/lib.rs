@@ -457,18 +457,26 @@ mod tests {
     }
 
     #[test]
-    fn pointer_left_releases_held_pointer_buttons() {
+    fn pointer_left_clears_all_held_bindings() {
         let mut input = InputState::default();
-        let binding = InputBinding::PointerButton(PointerButton::Secondary);
+        let pointer_binding = InputBinding::PointerButton(PointerButton::Secondary);
+        let key_binding = InputBinding::Key(LogicalKey::character("w"));
         input.handle_event(&InputEvent::PointerButton {
             button: PointerButton::Secondary,
             state: ButtonState::Pressed,
             position: NormalizedPosition::new(glam::Vec2::ZERO),
             modifiers: Modifiers::default(),
         });
+        input.handle_event(&InputEvent::Key {
+            key: LogicalKey::character("w"),
+            state: ButtonState::Pressed,
+            repeat: false,
+            modifiers: Modifiers::default(),
+        });
 
         input.handle_event(&InputEvent::PointerLeft);
 
-        assert!(!input.is_held(&binding));
+        assert!(!input.is_held(&pointer_binding));
+        assert!(!input.is_held(&key_binding));
     }
 }
