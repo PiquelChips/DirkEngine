@@ -4,6 +4,7 @@ use std::{
     any::TypeId,
     collections::{HashMap, HashSet},
     fmt::Debug,
+    sync::mpsc::{self, Receiver, Sender},
 };
 use tracing::warn;
 
@@ -41,12 +42,32 @@ pub struct ComponentInfo<'a> {
     pub debug: &'a dyn Debug,
 }
 
+/// A cheap clonable handle for access to the [`Universe`].
+/// This give write-only access to the [`Universe`]. To write to it, use
+/// a [`System`].
+///
+/// [`System`]: systems::System
+#[derive(Clone)]
+pub struct UniverseHandle {
+    allocator: Allocator,
+    buffer_sender: Sender<CommandBuffer>,
+}
+
+impl UniverseHandle {
+    /// Creates a command buffer
+    #[must_use]
+    pub fn command_buffer(&self) -> CommandBuffer {
+        CommandBuffer::new(self.clone())
+    }
+}
+
 /// This struct is the manager for all the worlds.
 pub struct Universe {
     worlds: HashMap<WorldId, World>,
     entities: HashMap<Entity, WorldId>,
 
-    allocator: Allocator,
+    handle: UniverseHandle,
+    buffer_receiver: Receiver<CommandBuffer>,
 
     // this field starts with `universe`
     #[allow(clippy::struct_field_names)]
@@ -56,9 +77,6 @@ pub struct Universe {
     component_systems: ComponentSystemStorage,
 
     components: Components,
-
-    /// The queue of command buffers that need to be submitted
-    buffers: Vec<CommandBuffer>,
 }
 
 impl Universe {
@@ -70,30 +88,34 @@ impl Universe {
 
     #[must_use]
     fn build(builder: UniverseBuilder) -> Self {
-        let mut universe = Self {
+        let (sender, receiver) = mpsc::channel();
+        let universe = Self {
             worlds: HashMap::new(),
             entities: HashMap::new(),
-            allocator: Allocator::new(),
+            handle: UniverseHandle {
+                allocator: Allocator::new(),
+                buffer_sender: sender,
+            },
+            buffer_receiver: receiver,
             universe_systems: builder.universe_systems,
             ticking_systems: builder.ticking_systems,
             entity_systems: builder.entity_systems,
             component_systems: builder.component_systems,
             components: Components::default(),
-            buffers: Vec::new(),
         };
 
-        let mut cmd = universe.command_buffer();
+        let mut cmd = universe.handle.command_buffer();
         for builder in builder.worlds {
             cmd.create_world(builder);
         }
-        universe.submit_buffer(cmd);
+        cmd.submit();
         universe
     }
 
-    /// Creates a new empty command buffer for this universe.
+    /// Returns a cheap handle to the [`Universe`].
     #[must_use]
-    pub fn command_buffer(&self) -> CommandBuffer {
-        CommandBuffer::new(self.allocator.clone())
+    pub fn handle(&self) -> UniverseHandle {
+        self.handle.clone()
     }
 
     /// Ticks every the entire [`Universe`].
@@ -104,12 +126,10 @@ impl Universe {
     /// was just created is not found in the [`Universe`].
     /// No panic should be caused by user error.
     pub fn tick(&mut self, delta_time: f64) {
-        let mut cmd = self.command_buffer();
-
-        let buffers = std::mem::take(&mut self.buffers);
+        let mut cmd = self.handle.command_buffer();
 
         let mut commands: Vec<Command> = Vec::new();
-        for sub in buffers {
+        for sub in self.buffer_receiver.try_iter() {
             commands.append(&mut sub.commands());
         }
 
@@ -123,7 +143,7 @@ impl Universe {
             system.tick(&mut cmd, self, delta_time, &mut system.query().query(self));
         });
 
-        self.submit_buffer(cmd);
+        cmd.submit();
     }
 
     // HELPERS FOR THE TICK FUNCTION
@@ -351,16 +371,6 @@ impl Universe {
         for world in destroyed_worlds {
             self.worlds.remove(&world);
         }
-    }
-
-    // COMMAND BUFFERS
-
-    /// Will submit a buffer for execution.
-    pub fn submit_buffer(&mut self, buffer: CommandBuffer) {
-        if buffer.is_empty() {
-            return;
-        }
-        self.buffers.push(buffer);
     }
 
     // UTILITIES & GETTERS

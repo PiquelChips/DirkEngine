@@ -43,7 +43,7 @@ impl Subsystem for Demo {
             return Ok(());
         }
 
-        let mut cmd = universe.command_buffer();
+        let mut cmd = universe.handle().command_buffer();
 
         let world_id = create_test_world(&mut cmd);
         let player = self.players.new_player();
@@ -59,7 +59,7 @@ impl Subsystem for Demo {
             ),
         );
 
-        universe.submit_buffer(cmd);
+        cmd.submit();
 
         self.started = true;
         Ok(())
