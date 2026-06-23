@@ -202,14 +202,23 @@ fn append_translated_event(
             repeat,
             modifiers,
         } => {
+            let modifiers = egui::Modifiers::from(*modifiers);
             if let Some(key) = key_to_egui(key) {
                 out.push(egui::Event::Key {
                     key,
                     physical_key: None,
                     pressed: *state == ButtonState::Pressed,
                     repeat: *repeat,
-                    modifiers: (*modifiers).into(),
+                    modifiers,
                 });
+            }
+            if *state == ButtonState::Pressed
+                && !*repeat
+                && !modifiers.command
+                && !modifiers.ctrl
+                && let Some(text) = key.text()
+            {
+                out.push(egui::Event::Text(text.to_owned()));
             }
         }
         InputEvent::PointerMoved { position, .. } => {
@@ -412,6 +421,116 @@ mod tests {
         assert_eq!(
             events,
             vec![egui::Event::PointerMoved(Pos2::new(50.0, 25.0))]
+        );
+    }
+
+    #[test]
+    fn printable_key_press_emits_key_and_text_events() {
+        let modifiers = Modifiers::default();
+        let events = translate_events(
+            window_id(1),
+            vk::Extent2D {
+                width: 100,
+                height: 100,
+            },
+            1.0,
+            &[WindowInputEvent {
+                window: window_id(1),
+                event: InputEvent::Key {
+                    key: LogicalKey::character("a"),
+                    state: ButtonState::Pressed,
+                    repeat: false,
+                    modifiers,
+                },
+            }],
+        );
+
+        assert_eq!(
+            events,
+            vec![
+                egui::Event::Key {
+                    key: egui::Key::A,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: modifiers.into(),
+                },
+                egui::Event::Text("a".to_owned()),
+            ]
+        );
+    }
+
+    #[test]
+    fn space_key_press_emits_text_event() {
+        let events = translate_events(
+            window_id(1),
+            vk::Extent2D {
+                width: 100,
+                height: 100,
+            },
+            1.0,
+            &[WindowInputEvent {
+                window: window_id(1),
+                event: InputEvent::Key {
+                    key: LogicalKey::Named(NamedKey::Space),
+                    state: ButtonState::Pressed,
+                    repeat: false,
+                    modifiers: Modifiers::default(),
+                },
+            }],
+        );
+
+        assert!(events.contains(&egui::Event::Text(" ".to_owned())));
+    }
+
+    #[test]
+    fn printable_key_text_events_are_suppressed_for_repeats_releases_and_command_modifiers() {
+        let ctrl_modifiers = Modifiers {
+            ctrl: true,
+            ..Modifiers::default()
+        };
+        let events = translate_events(
+            window_id(1),
+            vk::Extent2D {
+                width: 100,
+                height: 100,
+            },
+            1.0,
+            &[
+                WindowInputEvent {
+                    window: window_id(1),
+                    event: InputEvent::Key {
+                        key: LogicalKey::character("a"),
+                        state: ButtonState::Pressed,
+                        repeat: true,
+                        modifiers: Modifiers::default(),
+                    },
+                },
+                WindowInputEvent {
+                    window: window_id(1),
+                    event: InputEvent::Key {
+                        key: LogicalKey::character("b"),
+                        state: ButtonState::Released,
+                        repeat: false,
+                        modifiers: Modifiers::default(),
+                    },
+                },
+                WindowInputEvent {
+                    window: window_id(1),
+                    event: InputEvent::Key {
+                        key: LogicalKey::character("c"),
+                        state: ButtonState::Pressed,
+                        repeat: false,
+                        modifiers: ctrl_modifiers,
+                    },
+                },
+            ],
+        );
+
+        assert!(
+            events
+                .iter()
+                .all(|event| !matches!(event, egui::Event::Text(_)))
         );
     }
 
