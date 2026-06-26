@@ -11,9 +11,9 @@ struct Health(u32);
 struct Mana(u32);
 
 fn spawn_entity(universe: &mut Universe, world: WorldId, builder: EntityBuilder) -> Entity {
-    let mut command_buffer = universe.command_buffer();
+    let mut command_buffer = universe.handle().command_buffer();
     let entity = command_buffer.spawn(world, builder);
-    universe.submit_buffer(command_buffer);
+    command_buffer.submit();
     universe.tick(0.0);
     entity
 }
@@ -221,10 +221,10 @@ fn inspection_helpers_update_after_despawn_and_world_destruction() {
         Entity::builder().with_component(Mana(20)),
     );
 
-    let mut command_buffer = universe.command_buffer();
+    let mut command_buffer = universe.handle().command_buffer();
     command_buffer.despawn(despawned);
     command_buffer.destroy_world(second_world);
-    universe.submit_buffer(command_buffer);
+    command_buffer.submit();
     universe.tick(0.016);
 
     assert_eq!(universe.component_infos(despawned).count(), 0);

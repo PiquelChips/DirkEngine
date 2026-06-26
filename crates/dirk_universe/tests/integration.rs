@@ -9,9 +9,9 @@ struct Position(i32, i32);
 struct Hidden;
 
 fn spawn_entity(universe: &mut Universe, world: WorldId, builder: EntityBuilder) -> Entity {
-    let mut cmd = universe.command_buffer();
+    let mut cmd = universe.handle().command_buffer();
     let entity = cmd.spawn(world, builder);
-    universe.submit_buffer(cmd);
+    cmd.submit();
     universe.tick(0.0);
     entity
 }
@@ -37,17 +37,17 @@ fn universe_public_api_supports_entity_lifecycle_across_worlds() {
     assert!(universe.is_in_world(overworld, entity));
     assert_eq!(universe.get_world(entity), Some(overworld));
 
-    let mut cmd = universe.command_buffer();
+    let mut cmd = universe.handle().command_buffer();
     cmd.send(entity, dungeon);
-    universe.submit_buffer(cmd);
+    cmd.submit();
     universe.tick(0.016);
 
     assert!(universe.is_in_world(dungeon, entity));
     assert_eq!(universe.get_world(entity), Some(dungeon));
 
-    let mut cmd = universe.command_buffer();
+    let mut cmd = universe.handle().command_buffer();
     cmd.despawn(entity);
-    universe.submit_buffer(cmd);
+    cmd.submit();
     universe.tick(0.016);
 
     assert!(!universe.is_alive(entity));
@@ -59,7 +59,7 @@ fn buffered_spawns_are_applied_on_tick_and_components_are_readable() {
     universe.tick(0.0);
     let world = dirk_universe::WorldId::default();
 
-    let mut cmd = universe.command_buffer();
+    let mut cmd = universe.handle().command_buffer();
     let e0 = cmd.spawn(world, Entity::builder().with_component(Position(1, 1)));
     let e1 = cmd.spawn(
         world,
@@ -67,7 +67,7 @@ fn buffered_spawns_are_applied_on_tick_and_components_are_readable() {
             .with_component(Position(9, 9))
             .with_component(Hidden),
     );
-    universe.submit_buffer(cmd);
+    cmd.submit();
 
     universe.tick(0.016);
 
@@ -90,22 +90,22 @@ fn buffered_spawns_are_applied_on_tick_and_components_are_readable() {
 fn public_command_buffers_allocate_unique_handles() {
     let mut universe = Universe::builder().build();
 
-    let mut first_cmd = universe.command_buffer();
+    let mut first_cmd = universe.handle().command_buffer();
     let first_world = first_cmd.create_world(World::builder("first"));
     let first_entity = first_cmd.spawn(
         first_world,
         Entity::builder().with_component(Position(4, 8)),
     );
 
-    let mut second_cmd = universe.command_buffer();
+    let mut second_cmd = universe.handle().command_buffer();
     let second_world = second_cmd.create_world(World::builder("second"));
     let second_entity = second_cmd.spawn(
         second_world,
         Entity::builder().with_component(Position(16, 32)),
     );
 
-    universe.submit_buffer(first_cmd);
-    universe.submit_buffer(second_cmd);
+    first_cmd.submit();
+    second_cmd.submit();
     universe.tick(0.016);
 
     assert_ne!(first_world, second_world);

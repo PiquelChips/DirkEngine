@@ -4,6 +4,7 @@
 mod tests;
 
 mod errors;
+use dirk_universe::Universe;
 pub use errors::{Error, Result};
 
 mod events;
@@ -69,7 +70,7 @@ impl Subsystem for AssetsSubsystem {
         &mut self,
         _delta_time: f64,
         _handle: &EngineHandle,
-        _universe: &mut dirk_universe::Universe,
+        _universe: &Universe,
     ) -> anyhow::Result<()> {
         self.registry.tick();
         Ok(())

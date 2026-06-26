@@ -101,7 +101,7 @@ impl Subsystem for StartFailingSubsystem {
         "start-failing"
     }
 
-    fn start(&mut self, _handle: &EngineHandle, _universe: &mut Universe) -> anyhow::Result<()> {
+    fn start(&mut self, _handle: &EngineHandle) -> anyhow::Result<()> {
         Err(anyhow::anyhow!("start failed"))
     }
 }
@@ -113,7 +113,7 @@ impl Subsystem for ShutdownFailingSubsystem {
         "shutdown-failing"
     }
 
-    fn shutdown(&mut self, _handle: &EngineHandle, _universe: &mut Universe) -> anyhow::Result<()> {
+    fn shutdown(&mut self, _handle: &EngineHandle) -> anyhow::Result<()> {
         Err(anyhow::anyhow!("shutdown failed"))
     }
 }
@@ -127,7 +127,7 @@ impl Subsystem for PublishingSubsystem {
         "publishing"
     }
 
-    fn start(&mut self, _handle: &EngineHandle, _universe: &mut Universe) -> anyhow::Result<()> {
+    fn start(&mut self, _handle: &EngineHandle) -> anyhow::Result<()> {
         self.events.lock().push("publishing-start");
         Ok(())
     }
@@ -136,13 +136,13 @@ impl Subsystem for PublishingSubsystem {
         &mut self,
         _delta_time: f64,
         _handle: &EngineHandle,
-        _universe: &mut Universe,
+        _universe: &Universe,
     ) -> anyhow::Result<()> {
         self.events.lock().push("publishing-tick");
         Ok(())
     }
 
-    fn shutdown(&mut self, _handle: &EngineHandle, _universe: &mut Universe) -> anyhow::Result<()> {
+    fn shutdown(&mut self, _handle: &EngineHandle) -> anyhow::Result<()> {
         self.events.lock().push("publishing-shutdown");
         Ok(())
     }
@@ -157,7 +157,7 @@ impl Subsystem for ReadingSubsystem {
         "reading"
     }
 
-    fn start(&mut self, _handle: &EngineHandle, _universe: &mut Universe) -> anyhow::Result<()> {
+    fn start(&mut self, _handle: &EngineHandle) -> anyhow::Result<()> {
         self.events.lock().push("reading-start");
         Ok(())
     }
@@ -166,15 +166,44 @@ impl Subsystem for ReadingSubsystem {
         &mut self,
         _delta_time: f64,
         handle: &EngineHandle,
-        _universe: &mut Universe,
+        _universe: &Universe,
     ) -> anyhow::Result<()> {
         self.events.lock().push("reading-tick");
         handle.exit();
         Ok(())
     }
 
-    fn shutdown(&mut self, _handle: &EngineHandle, _universe: &mut Universe) -> anyhow::Result<()> {
+    fn shutdown(&mut self, _handle: &EngineHandle) -> anyhow::Result<()> {
         self.events.lock().push("reading-shutdown");
+        Ok(())
+    }
+}
+
+struct UniverseHandleSubsystem {
+    handle: dirk_universe::UniverseHandle,
+    world: Arc<Mutex<Option<dirk_universe::WorldId>>>,
+}
+
+impl Subsystem for UniverseHandleSubsystem {
+    fn name(&self) -> &'static str {
+        "universe-handle"
+    }
+
+    fn start(&mut self, _handle: &EngineHandle) -> anyhow::Result<()> {
+        let mut command_buffer = self.handle.command_buffer();
+        let world = command_buffer.create_world(dirk_universe::World::builder("resource-world"));
+        command_buffer.submit();
+        *self.world.lock() = Some(world);
+        Ok(())
+    }
+
+    fn tick(
+        &mut self,
+        _delta_time: f64,
+        handle: &EngineHandle,
+        _universe: &Universe,
+    ) -> anyhow::Result<()> {
+        handle.exit();
         Ok(())
     }
 }
@@ -260,7 +289,7 @@ impl Subsystem for CountingTickSubsystem {
         &mut self,
         _delta_time: f64,
         _handle: &EngineHandle,
-        _universe: &mut Universe,
+        _universe: &Universe,
     ) -> anyhow::Result<()> {
         self.ticks.fetch_add(1, Ordering::Relaxed);
         Ok(())
@@ -464,5 +493,34 @@ fn subsystem_factories_publish_and_read_resources_and_lifecycle_still_runs() -> 
         ]
     );
 
+    Ok(())
+}
+
+#[test]
+fn universe_handle_is_available_as_engine_resource() -> Result<()> {
+    let world = Arc::new(Mutex::new(None));
+    let mut builder = EngineBuilder::new();
+
+    {
+        let world = Arc::clone(&world);
+        builder.add_subsystem(move |ctx| {
+            Ok(UniverseHandleSubsystem {
+                handle: ctx.resource::<dirk_universe::UniverseHandle>()?,
+                world,
+            })
+        });
+    }
+
+    let mut engine = builder.build()?;
+    let status = engine.tick()?;
+    assert_eq!(status, EngineStatus::ExitRequested);
+
+    let world = world.lock().expect("subsystem should record created world");
+    assert_eq!(
+        engine.universe.world(world).map(dirk_universe::World::name),
+        Some("resource-world")
+    );
+
+    engine.shutdown()?;
     Ok(())
 }

@@ -3,7 +3,7 @@
 use std::f32::consts::PI;
 
 use dirk_engine::{EngineHandle, EnginePlugin, Subsystem};
-use dirk_universe::{CommandBuffer, Entity, Universe, World};
+use dirk_universe::{CommandBuffer, Entity, UniverseHandle, World};
 
 /// An [`EnginePlugin`] with a basic demo world.
 pub struct DemoPlugin;
@@ -20,6 +20,7 @@ impl EnginePlugin for DemoPlugin {
         builder.add_subsystem(|ctx| {
             Ok(Demo {
                 players: ctx.resource::<dirk_player::PlayerRegistry>()?,
+                universe: ctx.resource::<dirk_universe::UniverseHandle>()?,
                 started: false,
             })
         });
@@ -30,6 +31,7 @@ impl EnginePlugin for DemoPlugin {
 /// A basic demo [`Subsystem`].
 struct Demo {
     players: dirk_player::PlayerRegistry,
+    universe: UniverseHandle,
     started: bool,
 }
 
@@ -38,12 +40,12 @@ impl Subsystem for Demo {
         "demo-startup"
     }
 
-    fn start(&mut self, _handle: &EngineHandle, universe: &mut Universe) -> anyhow::Result<()> {
+    fn start(&mut self, _engine: &EngineHandle) -> anyhow::Result<()> {
         if self.started {
             return Ok(());
         }
 
-        let mut cmd = universe.command_buffer();
+        let mut cmd = self.universe.command_buffer();
 
         let world_id = create_test_world(&mut cmd);
         let player = self.players.new_player();
@@ -59,7 +61,7 @@ impl Subsystem for Demo {
             ),
         );
 
-        universe.submit_buffer(cmd);
+        cmd.submit();
 
         self.started = true;
         Ok(())

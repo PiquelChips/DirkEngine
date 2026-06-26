@@ -22,7 +22,9 @@ pub fn register_capabilities(services: &EditorServices) {
                 show_in_list: true,
             },
             move |ui, context| {
-                universe_windows.lock().world_list_ui(ui, context.universe);
+                universe_windows
+                    .lock()
+                    .world_list_ui(ui, context.universe());
                 Ok(())
             },
         );
@@ -39,7 +41,9 @@ pub fn register_capabilities(services: &EditorServices) {
                 show_in_list: true,
             },
             move |ui, context| {
-                let entity_clicked = universe_windows.lock().entity_list_ui(ui, context.universe);
+                let entity_clicked = universe_windows
+                    .lock()
+                    .entity_list_ui(ui, context.universe());
                 if entity_clicked && let Some(entity_details) = *entity_details_window.lock() {
                     context.open_window(entity_details);
                 }
@@ -58,7 +62,7 @@ pub fn register_capabilities(services: &EditorServices) {
         move |ui, context| {
             universe_windows
                 .lock()
-                .entity_details_ui(ui, context.universe);
+                .entity_details_ui(ui, context.universe());
             Ok(())
         },
     );

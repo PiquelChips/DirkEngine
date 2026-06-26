@@ -12,14 +12,14 @@ use std::{
 };
 
 /// Base marker trait for component types.
-pub trait Component: 'static + Sized + Debug {}
+pub trait Component: 'static + Sized + Debug + Send {}
 #[doc(hidden)]
 pub use dirk_proc::Component;
 
 /// A dyn-compatible wrapper around Component, used wherever
 /// type-erased component values must be passed around at runtime.
 #[doc(hidden)]
-pub(crate) trait AnyComponent: Any + Debug + 'static {
+pub(crate) trait AnyComponent: Send + Any + Debug + 'static {
     fn as_any(&self) -> &dyn Any;
     /// Consume this boxed value and return it as a plain `Box<dyn Any>`,
     /// enabling `Box::downcast::<C>()` at call sites.
