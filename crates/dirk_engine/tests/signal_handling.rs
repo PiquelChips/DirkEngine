@@ -8,7 +8,6 @@ use std::{
 };
 
 use dirk_engine::{Engine, EngineBuilder, EngineHandle, EnginePlugin, Subsystem};
-use dirk_universe::Universe;
 
 const CHILD_ENV: &str = "DIRK_ENGINE_SIGNAL_TEST_CHILD";
 const SIGINT: i32 = 2;
@@ -33,7 +32,7 @@ impl Subsystem for BlockingShutdownSubsystem {
         "blocking-shutdown"
     }
 
-    fn shutdown(&mut self, _handle: &EngineHandle, _universe: &mut Universe) -> anyhow::Result<()> {
+    fn shutdown(&mut self, _handle: &EngineHandle) -> anyhow::Result<()> {
         loop {
             thread::sleep(Duration::from_secs(1));
         }

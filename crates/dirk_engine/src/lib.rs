@@ -202,7 +202,7 @@ impl Engine {
 
         for subsystem in &mut self.subsystems {
             subsystem
-                .start(&self.handle, &mut self.universe)
+                .start(&self.handle)
                 .map_err(|source| Error::SubsystemFailedStart {
                     name: subsystem.name(),
                     source,
@@ -210,7 +210,7 @@ impl Engine {
         }
 
         #[cfg(feature = "editor")]
-        self.editor.start(&self.handle, &self.universe)?;
+        self.editor.start(&self.handle)?;
 
         self.last_tick = Instant::now();
         self.started = true;
@@ -269,7 +269,7 @@ impl Engine {
             let subsystem = &mut self.subsystems[index];
             let name = subsystem.name();
             subsystem
-                .tick(delta_time, &self.handle, &mut self.universe)
+                .tick(delta_time, &self.handle, &self.universe)
                 .map_err(|source| Error::SubsystemFailedTick { name, source })?;
 
             self.process_commands();
@@ -279,7 +279,7 @@ impl Engine {
         }
 
         #[cfg(feature = "editor")]
-        self.editor.tick(delta_time, &self.handle, &self.universe)?;
+        self.editor.tick(delta_time, &self.handle)?;
 
         self.process_commands();
         Ok(self.status())
@@ -314,11 +314,11 @@ impl Engine {
         }
 
         #[cfg(feature = "editor")]
-        self.editor.shutdown(&self.handle, &self.universe)?;
+        self.editor.shutdown(&self.handle)?;
 
         while let Some(mut subsystem) = self.subsystems.pop() {
             subsystem
-                .shutdown(&self.handle, &mut self.universe)
+                .shutdown(&self.handle)
                 .map_err(|source| Error::SubsystemFailedShutdown {
                     name: subsystem.name(),
                     source,

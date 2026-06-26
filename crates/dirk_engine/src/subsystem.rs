@@ -53,7 +53,7 @@ pub trait EnginePlugin {
 /// necessary.
 pub trait EngineResource: Clone + Send + Sync + 'static {}
 
-impl<T> EngineResource for T where T: Clone + Send + Sync + 'static {}
+impl<T: Clone + Send + Sync + 'static> EngineResource for T {}
 
 /// A runtime system owned and driven by the engine.
 ///
@@ -74,7 +74,7 @@ pub trait Subsystem {
     /// # Errors
     ///
     /// Returns an error if startup fails.
-    fn start(&mut self, _handle: &EngineHandle, _universe: &mut Universe) -> anyhow::Result<()> {
+    fn start(&mut self, _handle: &EngineHandle) -> anyhow::Result<()> {
         Ok(())
     }
 
@@ -89,7 +89,7 @@ pub trait Subsystem {
         &mut self,
         _delta_time: f64,
         _handle: &EngineHandle,
-        _universe: &mut Universe,
+        _universe: &Universe,
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -101,7 +101,7 @@ pub trait Subsystem {
     /// # Errors
     ///
     /// Returns an error if shutdown fails.
-    fn shutdown(&mut self, _handle: &EngineHandle, _universe: &mut Universe) -> anyhow::Result<()> {
+    fn shutdown(&mut self, _handle: &EngineHandle) -> anyhow::Result<()> {
         Ok(())
     }
 }

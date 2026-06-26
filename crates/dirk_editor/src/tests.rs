@@ -89,13 +89,8 @@ fn builtin_editor_subsystem_registers_expected_default_capabilities() -> anyhow:
     let handle = test_handle();
     let universe = dirk_universe::Universe::builder().build();
     let mut subsystem = crate::BuiltinEditorSubsystem;
-    let mut context = dirk_engine::editor::EditorStartContext {
-        engine: &handle,
-        universe: &universe,
-        editor: &services,
-    };
 
-    subsystem.start(&mut context)?;
+    subsystem.start(&handle, &services)?;
 
     assert_eq!(services.menu_titles(), vec!["Main", "Settings", "Windows"]);
     assert_eq!(
@@ -113,8 +108,8 @@ fn builtin_editor_subsystem_registers_expected_default_capabilities() -> anyhow:
     let ctx = egui::Context::default();
     begin_egui_pass(&ctx);
 
-    let frame = dirk_engine::editor::EditorRenderContext::new(0.016, &handle, &universe);
-    services.render_ui(&ctx, &frame)?;
+    let frame = dirk_engine::editor::EditorRenderContext::new(0.016, &handle);
+    services.render_ui(&ctx, &frame, &universe)?;
 
     let palette = EditorPalette::default();
     let style = ctx.style();
