@@ -210,7 +210,7 @@ impl Transform {
                 forward
             );
         }
-        Mat4::look_at_lh(
+        glam::camera::lh::view::look_at_mat4(
             self.location,
             self.location + forward,
             dirk_utils::UP_DIRECTION,

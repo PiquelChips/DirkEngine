@@ -143,15 +143,12 @@ impl SceneManager {
                 // `width` & `height` aren't large enough for this to matter
                 #[allow(clippy::cast_precision_loss)]
                 let aspect = settings.extent.width as f32 / settings.extent.height.max(1) as f32;
-                let mut proj = glam::Mat4::perspective_rh(
+                glam::camera::rh::proj::vulkan::perspective(
                     settings.fov_y_radians,
                     aspect,
                     settings.near,
                     settings.far,
-                );
-                // Vulkan NDC has Y pointing down; flip the projection accordingly.
-                proj.y_axis.y *= -1.0;
-                proj
+                )
             };
 
             let scene_ubo = SceneUbo { view, proj };
