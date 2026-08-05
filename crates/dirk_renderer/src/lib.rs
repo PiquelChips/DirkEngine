@@ -1061,10 +1061,14 @@ impl Renderer {
 
     fn required_instance_extensions(window: &dirk_platform::Window) -> Result<Vec<*const i8>> {
         let display_handle = window.display_handle()?.as_raw();
-        let mut extensions = ash_window::enumerate_required_extensions(display_handle)?.to_vec();
+        let extensions = ash_window::enumerate_required_extensions(display_handle)?.to_vec();
 
         #[cfg(platform_macos)]
-        extensions.push(ash::khr::portability_enumeration::NAME.as_ptr());
+        let extensions = {
+            let mut extensions = extensions;
+            extensions.push(ash::khr::portability_enumeration::NAME.as_ptr());
+            extensions
+        };
 
         Ok(extensions)
     }
