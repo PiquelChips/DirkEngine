@@ -12,13 +12,7 @@ use std::{
 use anyhow::Context;
 #[cfg(validation)]
 use ash::ext::debug_utils;
-#[cfg(platform_linux)]
-use ash::khr::wayland_surface;
-use ash::{
-    Entry,
-    khr::{surface, swapchain},
-    vk,
-};
+use ash::{Entry, khr::swapchain, vk};
 
 #[cfg(feature = "editor")]
 use dirk_platform::WindowInputEvent;
@@ -31,6 +25,7 @@ use dirk_player::PlayerPresentationAssignments;
 
 use dirk_universe::{Entity, Universe, UniverseBuilder, WorldId};
 use dirk_utils::Version;
+use raw_window_handle::HasDisplayHandle;
 use tracing::{debug, info};
 
 use dirk_platform::PlatformWindows;
@@ -136,8 +131,13 @@ impl dirk_engine::EnginePlugin for RendererPlugin {
 mod debug;
 
 const MAX_FRAMES_IN_FLIGHT: usize = 2;
-const DEVICE_EXTENSIONS: &[&str] =
-    &[unsafe { std::str::from_utf8_unchecked(swapchain::NAME.to_bytes()) }];
+const DEVICE_EXTENSIONS: &[&str] = &[
+    unsafe { std::str::from_utf8_unchecked(swapchain::NAME.to_bytes()) },
+    #[cfg(platform_macos)]
+    unsafe {
+        std::str::from_utf8_unchecked(ash::khr::portability_subset::NAME.to_bytes())
+    },
+];
 #[cfg(validation)]
 const VALIDATION_LAYERS: &[*const i8] = &[c"VK_LAYER_KHRONOS_validation".as_ptr()];
 
@@ -281,7 +281,7 @@ impl Renderer {
     ) -> Result<Self> {
         info!("Intializing Vulkan...");
 
-        let entry = unsafe { Entry::load()? };
+        let entry = Self::load_vulkan_entry()?;
 
         let app_info = vk::ApplicationInfo::default()
             .application_name(create_info.app_name.as_c_str())
@@ -290,9 +290,15 @@ impl Renderer {
             .engine_version(make_version(create_info.engine_version))
             .api_version(vk::API_VERSION_1_3);
 
-        let mut extensions = Self::required_instance_extensions();
+        let mut extensions = Self::required_instance_extensions(window)?;
         let mut instance_create_info =
             vk::InstanceCreateInfo::default().application_info(&app_info);
+
+        #[cfg(platform_macos)]
+        {
+            instance_create_info =
+                instance_create_info.flags(vk::InstanceCreateFlags::ENUMERATE_PORTABILITY_KHR);
+        }
 
         #[cfg(validation)]
         let mut debug_create_info = debug::debug_create_info();
@@ -1053,13 +1059,30 @@ impl Renderer {
         Ok(unsafe { device.device.create_sampler(&sampler_info, None)? })
     }
 
-    fn required_instance_extensions() -> Vec<*const i8> {
-        let mut extensions = vec![surface::NAME.as_ptr()];
+    fn load_vulkan_entry() -> Result<Entry> {
+        match unsafe { Entry::load() } {
+            Ok(entry) => Ok(entry),
+            #[cfg(platform_macos)]
+            Err(loader_error) => {
+                // The Vulkan SDK provides a Vulkan loader, while a standalone
+                // MoltenVK installation provides libMoltenVK.dylib directly.
+                // Try both without requiring either library at build time.
+                info!("could not load libvulkan.dylib ({loader_error}); trying libMoltenVK.dylib");
+                Ok(unsafe { Entry::load_from("libMoltenVK.dylib")? })
+            }
+            #[cfg(not(platform_macos))]
+            Err(loader_error) => Err(loader_error.into()),
+        }
+    }
 
-        #[cfg(platform_linux)]
-        extensions.push(wayland_surface::NAME.as_ptr());
+    fn required_instance_extensions(window: &dirk_platform::Window) -> Result<Vec<*const i8>> {
+        let display_handle = window.display_handle()?.as_raw();
+        let mut extensions = ash_window::enumerate_required_extensions(display_handle)?.to_vec();
 
-        extensions
+        #[cfg(platform_macos)]
+        extensions.push(ash::khr::portability_enumeration::NAME.as_ptr());
+
+        Ok(extensions)
     }
 
     fn validate_instance_extensions(entry: &Entry, extensions: &[*const i8]) -> Result<()> {

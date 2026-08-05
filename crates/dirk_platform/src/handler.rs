@@ -20,6 +20,7 @@ use crate::{
 
 pub struct PlatformHandler {
     can_create_surfaces: bool,
+    shutdown_requested: bool,
     windows: PlatformWindows,
 
     /// Current keyboard modifier state, updated on every `ModifiersChanged` event.
@@ -40,6 +41,7 @@ impl PlatformHandler {
     pub fn new(events: &dirk_events::EventManager, windows: PlatformWindows) -> Self {
         Self {
             can_create_surfaces: false,
+            shutdown_requested: false,
             windows,
             modifiers: ModifiersState::default(),
             pointer_positions: HashMap::new(),
@@ -68,6 +70,10 @@ impl PlatformHandler {
     pub fn shutdown(&mut self) {
         let count = self.windows.clear();
         debug!("Closed {count} window(s) during platform shutdown");
+    }
+
+    pub fn request_shutdown(&mut self) {
+        self.shutdown_requested = true;
     }
 
     fn dispatch_platform_event(&mut self, id: WindowId, event: &WindowEvent) -> bool {
@@ -296,6 +302,12 @@ impl ApplicationHandler for PlatformHandler {
             return;
         }
         self.dispatch_input_event(id, &event);
+    }
+
+    fn about_to_wait(&mut self, event_loop: &dyn ActiveEventLoop) {
+        if self.shutdown_requested {
+            event_loop.exit();
+        }
     }
 }
 
