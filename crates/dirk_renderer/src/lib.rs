@@ -281,7 +281,7 @@ impl Renderer {
     ) -> Result<Self> {
         info!("Intializing Vulkan...");
 
-        let entry = Self::load_vulkan_entry()?;
+        let entry = unsafe { Entry::load()? };
 
         let app_info = vk::ApplicationInfo::default()
             .application_name(create_info.app_name.as_c_str())
@@ -1057,22 +1057,6 @@ impl Renderer {
             .unnormalized_coordinates(false);
 
         Ok(unsafe { device.device.create_sampler(&sampler_info, None)? })
-    }
-
-    fn load_vulkan_entry() -> Result<Entry> {
-        match unsafe { Entry::load() } {
-            Ok(entry) => Ok(entry),
-            #[cfg(platform_macos)]
-            Err(loader_error) => {
-                // The Vulkan SDK provides a Vulkan loader, while a standalone
-                // MoltenVK installation provides libMoltenVK.dylib directly.
-                // Try both without requiring either library at build time.
-                info!("could not load libvulkan.dylib ({loader_error}); trying libMoltenVK.dylib");
-                Ok(unsafe { Entry::load_from("libMoltenVK.dylib")? })
-            }
-            #[cfg(not(platform_macos))]
-            Err(loader_error) => Err(loader_error.into()),
-        }
     }
 
     fn required_instance_extensions(window: &dirk_platform::Window) -> Result<Vec<*const i8>> {
