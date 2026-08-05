@@ -20,6 +20,7 @@ use crate::{
 
 pub struct PlatformHandler {
     can_create_surfaces: bool,
+    #[cfg(platform_macos)]
     shutdown_requested: bool,
     windows: PlatformWindows,
 
@@ -41,6 +42,7 @@ impl PlatformHandler {
     pub fn new(events: &dirk_events::EventManager, windows: PlatformWindows) -> Self {
         Self {
             can_create_surfaces: false,
+            #[cfg(platform_macos)]
             shutdown_requested: false,
             windows,
             modifiers: ModifiersState::default(),
@@ -72,6 +74,7 @@ impl PlatformHandler {
         debug!("Closed {count} window(s) during platform shutdown");
     }
 
+    #[cfg(platform_macos)]
     pub fn request_shutdown(&mut self) {
         self.shutdown_requested = true;
     }
@@ -304,6 +307,7 @@ impl ApplicationHandler for PlatformHandler {
         self.dispatch_input_event(id, &event);
     }
 
+    #[cfg(platform_macos)]
     fn about_to_wait(&mut self, event_loop: &dyn ActiveEventLoop) {
         if self.shutdown_requested {
             event_loop.exit();
