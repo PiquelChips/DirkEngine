@@ -576,6 +576,94 @@ mod tests {
             .expect("reset buffer should record again");
     }
 
+    #[test]
+    fn wait_idle_completes_tracked_submissions() {
+        let device = device();
+        let mut pool = command_pool(&device, CommandPoolFlags::RESET_COMMAND_BUFFER);
+        let mut command_buffer = executable(&pool, CommandBufferUsage::empty());
+        let fence = device
+            .create_fence(false)
+            .expect("fence creation should succeed");
+
+        device
+            .submit(
+                QueueType::Graphics,
+                &SubmitInfo {
+                    waits: &[],
+                    command_buffers: &[&command_buffer],
+                    signals: &[],
+                },
+                &fence,
+            )
+            .expect("submission should succeed");
+        device.wait_idle().expect("device wait should succeed");
+
+        command_buffer
+            .reset()
+            .expect("wait_idle should release command buffers");
+        pool.reset()
+            .expect("wait_idle should release command pools");
+    }
+
+    #[test]
+    fn wait_idle_recovers_submission_after_wrappers_drop() {
+        let device = device();
+        let mut pool = command_pool(&device, CommandPoolFlags::RESET_COMMAND_BUFFER);
+        let command_buffer = executable(&pool, CommandBufferUsage::empty());
+        let fence = device
+            .create_fence(false)
+            .expect("fence creation should succeed");
+
+        device
+            .submit(
+                QueueType::Graphics,
+                &SubmitInfo {
+                    waits: &[],
+                    command_buffers: &[&command_buffer],
+                    signals: &[],
+                },
+                &fence,
+            )
+            .expect("submission should succeed");
+        drop(fence);
+        drop(command_buffer);
+        device.wait_idle().expect("device wait should succeed");
+
+        pool.reset()
+            .expect("registry should retain dropped submission state");
+    }
+
+    #[test]
+    fn cube_view_validation_rejects_incompatible_images() {
+        let device = device();
+        let image = device
+            .create_image(&ImageCreateInfo {
+                dimension: ImageDimension::Two,
+                extent: Extent3D::new(64, 32, 1),
+                format: Format::Rgba8Unorm,
+                usage: ImageUsage::SAMPLED,
+                memory: MemoryLocation::Device,
+                mip_levels: 1,
+                array_layers: 6,
+                samples: SampleCount::One,
+                label: None,
+            })
+            .expect("fake image creation should succeed");
+
+        assert!(matches!(
+            device.create_image_view(
+                &image,
+                &ImageViewCreateInfo {
+                    dimension: ImageViewDimension::Cube,
+                    format: None,
+                    range: ImageSubresourceRange::all(ImageAspects::COLOR, 1, 6),
+                    label: None,
+                },
+            ),
+            Err(Error::InvalidDescriptor { .. })
+        ));
+    }
+
     #[cfg(feature = "presentation")]
     #[test]
     fn render_image_present_and_abandon_consume_acquisition() {
@@ -583,7 +671,7 @@ mod tests {
         let surface = device
             .create_surface(&())
             .expect("surface creation should succeed");
-        let swapchain = device
+        let mut swapchain = device
             .create_swapchain(
                 &surface,
                 &SwapchainCreateInfo {
@@ -615,7 +703,62 @@ mod tests {
                 .expect("third acquisition should succeed"),
         );
 
-        assert_eq!(device.backend.abandoned_images.get(), 2);
+        assert!(
+            swapchain
+                .recreate(&SwapchainCreateInfo {
+                    extent: Extent2D::new(800, 600),
+                    image_usage: ImageUsage::COLOR_ATTACHMENT,
+                    preferred_formats: &[Format::Bgra8Srgb],
+                    present_mode: PresentMode::Fifo,
+                    label: None,
+                })
+                .is_err()
+        );
+        assert_eq!(device.backend.abandoned_images.get(), 1);
         assert_eq!(device.backend.presented_images.get(), 1);
+    }
+
+    #[cfg(feature = "presentation")]
+    #[test]
+    fn invalid_present_wait_releases_acquisition() {
+        let device = device();
+        let surface = device
+            .create_surface(&())
+            .expect("surface creation should succeed");
+        let mut swapchain = device
+            .create_swapchain(
+                &surface,
+                &SwapchainCreateInfo {
+                    extent: Extent2D::new(640, 480),
+                    image_usage: ImageUsage::COLOR_ATTACHMENT,
+                    preferred_formats: &[Format::Bgra8Srgb],
+                    present_mode: PresentMode::Fifo,
+                    label: None,
+                },
+            )
+            .expect("swapchain creation should succeed");
+        let acquire = device
+            .create_semaphore(SemaphoreKind::Binary)
+            .expect("semaphore creation should succeed");
+        let invalid_wait = device
+            .create_semaphore(SemaphoreKind::Timeline { initial_value: 0 })
+            .expect("timeline semaphore creation should succeed");
+
+        let error = swapchain
+            .acquire_next_image(u64::MAX, &acquire)
+            .expect("image acquisition should succeed")
+            .present(&[&invalid_wait])
+            .expect_err("timeline presentation wait should fail");
+        assert!(matches!(error, Error::InvalidDescriptor { .. }));
+        assert_eq!(device.backend.abandoned_images.get(), 1);
+        swapchain
+            .recreate(&SwapchainCreateInfo {
+                extent: Extent2D::new(800, 600),
+                image_usage: ImageUsage::COLOR_ATTACHMENT,
+                preferred_formats: &[Format::Bgra8Srgb],
+                present_mode: PresentMode::Fifo,
+                label: None,
+            })
+            .expect("invalid presentation should release the acquisition");
     }
 }

@@ -514,6 +514,8 @@ pub struct SamplerCreateInfo<'a> {
     pub lod_min: f32,
     /// Largest accessible mip level.
     pub lod_max: f32,
+    /// Enables the backend's maximum supported anisotropy.
+    pub anisotropy: bool,
     /// Optional diagnostic label.
     pub label: Option<&'a str>,
 }
@@ -529,6 +531,7 @@ impl Default for SamplerCreateInfo<'_> {
             address_w: AddressMode::Repeat,
             lod_min: 0.0,
             lod_max: 32.0,
+            anisotropy: true,
             label: None,
         }
     }

@@ -3,8 +3,10 @@
 use std::{
     cell::{Cell, RefCell},
     fmt,
-    rc::Rc,
-    sync::Arc,
+    sync::{
+        Arc, Mutex, MutexGuard,
+        atomic::{AtomicU64, AtomicUsize, Ordering},
+    },
 };
 
 use crate::{
@@ -68,12 +70,12 @@ pub struct CommandPool<B: Backend> {
     pub(crate) backend: Arc<B>,
     pub(crate) raw: Arc<B::CommandPool>,
     queue: QueueType,
-    state: Rc<CommandPoolState>,
+    state: Arc<CommandPoolState>,
 }
 
 struct CommandPoolState {
-    generation: Cell<u64>,
-    pending_count: Cell<usize>,
+    generation: AtomicU64,
+    pending_count: AtomicUsize,
     flags: CommandPoolFlags,
 }
 
@@ -103,8 +105,8 @@ impl<B: Backend> CommandPool<B> {
             _pool: Arc::clone(&self.raw),
             raw,
             queue: self.queue,
-            pool_state: Rc::clone(&self.state),
-            observed_generation: Cell::new(self.state.generation.get()),
+            pool_state: Arc::clone(&self.state),
+            observed_generation: Cell::new(self.state.generation.load(Ordering::Acquire)),
             state: Cell::new(CommandBufferState::Initial),
             usage: Cell::new(CommandBufferUsage::empty()),
             rendering: Cell::new(false),
@@ -115,16 +117,14 @@ impl<B: Backend> CommandPool<B> {
 
     /// Resets all command buffers allocated from the pool.
     pub fn reset(&mut self) -> Result<()> {
-        if self.state.pending_count.get() != 0 {
+        if self.state.pending_count.load(Ordering::Acquire) != 0 {
             return Err(Error::InvalidCommandBufferState {
                 expected: "no pending command buffers",
                 actual: "pending",
             });
         }
         self.backend.reset_command_pool(self.raw.as_ref())?;
-        self.state
-            .generation
-            .set(self.state.generation.get().wrapping_add(1));
+        self.state.generation.fetch_add(1, Ordering::AcqRel);
         Ok(())
     }
 }
@@ -154,7 +154,7 @@ pub struct CommandBuffer<B: Backend> {
     _pool: Arc<B::CommandPool>,
     pub(crate) raw: B::CommandBuffer,
     queue: QueueType,
-    pool_state: Rc<CommandPoolState>,
+    pool_state: Arc<CommandPoolState>,
     observed_generation: Cell<u64>,
     state: Cell<CommandBufferState>,
     usage: Cell<CommandBufferUsage>,
@@ -164,7 +164,7 @@ pub struct CommandBuffer<B: Backend> {
 }
 
 struct PendingSubmission {
-    fence: Rc<FenceTracking>,
+    fence: Arc<FenceTracking>,
     serial: u64,
 }
 
@@ -483,18 +483,16 @@ impl<B: Backend> CommandBuffer<B> {
     }
 
     fn synchronize_state(&self) {
-        let generation = self.pool_state.generation.get();
+        let generation = self.pool_state.generation.load(Ordering::Acquire);
         if self.observed_generation.get() != generation {
             self.observed_generation.set(generation);
             self.reset_local_state();
             return;
         }
 
-        let completed = self
-            .pending
-            .borrow()
-            .as_ref()
-            .is_some_and(|pending| pending.fence.completed_serial.get() >= pending.serial);
+        let completed = self.pending.borrow().as_ref().is_some_and(|pending| {
+            pending.fence.completed_serial.load(Ordering::Acquire) >= pending.serial
+        });
         if completed {
             self.pending.borrow_mut().take();
             self.state.set(CommandBufferState::Executable);
@@ -526,27 +524,83 @@ enum FenceState {
 }
 
 struct FenceTracking {
-    state: Cell<FenceState>,
-    submitted_serial: Cell<u64>,
-    completed_serial: Cell<u64>,
-    pending_pools: RefCell<Vec<Rc<CommandPoolState>>>,
+    state: Mutex<FenceState>,
+    submitted_serial: AtomicU64,
+    completed_serial: AtomicU64,
+    pending_pools: Mutex<Vec<Arc<CommandPoolState>>>,
+}
+
+#[derive(Default)]
+pub(crate) struct SubmissionRegistry {
+    pending: Mutex<Vec<Arc<FenceTracking>>>,
+}
+
+impl SubmissionRegistry {
+    fn track(&self, tracking: &Arc<FenceTracking>) {
+        lock(&self.pending).push(Arc::clone(tracking));
+    }
+
+    fn complete(&self, tracking: &Arc<FenceTracking>) {
+        let tracked = {
+            let mut pending = lock(&self.pending);
+            pending
+                .iter()
+                .position(|pending| Arc::ptr_eq(pending, tracking))
+                .map(|index| pending.swap_remove(index))
+        };
+
+        if let Some(tracked) = tracked {
+            if tracked.state() == FenceState::Pending {
+                tracked.complete();
+            }
+        } else if tracking.state() == FenceState::Pending {
+            tracking.complete();
+        }
+    }
+
+    pub(crate) fn complete_all(&self) {
+        let pending = std::mem::take(&mut *lock(&self.pending));
+        for tracking in pending {
+            if tracking.state() == FenceState::Pending {
+                tracking.complete();
+            }
+        }
+    }
+}
+
+fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 impl FenceTracking {
     fn begin_submission(&self) -> u64 {
-        let serial = self.submitted_serial.get().wrapping_add(1);
-        self.submitted_serial.set(serial);
-        self.state.set(FenceState::Pending);
+        let serial = self
+            .submitted_serial
+            .fetch_add(1, Ordering::AcqRel)
+            .wrapping_add(1);
+        self.set_state(FenceState::Pending);
         serial
     }
 
     fn complete(&self) {
-        self.completed_serial.set(self.submitted_serial.get());
-        self.state.set(FenceState::Signaled);
-        for pool in self.pending_pools.borrow_mut().drain(..) {
-            pool.pending_count
-                .set(pool.pending_count.get().saturating_sub(1));
+        self.completed_serial.store(
+            self.submitted_serial.load(Ordering::Acquire),
+            Ordering::Release,
+        );
+        self.set_state(FenceState::Signaled);
+        for pool in lock(&self.pending_pools).drain(..) {
+            pool.pending_count.fetch_sub(1, Ordering::AcqRel);
         }
+    }
+
+    fn state(&self) -> FenceState {
+        *lock(&self.state)
+    }
+
+    fn set_state(&self, state: FenceState) {
+        *lock(&self.state) = state;
     }
 }
 
@@ -554,7 +608,7 @@ impl FenceTracking {
 pub struct Fence<B: Backend> {
     pub(crate) backend: Arc<B>,
     pub(crate) raw: B::Fence,
-    tracking: Rc<FenceTracking>,
+    tracking: Arc<FenceTracking>,
 }
 
 impl<B: Backend> Fence<B> {
@@ -562,15 +616,15 @@ impl<B: Backend> Fence<B> {
         Self {
             backend,
             raw,
-            tracking: Rc::new(FenceTracking {
-                state: Cell::new(if signaled {
+            tracking: Arc::new(FenceTracking {
+                state: Mutex::new(if signaled {
                     FenceState::Signaled
                 } else {
                     FenceState::Unsignaled
                 }),
-                submitted_serial: Cell::new(0),
-                completed_serial: Cell::new(0),
-                pending_pools: RefCell::new(Vec::new()),
+                submitted_serial: AtomicU64::new(0),
+                completed_serial: AtomicU64::new(0),
+                pending_pools: Mutex::new(Vec::new()),
             }),
         }
     }
@@ -580,7 +634,7 @@ impl<B: Backend> fmt::Debug for Fence<B> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("Fence")
-            .field("state", &self.tracking.state.get())
+            .field("state", &self.tracking.state())
             .finish_non_exhaustive()
     }
 }
@@ -592,9 +646,9 @@ impl<B: Backend> Device<B> {
             backend: Arc::clone(&self.backend),
             raw: Arc::new(self.backend.create_command_pool(info)?),
             queue: info.queue,
-            state: Rc::new(CommandPoolState {
-                generation: Cell::new(0),
-                pending_count: Cell::new(0),
+            state: Arc::new(CommandPoolState {
+                generation: AtomicU64::new(0),
+                pending_count: AtomicUsize::new(0),
                 flags: info.flags,
             }),
         })
@@ -613,21 +667,21 @@ impl<B: Backend> Device<B> {
     pub fn wait_for_fence(&self, fence: &Fence<B>, timeout_ns: u64) -> Result<()> {
         self.ensure_resource(&fence.backend, "wait_for_fence")?;
         self.backend.wait_for_fence(&fence.raw, timeout_ns)?;
-        fence.tracking.complete();
+        self.submissions.complete(&fence.tracking);
         Ok(())
     }
 
     /// Resets a fence to the unsignaled state.
     pub fn reset_fence(&self, fence: &mut Fence<B>) -> Result<()> {
         self.ensure_resource(&fence.backend, "reset_fence")?;
-        if fence.tracking.state.get() == FenceState::Pending {
+        if fence.tracking.state() == FenceState::Pending {
             return Err(Error::invalid_descriptor(
                 "fence reset",
                 "a pending fence must be waited before reset",
             ));
         }
         self.backend.reset_fence(&mut fence.raw)?;
-        fence.tracking.state.set(FenceState::Unsignaled);
+        fence.tracking.set_state(FenceState::Unsignaled);
         Ok(())
     }
 
@@ -716,7 +770,7 @@ impl<B: Backend> Device<B> {
             signal.validate()?;
         }
         self.ensure_resource(&fence.backend, "submit")?;
-        if fence.tracking.state.get() != FenceState::Unsignaled {
+        if fence.tracking.state() != FenceState::Unsignaled {
             return Err(Error::invalid_descriptor(
                 "queue submission",
                 "the submission fence must be unsignaled and not pending",
@@ -725,24 +779,20 @@ impl<B: Backend> Device<B> {
         self.backend.submit(queue, info, fence)?;
 
         let serial = fence.tracking.begin_submission();
+        self.submissions.track(&fence.tracking);
         for command_buffer in info.command_buffers {
-            let pending_count = command_buffer.pool_state.pending_count.get();
             command_buffer
                 .pool_state
                 .pending_count
-                .set(pending_count + 1);
-            fence
-                .tracking
-                .pending_pools
-                .borrow_mut()
-                .push(Rc::clone(&command_buffer.pool_state));
+                .fetch_add(1, Ordering::AcqRel);
+            lock(&fence.tracking.pending_pools).push(Arc::clone(&command_buffer.pool_state));
             command_buffer.state.set(CommandBufferState::Pending);
             command_buffer.submitted_once.set(true);
             command_buffer
                 .pending
                 .borrow_mut()
                 .replace(PendingSubmission {
-                    fence: Rc::clone(&fence.tracking),
+                    fence: Arc::clone(&fence.tracking),
                     serial,
                 });
         }

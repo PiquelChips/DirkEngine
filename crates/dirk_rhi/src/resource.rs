@@ -11,12 +11,14 @@ use crate::{
 /// A logical device implemented by a concrete backend.
 pub struct Device<B: Backend> {
     pub(crate) backend: Arc<B>,
+    pub(crate) submissions: Arc<crate::command::SubmissionRegistry>,
 }
 
 impl<B: Backend> Clone for Device<B> {
     fn clone(&self) -> Self {
         Self {
             backend: Arc::clone(&self.backend),
+            submissions: Arc::clone(&self.submissions),
         }
     }
 }
@@ -33,12 +35,15 @@ impl<B: Backend> Device<B> {
     pub fn new(backend: B) -> Self {
         Self {
             backend: Arc::new(backend),
+            submissions: Arc::new(crate::command::SubmissionRegistry::default()),
         }
     }
 
     /// Waits until all device work has completed.
     pub fn wait_idle(&self) -> Result<()> {
-        self.backend.wait_idle()
+        self.backend.wait_idle()?;
+        self.submissions.complete_all();
+        Ok(())
     }
 
     /// Flushes backend-managed deferred destruction at a caller-defined safe point.
@@ -84,6 +89,7 @@ impl<B: Backend> Device<B> {
             format: info.format,
             mip_levels: info.mip_levels,
             array_layers: info.array_layers,
+            dimension: info.dimension,
         })
     }
 
@@ -95,6 +101,7 @@ impl<B: Backend> Device<B> {
     ) -> Result<ImageView<B>> {
         self.ensure_resource(&image.backend, "create_image_view")?;
         info.validate()?;
+        image.validate_view(info)?;
         let raw = self.backend.create_image_view(image.raw.as_ref(), info)?;
         Ok(ImageView {
             backend: Arc::clone(&self.backend),
@@ -280,9 +287,57 @@ pub struct Image<B: Backend> {
     format: Format,
     mip_levels: u32,
     array_layers: u32,
+    dimension: crate::ImageDimension,
 }
 
 impl<B: Backend> Image<B> {
+    fn validate_view(&self, info: &ImageViewCreateInfo<'_>) -> Result<()> {
+        let mip_end = info
+            .range
+            .base_mip_level
+            .checked_add(info.range.mip_level_count)
+            .ok_or_else(|| Error::invalid_descriptor("image view", "mip range overflows"))?;
+        let layer_end = info
+            .range
+            .base_array_layer
+            .checked_add(info.range.array_layer_count)
+            .ok_or_else(|| Error::invalid_descriptor("image view", "layer range overflows"))?;
+        if mip_end > self.mip_levels || layer_end > self.array_layers {
+            return Err(Error::invalid_descriptor(
+                "image view",
+                "selected subresources exceed the image",
+            ));
+        }
+
+        match info.dimension {
+            crate::ImageViewDimension::Cube | crate::ImageViewDimension::CubeArray => {
+                if self.dimension != crate::ImageDimension::Two
+                    || self.extent.width != self.extent.height
+                    || self.array_layers < 6
+                {
+                    return Err(Error::invalid_descriptor(
+                        "image view",
+                        "cube views require a square two-dimensional image with at least six layers",
+                    ));
+                }
+                let layers = info.range.array_layer_count;
+                let valid_layers = match info.dimension {
+                    crate::ImageViewDimension::Cube => layers == 6,
+                    crate::ImageViewDimension::CubeArray => layers >= 6 && layers.is_multiple_of(6),
+                    _ => unreachable!(),
+                };
+                if !valid_layers {
+                    return Err(Error::invalid_descriptor(
+                        "image view",
+                        "cube views require six layers per cube",
+                    ));
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
     /// Returns a non-owning image reference for command recording.
     #[must_use]
     pub fn as_ref(&self) -> ImageRef<'_, B> {

@@ -181,9 +181,9 @@ impl<B: Backend> Swapchain<B> {
             .acquired_count
             .set(self.state.acquired_count.get() + 1);
         Ok(RenderImage {
+            raw: Some(raw),
             backend: Arc::clone(&self.backend),
             swapchain: Arc::clone(&self.state),
-            raw: Some(raw),
         })
     }
 }
@@ -191,9 +191,10 @@ impl<B: Backend> Swapchain<B> {
 /// An acquired swapchain image that must be presented or abandoned.
 #[must_use = "an acquired image must be presented or abandoned"]
 pub struct RenderImage<B: Backend> {
+    // Fields drop in declaration order. Release image/view references before the swapchain state.
+    raw: Option<B::RenderImage>,
     backend: Arc<B>,
     swapchain: Arc<SwapchainState<B>>,
-    raw: Option<B::RenderImage>,
 }
 
 impl<B: Backend> fmt::Debug for RenderImage<B> {
@@ -232,6 +233,26 @@ impl<B: Backend> RenderImage<B> {
 
     /// Presents the acquired image after waiting on binary semaphores.
     pub fn present(mut self, waits: &[&Semaphore<B>]) -> Result<()> {
+        if let Err(error) = self.validate_present_waits(waits) {
+            return self.abandon_after_validation_error(error);
+        }
+        let backend_waits = waits.iter().map(|wait| &wait.raw).collect::<Vec<_>>();
+        let raw = self.take_raw();
+        self.backend
+            .present(&mut self.swapchain.raw.borrow_mut(), raw, &backend_waits)
+    }
+
+    /// Releases an acquired image that will not be presented.
+    ///
+    /// This is only valid before queue work has consumed the semaphore used to
+    /// acquire the image. Once rendering has been submitted, present the image.
+    pub fn abandon(mut self) -> Result<()> {
+        let raw = self.take_raw();
+        self.backend
+            .abandon_render_image(&mut self.swapchain.raw.borrow_mut(), raw)
+    }
+
+    fn validate_present_waits(&self, waits: &[&Semaphore<B>]) -> Result<()> {
         for wait in waits {
             if !Arc::ptr_eq(&self.backend, &wait.backend) {
                 return Err(Error::DeviceMismatch {
@@ -245,17 +266,14 @@ impl<B: Backend> RenderImage<B> {
                 ));
             }
         }
-        let backend_waits = waits.iter().map(|wait| &wait.raw).collect::<Vec<_>>();
-        let raw = self.take_raw();
-        self.backend
-            .present(&mut self.swapchain.raw.borrow_mut(), raw, &backend_waits)
+        Ok(())
     }
 
-    /// Releases an acquired image that will not be presented.
-    pub fn abandon(mut self) -> Result<()> {
-        let raw = self.take_raw();
-        self.backend
-            .abandon_render_image(&mut self.swapchain.raw.borrow_mut(), raw)
+    fn abandon_after_validation_error(self, error: Error) -> Result<()> {
+        match self.abandon() {
+            Ok(()) => Err(error),
+            Err(abandon_error) => Err(abandon_error),
+        }
     }
 
     fn raw(&self) -> &B::RenderImage {
@@ -271,19 +289,5 @@ impl<B: Backend> RenderImage<B> {
         self.raw
             .take()
             .expect("render image can only be consumed once")
-    }
-}
-
-impl<B: Backend> Drop for RenderImage<B> {
-    fn drop(&mut self) {
-        let Some(raw) = self.raw.take() else {
-            return;
-        };
-        self.swapchain
-            .acquired_count
-            .set(self.swapchain.acquired_count.get().saturating_sub(1));
-        let _ = self
-            .backend
-            .abandon_render_image(&mut self.swapchain.raw.borrow_mut(), raw);
     }
 }

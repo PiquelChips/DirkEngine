@@ -15,6 +15,8 @@ mod resource;
 #[cfg(test)]
 mod test_backend;
 mod types;
+#[cfg(feature = "vulkan")]
+pub mod vulkan;
 
 pub use backend::{Backend, BackendInterop};
 pub use command::*;
