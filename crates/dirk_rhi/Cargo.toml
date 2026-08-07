@@ -1,0 +1,21 @@
+[package]
+name = "dirk_rhi"
+description = "Backend-neutral rendering hardware interface for DirkEngine"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+homepage.workspace = true
+authors.workspace = true
+documentation.workspace = true
+
+[dependencies]
+
+[features]
+default = []
+presentation = []
+
+[lints]
+workspace = true
