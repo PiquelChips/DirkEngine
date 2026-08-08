@@ -200,7 +200,7 @@ pub trait CommandBuffer<B: Backend> {
         dst: &B::Image,
         regions: &[ImageBlit],
         filter: FilterMode,
-    );
+    ) -> Result<()>;
     /// Applies resource transitions.
     fn barrier(&mut self, dependency: &DependencyInfo<'_, B>);
 }
