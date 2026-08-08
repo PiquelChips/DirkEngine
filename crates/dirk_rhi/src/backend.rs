@@ -48,7 +48,7 @@ pub struct Capabilities {
 /// One queue submission, including presentation and timeline dependencies.
 pub struct Submission<'a, B: Backend> {
     /// Recorded command buffers.
-    pub command_buffers: &'a [B::CommandBuffer],
+    pub command_buffers: &'a [&'a B::CommandBuffer],
     /// Acquired frames waited on and signaled by this submission.
     pub surface_frames: &'a [&'a B::SurfaceFrame],
     /// Timeline values waited on before execution.
@@ -58,7 +58,7 @@ pub struct Submission<'a, B: Backend> {
     /// Fence signaled after all submitted work completes.
     ///
     /// The backend may retain submitted resources through this fence, so it
-    /// must not be reused until [`Rhi::wait_and_reset_fence`] succeeds.
+    /// must not be reused until [`Rhi::wait_fence`] succeeds.
     pub fence: &'a B::Fence,
 }
 
@@ -142,8 +142,10 @@ pub trait Backend: Sized + Send + Sync + 'static {
     fn create_command_buffer(&self, pool: &Self::CommandPool) -> Result<Self::CommandBuffer>;
     /// Creates a fence.
     fn create_fence(&self, signaled: bool) -> Result<Self::Fence>;
-    /// Waits for a fence and resets it for reuse.
-    fn wait_and_reset_fence(&self, fence: &Self::Fence, timeout_ns: u64) -> Result<()>;
+    /// Waits for a fence to signal.
+    fn wait_fence(&self, fence: &Self::Fence, timeout_ns: u64) -> Result<()>;
+    /// Resets a signaled fence for reuse.
+    fn reset_fence(&self, fence: &Self::Fence) -> Result<()>;
     /// Creates a timeline semaphore.
     fn create_timeline_semaphore(&self, initial_value: u64) -> Result<Self::TimelineSemaphore>;
     /// Waits for a timeline semaphore value.
@@ -302,9 +304,14 @@ impl<B: Backend> Rhi<B> {
         self.backend.create_fence(signaled)
     }
 
-    /// Waits for and resets a fence.
-    pub fn wait_and_reset_fence(&self, fence: &B::Fence, timeout_ns: u64) -> Result<()> {
-        self.backend.wait_and_reset_fence(fence, timeout_ns)
+    /// Waits for a fence to signal.
+    pub fn wait_fence(&self, fence: &B::Fence, timeout_ns: u64) -> Result<()> {
+        self.backend.wait_fence(fence, timeout_ns)
+    }
+
+    /// Resets a signaled fence for reuse.
+    pub fn reset_fence(&self, fence: &B::Fence) -> Result<()> {
+        self.backend.reset_fence(fence)
     }
 
     /// Creates a timeline semaphore.
