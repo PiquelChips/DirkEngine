@@ -56,7 +56,10 @@ pub struct Submission<'a, B: Backend> {
     /// Timeline values signaled after execution.
     pub signal_timelines: &'a [TimelinePoint<'a, B>],
     /// Fence signaled after all submitted work completes.
-    pub fence: Option<&'a B::Fence>,
+    ///
+    /// The backend may retain submitted resources through this fence, so it
+    /// must not be reused until [`Rhi::wait_and_reset_fence`] succeeds.
+    pub fence: &'a B::Fence,
 }
 
 /// Backend implementation contract for the RHI.

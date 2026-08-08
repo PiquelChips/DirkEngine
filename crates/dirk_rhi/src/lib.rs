@@ -22,7 +22,7 @@ pub use presentation::{SurfaceCreateInfo, SurfaceFrame, SwapchainDesc};
 pub use resource::{
     BindGroupDesc, BindGroupEntry, BindGroupLayoutDesc, BindGroupLayoutEntry, BindingResource,
     BufferDesc, GraphicsPipelineDesc, ImageDesc, ImageViewDesc, PipelineLayoutDesc, SamplerDesc,
-    ShaderDesc,
+    ShaderDesc, ShaderSource,
 };
 pub use types::*;
 

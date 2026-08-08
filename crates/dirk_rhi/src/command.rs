@@ -32,6 +32,8 @@ pub struct BufferImageCopy {
     pub array_layer_count: u32,
     /// Destination image extent.
     pub extent: Extent3d,
+    /// Copied image aspects.
+    pub aspects: ImageAspects,
 }
 
 /// Image-to-image copy region.
