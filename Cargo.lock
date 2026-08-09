@@ -685,6 +685,7 @@ dependencies = [
 name = "dirk_rhi"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "raw-window-handle",
  "thiserror 2.0.18",
 ]

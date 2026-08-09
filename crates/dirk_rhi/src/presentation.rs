@@ -1,6 +1,6 @@
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 
-use crate::{Backend, Extent3d, Format, ImageUsages, SurfaceStatus};
+use crate::{Backend, Extent3d, Format, ImageUsages, Result, SurfaceStatus};
 
 /// Raw platform handles used to create a graphics presentation surface.
 #[derive(Clone, Copy, Debug)]
@@ -23,6 +23,28 @@ pub struct SwapchainDesc<'a, B: Backend> {
     pub height: u32,
     /// Required swapchain image uses.
     pub usage: ImageUsages,
+}
+
+/// Reconfigurable presentation chain and its acquired frames.
+pub trait Swapchain<B: Backend> {
+    /// Acquires the next presentation frame.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the surface is unavailable or must be recreated.
+    fn acquire(&mut self) -> Result<B::SurfaceFrame>;
+    /// Reconfigures this swapchain for a new extent.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the extent is invalid or recreation fails.
+    fn resize(&mut self, width: u32, height: u32) -> Result<()>;
+    /// Presents a frame previously acquired from this swapchain.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the frame is invalid or presentation fails.
+    fn present(&mut self, frame: B::SurfaceFrame) -> Result<()>;
 }
 
 /// A presentation image acquired from a backend swapchain.

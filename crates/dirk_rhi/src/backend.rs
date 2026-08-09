@@ -3,12 +3,11 @@
     reason = "backend methods share the crate Error contract; individual failure modes are backend-dependent"
 )]
 
-use std::sync::Arc;
-
 use crate::{
-    BindGroupDesc, BindGroupLayoutDesc, BufferDesc, CommandBuffer, Format, GraphicsPipelineDesc,
-    ImageDesc, ImageViewDesc, PipelineLayoutDesc, QueueType, Result, SamplerDesc, ShaderDesc,
-    SurfaceCreateInfo, SurfaceFrame, SwapchainDesc, TimelinePoint,
+    BindGroupDesc, BindGroupLayoutDesc, Buffer, BufferDesc, CommandBuffer, Format,
+    GraphicsPipelineDesc, ImageDesc, ImageViewDesc, PipelineLayoutDesc, QueueType, Result,
+    SamplerDesc, ShaderDesc, SurfaceCreateInfo, SurfaceFrame, Swapchain, SwapchainDesc,
+    TimelinePoint,
 };
 
 /// Application metadata and backend policy used during device creation.
@@ -45,6 +44,22 @@ pub struct Capabilities {
     pub dedicated_copy_queue: bool,
 }
 
+/// CPU-waitable submission completion primitive.
+pub trait Fence: Send + Sync + 'static {
+    /// Waits until this fence signals or the timeout expires.
+    fn wait(&self, timeout_ns: u64) -> Result<()>;
+    /// Resets this signaled fence for reuse.
+    fn reset(&self) -> Result<()>;
+}
+
+/// Monotonically increasing GPU synchronization primitive.
+pub trait TimelineSemaphore: Clone + Send + Sync + 'static {
+    /// Waits until this semaphore reaches `value` or the timeout expires.
+    fn wait(&self, value: u64, timeout_ns: u64) -> Result<()>;
+    /// Returns this semaphore's current value.
+    fn value(&self) -> Result<u64>;
+}
+
 /// One queue submission, including presentation and timeline dependencies.
 pub struct Submission<'a, B: Backend> {
     /// Recorded command buffers.
@@ -58,14 +73,14 @@ pub struct Submission<'a, B: Backend> {
     /// Fence signaled after all submitted work completes.
     ///
     /// The backend may retain submitted resources through this fence, so it
-    /// must not be reused until [`Rhi::wait_fence`] succeeds.
+    /// must not be reused until [`Fence::wait`] succeeds.
     pub fence: &'a B::Fence,
 }
 
 /// Backend implementation contract for the RHI.
 pub trait Backend: Sized + Send + Sync + 'static {
     /// Buffer resource.
-    type Buffer: Clone + Send + Sync + 'static;
+    type Buffer: Buffer;
     /// Image resource, including externally-owned surface images.
     type Image: Clone + Send + Sync + 'static;
     /// Image view resource.
@@ -87,13 +102,13 @@ pub trait Backend: Sized + Send + Sync + 'static {
     /// Recorded command buffer.
     type CommandBuffer: CommandBuffer<Self>;
     /// Submission completion fence.
-    type Fence;
+    type Fence: Fence;
     /// Timeline synchronization primitive.
-    type TimelineSemaphore: Clone + Send + Sync + 'static;
+    type TimelineSemaphore: TimelineSemaphore;
     /// Presentation surface.
     type Surface: Clone + Send + Sync + 'static;
     /// Presentation swapchain.
-    type Swapchain;
+    type Swapchain: Swapchain<Self>;
     /// Acquired presentation frame.
     type SurfaceFrame: SurfaceFrame<Self>;
 
@@ -108,8 +123,6 @@ pub trait Backend: Sized + Send + Sync + 'static {
 
     /// Creates a buffer.
     fn create_buffer(&self, desc: &BufferDesc<'_>) -> Result<Self::Buffer>;
-    /// Writes bytes into host-visible buffer memory.
-    fn write_buffer(&self, buffer: &Self::Buffer, offset: u64, data: &[u8]) -> Result<()>;
     /// Creates an image.
     fn create_image(&self, desc: &ImageDesc<'_>) -> Result<Self::Image>;
     /// Creates a view of an image.
@@ -142,21 +155,8 @@ pub trait Backend: Sized + Send + Sync + 'static {
     fn create_command_buffer(&self, pool: &Self::CommandPool) -> Result<Self::CommandBuffer>;
     /// Creates a fence.
     fn create_fence(&self, signaled: bool) -> Result<Self::Fence>;
-    /// Waits for a fence to signal.
-    fn wait_fence(&self, fence: &Self::Fence, timeout_ns: u64) -> Result<()>;
-    /// Resets a signaled fence for reuse.
-    fn reset_fence(&self, fence: &Self::Fence) -> Result<()>;
     /// Creates a timeline semaphore.
     fn create_timeline_semaphore(&self, initial_value: u64) -> Result<Self::TimelineSemaphore>;
-    /// Waits for a timeline semaphore value.
-    fn wait_timeline(
-        &self,
-        semaphore: &Self::TimelineSemaphore,
-        value: u64,
-        timeout_ns: u64,
-    ) -> Result<()>;
-    /// Returns a timeline semaphore's current value.
-    fn timeline_value(&self, semaphore: &Self::TimelineSemaphore) -> Result<u64>;
     /// Submits command buffers and synchronization to a queue.
     fn submit(&self, queue: QueueType, submission: &Submission<'_, Self>) -> Result<()>;
 
@@ -164,208 +164,4 @@ pub trait Backend: Sized + Send + Sync + 'static {
     fn create_surface(&self, info: SurfaceCreateInfo) -> Result<Self::Surface>;
     /// Creates a presentation swapchain.
     fn create_swapchain(&self, desc: &SwapchainDesc<'_, Self>) -> Result<Self::Swapchain>;
-    /// Acquires one presentation frame.
-    fn acquire_frame(&self, swapchain: &mut Self::Swapchain) -> Result<Self::SurfaceFrame>;
-    /// Recreates a presentation swapchain for a new extent.
-    fn resize_swapchain(
-        &self,
-        swapchain: &mut Self::Swapchain,
-        width: u32,
-        height: u32,
-    ) -> Result<()>;
-    /// Presents one acquired frame.
-    fn present(&self, frame: Self::SurfaceFrame) -> Result<()>;
-}
-
-/// Backend-neutral graphics device façade.
-pub struct Rhi<B: Backend> {
-    backend: Arc<B>,
-}
-
-impl<B: Backend> Clone for Rhi<B> {
-    fn clone(&self) -> Self {
-        Self {
-            backend: self.backend.clone(),
-        }
-    }
-}
-
-impl<B: Backend> Rhi<B> {
-    /// Creates an RHI using backend `B`.
-    pub fn new(info: &RhiCreateInfo<'_>) -> Result<Self> {
-        Ok(Self {
-            backend: Arc::new(B::new(info)?),
-        })
-    }
-
-    /// Creates an RHI from an already initialized backend.
-    #[must_use]
-    pub fn from_backend(backend: B) -> Self {
-        Self {
-            backend: Arc::new(backend),
-        }
-    }
-
-    /// Returns the concrete backend for isolated native API integrations.
-    ///
-    /// Renderer code should normally use the neutral methods on [`Rhi`].
-    #[must_use]
-    pub fn backend(&self) -> &B {
-        &self.backend
-    }
-
-    /// Returns selected device capabilities.
-    #[must_use]
-    pub fn capabilities(&self) -> Capabilities {
-        self.backend.capabilities()
-    }
-
-    /// Waits until all submitted work completes.
-    pub fn wait_idle(&self) -> Result<()> {
-        self.backend.wait_idle()
-    }
-
-    /// Reclaims resources whose GPU use has completed.
-    pub fn collect_garbage(&self) -> Result<()> {
-        self.backend.collect_garbage()
-    }
-
-    /// Creates a buffer.
-    pub fn create_buffer(&self, desc: &BufferDesc<'_>) -> Result<B::Buffer> {
-        self.backend.create_buffer(desc)
-    }
-
-    /// Writes bytes into a host-visible buffer.
-    pub fn write_buffer(&self, buffer: &B::Buffer, offset: u64, data: &[u8]) -> Result<()> {
-        self.backend.write_buffer(buffer, offset, data)
-    }
-
-    /// Creates an image.
-    pub fn create_image(&self, desc: &ImageDesc<'_>) -> Result<B::Image> {
-        self.backend.create_image(desc)
-    }
-
-    /// Creates a view of an image.
-    pub fn create_image_view(&self, desc: &ImageViewDesc<'_, B>) -> Result<B::ImageView> {
-        self.backend.create_image_view(desc)
-    }
-
-    /// Creates a sampler.
-    pub fn create_sampler(&self, desc: &SamplerDesc<'_>) -> Result<B::Sampler> {
-        self.backend.create_sampler(desc)
-    }
-
-    /// Creates a shader module.
-    pub fn create_shader(&self, desc: &ShaderDesc<'_>) -> Result<B::Shader> {
-        self.backend.create_shader(desc)
-    }
-
-    /// Creates a bind-group layout.
-    pub fn create_bind_group_layout(
-        &self,
-        desc: &BindGroupLayoutDesc<'_>,
-    ) -> Result<B::BindGroupLayout> {
-        self.backend.create_bind_group_layout(desc)
-    }
-
-    /// Creates a bind group.
-    pub fn create_bind_group(&self, desc: &BindGroupDesc<'_, B>) -> Result<B::BindGroup> {
-        self.backend.create_bind_group(desc)
-    }
-
-    /// Creates a pipeline layout.
-    pub fn create_pipeline_layout(
-        &self,
-        desc: &PipelineLayoutDesc<'_, B>,
-    ) -> Result<B::PipelineLayout> {
-        self.backend.create_pipeline_layout(desc)
-    }
-
-    /// Creates a graphics pipeline.
-    pub fn create_graphics_pipeline(
-        &self,
-        desc: &GraphicsPipelineDesc<'_, B>,
-    ) -> Result<B::GraphicsPipeline> {
-        self.backend.create_graphics_pipeline(desc)
-    }
-
-    /// Creates a command pool.
-    pub fn create_command_pool(&self, queue: QueueType) -> Result<B::CommandPool> {
-        self.backend.create_command_pool(queue)
-    }
-
-    /// Allocates a command buffer.
-    pub fn create_command_buffer(&self, pool: &B::CommandPool) -> Result<B::CommandBuffer> {
-        self.backend.create_command_buffer(pool)
-    }
-
-    /// Creates a fence.
-    pub fn create_fence(&self, signaled: bool) -> Result<B::Fence> {
-        self.backend.create_fence(signaled)
-    }
-
-    /// Waits for a fence to signal.
-    pub fn wait_fence(&self, fence: &B::Fence, timeout_ns: u64) -> Result<()> {
-        self.backend.wait_fence(fence, timeout_ns)
-    }
-
-    /// Resets a signaled fence for reuse.
-    pub fn reset_fence(&self, fence: &B::Fence) -> Result<()> {
-        self.backend.reset_fence(fence)
-    }
-
-    /// Creates a timeline semaphore.
-    pub fn create_timeline_semaphore(&self, initial_value: u64) -> Result<B::TimelineSemaphore> {
-        self.backend.create_timeline_semaphore(initial_value)
-    }
-
-    /// Waits for a timeline semaphore value.
-    pub fn wait_timeline(
-        &self,
-        semaphore: &B::TimelineSemaphore,
-        value: u64,
-        timeout_ns: u64,
-    ) -> Result<()> {
-        self.backend.wait_timeline(semaphore, value, timeout_ns)
-    }
-
-    /// Returns the current timeline value.
-    pub fn timeline_value(&self, semaphore: &B::TimelineSemaphore) -> Result<u64> {
-        self.backend.timeline_value(semaphore)
-    }
-
-    /// Submits work to a semantic queue.
-    pub fn submit(&self, queue: QueueType, submission: &Submission<'_, B>) -> Result<()> {
-        self.backend.submit(queue, submission)
-    }
-
-    /// Creates a presentation surface.
-    pub fn create_surface(&self, info: SurfaceCreateInfo) -> Result<B::Surface> {
-        self.backend.create_surface(info)
-    }
-
-    /// Creates a swapchain.
-    pub fn create_swapchain(&self, desc: &SwapchainDesc<'_, B>) -> Result<B::Swapchain> {
-        self.backend.create_swapchain(desc)
-    }
-
-    /// Acquires one swapchain frame.
-    pub fn acquire_frame(&self, swapchain: &mut B::Swapchain) -> Result<B::SurfaceFrame> {
-        self.backend.acquire_frame(swapchain)
-    }
-
-    /// Resizes a swapchain.
-    pub fn resize_swapchain(
-        &self,
-        swapchain: &mut B::Swapchain,
-        width: u32,
-        height: u32,
-    ) -> Result<()> {
-        self.backend.resize_swapchain(swapchain, width, height)
-    }
-
-    /// Presents one acquired frame.
-    pub fn present(&self, frame: B::SurfaceFrame) -> Result<()> {
-        self.backend.present(frame)
-    }
 }

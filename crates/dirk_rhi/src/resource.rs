@@ -1,8 +1,19 @@
 use crate::{
     AddressMode, Backend, BindingType, BufferUsages, CompareOp, CullMode, Extent3d, FilterMode,
     Format, FrontFace, ImageAspects, ImageUsages, ImageViewType, MemoryDomain, PrimitiveTopology,
-    SampleCount, ShaderStage, ShaderStages, VertexBufferLayout,
+    Result, SampleCount, ShaderStage, ShaderStages, VertexBufferLayout,
 };
+
+/// Backend buffer with host-write behavior when its memory domain permits it.
+pub trait Buffer: Clone + Send + Sync + 'static {
+    /// Writes bytes into this buffer's host-visible memory.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the buffer is not host-visible or the requested
+    /// range falls outside its allocation.
+    fn write(&self, offset: u64, data: &[u8]) -> Result<()>;
+}
 
 /// Buffer allocation description.
 #[derive(Clone, Copy, Debug)]

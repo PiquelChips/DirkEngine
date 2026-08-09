@@ -12,17 +12,17 @@ mod presentation;
 mod resource;
 mod types;
 
-pub use backend::{Backend, Capabilities, Rhi, RhiCreateInfo, Submission};
+pub use backend::{Backend, Capabilities, Fence, RhiCreateInfo, Submission, TimelineSemaphore};
 pub use command::{
     BufferCopy, BufferImageCopy, ColorAttachment, CommandBuffer, DependencyInfo, DepthAttachment,
     ImageBarrier, ImageBlit, ImageCopy, RenderingInfo, TimelinePoint,
 };
 pub use error::{Error, Result};
-pub use presentation::{SurfaceCreateInfo, SurfaceFrame, SwapchainDesc};
+pub use presentation::{SurfaceCreateInfo, SurfaceFrame, Swapchain, SwapchainDesc};
 pub use resource::{
     BindGroupDesc, BindGroupEntry, BindGroupLayoutDesc, BindGroupLayoutEntry, BindingResource,
-    BufferDesc, GraphicsPipelineDesc, ImageDesc, ImageViewDesc, PipelineLayoutDesc, SamplerDesc,
-    ShaderDesc, ShaderSource,
+    Buffer, BufferDesc, GraphicsPipelineDesc, ImageDesc, ImageViewDesc, PipelineLayoutDesc,
+    SamplerDesc, ShaderDesc, ShaderSource,
 };
 pub use types::*;
 

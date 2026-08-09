@@ -12,6 +12,7 @@ authors.workspace = true
 documentation.workspace = true
 
 [dependencies]
+anyhow.workspace = true
 raw-window-handle.workspace = true
 thiserror.workspace = true
 
