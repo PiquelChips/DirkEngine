@@ -21,8 +21,8 @@ pub use error::{Error, Result};
 pub use presentation::{SurfaceCreateInfo, SurfaceFrame, Swapchain, SwapchainDesc};
 pub use resource::{
     BindGroupDesc, BindGroupEntry, BindGroupLayoutDesc, BindGroupLayoutEntry, BindingResource,
-    Buffer, BufferDesc, GraphicsPipelineDesc, ImageDesc, ImageViewDesc, PipelineLayoutDesc,
-    SamplerDesc, ShaderDesc, ShaderSource,
+    Buffer, BufferDesc, DepthState, GraphicsPipelineDesc, ImageDesc, ImageViewDesc,
+    PipelineLayoutDesc, RasterState, SamplerDesc, ShaderDesc, ShaderSource,
 };
 pub use types::*;
 

@@ -27,6 +27,10 @@ pub struct SwapchainDesc<'a, B: Backend> {
 
 /// Reconfigurable presentation chain and its acquired frames.
 pub trait Swapchain<B: Backend> {
+    /// Format selected for images in the current swapchain generation.
+    fn format(&self) -> Format;
+    /// Dimensions selected for images in the current swapchain generation.
+    fn extent(&self) -> Extent3d;
     /// Acquires the next presentation frame.
     ///
     /// # Errors
