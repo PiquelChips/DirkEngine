@@ -5,7 +5,10 @@ use dirk_rhi::Backend as _;
 macro_rules! shader_code {
     ($name:literal) => {
         ShaderCode {
+            #[cfg(not(target_vendor = "apple"))]
             spirv: include_bytes!(concat!(env!("OUT_DIR"), "/", $name, ".spv")),
+            #[cfg(target_vendor = "apple")]
+            msl: include_str!(concat!(env!("OUT_DIR"), "/", $name, ".metal")),
         }
     };
 }
@@ -14,7 +17,10 @@ pub mod metadata;
 
 /// A block of shader bytecode and the shader entry point name.
 pub(crate) struct ShaderCode {
+    #[cfg(not(target_vendor = "apple"))]
     spirv: &'static [u8],
+    #[cfg(target_vendor = "apple")]
+    msl: &'static str,
 }
 
 impl ShaderCode {
@@ -24,13 +30,25 @@ impl ShaderCode {
         stage: dirk_rhi::ShaderStage,
         entry: &'static str,
     ) -> crate::Result<crate::resources::ActiveShader> {
-        let words = self.code_as_u32();
-        Ok(device.rhi.create_shader(&dirk_rhi::ShaderDesc {
-            label: entry,
-            stage,
-            entry,
-            source: dirk_rhi::ShaderSource::SpirV(&words),
-        })?)
+        #[cfg(target_vendor = "apple")]
+        {
+            Ok(device.rhi.create_shader(&dirk_rhi::ShaderDesc {
+                label: entry,
+                stage,
+                entry,
+                source: dirk_rhi::ShaderSource::Msl(self.msl),
+            })?)
+        }
+        #[cfg(not(target_vendor = "apple"))]
+        {
+            let words = self.code_as_u32();
+            Ok(device.rhi.create_shader(&dirk_rhi::ShaderDesc {
+                label: entry,
+                stage,
+                entry,
+                source: dirk_rhi::ShaderSource::SpirV(&words),
+            })?)
+        }
     }
 
     /// Returns the shader code as little-endian `u32` words.
@@ -39,6 +57,7 @@ impl ShaderCode {
     ///
     /// Panics if the SPIR-V code size is not a multiple of 4 bytes.
     #[must_use]
+    #[cfg(not(target_vendor = "apple"))]
     fn code_as_u32(&self) -> Vec<u32> {
         assert!(
             self.spirv.len().is_multiple_of(4),

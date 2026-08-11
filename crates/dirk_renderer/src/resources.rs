@@ -8,6 +8,9 @@ pub mod image;
 pub mod swapchain;
 pub mod sync;
 
+#[cfg(target_vendor = "apple")]
+pub(crate) type ActiveRhi = dirk_rhi_metal::MetalBackend;
+#[cfg(not(target_vendor = "apple"))]
 pub(crate) type ActiveRhi = dirk_rhi_vulkan::VulkanBackend;
 
 pub(crate) type ActiveBuffer = <ActiveRhi as dirk_rhi::Backend>::Buffer;
