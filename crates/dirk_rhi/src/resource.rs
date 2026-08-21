@@ -12,6 +12,10 @@ pub trait Buffer: Clone + Send + Sync + 'static {
     ///
     /// Returns an error when the buffer is not host-visible or the requested
     /// range falls outside its allocation.
+    ///
+    /// Callers must prevent concurrent writes to overlapping ranges of the
+    /// same buffer, including writes made through cloned buffer handles.
+    /// Implementations are not required to serialize such writes.
     fn write(&self, offset: u64, data: &[u8]) -> Result<()>;
 }
 
@@ -33,7 +37,8 @@ pub struct BufferDesc<'a> {
 pub struct ImageDesc<'a> {
     /// Debug label.
     pub label: &'a str,
-    /// Image dimensions.
+    /// Image dimensions. For a two-dimensional array image, `depth` must be
+    /// one; array layers are specified only by [`Self::array_layers`].
     pub extent: Extent3d,
     /// Texel format.
     pub format: Format,
@@ -48,7 +53,7 @@ pub struct ImageDesc<'a> {
 }
 
 /// Image-view description.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub struct ImageViewDesc<'a, B: Backend> {
     /// Debug label.
     pub label: &'a str,
@@ -66,6 +71,21 @@ pub struct ImageViewDesc<'a, B: Backend> {
     pub base_array_layer: u32,
     /// Visible array layer count.
     pub array_layer_count: u32,
+}
+
+impl<B: Backend> std::fmt::Debug for ImageViewDesc<'_, B> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ImageViewDesc")
+            .field("label", &self.label)
+            .field("view_type", &self.view_type)
+            .field("aspects", &self.aspects)
+            .field("base_mip_level", &self.base_mip_level)
+            .field("mip_level_count", &self.mip_level_count)
+            .field("base_array_layer", &self.base_array_layer)
+            .field("array_layer_count", &self.array_layer_count)
+            .finish_non_exhaustive()
+    }
 }
 
 /// Texture sampler description.
@@ -157,12 +177,52 @@ pub enum BindingResource<'a, B: Backend> {
     StorageImage(&'a B::ImageView),
 }
 
+impl<B: Backend> Copy for BindingResource<'_, B> {}
+
+impl<B: Backend> Clone for BindingResource<'_, B> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<B: Backend> std::fmt::Debug for BindingResource<'_, B> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Buffer { offset, size, .. } => formatter
+                .debug_struct("BindingResource::Buffer")
+                .field("offset", offset)
+                .field("size", size)
+                .finish(),
+            Self::SampledImage { .. } => formatter.write_str("BindingResource::SampledImage"),
+            Self::StorageImage(_) => formatter.write_str("BindingResource::StorageImage"),
+        }
+    }
+}
+
 /// One bind-group resource entry.
 pub struct BindGroupEntry<'a, B: Backend> {
     /// Binding index from the layout.
     pub binding: u32,
     /// Bound resource.
     pub resource: BindingResource<'a, B>,
+}
+
+impl<B: Backend> Copy for BindGroupEntry<'_, B> {}
+
+impl<B: Backend> Clone for BindGroupEntry<'_, B> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<B: Backend> std::fmt::Debug for BindGroupEntry<'_, B> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("BindGroupEntry")
+            .field("binding", &self.binding)
+            .field("resource", &self.resource)
+            .finish()
+    }
 }
 
 /// Bind-group creation description.
@@ -175,12 +235,48 @@ pub struct BindGroupDesc<'a, B: Backend> {
     pub entries: &'a [BindGroupEntry<'a, B>],
 }
 
+impl<B: Backend> Copy for BindGroupDesc<'_, B> {}
+
+impl<B: Backend> Clone for BindGroupDesc<'_, B> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<B: Backend> std::fmt::Debug for BindGroupDesc<'_, B> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("BindGroupDesc")
+            .field("label", &self.label)
+            .field("entries", &self.entries)
+            .finish_non_exhaustive()
+    }
+}
+
 /// Pipeline-layout description.
 pub struct PipelineLayoutDesc<'a, B: Backend> {
     /// Debug label.
     pub label: &'a str,
     /// Bind-group layouts ordered by set/group index.
     pub bind_group_layouts: &'a [&'a B::BindGroupLayout],
+}
+
+impl<B: Backend> Copy for PipelineLayoutDesc<'_, B> {}
+
+impl<B: Backend> Clone for PipelineLayoutDesc<'_, B> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<B: Backend> std::fmt::Debug for PipelineLayoutDesc<'_, B> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("PipelineLayoutDesc")
+            .field("label", &self.label)
+            .field("bind_group_layout_count", &self.bind_group_layouts.len())
+            .finish_non_exhaustive()
+    }
 }
 
 /// Rasterization state.
@@ -213,8 +309,8 @@ pub struct GraphicsPipelineDesc<'a, B: Backend> {
     pub layout: &'a B::PipelineLayout,
     /// Vertex shader.
     pub vertex: &'a B::Shader,
-    /// Fragment shader.
-    pub fragment: &'a B::Shader,
+    /// Optional fragment shader. Depth-only passes leave this unset.
+    pub fragment: Option<&'a B::Shader>,
     /// Vertex-buffer layouts.
     pub vertex_buffers: &'a [VertexBufferLayout<'a>],
     /// Rasterization state.
@@ -225,4 +321,27 @@ pub struct GraphicsPipelineDesc<'a, B: Backend> {
     pub depth: Option<DepthState>,
     /// Multisampling count.
     pub samples: SampleCount,
+}
+
+impl<B: Backend> Copy for GraphicsPipelineDesc<'_, B> {}
+
+impl<B: Backend> Clone for GraphicsPipelineDesc<'_, B> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<B: Backend> std::fmt::Debug for GraphicsPipelineDesc<'_, B> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("GraphicsPipelineDesc")
+            .field("label", &self.label)
+            .field("has_fragment_shader", &self.fragment.is_some())
+            .field("vertex_buffers", &self.vertex_buffers)
+            .field("raster", &self.raster)
+            .field("color_formats", &self.color_formats)
+            .field("depth", &self.depth)
+            .field("samples", &self.samples)
+            .finish_non_exhaustive()
+    }
 }

@@ -26,7 +26,7 @@ pub struct RhiCreateInfo<'a> {
     ///
     /// Headless users may leave this unset and create a surface later, at
     /// which point presentation support can still be rejected by the backend.
-    pub compatible_surface: Option<SurfaceCreateInfo>,
+    pub compatible_surface: Option<SurfaceCreateInfo<'a>>,
 }
 
 /// Selected device capabilities relevant to the renderer.
@@ -38,6 +38,10 @@ pub struct Capabilities {
     pub max_samples: crate::SampleCount,
     /// Maximum supported texture anisotropy.
     pub max_sampler_anisotropy: u16,
+    /// Minimum alignment for a uniform-buffer binding offset, in bytes.
+    pub min_uniform_buffer_offset_alignment: u64,
+    /// Minimum alignment for a storage-buffer binding offset, in bytes.
+    pub min_storage_buffer_offset_alignment: u64,
     /// Whether a distinct compute queue is available.
     pub dedicated_compute_queue: bool,
     /// Whether a distinct copy queue is available.
@@ -70,11 +74,12 @@ pub struct Submission<'a, B: Backend> {
     pub wait_timelines: &'a [TimelinePoint<'a, B>],
     /// Timeline values signaled after execution.
     pub signal_timelines: &'a [TimelinePoint<'a, B>],
-    /// Fence signaled after all submitted work completes.
+    /// Optional fence signaled after all submitted work completes.
     ///
-    /// The backend may retain submitted resources through this fence, so it
-    /// must not be reused until [`Fence::wait`] succeeds.
-    pub fence: &'a B::Fence,
+    /// A timeline-only submission may leave this unset. When provided, the
+    /// backend may retain submitted resources through this fence, so it must
+    /// not be reused until [`Fence::wait`] succeeds.
+    pub fence: Option<&'a B::Fence>,
 }
 
 /// Backend implementation contract for the RHI.
@@ -98,7 +103,7 @@ pub trait Backend: Sized + Send + Sync + 'static {
     /// Graphics pipeline resource.
     type GraphicsPipeline: Clone + Send + Sync + 'static;
     /// Command allocation pool.
-    type CommandPool;
+    type CommandPool: Send + 'static;
     /// Recorded command buffer.
     type CommandBuffer: CommandBuffer<Self>;
     /// Submission completion fence.
@@ -152,7 +157,7 @@ pub trait Backend: Sized + Send + Sync + 'static {
     /// Creates a command pool for a semantic queue.
     fn create_command_pool(&self, queue: QueueType) -> Result<Self::CommandPool>;
     /// Allocates a command buffer from a pool.
-    fn create_command_buffer(&self, pool: &Self::CommandPool) -> Result<Self::CommandBuffer>;
+    fn create_command_buffer(&self, pool: &mut Self::CommandPool) -> Result<Self::CommandBuffer>;
     /// Creates a fence.
     fn create_fence(&self, signaled: bool) -> Result<Self::Fence>;
     /// Creates a timeline semaphore.
@@ -161,7 +166,7 @@ pub trait Backend: Sized + Send + Sync + 'static {
     fn submit(&self, queue: QueueType, submission: &Submission<'_, Self>) -> Result<()>;
 
     /// Creates a presentation surface.
-    fn create_surface(&self, info: SurfaceCreateInfo) -> Result<Self::Surface>;
+    fn create_surface(&self, info: SurfaceCreateInfo<'_>) -> Result<Self::Surface>;
     /// Creates a presentation swapchain.
     fn create_swapchain(&self, desc: &SwapchainDesc<'_, Self>) -> Result<Self::Swapchain>;
 }

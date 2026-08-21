@@ -22,6 +22,6 @@ pub enum Error {
     #[error("invalid resource description: {0}")]
     InvalidResource(&'static str),
     /// A backend-specific operation failed.
-    #[error("graphics backend error: {0}")]
+    #[error("graphics backend error")]
     Backend(#[from] anyhow::Error),
 }

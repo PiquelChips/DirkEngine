@@ -18,7 +18,9 @@ pub struct Extent3d {
     pub width: u32,
     /// Height in pixels.
     pub height: u32,
-    /// Depth or array-layer count.
+    /// Number of depth slices.
+    ///
+    /// Array layers are specified by the descriptor that owns this extent.
     pub depth: u32,
 }
 
@@ -421,4 +423,16 @@ pub enum SurfaceStatus {
     Optimal,
     /// Frame is usable, but the surface should soon be recreated.
     Suboptimal,
+}
+
+/// Presentation mode requested when creating a swapchain.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum PresentMode {
+    /// Wait for vertical blanking and queue frames in order.
+    #[default]
+    Fifo,
+    /// Prefer low-latency queued presentation when supported.
+    Mailbox,
+    /// Present immediately without synchronizing to vertical blanking.
+    Immediate,
 }

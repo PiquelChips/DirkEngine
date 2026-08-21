@@ -110,5 +110,11 @@ fn backend_errors_keep_anyhow_context() {
     let error = Error::from(source);
 
     assert!(matches!(error, Error::Backend(_)));
-    assert!(error.to_string().contains("creating buffer"));
+    assert_eq!(error.to_string(), "graphics backend error");
+
+    let Error::Backend(inner) = &error else {
+        unreachable!("classified as a backend error above");
+    };
+    let causes: Vec<_> = inner.chain().map(ToString::to_string).collect();
+    assert_eq!(causes, ["creating buffer", "native allocation failed"]);
 }
