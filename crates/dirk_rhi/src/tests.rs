@@ -4,11 +4,15 @@ use std::sync::{
 };
 
 use crate::{
-    Buffer, BufferUsages, Error, Extent3d, Fence, ImageUsages, PipelineStages, Result, SampleCount,
-    TimelineSemaphore,
+    Backend, BindGroupDesc, BindGroupLayoutDesc, Buffer, BufferCopy, BufferDesc, BufferImageCopy,
+    BufferUsages, Capabilities, CommandBuffer, DependencyInfo, Error, Extent3d, Fence, FilterMode,
+    Format, GraphicsPipelineDesc, ImageCopy, ImageDesc, ImageUsages, ImageViewDesc,
+    PipelineLayoutDesc, PipelineStages, QueueType, Rect, RenderingInfo, Result, RhiCreateInfo,
+    SampleCount, SamplerDesc, ShaderDesc, Submission, SurfaceCreateInfo, SurfaceFrame,
+    SurfaceStatus, Swapchain, SwapchainDesc, TimelinePoint, TimelineSemaphore, Viewport,
 };
 
-#[derive(Clone, Default)]
+#[derive(Clone, Debug, Default)]
 struct TestBuffer(Arc<AtomicU64>);
 
 impl Buffer for TestBuffer {
@@ -49,6 +53,266 @@ impl TimelineSemaphore for TestTimeline {
     }
 }
 
+#[derive(Clone, Debug, Default)]
+struct TestResource;
+
+#[derive(Default)]
+struct TestCommandPool;
+
+#[derive(Default)]
+struct TestCommandBuffer;
+
+#[derive(Default)]
+struct TestSurfaceFrame {
+    image: TestResource,
+    view: TestResource,
+}
+
+#[derive(Default)]
+struct TestSwapchain;
+
+#[derive(Default)]
+struct TestBackend;
+
+impl CommandBuffer<TestBackend> for TestCommandBuffer {
+    fn begin(&mut self, _label: &str, _one_time_submit: bool) -> Result<()> {
+        Ok(())
+    }
+
+    fn end(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    fn begin_rendering(&mut self, _info: &RenderingInfo<'_, TestBackend>) -> Result<()> {
+        Ok(())
+    }
+
+    fn end_rendering(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    fn set_viewport(&mut self, _viewport: Viewport) {}
+
+    fn set_scissor(&mut self, _scissor: Rect) {}
+
+    fn bind_graphics_pipeline(&mut self, _pipeline: &TestResource) {}
+
+    fn bind_groups(
+        &mut self,
+        _layout: &TestResource,
+        _first_group: u32,
+        _groups: &[&TestResource],
+    ) {
+    }
+
+    fn bind_vertex_buffer(&mut self, _slot: u32, _buffer: &TestBuffer, _offset: u64) {}
+
+    fn bind_index_buffer(
+        &mut self,
+        _buffer: &TestBuffer,
+        _offset: u64,
+        _format: crate::IndexFormat,
+    ) {
+    }
+
+    fn draw(
+        &mut self,
+        _vertex_count: u32,
+        _instance_count: u32,
+        _first_vertex: u32,
+        _first_instance: u32,
+    ) {
+    }
+
+    fn draw_indexed(
+        &mut self,
+        _index_count: u32,
+        _instance_count: u32,
+        _first_index: u32,
+        _vertex_offset: i32,
+        _first_instance: u32,
+    ) {
+    }
+
+    fn copy_buffer(&mut self, _src: &TestBuffer, _dst: &TestBuffer, _regions: &[BufferCopy]) {}
+
+    fn copy_buffer_to_image(
+        &mut self,
+        _src: &TestBuffer,
+        _dst: &TestResource,
+        _regions: &[BufferImageCopy],
+    ) {
+    }
+
+    fn copy_image(&mut self, _src: &TestResource, _dst: &TestResource, _regions: &[ImageCopy]) {}
+
+    fn blit_image(
+        &mut self,
+        _src: &TestResource,
+        _dst: &TestResource,
+        _regions: &[crate::ImageBlit],
+        _filter: FilterMode,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    fn barrier(&mut self, _dependency: &DependencyInfo<'_, TestBackend>) {}
+}
+
+impl SurfaceFrame<TestBackend> for TestSurfaceFrame {
+    fn image(&self) -> &TestResource {
+        &self.image
+    }
+
+    fn view(&self) -> &TestResource {
+        &self.view
+    }
+
+    fn format(&self) -> Format {
+        Format::Rgba8Unorm
+    }
+
+    fn extent(&self) -> Extent3d {
+        Extent3d::new_2d(1, 1)
+    }
+
+    fn status(&self) -> SurfaceStatus {
+        SurfaceStatus::Optimal
+    }
+}
+
+impl Swapchain<TestBackend> for TestSwapchain {
+    fn format(&self) -> Format {
+        Format::Rgba8Unorm
+    }
+
+    fn extent(&self) -> Extent3d {
+        Extent3d::new_2d(1, 1)
+    }
+
+    fn acquire(&mut self) -> Result<TestSurfaceFrame> {
+        Ok(TestSurfaceFrame::default())
+    }
+
+    fn resize(&mut self, _width: u32, _height: u32) -> Result<()> {
+        Ok(())
+    }
+
+    fn present(&mut self, frame: TestSurfaceFrame) -> Result<SurfaceStatus> {
+        Ok(frame.status())
+    }
+}
+
+impl Backend for TestBackend {
+    type Buffer = TestBuffer;
+    type Image = TestResource;
+    type ImageView = TestResource;
+    type Sampler = TestResource;
+    type Shader = TestResource;
+    type BindGroupLayout = TestResource;
+    type BindGroup = TestResource;
+    type PipelineLayout = TestResource;
+    type GraphicsPipeline = TestResource;
+    type CommandPool = TestCommandPool;
+    type CommandBuffer = TestCommandBuffer;
+    type Fence = TestFence;
+    type TimelineSemaphore = TestTimeline;
+    type Surface = TestResource;
+    type Swapchain = TestSwapchain;
+    type SurfaceFrame = TestSurfaceFrame;
+
+    fn new(_info: &RhiCreateInfo<'_>) -> Result<Self> {
+        Ok(Self)
+    }
+
+    fn capabilities(&self) -> Capabilities {
+        Capabilities {
+            depth_format: Format::Depth32Float,
+            max_samples: SampleCount::Eight,
+            max_sampler_anisotropy: 1,
+            min_uniform_buffer_offset_alignment: 256,
+            min_storage_buffer_offset_alignment: 16,
+            dedicated_compute_queue: false,
+            dedicated_copy_queue: false,
+        }
+    }
+
+    fn wait_idle(&self) -> Result<()> {
+        Ok(())
+    }
+
+    fn collect_garbage(&self) -> Result<()> {
+        Ok(())
+    }
+
+    fn create_buffer(&self, _desc: &BufferDesc<'_>) -> Result<TestBuffer> {
+        Ok(TestBuffer::default())
+    }
+
+    fn create_image(&self, _desc: &ImageDesc<'_>) -> Result<TestResource> {
+        Ok(TestResource)
+    }
+
+    fn create_image_view(&self, _desc: &ImageViewDesc<'_, Self>) -> Result<TestResource> {
+        Ok(TestResource)
+    }
+
+    fn create_sampler(&self, _desc: &SamplerDesc<'_>) -> Result<TestResource> {
+        Ok(TestResource)
+    }
+
+    fn create_shader(&self, _desc: &ShaderDesc<'_>) -> Result<TestResource> {
+        Ok(TestResource)
+    }
+
+    fn create_bind_group_layout(&self, _desc: &BindGroupLayoutDesc<'_>) -> Result<TestResource> {
+        Ok(TestResource)
+    }
+
+    fn create_bind_group(&self, _desc: &BindGroupDesc<'_, Self>) -> Result<TestResource> {
+        Ok(TestResource)
+    }
+
+    fn create_pipeline_layout(&self, _desc: &PipelineLayoutDesc<'_, Self>) -> Result<TestResource> {
+        Ok(TestResource)
+    }
+
+    fn create_graphics_pipeline(
+        &self,
+        _desc: &GraphicsPipelineDesc<'_, Self>,
+    ) -> Result<TestResource> {
+        Ok(TestResource)
+    }
+
+    fn create_command_pool(&self, _queue: QueueType) -> Result<TestCommandPool> {
+        Ok(TestCommandPool)
+    }
+
+    fn create_command_buffer(&self, _pool: &mut TestCommandPool) -> Result<TestCommandBuffer> {
+        Ok(TestCommandBuffer)
+    }
+
+    fn create_fence(&self, signaled: bool) -> Result<TestFence> {
+        Ok(TestFence(AtomicBool::new(signaled)))
+    }
+
+    fn create_timeline_semaphore(&self, initial_value: u64) -> Result<TestTimeline> {
+        Ok(TestTimeline(Arc::new(AtomicU64::new(initial_value))))
+    }
+
+    fn submit(&self, _queue: QueueType, _submission: &Submission<'_, Self>) -> Result<()> {
+        Ok(())
+    }
+
+    fn create_surface(&self, _info: SurfaceCreateInfo<'_>) -> Result<TestResource> {
+        Ok(TestResource)
+    }
+
+    fn create_swapchain(&self, _desc: &SwapchainDesc<'_, Self>) -> Result<TestSwapchain> {
+        Ok(TestSwapchain)
+    }
+}
+
 #[test]
 fn usage_flags_compose_without_backend_values() {
     const DEFAULT: BufferUsages = BufferUsages::COPY_DST.union(BufferUsages::VERTEX);
@@ -75,7 +339,6 @@ fn image_usage_flags_preserve_all_requested_roles() {
 fn semantic_types_do_not_encode_backend_constants() {
     assert_eq!(Extent3d::new_2d(1920, 1080).depth, 1);
     assert_eq!(SampleCount::Four as u8, 4);
-    assert!(SampleCount::Four < SampleCount::Eight);
     assert_eq!(
         PipelineStages::ALL,
         PipelineStages::COPY
@@ -84,6 +347,7 @@ fn semantic_types_do_not_encode_backend_constants() {
             | PipelineStages::COLOR_OUTPUT
             | PipelineStages::COMPUTE
     );
+    assert!(SampleCount::Four < SampleCount::Eight);
 }
 
 #[test]
@@ -117,4 +381,31 @@ fn backend_errors_keep_anyhow_context() {
     };
     let causes: Vec<_> = inner.chain().map(ToString::to_string).collect();
     assert_eq!(causes, ["creating buffer", "native allocation failed"]);
+}
+
+#[test]
+fn backend_contract_accepts_borrowed_descriptors_and_submission() -> Result<()> {
+    let backend = TestBackend::new(&RhiCreateInfo {
+        engine_name: "test",
+        engine_version: (0, 1, 0),
+        application_name: "test",
+        application_version: (0, 1, 0),
+        validation: false,
+        compatible_surface: None,
+    })?;
+    let mut pool = backend.create_command_pool(QueueType::Graphics)?;
+    let command_buffer = backend.create_command_buffer(&mut pool)?;
+    let command_buffers = [&command_buffer];
+    let surface_frames: &[&TestSurfaceFrame] = &[];
+    let wait_timelines: &[TimelinePoint<'_, TestBackend>] = &[];
+    let signal_timelines: &[TimelinePoint<'_, TestBackend>] = &[];
+    let submission = Submission {
+        command_buffers: &command_buffers,
+        surface_frames,
+        wait_timelines,
+        signal_timelines,
+        fence: None,
+    };
+
+    backend.submit(QueueType::Graphics, &submission)
 }

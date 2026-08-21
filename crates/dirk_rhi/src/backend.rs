@@ -3,6 +3,8 @@
     reason = "backend methods share the crate Error contract; individual failure modes are backend-dependent"
 )]
 
+use std::fmt::Debug;
+
 use crate::{
     BindGroupDesc, BindGroupLayoutDesc, Buffer, BufferDesc, CommandBuffer, Format,
     GraphicsPipelineDesc, ImageDesc, ImageViewDesc, PipelineLayoutDesc, QueueType, Result,
@@ -85,13 +87,13 @@ pub struct Submission<'a, B: Backend> {
 /// Backend implementation contract for the RHI.
 pub trait Backend: Sized + Send + Sync + 'static {
     /// Buffer resource.
-    type Buffer: Buffer;
+    type Buffer: Buffer + Debug;
     /// Image resource, including externally-owned surface images.
-    type Image: Clone + Send + Sync + 'static;
+    type Image: Clone + Debug + Send + Sync + 'static;
     /// Image view resource.
-    type ImageView: Clone + Send + Sync + 'static;
+    type ImageView: Clone + Debug + Send + Sync + 'static;
     /// Texture sampler resource.
-    type Sampler: Clone + Send + Sync + 'static;
+    type Sampler: Clone + Debug + Send + Sync + 'static;
     /// Shader module resource.
     type Shader: Clone + Send + Sync + 'static;
     /// Bind-group layout resource.
