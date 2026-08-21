@@ -51,11 +51,16 @@ impl TimelineSemaphore for TestTimeline {
 
 #[test]
 fn usage_flags_compose_without_backend_values() {
+    const DEFAULT: BufferUsages = BufferUsages::COPY_DST.union(BufferUsages::VERTEX);
     let usage = BufferUsages::COPY_DST | BufferUsages::VERTEX;
 
+    assert_eq!(usage, DEFAULT);
     assert!(usage.contains(BufferUsages::COPY_DST));
     assert!(usage.contains(BufferUsages::VERTEX));
     assert!(!usage.contains(BufferUsages::UNIFORM));
+    assert!(BufferUsages::NONE.is_empty());
+    assert!(BufferUsages::from_bits(usage.bits()).is_some());
+    assert!(BufferUsages::from_bits(u32::MAX).is_none());
 }
 
 #[test]
@@ -70,7 +75,15 @@ fn image_usage_flags_preserve_all_requested_roles() {
 fn semantic_types_do_not_encode_backend_constants() {
     assert_eq!(Extent3d::new_2d(1920, 1080).depth, 1);
     assert_eq!(SampleCount::Four as u8, 4);
-    assert!(PipelineStages::ALL.contains(PipelineStages::COLOR_OUTPUT));
+    assert!(SampleCount::Four < SampleCount::Eight);
+    assert_eq!(
+        PipelineStages::ALL,
+        PipelineStages::COPY
+            | PipelineStages::VERTEX
+            | PipelineStages::FRAGMENT
+            | PipelineStages::COLOR_OUTPUT
+            | PipelineStages::COMPUTE
+    );
 }
 
 #[test]

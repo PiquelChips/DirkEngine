@@ -71,7 +71,7 @@ pub enum Format {
 }
 
 /// Texture sample count.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(u8)]
 pub enum SampleCount {
     /// One sample per pixel.
@@ -161,8 +161,6 @@ define_flags! {
         const COLOR_OUTPUT = 1 << 3;
         /// Compute processing.
         const COMPUTE = 1 << 4;
-        /// Every command stage.
-        const ALL = u32::MAX;
     }
 }
 
