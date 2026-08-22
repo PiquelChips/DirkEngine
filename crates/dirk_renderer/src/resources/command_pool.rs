@@ -3,7 +3,6 @@ use std::{marker::PhantomData, sync::Arc};
 use parking_lot::Mutex;
 
 use dirk_rhi::{Backend as _, CommandBuffer as _, Fence as _, QueueType, Submission};
-use std::{marker::PhantomData, sync::Arc};
 
 use crate::{
     Result,
