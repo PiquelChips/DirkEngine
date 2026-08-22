@@ -5,11 +5,12 @@
 
 use std::fmt::Debug;
 
+use raw_window_handle::{DisplayHandle, WindowHandle};
+
 use crate::{
-    BindGroupDesc, BindGroupLayoutDesc, Buffer, BufferDesc, CommandBuffer, Format,
-    GraphicsPipelineDesc, ImageDesc, ImageViewDesc, PipelineLayoutDesc, QueueType, Result,
-    SamplerDesc, ShaderDesc, SurfaceCreateInfo, SurfaceFrame, Swapchain, SwapchainDesc,
-    TimelinePoint,
+    BindGroupDesc, BindGroupLayoutDesc, Buffer, BufferDesc, CommandBuffer, GraphicsPipelineDesc,
+    ImageDesc, ImageViewDesc, PipelineLayoutDesc, QueueType, Result, SamplerDesc, ShaderDesc,
+    SurfaceCreateInfo, SurfaceFrame, Swapchain, SwapchainDesc, TextureFormat, TimelinePoint,
 };
 
 /// Application metadata and backend policy used during device creation.
@@ -24,18 +25,17 @@ pub struct RhiCreateInfo<'a> {
     pub application_version: (u32, u32, u32),
     /// Enables backend validation when available.
     pub validation: bool,
-    /// Surface the selected device must be able to present to.
+    /// Display and window handles the selected device must be able to present
+    /// to.
     ///
     /// Headless users may leave this unset and create a surface later, at
     /// which point presentation support can still be rejected by the backend.
-    pub compatible_surface: Option<SurfaceCreateInfo<'a>>,
+    pub compatible_surface: Option<(DisplayHandle<'a>, WindowHandle<'a>)>,
 }
 
 /// Selected device capabilities relevant to the renderer.
 #[derive(Clone, Copy, Debug)]
 pub struct Capabilities {
-    /// Preferred depth attachment format.
-    pub depth_format: Format,
     /// Maximum supported color/depth sample count.
     pub max_samples: crate::SampleCount,
     /// Maximum supported texture anisotropy.
@@ -67,10 +67,26 @@ pub trait TimelineSemaphore: Clone + Send + Sync + 'static {
 }
 
 /// One queue submission, including presentation and timeline dependencies.
+///
+/// # Frame presentation protocol
+///
+/// Frames acquired from a swapchain are coupled to rendering through
+/// `surface_frames`. For each listed frame the backend:
+///
+/// 1. waits, before execution begins, on the semaphore produced by
+///    [`Swapchain::acquire`] for that frame;
+/// 2. signals, once all recorded work completes, the semaphore consumed by
+///    [`Swapchain::present`] for that frame.
+///
+/// A typical frame therefore acquires a frame, records into its image and
+/// view, lists it in `surface_frames`, submits, and finally presents it.
+/// Each frame must be submitted exactly once between acquisition and
+/// presentation; see [`Swapchain`] for the full lifecycle and pacing rules.
 pub struct Submission<'a, B: Backend> {
     /// Recorded command buffers.
     pub command_buffers: &'a [&'a B::CommandBuffer],
-    /// Acquired frames waited on and signaled by this submission.
+    /// Acquired frames whose presentation dependencies are handled by this
+    /// submission. See the type-level documentation for the protocol.
     pub surface_frames: &'a [&'a B::SurfaceFrame],
     /// Timeline values waited on before execution.
     pub wait_timelines: &'a [TimelinePoint<'a, B>],
@@ -123,6 +139,9 @@ pub trait Backend: Sized + Send + Sync + 'static {
     fn new(info: &RhiCreateInfo<'_>) -> Result<Self>;
     /// Returns selected device capabilities.
     fn capabilities(&self) -> Capabilities;
+    /// Returns the depth attachment formats supported by the selected
+    /// device, ordered from most to least preferred.
+    fn supported_depth_formats(&self) -> &'static [TextureFormat];
     /// Waits until all submitted device work completes.
     fn wait_idle(&self) -> Result<()>;
     /// Reclaims resources whose GPU use has completed.

@@ -47,9 +47,12 @@ impl Extent3d {
     }
 }
 
-/// Supported texel and vertex formats.
+/// Supported texel formats for images, views, attachments, and swapchains.
+///
+/// Vertex input uses the separate [`VertexFormat`] enumeration; formats here
+/// describe how a texel is stored, not how vertex data is fetched.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum Format {
+pub enum TextureFormat {
     /// Four-channel normalized RGBA.
     Rgba8Unorm,
     /// Four-channel sRGB RGBA.
@@ -58,10 +61,23 @@ pub enum Format {
     Bgra8Unorm,
     /// Four-channel sRGB BGRA.
     Bgra8Srgb,
+    /// One 16-bit floating-point channel.
+    R16Float,
+    /// Two 16-bit floating-point channels.
+    Rg16Float,
+    /// Four 16-bit floating-point channels.
+    ///
+    /// The standard high-dynamic-range color attachment format.
+    Rgba16Float,
+    /// One 32-bit floating-point channel.
+    R32Float,
     /// Two 32-bit floating-point channels.
     Rg32Float,
-    /// Three 32-bit floating-point channels.
-    Rgb32Float,
+    /// Four 32-bit floating-point channels.
+    Rgba32Float,
+    /// Packed positive-only floating-point channels for high-dynamic-range
+    /// storage at 32 bits per texel.
+    R11G11B10Float,
     /// 16-bit normalized depth.
     Depth16Unorm,
     /// 24-bit normalized depth with 8-bit stencil.
@@ -70,6 +86,23 @@ pub enum Format {
     Depth32Float,
     /// 32-bit floating-point depth with 8-bit stencil.
     Depth32FloatStencil8,
+}
+
+/// Supported vertex attribute formats.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum VertexFormat {
+    /// One 32-bit floating-point component.
+    Float32,
+    /// Two 32-bit floating-point components.
+    Float32x2,
+    /// Three 32-bit floating-point components.
+    Float32x3,
+    /// Four 32-bit floating-point components.
+    Float32x4,
+    /// Four normalized unsigned 8-bit components.
+    Unorm8x4,
+    /// Four unsigned 16-bit components.
+    Uint16x4,
 }
 
 /// Texture sample count.
@@ -275,6 +308,58 @@ pub enum IndexFormat {
     Uint32,
 }
 
+/// Operation applied to stencil bits when a stencil test resolves.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum StencilOp {
+    /// Preserve the current stencil value.
+    #[default]
+    Keep,
+    /// Set the stencil value to zero.
+    Zero,
+    /// Replace the stencil value with the reference value.
+    Replace,
+    /// Increment the stencil value, clamping at the maximum.
+    IncrementClamp,
+    /// Decrement the stencil value, clamping at zero.
+    DecrementClamp,
+    /// Bitwise-invert the stencil value.
+    Invert,
+}
+
+/// Arithmetic operation used when blending color attachments.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum BlendOp {
+    /// Adds the source and destination terms.
+    #[default]
+    Add,
+    /// Subtracts the destination term from the source term.
+    Subtract,
+    /// Subtracts the source term from the destination term.
+    ReverseSubtract,
+    /// Selects the smaller term.
+    Min,
+    /// Selects the larger term.
+    Max,
+}
+
+/// Source or destination multiplier used when blending color attachments.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum BlendFactor {
+    /// Multiplies by zero.
+    Zero,
+    /// Multiplies by one.
+    #[default]
+    One,
+    /// Multiplies by the source alpha channel.
+    SourceAlpha,
+    /// Multiplies by one minus the source alpha channel.
+    OneMinusSourceAlpha,
+    /// Multiplies by the destination alpha channel.
+    DestinationAlpha,
+    /// Multiplies by one minus the destination alpha channel.
+    OneMinusDestinationAlpha,
+}
+
 /// Texture filtering mode.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum FilterMode {
@@ -315,6 +400,9 @@ pub enum ImageState {
     ColorAttachment,
     /// Depth/stencil attachment.
     DepthStencilAttachment,
+    /// Depth/stencil attachment with depth writes and stencil updates
+    /// disabled, permitting simultaneous sampling.
+    DepthStencilAttachmentReadOnly,
     /// Ready for presentation.
     Present,
 }
@@ -330,6 +418,19 @@ pub struct Rect {
     pub width: u32,
     /// Rectangle height.
     pub height: u32,
+}
+
+impl Rect {
+    /// Creates a rectangle from its origin and dimensions.
+    #[must_use]
+    pub const fn new(x: i32, y: i32, width: u32, height: u32) -> Self {
+        Self {
+            x,
+            y,
+            width,
+            height,
+        }
+    }
 }
 
 /// Floating-point viewport and depth range.
@@ -349,6 +450,37 @@ pub struct Viewport {
     pub max_depth: f32,
 }
 
+impl Viewport {
+    /// Creates a viewport covering `width` by `height` pixels with the
+    /// supplied origin and depth range.
+    #[must_use]
+    #[allow(clippy::too_many_arguments)]
+    pub const fn new(
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        min_depth: f32,
+        max_depth: f32,
+    ) -> Self {
+        Self {
+            x,
+            y,
+            width,
+            height,
+            min_depth,
+            max_depth,
+        }
+    }
+
+    /// Creates a full-range viewport with the given origin and size and a
+    /// depth range of zero through one.
+    #[must_use]
+    pub const fn dimensions(x: f32, y: f32, width: f32, height: f32) -> Self {
+        Self::new(x, y, width, height, 0.0, 1.0)
+    }
+}
+
 /// Per-vertex input rate.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum VertexStepMode {
@@ -365,7 +497,7 @@ pub struct VertexAttribute {
     /// Shader location.
     pub location: u32,
     /// Attribute format.
-    pub format: Format,
+    pub format: VertexFormat,
     /// Byte offset within one vertex.
     pub offset: u32,
 }
@@ -392,6 +524,29 @@ pub struct Color {
     pub b: f32,
     /// Alpha component.
     pub a: f32,
+}
+
+impl Color {
+    /// Creates a color from linear components.
+    #[must_use]
+    pub const fn new(r: f32, g: f32, b: f32, a: f32) -> Self {
+        Self { r, g, b, a }
+    }
+
+    /// Fully transparent black.
+    pub const TRANSPARENT: Self = Self::new(0.0, 0.0, 0.0, 0.0);
+    /// Opaque black.
+    pub const BLACK: Self = Self::new(0.0, 0.0, 0.0, 1.0);
+    /// Opaque white.
+    pub const WHITE: Self = Self::new(1.0, 1.0, 1.0, 1.0);
+    /// Opaque gray at half intensity.
+    pub const GRAY: Self = Self::new(0.5, 0.5, 0.5, 1.0);
+    /// Opaque red.
+    pub const RED: Self = Self::new(1.0, 0.0, 0.0, 1.0);
+    /// Opaque green.
+    pub const GREEN: Self = Self::new(0.0, 1.0, 0.0, 1.0);
+    /// Opaque blue.
+    pub const BLUE: Self = Self::new(0.0, 0.0, 1.0, 1.0);
 }
 
 /// Attachment load operation.

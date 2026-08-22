@@ -99,8 +99,8 @@ pub struct BufferBarrier<'a, B: Backend> {
     pub buffer: &'a B::Buffer,
     /// First byte covered by the barrier.
     pub offset: u64,
-    /// Number of bytes covered by the barrier. A backend-defined whole-range
-    /// value may be used when the complete buffer is required.
+    /// Number of bytes covered by the barrier; use
+    /// [`Buffer::size`](crate::Buffer::size) to cover the whole allocation.
     pub size: u64,
     /// Pipeline stages before the dependency.
     pub src_stages: PipelineStages,
@@ -222,6 +222,13 @@ pub trait CommandBuffer<B: Backend>: Send {
     fn set_viewport(&mut self, viewport: Viewport);
     /// Sets the active scissor rectangle.
     fn set_scissor(&mut self, scissor: Rect);
+    /// Sets the constant blend factors applied to blended color attachments.
+    ///
+    /// Factors are used only while a pipeline with blending is bound.
+    fn set_blend_constants(&mut self, color: Color);
+    /// Sets the front- and back-face stencil reference values used by
+    /// stencil comparisons and replace operations.
+    fn set_stencil_reference(&mut self, front: u32, back: u32);
     /// Binds a graphics pipeline.
     fn bind_graphics_pipeline(&mut self, pipeline: &B::GraphicsPipeline);
     /// Binds resource groups to a pipeline layout.

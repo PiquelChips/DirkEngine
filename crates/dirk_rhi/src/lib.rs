@@ -18,20 +18,21 @@ pub use command::{
     DepthAttachment, ImageBarrier, ImageBlit, ImageCopy, MemoryBarrier, RenderingInfo,
     TimelinePoint,
 };
-pub use error::{Error, Result};
+pub use error::{Error, InvalidResource, Result, ShaderLanguage, UnsupportedOperation};
 pub use presentation::{SurfaceCreateInfo, SurfaceFrame, Swapchain, SwapchainDesc};
 pub use raw_window_handle;
 pub use resource::{
     BindGroupDesc, BindGroupEntry, BindGroupLayoutDesc, BindGroupLayoutEntry, BindingResource,
-    Buffer, BufferDesc, DepthState, GraphicsPipelineDesc, ImageDesc, ImageViewDesc,
-    PipelineLayoutDesc, RasterState, SamplerDesc, ShaderDesc, ShaderSource,
+    BlendComponent, BlendState, Buffer, BufferDesc, DepthBiasState, DepthState,
+    GraphicsPipelineDesc, ImageDesc, ImageViewDesc, PipelineLayoutDesc, RasterState, SamplerDesc,
+    ShaderDesc, ShaderSource, StencilFaceState, StencilState,
 };
 pub use types::{
-    AddressMode, BindingType, BufferUsages, Color, CompareOp, CullMode, Extent3d, FilterMode,
-    Format, FrontFace, ImageAspects, ImageState, ImageUsages, ImageViewType, IndexFormat, LoadOp,
-    MemoryDomain, Origin3d, PipelineStages, PresentMode, PrimitiveTopology, QueueType, Rect,
-    SampleCount, ShaderStage, ShaderStages, StoreOp, SurfaceStatus, VertexAttribute,
-    VertexBufferLayout, VertexStepMode, Viewport,
+    AddressMode, BindingType, BlendFactor, BlendOp, BufferUsages, Color, CompareOp, CullMode,
+    Extent3d, FilterMode, FrontFace, ImageAspects, ImageState, ImageUsages, ImageViewType,
+    IndexFormat, LoadOp, MemoryDomain, Origin3d, PipelineStages, PresentMode, PrimitiveTopology,
+    QueueType, Rect, SampleCount, ShaderStage, ShaderStages, StencilOp, StoreOp, SurfaceStatus,
+    TextureFormat, VertexAttribute, VertexBufferLayout, VertexFormat, VertexStepMode, Viewport,
 };
 
 #[cfg(test)]

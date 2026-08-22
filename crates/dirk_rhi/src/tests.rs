@@ -5,21 +5,47 @@ use std::sync::{
 
 use crate::{
     Backend, BindGroupDesc, BindGroupLayoutDesc, Buffer, BufferCopy, BufferDesc, BufferImageCopy,
-    BufferUsages, Capabilities, CommandBuffer, DependencyInfo, Error, Extent3d, Fence, FilterMode,
-    Format, GraphicsPipelineDesc, ImageCopy, ImageDesc, ImageUsages, ImageViewDesc,
-    PipelineLayoutDesc, PipelineStages, QueueType, Rect, RenderingInfo, Result, RhiCreateInfo,
-    SampleCount, SamplerDesc, ShaderDesc, Submission, SurfaceCreateInfo, SurfaceFrame,
-    SurfaceStatus, Swapchain, SwapchainDesc, TimelinePoint, TimelineSemaphore, Viewport,
+    BufferUsages, Capabilities, Color, CommandBuffer, DependencyInfo, Error, Extent3d, Fence,
+    FilterMode, GraphicsPipelineDesc, ImageCopy, ImageDesc, ImageUsages, ImageViewDesc,
+    InvalidResource, PipelineLayoutDesc, PipelineStages, QueueType, Rect, RenderingInfo, Result,
+    RhiCreateInfo, SampleCount, SamplerDesc, ShaderDesc, StencilOp, Submission, SurfaceCreateInfo,
+    SurfaceFrame, SurfaceStatus, Swapchain, SwapchainDesc, TextureFormat, TimelinePoint,
+    TimelineSemaphore, UnsupportedOperation, Viewport,
 };
 
-#[derive(Clone, Debug, Default)]
-struct TestBuffer(Arc<AtomicU64>);
+#[derive(Clone, Debug)]
+struct TestBuffer {
+    size: Arc<AtomicU64>,
+}
+
+impl TestBuffer {
+    fn new(size: u64) -> Self {
+        Self {
+            size: Arc::new(AtomicU64::new(size)),
+        }
+    }
+}
+
+impl Default for TestBuffer {
+    fn default() -> Self {
+        Self::new(0)
+    }
+}
 
 impl Buffer for TestBuffer {
+    fn size(&self) -> u64 {
+        self.size.load(Ordering::Acquire)
+    }
+
     fn write(&self, offset: u64, data: &[u8]) -> Result<()> {
-        let size =
+        let length =
             u64::try_from(data.len()).map_err(|error| Error::Backend(anyhow::Error::new(error)))?;
-        self.0.store(offset + size, Ordering::Release);
+        if offset
+            .checked_add(length)
+            .is_none_or(|end| end > self.size())
+        {
+            return Err(InvalidResource::OutOfRange.into());
+        }
         Ok(())
     }
 }
@@ -95,6 +121,10 @@ impl CommandBuffer<TestBackend> for TestCommandBuffer {
 
     fn set_scissor(&mut self, _scissor: Rect) {}
 
+    fn set_blend_constants(&mut self, _color: Color) {}
+
+    fn set_stencil_reference(&mut self, _front: u32, _back: u32) {}
+
     fn bind_graphics_pipeline(&mut self, _pipeline: &TestResource) {}
 
     fn bind_groups(
@@ -168,8 +198,8 @@ impl SurfaceFrame<TestBackend> for TestSurfaceFrame {
         &self.view
     }
 
-    fn format(&self) -> Format {
-        Format::Rgba8Unorm
+    fn format(&self) -> TextureFormat {
+        TextureFormat::Rgba8Unorm
     }
 
     fn extent(&self) -> Extent3d {
@@ -182,8 +212,8 @@ impl SurfaceFrame<TestBackend> for TestSurfaceFrame {
 }
 
 impl Swapchain<TestBackend> for TestSwapchain {
-    fn format(&self) -> Format {
-        Format::Rgba8Unorm
+    fn format(&self) -> TextureFormat {
+        TextureFormat::Rgba8Unorm
     }
 
     fn extent(&self) -> Extent3d {
@@ -227,7 +257,6 @@ impl Backend for TestBackend {
 
     fn capabilities(&self) -> Capabilities {
         Capabilities {
-            depth_format: Format::Depth32Float,
             max_samples: SampleCount::Eight,
             max_sampler_anisotropy: 1,
             min_uniform_buffer_offset_alignment: 256,
@@ -235,6 +264,10 @@ impl Backend for TestBackend {
             dedicated_compute_queue: false,
             dedicated_copy_queue: false,
         }
+    }
+
+    fn supported_depth_formats(&self) -> &'static [TextureFormat] {
+        &[TextureFormat::Depth32Float, TextureFormat::Depth16Unorm]
     }
 
     fn wait_idle(&self) -> Result<()> {
@@ -245,8 +278,11 @@ impl Backend for TestBackend {
         Ok(())
     }
 
-    fn create_buffer(&self, _desc: &BufferDesc<'_>) -> Result<TestBuffer> {
-        Ok(TestBuffer::default())
+    fn create_buffer(&self, desc: &BufferDesc<'_>) -> Result<TestBuffer> {
+        if desc.size == 0 {
+            return Err(InvalidResource::Empty.into());
+        }
+        Ok(TestBuffer::new(desc.size))
     }
 
     fn create_image(&self, _desc: &ImageDesc<'_>) -> Result<TestResource> {
@@ -351,10 +387,40 @@ fn semantic_types_do_not_encode_backend_constants() {
 }
 
 #[test]
+#[allow(
+    clippy::float_cmp,
+    reason = "constructors must reproduce these constants exactly"
+)]
+fn semantic_helpers_build_expected_values() {
+    let viewport = Viewport::dimensions(0.0, 0.0, 1280.0, 720.0);
+    assert_eq!(viewport.min_depth, 0.0);
+    assert_eq!(viewport.max_depth, 1.0);
+
+    let scissor = Rect::new(4, 8, 640, 360);
+    assert_eq!((scissor.x, scissor.y), (4, 8));
+
+    assert_eq!(Color::TRANSPARENT.a, 0.0);
+    assert_eq!(Color::BLACK, Color::new(0.0, 0.0, 0.0, 1.0));
+    assert_eq!(
+        Color::WHITE,
+        Color {
+            r: 1.0,
+            g: 1.0,
+            b: 1.0,
+            a: 1.0,
+        }
+    );
+}
+
+#[test]
 fn resources_own_their_stateful_operations() -> Result<()> {
-    let buffer = TestBuffer::default();
+    let buffer = TestBuffer::new(12);
+    assert_eq!(buffer.size(), 12);
     buffer.write(8, &[1, 2, 3, 4])?;
-    assert_eq!(buffer.0.load(Ordering::Acquire), 12);
+    assert!(matches!(
+        buffer.write(9, &[1, 2, 3, 4]),
+        Err(Error::InvalidResource(InvalidResource::OutOfRange))
+    ));
 
     let fence = TestFence::default();
     fence.wait(u64::MAX)?;
@@ -374,13 +440,57 @@ fn backend_errors_keep_anyhow_context() {
     let error = Error::from(source);
 
     assert!(matches!(error, Error::Backend(_)));
-    assert_eq!(error.to_string(), "graphics backend error");
+    assert_eq!(error.to_string(), "graphics backend error: creating buffer");
 
     let Error::Backend(inner) = &error else {
         unreachable!("classified as a backend error above");
     };
     let causes: Vec<_> = inner.chain().map(ToString::to_string).collect();
     assert_eq!(causes, ["creating buffer", "native allocation failed"]);
+}
+
+#[test]
+fn typed_errors_describe_recoverable_conditions() {
+    assert_eq!(
+        Error::from(UnsupportedOperation::ImageBlit).to_string(),
+        "unsupported RHI operation: image blits are not supported by this backend"
+    );
+    let language_error = Error::from(UnsupportedOperation::ShaderSource(
+        crate::ShaderLanguage::Msl,
+    ));
+    assert_eq!(
+        language_error.to_string(),
+        "unsupported RHI operation: Metal Shading Language shader source is not supported by this backend"
+    );
+    assert_eq!(
+        Error::from(InvalidResource::ForeignInstance).to_string(),
+        "invalid resource description: resource belongs to a different RHI instance"
+    );
+}
+
+#[test]
+fn shader_sources_report_their_language() {
+    assert_eq!(
+        crate::ShaderSource::SpirV(&[0; 4]).language(),
+        crate::ShaderLanguage::SpirV
+    );
+    assert_eq!(
+        crate::ShaderSource::Msl("void main() {}").language(),
+        crate::ShaderLanguage::Msl
+    );
+}
+
+#[test]
+#[allow(clippy::float_cmp, reason = "default bias must be exactly zero")]
+fn stencil_state_defaults_to_keep_operations() {
+    let face = crate::StencilFaceState {
+        compare: crate::CompareOp::Always,
+        fail_op: StencilOp::Keep,
+        depth_fail_op: StencilOp::default(),
+        pass_op: StencilOp::Replace,
+    };
+    assert_eq!(face.depth_fail_op, StencilOp::Keep);
+    assert_eq!(crate::DepthBiasState::default().constant_factor, 0.0);
 }
 
 #[test]
