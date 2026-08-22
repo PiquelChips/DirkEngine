@@ -22,3 +22,6 @@ target
 
 # Engine files
 saved/
+
+# Nix files
+result/
