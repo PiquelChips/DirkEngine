@@ -177,9 +177,14 @@ pub struct BindGroupLayoutDesc<'a> {
 #[derive(Clone, Copy, Debug)]
 pub enum BindingResource<'a, B: Backend> {
     /// Byte range of a buffer.
-    // TODO: support dynamic uniform and storage buffer offsets so per-draw
-    // ranges can be supplied at bind time instead of baking one bind group
-    // per offset.
+    ///
+    /// This variant has no dynamic-offset capability: the offset and size
+    /// are fixed when the bind group is created, so per-draw subranges
+    /// require one bind group per range.
+    // TODO(follow-up): add dynamic uniform and storage buffer offsets so
+    // per-draw ranges can be supplied at bind time instead of baking one
+    // bind group per offset. Defer APIs and tests that require per-draw
+    // buffer ranges until this is addressed.
     Buffer {
         /// Buffer resource.
         buffer: &'a B::Buffer,
