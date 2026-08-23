@@ -230,6 +230,8 @@ impl Swapchain<TestBackend> for TestSwapchain {
         Ok(TestSurfaceFrame::default())
     }
 
+    fn discard(&mut self, _frame: TestSurfaceFrame) {}
+
     fn resize(&mut self, _width: u32, _height: u32) -> Result<()> {
         Ok(())
     }

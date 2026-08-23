@@ -41,9 +41,11 @@ pub struct SwapchainDesc<'a, B: Backend> {
 ///
 /// Frames follow a strict lifecycle: [`Self::acquire`] yields a frame, a
 /// submission lists that frame in [`Submission::surface_frames`](crate::Submission::surface_frames) to order
-/// rendering against presentation, and [`Self::present`](Swapchain::present)
-/// returns it to the display. A frame must not be acquired twice, submitted
-/// twice, or presented without an intervening submission.
+/// rendering against presentation, and the frame ends when
+/// [`Self::present`](Swapchain::present) returns it to the display or
+/// [`Self::discard`](Swapchain::discard) releases it unrendered. A frame must
+/// not be acquired twice, submitted twice, or presented without an
+/// intervening submission.
 pub trait Swapchain<B: Backend> {
     /// Format selected for images in the current swapchain generation.
     fn format(&self) -> TextureFormat;
@@ -54,19 +56,29 @@ pub trait Swapchain<B: Backend> {
     /// This call may block the calling thread until an image is available,
     /// including when the presentation queue is full.
     ///
-    /// The caller owns frame pacing: multiple frames may be held between
-    /// acquisition and presentation up to the backend's limit (at least one
-    /// more than the swapchain's reported minimum image count), but holding
-    /// every frame deadlocks; present acquired frames promptly.
+    /// The caller owns frame pacing: hold only a fixed in-flight budget of
+    /// acquired frames (tracked with fences, typically two or three), and
+    /// present each frame promptly after rendering to it. Holding every
+    /// frame deadlocks future acquisitions; treat blocking in this call as a
+    /// queue-drain backstop rather than as the renderer's frame limiter.
     ///
     /// # Errors
     ///
     /// Returns an error when the surface is unavailable or must be recreated.
     fn acquire(&mut self) -> Result<B::SurfaceFrame>;
+    /// Releases a frame acquired from this swapchain without presenting it.
+    ///
+    /// A discarded frame ends its lifecycle like a presented one: its image
+    /// becomes available for future acquisition, and the caller must no
+    /// longer submit or present it. Use this to shed suboptimal or
+    /// unrendered frames, for example to satisfy [`Self::resize`]'s
+    /// precondition.
+    fn discard(&mut self, frame: B::SurfaceFrame);
     /// Reconfigures this swapchain for a new extent.
     ///
     /// All frames previously acquired from this swapchain must have been
-    /// presented or discarded before resizing.
+    /// presented with [`Self::present`](Swapchain::present) or released with
+    /// [`Self::discard`](Swapchain::discard) before resizing.
     ///
     /// # Errors
     ///
