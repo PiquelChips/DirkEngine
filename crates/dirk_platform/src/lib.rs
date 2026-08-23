@@ -139,10 +139,24 @@ impl dirk_engine::Subsystem for Platform {
 impl Drop for Platform {
     fn drop(&mut self) {
         info!("Shutting down platform");
+
+        // AppKit sends window-destruction callbacks while closing native
+        // windows. Ask winit to close them while its handler is still
+        // registered, then release the Rust window wrappers.
+        #[cfg(platform_macos)]
+        {
+            self.handler.request_shutdown();
+            self.event_loop
+                .pump_app_events(Some(Duration::ZERO), &mut self.handler);
+        }
+
         self.handler.shutdown();
-        // One final pump so winit can process the window destruction
-        // events before we tear everything down.
-        self.event_loop
-            .pump_app_events(Some(Duration::ZERO), &mut self.handler);
+        #[cfg(not(platform_macos))]
+        {
+            // On other platforms, process the window destruction events
+            // before tearing down the event loop.
+            self.event_loop
+                .pump_app_events(Some(Duration::ZERO), &mut self.handler);
+        }
     }
 }

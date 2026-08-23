@@ -50,7 +50,6 @@ impl Renderer {
     ) -> Result<(vk::PhysicalDevice, RendererProperties)> {
         let (device_info, queues) = physical_device::PhysicalDeviceSelector::new()
             .require_extensions(DEVICE_EXTENSIONS)
-            .require(|info| info.features.geometry_shader == vk::TRUE)
             .require(|info| info.vulkan12_features.vulkan_memory_model == vk::TRUE)
             .require(|info| info.vulkan12_features.timeline_semaphore == vk::TRUE)
             .select(instance, surface_loader, surface)

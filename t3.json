@@ -1,0 +1,46 @@
+{
+  "$schema": "https://t3.codes/schema/t3.json",
+  "scripts": [
+    {
+      "name": "Setup Worktree",
+      "command": "cargo build --workspace --locked",
+      "icon": "configure",
+      "runOnWorktreeCreate": true
+    },
+    {
+      "name": "Run Engine",
+      "command": "cargo run",
+      "icon": "play"
+    },
+    {
+      "name": "Check Workspace",
+      "command": "cargo check --workspace",
+      "icon": "build"
+    },
+    {
+      "name": "Format Workspace",
+      "command": "cargo fmt --all",
+      "icon": "configure"
+    },
+    {
+      "name": "Lint Workspace",
+      "command": "cargo clippy --workspace",
+      "icon": "lint"
+    },
+    {
+      "name": "Audit Dependencies",
+      "command": "cargo deny check -D warnings",
+      "icon": "lint"
+    },
+    {
+      "name": "Test Workspace",
+      "command": "cargo nextest run --workspace",
+      "icon": "test"
+    },
+    {
+      "name": "Validate Workspace",
+      "command": "cargo fmt --all && cargo clippy --workspace && cargo nextest run --workspace",
+      "icon": "test"
+    }
+  ]
+}
