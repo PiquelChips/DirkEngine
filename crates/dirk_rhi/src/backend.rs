@@ -52,15 +52,49 @@ pub struct Capabilities {
 
 /// CPU-waitable submission completion primitive.
 pub trait Fence: Send + Sync + 'static {
-    /// Waits until this fence signals or the timeout expires.
+    /// Waits until this fence signals or `timeout_ns` nanoseconds elapse.
+    ///
+    /// Returns `Ok(())` once the fence is signaled, including for a fence
+    /// created signaled or one whose submission completed before the call.
+    /// Returns [`Error::Timeout`](crate::Error::Timeout) when the timeout
+    /// expires first; the fence may still signal afterwards.
+    ///
+    /// # Synchronization
+    ///
+    /// Native fence state is not internally synchronized: at most one thread
+    /// may wait on this fence at a time, and callers must order waits
+    /// against [`Self::reset`](Fence::reset) and against the submission that
+    /// signals the fence.
     fn wait(&self, timeout_ns: u64) -> Result<()>;
     /// Resets this signaled fence for reuse.
+    ///
+    /// # Synchronization
+    ///
+    /// The caller must ensure no thread is concurrently waiting on or
+    /// resetting this fence, and that every submission signaling it has been
+    /// waited on (or otherwise completed) first; resetting a fence that is
+    /// still pending on a submission or under concurrent state access is
+    /// invalid in the native APIs.
     fn reset(&self) -> Result<()>;
 }
 
 /// Monotonically increasing GPU synchronization primitive.
 pub trait TimelineSemaphore: Clone + Send + Sync + 'static {
-    /// Waits until this semaphore reaches `value` or the timeout expires.
+    /// Waits until this semaphore reaches `value` or `timeout_ns`
+    /// nanoseconds elapse.
+    ///
+    /// Returns `Ok(())` once the semaphore's payload is at least `value`,
+    /// including when it already exceeds it. Returns
+    /// [`Error::Timeout`](crate::Error::Timeout) when the timeout expires
+    /// first; the semaphore may still reach `value` afterwards.
+    ///
+    /// # Synchronization
+    ///
+    /// Native semaphore state is not internally synchronized: at most one
+    /// thread may wait on or observe this semaphore at a time, and callers
+    /// must order waits and calls to [`Self::value`](TimelineSemaphore::value)
+    /// against the submissions that signal it. Cloned handles alias the same
+    /// native semaphore and do not add synchronization.
     fn wait(&self, value: u64, timeout_ns: u64) -> Result<()>;
     /// Returns this semaphore's current value.
     fn value(&self) -> Result<u64>;

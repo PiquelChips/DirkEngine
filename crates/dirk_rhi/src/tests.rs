@@ -55,8 +55,11 @@ struct TestFence(AtomicBool);
 
 impl Fence for TestFence {
     fn wait(&self, _timeout_ns: u64) -> Result<()> {
-        self.0.store(true, Ordering::Release);
-        Ok(())
+        if self.0.load(Ordering::Acquire) {
+            Ok(())
+        } else {
+            Err(Error::Timeout)
+        }
     }
 
     fn reset(&self) -> Result<()> {
@@ -70,8 +73,11 @@ struct TestTimeline(Arc<AtomicU64>);
 
 impl TimelineSemaphore for TestTimeline {
     fn wait(&self, value: u64, _timeout_ns: u64) -> Result<()> {
-        self.0.fetch_max(value, Ordering::AcqRel);
-        Ok(())
+        if self.0.load(Ordering::Acquire) >= value {
+            Ok(())
+        } else {
+            Err(Error::Timeout)
+        }
     }
 
     fn value(&self) -> Result<u64> {
@@ -423,14 +429,20 @@ fn resources_own_their_stateful_operations() -> Result<()> {
     ));
 
     let fence = TestFence::default();
+    assert!(matches!(fence.wait(0), Err(Error::Timeout)));
+    fence.0.store(true, Ordering::Release);
     fence.wait(u64::MAX)?;
     assert!(fence.0.load(Ordering::Acquire));
     fence.reset()?;
     assert!(!fence.0.load(Ordering::Acquire));
+    assert!(matches!(fence.wait(u64::MAX), Err(Error::Timeout)));
 
     let timeline = TestTimeline::default();
+    assert!(matches!(timeline.wait(42, 0), Err(Error::Timeout)));
+    timeline.0.store(42, Ordering::Release);
     timeline.wait(42, u64::MAX)?;
     assert_eq!(timeline.value()?, 42);
+    assert!(matches!(timeline.wait(43, u64::MAX), Err(Error::Timeout)));
     Ok(())
 }
 

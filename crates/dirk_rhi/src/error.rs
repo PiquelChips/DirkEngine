@@ -15,6 +15,10 @@ pub enum Error {
     /// The graphics device was lost.
     #[error("the graphics device was lost")]
     DeviceLost,
+    /// A timed wait on a synchronization primitive expired before the
+    /// primitive reached its waited-for state.
+    #[error("the synchronization wait timed out")]
+    Timeout,
     /// The presentation surface must be recreated.
     #[error("the presentation surface is out of date")]
     SurfaceOutOfDate,
