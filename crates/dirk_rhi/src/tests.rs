@@ -4,13 +4,13 @@ use std::sync::{
 };
 
 use crate::{
-    Backend, BindGroupDesc, BindGroupLayoutDesc, Buffer, BufferCopy, BufferDesc, BufferImageCopy,
-    BufferUsages, Capabilities, Color, CommandBuffer, DependencyInfo, Error, Extent3d, Fence,
-    FilterMode, GraphicsPipelineDesc, ImageCopy, ImageDesc, ImageUsages, ImageViewDesc,
-    InvalidResource, PipelineLayoutDesc, PipelineStages, QueueType, Rect, RenderingInfo, Result,
-    RhiCreateInfo, SampleCount, SamplerDesc, ShaderDesc, StencilOp, Submission, SurfaceCreateInfo,
-    SurfaceFrame, SurfaceStatus, Swapchain, SwapchainDesc, TextureFormat, TimelinePoint,
-    TimelineSemaphore, UnsupportedOperation, Viewport,
+    Backend, BindGroupDesc, BindGroupLayoutDesc, Buffer, BufferBarrier, BufferCopy, BufferDesc,
+    BufferImageCopy, BufferUsages, Capabilities, Color, CommandBuffer, DependencyInfo, Error,
+    Extent3d, Fence, FilterMode, GraphicsPipelineDesc, ImageCopy, ImageDesc, ImageUsages,
+    ImageViewDesc, InvalidResource, PipelineLayoutDesc, PipelineStages, QueueType, Rect,
+    RenderingInfo, Result, RhiCreateInfo, SampleCount, SamplerDesc, ShaderDesc, StencilOp,
+    Submission, SurfaceCreateInfo, SurfaceFrame, SurfaceStatus, Swapchain, SwapchainDesc,
+    TextureFormat, TimelinePoint, TimelineSemaphore, UnsupportedOperation, Viewport,
 };
 
 #[derive(Clone, Debug)]
@@ -383,6 +383,7 @@ fn image_usage_flags_preserve_all_requested_roles() {
 fn semantic_types_do_not_encode_backend_constants() {
     assert_eq!(Extent3d::new_2d(1920, 1080).depth, 1);
     assert_eq!(SampleCount::Four as u8, 4);
+    assert_eq!(BufferBarrier::<TestBackend>::WHOLE_SIZE, u64::MAX);
     assert_eq!(
         PipelineStages::ALL,
         PipelineStages::COPY

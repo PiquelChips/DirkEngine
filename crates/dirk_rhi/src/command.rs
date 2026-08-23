@@ -100,12 +100,23 @@ pub struct BufferBarrier<'a, B: Backend> {
     /// First byte covered by the barrier.
     pub offset: u64,
     /// Number of bytes covered by the barrier; use
-    /// [`Buffer::size`](crate::Buffer::size) to cover the whole allocation.
+    /// [`BufferBarrier::WHOLE_SIZE`] to cover the complete buffer.
     pub size: u64,
     /// Pipeline stages before the dependency.
     pub src_stages: PipelineStages,
     /// Pipeline stages after the dependency.
     pub dst_stages: PipelineStages,
+}
+
+impl<B: Backend> BufferBarrier<'_, B> {
+    /// Backend-neutral whole-range sentinel for
+    /// [`BufferBarrier::size`](BufferBarrier::size) that covers the buffer's
+    /// complete allocation regardless of its length.
+    ///
+    /// Backends must translate this shared sentinel to their native
+    /// whole-range representation (for example `VK_WHOLE_SIZE`) instead of
+    /// recording the raw value as a byte count.
+    pub const WHOLE_SIZE: u64 = u64::MAX;
 }
 
 /// Global memory dependency between pipeline stages.
