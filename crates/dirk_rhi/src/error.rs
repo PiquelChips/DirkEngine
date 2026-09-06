@@ -133,3 +133,10 @@ impl InvalidResourceKind {
         InvalidResource::new(self, detail)
     }
 }
+
+impl From<InvalidResourceKind> for Error {
+    fn from(kind: InvalidResourceKind) -> Self {
+        kind.with_detail("no additional backend diagnostic was provided")
+            .into()
+    }
+}
