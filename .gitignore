@@ -23,5 +23,6 @@ target
 # Engine files
 saved/
 
-# Nix files
-result/
+# Nix build output symlinks
+/result
+/result-*
