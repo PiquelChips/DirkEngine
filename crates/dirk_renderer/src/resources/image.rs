@@ -1,234 +1,253 @@
-//! This module houses the vulkan image abstraction
+//! Renderer images and texture uploads backed by the RHI.
 
-pub mod layouts;
-pub mod mips;
+use std::num::NonZeroU32;
 
-use ash::vk;
-use gpu_allocator::{
-    MemoryLocation,
-    vulkan::{Allocation, AllocationCreateDesc},
+use dirk_rhi::{
+    Backend as _, Buffer as _, BufferImageCopy, CommandBuffer as _, DependencyInfo, Extent3d,
+    FilterMode, ImageAspects, ImageBarrier, ImageBlit, ImageDesc, ImageDimension, ImageState,
+    ImageUsages, ImageViewDesc, ImageViewType, MemoryDomain, Origin3d, SampleCount, SamplerDesc,
+    TextureFormat,
 };
 
 use crate::{
-    Renderer, Result,
+    Result,
     models::Texture,
     resources::{
-        buffer::CustomBuffer,
-        device::{Garbage, RenderDevice},
+        ActiveCommandBuffer, ActiveImage, ActiveImageView, buffer::CustomBuffer,
+        device::RenderDevice,
     },
 };
 
-/// An abstraction around vulkan windows.
 pub struct Image {
-    device: RenderDevice,
-    raw: vk::Image,
-    view: vk::ImageView,
-    allocation: Option<Allocation>,
-    aspect_flags: vk::ImageAspectFlags,
+    inner: ActiveImage,
+    view: ActiveImageView,
+    aspects: ImageAspects,
+    mip_levels: u32,
 }
 
 pub struct ImageCreateInfo {
-    pub size: vk::Extent2D,
-    pub format: vk::Format,
-    pub tiling: vk::ImageTiling,
-    pub usage: vk::ImageUsageFlags,
-    pub location: MemoryLocation,
+    pub extent: Extent3d,
+    pub format: TextureFormat,
+    pub usage: ImageUsages,
     pub mip_levels: u32,
-    pub num_samples: vk::SampleCountFlags,
-    pub aspect_flags: vk::ImageAspectFlags,
+    pub samples: SampleCount,
+    pub aspects: ImageAspects,
 }
 
 impl Image {
     pub fn create_image(device: &RenderDevice, info: &ImageCreateInfo) -> Result<Self> {
-        let image_info = vk::ImageCreateInfo::default()
-            .image_type(vk::ImageType::TYPE_2D)
-            .format(info.format)
-            .extent(vk::Extent3D {
-                width: info.size.width,
-                height: info.size.height,
-                depth: 1,
-            })
-            .mip_levels(info.mip_levels)
-            .array_layers(1)
-            .samples(info.num_samples)
-            .tiling(info.tiling)
-            .usage(info.usage)
-            .sharing_mode(vk::SharingMode::EXCLUSIVE)
-            .initial_layout(vk::ImageLayout::UNDEFINED);
-
-        let image = unsafe { device.device.create_image(&image_info, None)? };
-        let requirements = unsafe { device.device.get_image_memory_requirements(image) };
-
-        let allocation = device.allocate(&AllocationCreateDesc {
-            name: "image",
-            requirements,
-            location: info.location,
-            linear: info.tiling == vk::ImageTiling::LINEAR,
-            allocation_scheme: gpu_allocator::vulkan::AllocationScheme::GpuAllocatorManaged,
+        if info.mip_levels == 0 {
+            return Err(dirk_rhi::Error::from(dirk_rhi::InvalidResourceKind::Empty).into());
+        }
+        let inner = device.rhi.create_image(&ImageDesc {
+            label: "renderer image",
+            dimension: ImageDimension::TwoD,
+            extent: info.extent,
+            format: info.format,
+            usage: info.usage,
+            mip_levels: info.mip_levels,
+            array_layers: 1,
+            samples: info.samples,
         })?;
-
-        unsafe {
-            device
-                .device
-                .bind_image_memory(image, allocation.memory(), allocation.offset())?;
-        };
-
+        let view = device.rhi.create_image_view(&ImageViewDesc {
+            label: "renderer image view",
+            image: &inner,
+            view_type: ImageViewType::TwoD,
+            aspects: info.aspects,
+            base_mip_level: 0,
+            mip_level_count: info.mip_levels,
+            base_array_layer: 0,
+            array_layer_count: 1,
+        })?;
         Ok(Self {
-            device: device.clone(),
-            raw: image,
-            view: Self::create_image_view(
-                device,
-                image,
-                info.format,
-                info.aspect_flags,
-                info.mip_levels,
-            )?,
-            allocation: Some(allocation),
-            aspect_flags: info.aspect_flags,
+            inner,
+            view,
+            aspects: info.aspects,
+            mip_levels: info.mip_levels,
         })
     }
-    pub fn image(&self) -> vk::Image {
-        self.raw
-    }
-    pub fn view(&self) -> vk::ImageView {
-        self.view
-    }
-    pub fn aspect_flags(&self) -> vk::ImageAspectFlags {
-        self.aspect_flags
+
+    pub(crate) fn rhi_image(&self) -> &ActiveImage {
+        &self.inner
     }
 
-    pub fn upload_texture(device: &RenderDevice, tex: &gltf::image::Data) -> Result<Texture> {
-        let pixels = match tex.format {
-            gltf::image::Format::R8G8B8 => tex
+    pub(crate) fn rhi_view(&self) -> &ActiveImageView {
+        &self.view
+    }
+
+    pub(crate) fn rhi_aspects(&self) -> ImageAspects {
+        self.aspects
+    }
+
+    pub fn upload_texture(device: &RenderDevice, texture: &gltf::image::Data) -> Result<Texture> {
+        let pixels = match texture.format {
+            gltf::image::Format::R8G8B8 => texture
                 .pixels
                 .chunks_exact(3)
                 .flat_map(|rgb| [rgb[0], rgb[1], rgb[2], 255])
                 .collect(),
-            gltf::image::Format::R8G8B8A8 => tex.pixels.clone(),
-            fmt => panic!("Unsuported glTF image format: {fmt:?}"),
+            gltf::image::Format::R8G8B8A8 => texture.pixels.clone(),
+            _ => {
+                return Err(dirk_rhi::Error::from(dirk_rhi::InvalidResourceKind::Mismatch).into());
+            }
         };
-
-        let mip_levels = Self::mip_levels(tex.width, tex.height);
-        let size = (pixels.len()) as vk::DeviceSize;
-        let format = vk::Format::R8G8B8A8_SRGB;
-
-        let staging_buf = CustomBuffer::create_custom(
+        let mip_levels = Self::mip_levels(texture.width, texture.height);
+        let staging = CustomBuffer::create_custom(
             device,
-            size,
-            vk::BufferUsageFlags::TRANSFER_SRC,
-            MemoryLocation::CpuToGpu,
+            u64::try_from(pixels.len())
+                .map_err(|_| dirk_rhi::Error::from(dirk_rhi::InvalidResourceKind::OutOfRange))?,
+            dirk_rhi::BufferUsages::COPY_SRC,
+            MemoryDomain::Upload,
         )?;
+        staging.rhi().write(0, &pixels)?;
 
-        unsafe {
-            let ptr = staging_buf
-                .mapped()
-                .expect("the buffer should be host visible")
-                .as_ptr()
-                .cast::<u8>();
-            ptr.copy_from_nonoverlapping(pixels.as_ptr(), pixels.len());
-        }
-
-        let create_info = ImageCreateInfo {
-            size: vk::Extent2D {
-                width: tex.width,
-                height: tex.height,
+        let image = Self::create_image(
+            device,
+            &ImageCreateInfo {
+                extent: Extent3d::new_2d(texture.width, texture.height),
+                format: TextureFormat::Rgba8Srgb,
+                usage: ImageUsages::COPY_DST | ImageUsages::COPY_SRC | ImageUsages::SAMPLED,
+                mip_levels,
+                samples: SampleCount::One,
+                aspects: ImageAspects::COLOR,
             },
-            format,
-            tiling: vk::ImageTiling::OPTIMAL,
-            // TRANSFER_SRC needed for mip creation
-            usage: vk::ImageUsageFlags::TRANSFER_DST
-                | vk::ImageUsageFlags::TRANSFER_SRC
-                | vk::ImageUsageFlags::SAMPLED,
-            location: MemoryLocation::GpuOnly,
-            mip_levels,
-            num_samples: vk::SampleCountFlags::TYPE_1,
-            aspect_flags: vk::ImageAspectFlags::COLOR,
-        };
-        let mut image = Self::create_image(device, &create_info)?;
-
-        let cmd = device.graphics_pool.begin_single_time()?;
-
-        image.transition_image_layout(
-            &cmd,
-            vk::ImageLayout::UNDEFINED,
-            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-            mip_levels, // all mip levels start undefined
-            0,
         )?;
-
-        let region = vk::BufferImageCopy::default()
-            .image_subresource(vk::ImageSubresourceLayers {
-                aspect_mask: vk::ImageAspectFlags::COLOR,
+        let mut command = device.graphics_pool.begin_single_time()?;
+        command.rhi_mut().barrier(&DependencyInfo {
+            memory_barriers: &[],
+            buffer_barriers: &[],
+            image_barriers: &[ImageBarrier {
+                image: image.rhi_image(),
+                old_state: ImageState::Undefined,
+                new_state: ImageState::CopyDestination,
+                aspects: ImageAspects::COLOR,
+                base_mip_level: 0,
+                mip_level_count: mip_levels,
+                base_array_layer: 0,
+                array_layer_count: 1,
+                queue_transfer: None,
+            }],
+        })?;
+        let bytes_per_row = texture
+            .width
+            .checked_mul(4)
+            .and_then(NonZeroU32::new)
+            .ok_or(dirk_rhi::Error::from(
+                dirk_rhi::InvalidResourceKind::OutOfRange,
+            ))?;
+        command.rhi_mut().copy_buffer_to_image(
+            staging.rhi(),
+            image.rhi_image(),
+            &[BufferImageCopy {
+                buffer_offset: 0,
+                buffer_bytes_per_row: bytes_per_row,
+                buffer_rows_per_image: NonZeroU32::new(texture.height)
+                    .expect("glTF textures have non-zero height"),
                 mip_level: 0,
                 base_array_layer: 0,
-                layer_count: 1,
-            })
-            .image_extent(vk::Extent3D {
-                width: tex.width,
-                height: tex.height,
-                depth: 1,
-            });
-
-        cmd.copy_buffer_to_image(
-            staging_buf.buffer(),
-            image.image(),
-            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-            &[region],
-        );
-
-        image.generate_mipmaps(&cmd, tex.width, tex.height, mip_levels)?;
-        cmd.end_and_submit(&device.queues)?;
-
-        let old_view = image.view;
-        image.view = Self::create_image_view(
-            device,
-            image.image(),
-            format,
-            vk::ImageAspectFlags::COLOR,
-            mip_levels,
+                array_layer_count: 1,
+                image_origin: Origin3d::default(),
+                extent: Extent3d::new_2d(texture.width, texture.height),
+                aspects: ImageAspects::COLOR,
+            }],
         )?;
-        unsafe {
-            device.device.destroy_image_view(old_view, None);
-        }
-        let sampler = Renderer::create_sampler(device, mip_levels)?;
+        image.record_mips(command.rhi_mut(), texture.width, texture.height)?;
+        command.end_and_submit()?;
 
-        Ok(Texture {
-            device: device.clone(),
-            image,
-            sampler,
-        })
+        let sampler = device.rhi.create_sampler(&SamplerDesc {
+            label: "renderer texture sampler",
+            mag_filter: FilterMode::Linear,
+            min_filter: FilterMode::Linear,
+            mip_filter: FilterMode::Linear,
+            address_u: dirk_rhi::AddressMode::Repeat,
+            address_v: dirk_rhi::AddressMode::Repeat,
+            address_w: dirk_rhi::AddressMode::Repeat,
+            max_anisotropy: device.rhi.capabilities().max_sampler_anisotropy,
+            lod_min: 0.0,
+            // Renderer textures cannot approach the precision limit of an f32.
+            #[allow(clippy::cast_precision_loss)]
+            lod_max: mip_levels as f32,
+        })?;
+        Ok(Texture { image, sampler })
     }
 
-    /// Utility function. Not a member as it is used to create swapchain images
-    fn create_image_view(
-        device: &RenderDevice,
-        image: vk::Image,
-        format: vk::Format,
-        aspect_flags: vk::ImageAspectFlags,
-        mip_levels: u32,
-    ) -> Result<vk::ImageView> {
-        let create_info = vk::ImageViewCreateInfo::default()
-            .image(image)
-            .view_type(vk::ImageViewType::TYPE_2D)
-            .format(format)
-            .subresource_range(vk::ImageSubresourceRange {
-                aspect_mask: aspect_flags,
-                base_mip_level: 0,
-                level_count: mip_levels,
+    fn record_mips(
+        &self,
+        command: &mut ActiveCommandBuffer,
+        width: u32,
+        height: u32,
+    ) -> dirk_rhi::Result<()> {
+        for mip in 1..self.mip_levels {
+            command.barrier(&DependencyInfo {
+                memory_barriers: &[],
+                buffer_barriers: &[],
+                image_barriers: &[ImageBarrier {
+                    image: &self.inner,
+                    old_state: ImageState::CopyDestination,
+                    new_state: ImageState::CopySource,
+                    aspects: self.aspects,
+                    base_mip_level: mip - 1,
+                    mip_level_count: 1,
+                    base_array_layer: 0,
+                    array_layer_count: 1,
+                    queue_transfer: None,
+                }],
+            })?;
+            command.blit_image(
+                &self.inner,
+                &self.inner,
+                &[ImageBlit {
+                    src_mip_level: mip - 1,
+                    dst_mip_level: mip,
+                    src_base_array_layer: 0,
+                    dst_base_array_layer: 0,
+                    array_layer_count: 1,
+                    src_origin: dirk_rhi::Origin3d::default(),
+                    dst_origin: dirk_rhi::Origin3d::default(),
+                    src_extent: Extent3d::new_2d(
+                        (width >> (mip - 1)).max(1),
+                        (height >> (mip - 1)).max(1),
+                    ),
+                    dst_extent: Extent3d::new_2d((width >> mip).max(1), (height >> mip).max(1)),
+                    aspects: self.aspects,
+                }],
+                FilterMode::Linear,
+            )?;
+            command.barrier(&DependencyInfo {
+                memory_barriers: &[],
+                buffer_barriers: &[],
+                image_barriers: &[ImageBarrier {
+                    image: &self.inner,
+                    old_state: ImageState::CopySource,
+                    new_state: ImageState::ShaderRead,
+                    aspects: self.aspects,
+                    base_mip_level: mip - 1,
+                    mip_level_count: 1,
+                    base_array_layer: 0,
+                    array_layer_count: 1,
+                    queue_transfer: None,
+                }],
+            })?;
+        }
+        command.barrier(&DependencyInfo {
+            memory_barriers: &[],
+            buffer_barriers: &[],
+            image_barriers: &[ImageBarrier {
+                image: &self.inner,
+                old_state: ImageState::CopyDestination,
+                new_state: ImageState::ShaderRead,
+                aspects: self.aspects,
+                base_mip_level: self.mip_levels - 1,
+                mip_level_count: 1,
                 base_array_layer: 0,
-                layer_count: 1,
-            });
-
-        Ok(unsafe { device.device.create_image_view(&create_info, None)? })
+                array_layer_count: 1,
+                queue_transfer: None,
+            }],
+        })?;
+        Ok(())
     }
-}
 
-impl Drop for Image {
-    fn drop(&mut self) {
-        self.device.destroy(Garbage::Image(self.raw));
-        self.device.destroy(Garbage::ImageView(self.view));
-        if let Some(alloc) = self.allocation.take() {
-            self.device.destroy(Garbage::Allocation(alloc));
-        }
+    fn mip_levels(width: u32, height: u32) -> u32 {
+        u32::BITS - width.max(height).max(1).leading_zeros()
     }
 }

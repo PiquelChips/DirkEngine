@@ -1,7 +1,6 @@
-use ash::vk;
+use dirk_rhi::{SampleCount, TextureFormat, VertexAttribute, VertexFormat};
 
 use crate::{
-    physical_device,
     resources::{
         command_pool::{CommandBuffer, CommandPool, Graphics},
         sync::Fence,
@@ -20,30 +19,23 @@ pub struct Vertex {
 impl VertexInput for Vertex {
     // the offset is far from u32::MAX
     #[allow(clippy::cast_possible_truncation)]
-    const ATTRIBUTES: &'static [vk::VertexInputAttributeDescription] = &[
-        vk::VertexInputAttributeDescription {
+    const ATTRIBUTES: &'static [VertexAttribute] = &[
+        VertexAttribute {
             location: 0,
-            binding: 0,
-            format: vk::Format::R32G32B32_SFLOAT,
+            format: VertexFormat::Float32x3,
             offset: std::mem::offset_of!(Self, position) as u32,
         },
-        vk::VertexInputAttributeDescription {
+        VertexAttribute {
             location: 1,
-            binding: 0,
-            format: vk::Format::R32G32B32_SFLOAT,
+            format: VertexFormat::Float32x3,
             offset: std::mem::offset_of!(Self, normal) as u32,
         },
-        vk::VertexInputAttributeDescription {
+        VertexAttribute {
             location: 2,
-            binding: 0,
-            format: vk::Format::R32G32_SFLOAT,
+            format: VertexFormat::Float32x2,
             offset: std::mem::offset_of!(Self, texcoord) as u32,
         },
     ];
-}
-
-pub fn make_version(version: dirk_utils::Version) -> u32 {
-    vk::make_api_version(0, version.major(), version.minor(), version.patch())
 }
 
 pub struct Frame {
@@ -58,19 +50,10 @@ pub struct Frame {
     // there is a change in scene count. If not reallocated, reset.
 }
 
-impl Drop for Frame {
-    fn drop(&mut self) {
-        self.submitted_command_buffers.clear();
-        self.command_pool.destroy();
-    }
-}
-
 pub struct RendererProperties {
-    pub msaa_samples: vk::SampleCountFlags,
+    pub msaa_samples: SampleCount,
     #[allow(unused)]
     pub anisotropy: bool,
-    pub surface_format: vk::SurfaceFormatKHR,
-    pub queue_family_indices: physical_device::QueueFamilyIndices,
-    pub depth_format: vk::Format,
-    pub present_mode: vk::PresentModeKHR,
+    pub surface_format: TextureFormat,
+    pub depth_format: TextureFormat,
 }

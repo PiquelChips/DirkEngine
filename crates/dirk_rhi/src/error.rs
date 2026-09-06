@@ -53,6 +53,9 @@ pub enum UnsupportedOperation {
     /// The supplied shader source representation is not accepted natively.
     #[error("{0} shader source is not supported by this backend")]
     ShaderSource(#[source] ShaderLanguage),
+    /// A requested texture format is unavailable on this backend or surface.
+    #[error("texture format {0:?} is not supported by this backend")]
+    TextureFormat(crate::types::TextureFormat),
 }
 
 /// Source representation of a shader program.
@@ -118,6 +121,9 @@ pub enum InvalidResourceKind {
     /// The resource does not match its layout, format, or declared use.
     #[error("resource does not match its layout, format, or declared use")]
     Mismatch,
+    /// The resource was used without being declared for that use.
+    #[error("resource was used without being declared for that use")]
+    Undeclared,
     /// The resource memory domain does not permit this host access.
     #[error("memory domain does not permit this host access")]
     NotHostAccessible,
