@@ -11,6 +11,33 @@ pub enum QueueType {
     Copy,
 }
 
+/// Transfer of exclusive resource ownership between semantic queues.
+///
+/// Backends that require separate release and acquire dependencies interpret
+/// this value according to the queue of the recording command buffer: the
+/// source queue releases ownership and the destination queue acquires it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct QueueTransfer {
+    /// Queue that currently owns the resource.
+    pub source: QueueType,
+    /// Queue that will own the resource after the dependency.
+    pub destination: QueueType,
+}
+
+/// Dimensionality and allocation compatibility of an image.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum ImageDimension {
+    /// A two-dimensional image or image array.
+    #[default]
+    TwoD,
+    /// A three-dimensional image. Three-dimensional images cannot have array
+    /// layers.
+    ThreeD,
+    /// A cube-compatible two-dimensional image. Array layer counts must be a
+    /// multiple of six.
+    Cube,
+}
+
 /// Three-dimensional unsigned extent.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Extent3d {
@@ -52,6 +79,7 @@ impl Extent3d {
 /// Vertex input uses the separate [`VertexFormat`] enumeration; formats here
 /// describe how a texel is stored, not how vertex data is fetched.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum TextureFormat {
     /// Four-channel normalized RGBA.
     Rgba8Unorm,
@@ -88,6 +116,30 @@ pub enum TextureFormat {
     Depth32FloatStencil8,
 }
 
+impl TextureFormat {
+    /// Returns the number of bytes occupied by one uncompressed texel block.
+    ///
+    /// This can be combined with the backend's buffer-copy pitch alignment to
+    /// construct [`crate::BufferImageCopy`] layouts.
+    #[must_use]
+    pub const fn texel_size(self) -> u32 {
+        match self {
+            Self::Rgba8Unorm
+            | Self::Rgba8Srgb
+            | Self::Bgra8Unorm
+            | Self::Bgra8Srgb
+            | Self::Rg16Float
+            | Self::R32Float
+            | Self::R11G11B10Float
+            | Self::Depth24UnormStencil8
+            | Self::Depth32Float => 4,
+            Self::R16Float | Self::Depth16Unorm => 2,
+            Self::Rgba16Float | Self::Rg32Float | Self::Depth32FloatStencil8 => 8,
+            Self::Rgba32Float => 16,
+        }
+    }
+}
+
 /// Supported vertex attribute formats.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum VertexFormat {
@@ -120,6 +172,34 @@ pub enum SampleCount {
     Eight = 8,
 }
 
+define_flags! {
+    /// Supported texture sample counts.
+    pub struct SampleCounts(u8) {
+        /// One sample per pixel.
+        const ONE = 1 << 0;
+        /// Two samples per pixel.
+        const TWO = 1 << 1;
+        /// Four samples per pixel.
+        const FOUR = 1 << 2;
+        /// Eight samples per pixel.
+        const EIGHT = 1 << 3;
+    }
+}
+
+impl SampleCounts {
+    /// Returns whether `count` is present in this set.
+    #[must_use]
+    pub const fn supports(self, count: SampleCount) -> bool {
+        let flag = match count {
+            SampleCount::One => Self::ONE,
+            SampleCount::Two => Self::TWO,
+            SampleCount::Four => Self::FOUR,
+            SampleCount::Eight => Self::EIGHT,
+        };
+        self.contains(flag)
+    }
+}
+
 /// Preferred memory access pattern for a resource.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum MemoryDomain {
@@ -146,6 +226,44 @@ define_flags! {
         const UNIFORM = 1 << 4;
         /// Shader storage data.
         const STORAGE = 1 << 5;
+    }
+}
+
+define_flags! {
+    /// Memory accesses made visible by a dependency.
+    pub struct AccessTypes(u32) {
+        /// Indirect command data reads.
+        const INDIRECT_COMMAND_READ = 1 << 0;
+        /// Index buffer reads.
+        const INDEX_READ = 1 << 1;
+        /// Vertex attribute reads.
+        const VERTEX_ATTRIBUTE_READ = 1 << 2;
+        /// Uniform buffer reads.
+        const UNIFORM_READ = 1 << 3;
+        /// Shader reads from storage resources, textures, or attachments.
+        const SHADER_READ = 1 << 4;
+        /// Shader writes to storage resources.
+        const SHADER_WRITE = 1 << 5;
+        /// Color attachment reads.
+        const COLOR_ATTACHMENT_READ = 1 << 6;
+        /// Color attachment writes.
+        const COLOR_ATTACHMENT_WRITE = 1 << 7;
+        /// Depth/stencil attachment reads.
+        const DEPTH_STENCIL_READ = 1 << 8;
+        /// Depth/stencil attachment writes.
+        const DEPTH_STENCIL_WRITE = 1 << 9;
+        /// Transfer source reads.
+        const COPY_READ = 1 << 10;
+        /// Transfer destination writes.
+        const COPY_WRITE = 1 << 11;
+        /// Host reads.
+        const HOST_READ = 1 << 12;
+        /// Host writes.
+        const HOST_WRITE = 1 << 13;
+        /// Any memory read when a narrower access cannot be expressed.
+        const MEMORY_READ = 1 << 14;
+        /// Any memory write when a narrower access cannot be expressed.
+        const MEMORY_WRITE = 1 << 15;
     }
 }
 
@@ -184,18 +302,42 @@ define_flags! {
 }
 
 define_flags! {
-    /// Pipeline stages used to scope a submission wait.
+    /// Pipeline stages used to scope dependencies and submission waits.
     pub struct PipelineStages(u32) {
-        /// Transfer commands.
-        const COPY = 1 << 0;
-        /// Vertex processing.
-        const VERTEX = 1 << 1;
-        /// Fragment processing.
-        const FRAGMENT = 1 << 2;
+        /// Indirect argument consumption.
+        const INDIRECT = 1 << 0;
+        /// Vertex and index input assembly.
+        const VERTEX_INPUT = 1 << 1;
+        /// Vertex shader execution.
+        const VERTEX_SHADER = 1 << 2;
+        /// Early depth and stencil tests.
+        const EARLY_DEPTH_STENCIL = 1 << 3;
+        /// Fragment shader execution.
+        const FRAGMENT_SHADER = 1 << 4;
+        /// Late depth and stencil tests.
+        const LATE_DEPTH_STENCIL = 1 << 5;
         /// Color output.
-        const COLOR_OUTPUT = 1 << 3;
-        /// Compute processing.
-        const COMPUTE = 1 << 4;
+        const COLOR_OUTPUT = 1 << 6;
+        /// Compute shader execution.
+        const COMPUTE_SHADER = 1 << 7;
+        /// Transfer commands.
+        const COPY = 1 << 8;
+        /// Host access.
+        const HOST = 1 << 9;
+    }
+}
+
+define_flags! {
+    /// Color channels written by a graphics pipeline target.
+    pub struct ColorWrites(u8) {
+        /// Red channel.
+        const RED = 1 << 0;
+        /// Green channel.
+        const GREEN = 1 << 1;
+        /// Blue channel.
+        const BLUE = 1 << 2;
+        /// Alpha channel.
+        const ALPHA = 1 << 3;
     }
 }
 
@@ -219,8 +361,12 @@ pub enum ImageViewType {
     TwoD,
     /// An array of two-dimensional images.
     TwoDArray,
+    /// A three-dimensional image.
+    ThreeD,
     /// A cube image.
     Cube,
+    /// An array of cube images.
+    CubeArray,
 }
 
 /// Shader stage implemented by a module.
@@ -238,9 +384,17 @@ pub enum ShaderStage {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum BindingType {
     /// Read-only uniform buffer.
-    UniformBuffer,
-    /// Read-write storage buffer.
-    StorageBuffer,
+    UniformBuffer {
+        /// Whether a byte offset is supplied when the bind group is bound.
+        dynamic_offset: bool,
+    },
+    /// Storage buffer.
+    StorageBuffer {
+        /// Whether shaders are restricted to reading this binding.
+        read_only: bool,
+        /// Whether a byte offset is supplied when the bind group is bound.
+        dynamic_offset: bool,
+    },
     /// Sampled image and sampler pair.
     SampledImage,
     /// Read-write storage image.
@@ -293,8 +447,12 @@ pub enum CompareOp {
     LessEqual,
     /// Incoming value is equal to stored value.
     Equal,
+    /// Incoming value is not equal to stored value.
+    NotEqual,
     /// Incoming value is greater than stored value.
     Greater,
+    /// Incoming value is greater than or equal to stored value.
+    GreaterEqual,
     /// Comparison always succeeds.
     Always,
 }
@@ -322,6 +480,10 @@ pub enum StencilOp {
     IncrementClamp,
     /// Decrement the stencil value, clamping at zero.
     DecrementClamp,
+    /// Increment the stencil value, wrapping to zero at the maximum.
+    IncrementWrap,
+    /// Decrement the stencil value, wrapping to the maximum at zero.
+    DecrementWrap,
     /// Bitwise-invert the stencil value.
     Invert,
 }
@@ -350,14 +512,30 @@ pub enum BlendFactor {
     /// Multiplies by one.
     #[default]
     One,
+    /// Multiplies by the source color channels.
+    SourceColor,
+    /// Multiplies by one minus the source color channels.
+    OneMinusSourceColor,
     /// Multiplies by the source alpha channel.
     SourceAlpha,
     /// Multiplies by one minus the source alpha channel.
     OneMinusSourceAlpha,
+    /// Multiplies by the destination color channels.
+    DestinationColor,
+    /// Multiplies by one minus the destination color channels.
+    OneMinusDestinationColor,
     /// Multiplies by the destination alpha channel.
     DestinationAlpha,
     /// Multiplies by one minus the destination alpha channel.
     OneMinusDestinationAlpha,
+    /// Multiplies by the dynamic blend constant color channels.
+    ConstantColor,
+    /// Multiplies by one minus the dynamic blend constant color channels.
+    OneMinusConstantColor,
+    /// Multiplies by the dynamic blend constant alpha channel.
+    ConstantAlpha,
+    /// Multiplies by one minus the dynamic blend constant alpha channel.
+    OneMinusConstantAlpha,
 }
 
 /// Texture filtering mode.
@@ -454,7 +632,6 @@ impl Viewport {
     /// Creates a viewport covering `width` by `height` pixels with the
     /// supplied origin and depth range.
     #[must_use]
-    #[allow(clippy::too_many_arguments)]
     pub const fn new(
         x: f32,
         y: f32,
@@ -590,4 +767,26 @@ pub enum PresentMode {
     Mailbox,
     /// Present immediately without synchronizing to vertical blanking.
     Immediate,
+}
+
+/// Color space associated with presentation images.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum ColorSpace {
+    /// Standard sRGB color space.
+    #[default]
+    Srgb,
+    /// Display P3 color space.
+    DisplayP3,
+    /// HDR10 using the ST 2084 transfer function.
+    Hdr10,
+}
+
+/// Texture format and color space selected for presentation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct SurfaceFormat {
+    /// Storage format of presentation images.
+    pub texture: TextureFormat,
+    /// Color space used by the display surface.
+    pub color_space: ColorSpace,
 }

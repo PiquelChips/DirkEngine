@@ -5,6 +5,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// Errors common to all graphics backends.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum Error {
     /// The requested operation is unsupported by the selected backend.
     #[error("unsupported RHI operation: {0}")]
@@ -19,11 +20,15 @@ pub enum Error {
     /// primitive reached its waited-for state.
     #[error("the synchronization wait timed out")]
     Timeout,
-    /// The presentation surface must be recreated.
-    #[error("the presentation surface is out of date")]
-    SurfaceOutOfDate,
+    /// The presentation swapchain must be recreated while retaining its
+    /// surface.
+    #[error("the presentation swapchain is out of date")]
+    SwapchainOutOfDate,
+    /// The presentation surface itself was lost and must be recreated.
+    #[error("the presentation surface was lost")]
+    SurfaceLost,
     /// Resource creation or use failed because the request is invalid.
-    #[error("invalid resource description: {0}")]
+    #[error("invalid RHI request: {0}")]
     InvalidResource(#[from] InvalidResource),
     /// A backend-specific operation failed.
     ///
@@ -52,6 +57,7 @@ pub enum UnsupportedOperation {
 
 /// Source representation of a shader program.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Error)]
+#[non_exhaustive]
 pub enum ShaderLanguage {
     /// SPIR-V words.
     #[error("SPIR-V")]
@@ -61,14 +67,42 @@ pub enum ShaderLanguage {
     Msl,
 }
 
-/// Reasons a resource creation or use request may be invalid.
-///
-/// Members describe the failure class so callers can match programmatically;
-/// human-readable detail belongs in backend logs emitted where the failure is
-/// detected.
+/// Invalid resource creation or use request with diagnostic context.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[error("{kind}: {detail}")]
+pub struct InvalidResource {
+    kind: InvalidResourceKind,
+    detail: String,
+}
+
+impl InvalidResource {
+    /// Creates an invalid-resource error without discarding operation-specific
+    /// diagnostic detail.
+    #[must_use]
+    pub fn new(kind: InvalidResourceKind, detail: impl Into<String>) -> Self {
+        Self {
+            kind,
+            detail: detail.into(),
+        }
+    }
+
+    /// Returns the stable failure classification.
+    #[must_use]
+    pub const fn kind(&self) -> InvalidResourceKind {
+        self.kind
+    }
+
+    /// Returns the operation-specific diagnostic detail.
+    #[must_use]
+    pub fn detail(&self) -> &str {
+        &self.detail
+    }
+}
+
+/// Stable classifications for invalid resource requests.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Error)]
 #[non_exhaustive]
-pub enum InvalidResource {
+pub enum InvalidResourceKind {
     /// The resource belongs to another instance of this backend.
     #[error("resource belongs to a different RHI instance")]
     ForeignInstance,
@@ -90,4 +124,12 @@ pub enum InvalidResource {
     /// Input contains data the backend cannot represent natively.
     #[error("input contains data that cannot be represented")]
     Malformed,
+}
+
+impl InvalidResourceKind {
+    /// Attaches diagnostic detail to this classification.
+    #[must_use]
+    pub fn with_detail(self, detail: impl Into<String>) -> InvalidResource {
+        InvalidResource::new(self, detail)
+    }
 }

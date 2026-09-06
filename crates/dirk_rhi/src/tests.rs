@@ -1,28 +1,53 @@
 use std::sync::{
-    Arc,
+    Arc, Mutex,
     atomic::{AtomicBool, AtomicU64, Ordering},
+};
+
+use raw_window_handle::{
+    DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle, WindowHandle,
 };
 
 use crate::{
     Backend, BindGroupDesc, BindGroupLayoutDesc, Buffer, BufferBarrier, BufferCopy, BufferDesc,
-    BufferImageCopy, BufferUsages, Capabilities, Color, CommandBuffer, DependencyInfo, Error,
-    Extent3d, Fence, FilterMode, GraphicsPipelineDesc, ImageCopy, ImageDesc, ImageUsages,
-    ImageViewDesc, InvalidResource, PipelineLayoutDesc, PipelineStages, QueueType, Rect,
-    RenderingInfo, Result, RhiCreateInfo, SampleCount, SamplerDesc, ShaderDesc, StencilOp,
-    Submission, SurfaceCreateInfo, SurfaceFrame, SurfaceStatus, Swapchain, SwapchainDesc,
-    TextureFormat, TimelinePoint, TimelineSemaphore, UnsupportedOperation, Viewport,
+    BufferImageCopy, BufferUsages, Capabilities, Color, ColorSpace, CommandBuffer, DependencyInfo,
+    Error, Extent3d, Fence, FilterMode, FormatCapabilities, GraphicsPipelineDesc, ImageCopy,
+    ImageDesc, ImageUsages, ImageViewDesc, InvalidResourceKind, PipelineLayoutDesc, PipelineStages,
+    QueueType, Rect, RenderingInfo, Result, RhiCreateInfo, SampleCount, SampleCounts, SamplerDesc,
+    ShaderDesc, StencilOp, Submission, SurfaceCreateInfo, SurfaceFormat, SurfaceFrame,
+    SurfaceStatus, Swapchain, SwapchainDesc, TextureFormat, TimelinePoint, TimelineSemaphore,
+    UnsupportedOperation, Viewport,
 };
 
 #[derive(Clone, Debug)]
 struct TestBuffer {
-    size: Arc<AtomicU64>,
+    data: Arc<Mutex<Vec<u8>>>,
 }
 
 impl TestBuffer {
     fn new(size: u64) -> Self {
+        let size = usize::try_from(size).expect("test buffer size fits usize");
         Self {
-            size: Arc::new(AtomicU64::new(size)),
+            data: Arc::new(Mutex::new(vec![0; size])),
         }
+    }
+
+    fn checked_range(&self, offset: u64, length: usize) -> Result<std::ops::Range<usize>> {
+        let start = usize::try_from(offset).map_err(|error| Error::Backend(error.into()))?;
+        let end = start.checked_add(length).ok_or_else(|| {
+            InvalidResourceKind::OutOfRange.with_detail("test buffer range overflowed")
+        })?;
+        if end
+            > self
+                .data
+                .lock()
+                .map_err(|_| Error::Backend(anyhow::anyhow!("test buffer mutex was poisoned")))?
+                .len()
+        {
+            return Err(InvalidResourceKind::OutOfRange
+                .with_detail(format!("test buffer range {start}..{end} exceeds its size"))
+                .into());
+        }
+        Ok(start..end)
     }
 }
 
@@ -34,18 +59,27 @@ impl Default for TestBuffer {
 
 impl Buffer for TestBuffer {
     fn size(&self) -> u64 {
-        self.size.load(Ordering::Acquire)
+        u64::try_from(self.data.lock().map_or(0, |data| data.len())).unwrap_or(u64::MAX)
     }
 
     fn write(&self, offset: u64, data: &[u8]) -> Result<()> {
-        let length =
-            u64::try_from(data.len()).map_err(|error| Error::Backend(anyhow::Error::new(error)))?;
-        if offset
-            .checked_add(length)
-            .is_none_or(|end| end > self.size())
-        {
-            return Err(InvalidResource::OutOfRange.into());
-        }
+        let range = self.checked_range(offset, data.len())?;
+        self.data
+            .lock()
+            .map_err(|_| Error::Backend(anyhow::anyhow!("test buffer mutex was poisoned")))?[range]
+            .copy_from_slice(data);
+        Ok(())
+    }
+
+    fn read(&self, offset: u64, data: &mut [u8]) -> Result<()> {
+        let range = self.checked_range(offset, data.len())?;
+        data.copy_from_slice(
+            &self
+                .data
+                .lock()
+                .map_err(|_| Error::Backend(anyhow::anyhow!("test buffer mutex was poisoned")))?
+                [range],
+        );
         Ok(())
     }
 }
@@ -88,16 +122,35 @@ impl TimelineSemaphore for TestTimeline {
 #[derive(Clone, Debug, Default)]
 struct TestResource;
 
-#[derive(Default)]
-struct TestCommandPool;
+const TEST_SURFACE_FORMAT: SurfaceFormat = SurfaceFormat {
+    texture: TextureFormat::Rgba8Unorm,
+    color_space: ColorSpace::Srgb,
+};
 
-#[derive(Default)]
-struct TestCommandBuffer;
+struct TestCommandPool(QueueType);
+
+struct TestCommandBuffer(QueueType);
+
+impl TestCommandBuffer {
+    fn require_graphics(&self, operation: &str) -> Result<()> {
+        if self.0 == QueueType::Graphics {
+            Ok(())
+        } else {
+            Err(InvalidResourceKind::Mismatch
+                .with_detail(format!(
+                    "{operation} requires a graphics queue, not {:?}",
+                    self.0
+                ))
+                .into())
+        }
+    }
+}
 
 #[derive(Default)]
 struct TestSurfaceFrame {
     image: TestResource,
     view: TestResource,
+    submitted: AtomicBool,
 }
 
 #[derive(Default)]
@@ -106,7 +159,25 @@ struct TestSwapchain;
 #[derive(Default)]
 struct TestBackend;
 
+struct TestSurfaceTarget;
+
+impl HasDisplayHandle for TestSurfaceTarget {
+    fn display_handle(&self) -> std::result::Result<DisplayHandle<'_>, HandleError> {
+        Err(HandleError::Unavailable)
+    }
+}
+
+impl HasWindowHandle for TestSurfaceTarget {
+    fn window_handle(&self) -> std::result::Result<WindowHandle<'_>, HandleError> {
+        Err(HandleError::Unavailable)
+    }
+}
+
 impl CommandBuffer<TestBackend> for TestCommandBuffer {
+    fn queue_type(&self) -> QueueType {
+        self.0
+    }
+
     fn begin(&mut self, _label: &str, _one_time_submit: bool) -> Result<()> {
         Ok(())
     }
@@ -116,39 +187,54 @@ impl CommandBuffer<TestBackend> for TestCommandBuffer {
     }
 
     fn begin_rendering(&mut self, _info: &RenderingInfo<'_, TestBackend>) -> Result<()> {
-        Ok(())
+        self.require_graphics("begin_rendering")
     }
 
     fn end_rendering(&mut self) -> Result<()> {
-        Ok(())
+        self.require_graphics("end_rendering")
     }
 
-    fn set_viewport(&mut self, _viewport: Viewport) {}
+    fn set_viewport(&mut self, _viewport: Viewport) -> Result<()> {
+        self.require_graphics("set_viewport")
+    }
 
-    fn set_scissor(&mut self, _scissor: Rect) {}
+    fn set_scissor(&mut self, _scissor: Rect) -> Result<()> {
+        self.require_graphics("set_scissor")
+    }
 
-    fn set_blend_constants(&mut self, _color: Color) {}
+    fn set_blend_constants(&mut self, _color: Color) -> Result<()> {
+        self.require_graphics("set_blend_constants")
+    }
 
-    fn set_stencil_reference(&mut self, _front: u32, _back: u32) {}
+    fn set_stencil_reference(&mut self, _front: u32, _back: u32) -> Result<()> {
+        self.require_graphics("set_stencil_reference")
+    }
 
-    fn bind_graphics_pipeline(&mut self, _pipeline: &TestResource) {}
+    fn bind_graphics_pipeline(&mut self, _pipeline: &TestResource) -> Result<()> {
+        self.require_graphics("bind_graphics_pipeline")
+    }
 
     fn bind_groups(
         &mut self,
         _layout: &TestResource,
         _first_group: u32,
         _groups: &[&TestResource],
-    ) {
+        _dynamic_offsets: &[u64],
+    ) -> Result<()> {
+        self.require_graphics("bind_groups")
     }
 
-    fn bind_vertex_buffer(&mut self, _slot: u32, _buffer: &TestBuffer, _offset: u64) {}
+    fn bind_vertex_buffer(&mut self, _slot: u32, _buffer: &TestBuffer, _offset: u64) -> Result<()> {
+        self.require_graphics("bind_vertex_buffer")
+    }
 
     fn bind_index_buffer(
         &mut self,
         _buffer: &TestBuffer,
         _offset: u64,
         _format: crate::IndexFormat,
-    ) {
+    ) -> Result<()> {
+        self.require_graphics("bind_index_buffer")
     }
 
     fn draw(
@@ -157,7 +243,8 @@ impl CommandBuffer<TestBackend> for TestCommandBuffer {
         _instance_count: u32,
         _first_vertex: u32,
         _first_instance: u32,
-    ) {
+    ) -> Result<()> {
+        self.require_graphics("draw")
     }
 
     fn draw_indexed(
@@ -167,20 +254,45 @@ impl CommandBuffer<TestBackend> for TestCommandBuffer {
         _first_index: u32,
         _vertex_offset: i32,
         _first_instance: u32,
-    ) {
+    ) -> Result<()> {
+        self.require_graphics("draw_indexed")
     }
 
-    fn copy_buffer(&mut self, _src: &TestBuffer, _dst: &TestBuffer, _regions: &[BufferCopy]) {}
+    fn copy_buffer(
+        &mut self,
+        _src: &TestBuffer,
+        _dst: &TestBuffer,
+        _regions: &[BufferCopy],
+    ) -> Result<()> {
+        Ok(())
+    }
 
     fn copy_buffer_to_image(
         &mut self,
         _src: &TestBuffer,
         _dst: &TestResource,
         _regions: &[BufferImageCopy],
-    ) {
+    ) -> Result<()> {
+        Ok(())
     }
 
-    fn copy_image(&mut self, _src: &TestResource, _dst: &TestResource, _regions: &[ImageCopy]) {}
+    fn copy_image_to_buffer(
+        &mut self,
+        _src: &TestResource,
+        _dst: &TestBuffer,
+        _regions: &[BufferImageCopy],
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    fn copy_image(
+        &mut self,
+        _src: &TestResource,
+        _dst: &TestResource,
+        _regions: &[ImageCopy],
+    ) -> Result<()> {
+        Ok(())
+    }
 
     fn blit_image(
         &mut self,
@@ -192,7 +304,9 @@ impl CommandBuffer<TestBackend> for TestCommandBuffer {
         Ok(())
     }
 
-    fn barrier(&mut self, _dependency: &DependencyInfo<'_, TestBackend>) {}
+    fn barrier(&mut self, _dependency: &DependencyInfo<'_, TestBackend>) -> Result<()> {
+        Ok(())
+    }
 }
 
 impl SurfaceFrame<TestBackend> for TestSurfaceFrame {
@@ -204,8 +318,8 @@ impl SurfaceFrame<TestBackend> for TestSurfaceFrame {
         &self.view
     }
 
-    fn format(&self) -> TextureFormat {
-        TextureFormat::Rgba8Unorm
+    fn format(&self) -> SurfaceFormat {
+        TEST_SURFACE_FORMAT
     }
 
     fn extent(&self) -> Extent3d {
@@ -218,26 +332,52 @@ impl SurfaceFrame<TestBackend> for TestSurfaceFrame {
 }
 
 impl Swapchain<TestBackend> for TestSwapchain {
-    fn format(&self) -> TextureFormat {
-        TextureFormat::Rgba8Unorm
+    fn format(&self) -> SurfaceFormat {
+        TEST_SURFACE_FORMAT
     }
 
     fn extent(&self) -> Extent3d {
         Extent3d::new_2d(1, 1)
     }
 
-    fn acquire(&mut self) -> Result<TestSurfaceFrame> {
-        Ok(TestSurfaceFrame::default())
+    fn image_count(&self) -> std::num::NonZeroU32 {
+        std::num::NonZeroU32::new(2).expect("test swapchain image count is nonzero")
     }
 
-    fn discard(&mut self, _frame: TestSurfaceFrame) {}
+    fn acquire(&mut self, timeout_ns: u64) -> Result<TestSurfaceFrame> {
+        if timeout_ns == 0 {
+            Err(Error::Timeout)
+        } else {
+            Ok(TestSurfaceFrame::default())
+        }
+    }
 
-    fn resize(&mut self, _width: u32, _height: u32) -> Result<()> {
+    fn discard(&mut self, frame: TestSurfaceFrame) -> Result<()> {
+        if frame.submitted.load(Ordering::Acquire) {
+            Err(InvalidResourceKind::BadState
+                .with_detail("submitted surface frame cannot be discarded")
+                .into())
+        } else {
+            Ok(())
+        }
+    }
+
+    fn resize(
+        &mut self,
+        _width: std::num::NonZeroU32,
+        _height: std::num::NonZeroU32,
+    ) -> Result<()> {
         Ok(())
     }
 
     fn present(&mut self, frame: TestSurfaceFrame) -> Result<SurfaceStatus> {
-        Ok(frame.status())
+        if frame.submitted.load(Ordering::Acquire) {
+            Ok(frame.status())
+        } else {
+            Err(InvalidResourceKind::BadState
+                .with_detail("surface frame was presented before submission")
+                .into())
+        }
     }
 }
 
@@ -265,17 +405,32 @@ impl Backend for TestBackend {
 
     fn capabilities(&self) -> Capabilities {
         Capabilities {
-            max_samples: SampleCount::Eight,
             max_sampler_anisotropy: 1,
             min_uniform_buffer_offset_alignment: 256,
             min_storage_buffer_offset_alignment: 16,
+            buffer_copy_offset_alignment: 512,
+            buffer_copy_row_pitch_alignment: 256,
             dedicated_compute_queue: false,
             dedicated_copy_queue: false,
         }
     }
 
-    fn supported_depth_formats(&self) -> &'static [TextureFormat] {
+    fn supported_depth_formats(&self) -> &[TextureFormat] {
         &[TextureFormat::Depth32Float, TextureFormat::Depth16Unorm]
+    }
+
+    fn format_capabilities(&self, _format: TextureFormat) -> FormatCapabilities {
+        FormatCapabilities {
+            usages: ImageUsages::ALL,
+        }
+    }
+
+    fn supported_sample_counts(
+        &self,
+        _format: TextureFormat,
+        _usages: ImageUsages,
+    ) -> SampleCounts {
+        SampleCounts::ALL
     }
 
     fn wait_idle(&self) -> Result<()> {
@@ -288,7 +443,9 @@ impl Backend for TestBackend {
 
     fn create_buffer(&self, desc: &BufferDesc<'_>) -> Result<TestBuffer> {
         if desc.size == 0 {
-            return Err(InvalidResource::Empty.into());
+            return Err(InvalidResourceKind::Empty
+                .with_detail("buffer size must be nonzero")
+                .into());
         }
         Ok(TestBuffer::new(desc.size))
     }
@@ -328,12 +485,12 @@ impl Backend for TestBackend {
         Ok(TestResource)
     }
 
-    fn create_command_pool(&self, _queue: QueueType) -> Result<TestCommandPool> {
-        Ok(TestCommandPool)
+    fn create_command_pool(&self, queue: QueueType) -> Result<TestCommandPool> {
+        Ok(TestCommandPool(queue))
     }
 
-    fn create_command_buffer(&self, _pool: &mut TestCommandPool) -> Result<TestCommandBuffer> {
-        Ok(TestCommandBuffer)
+    fn create_command_buffer(&self, pool: &mut TestCommandPool) -> Result<TestCommandBuffer> {
+        Ok(TestCommandBuffer(pool.0))
     }
 
     fn create_fence(&self, signaled: bool) -> Result<TestFence> {
@@ -344,11 +501,29 @@ impl Backend for TestBackend {
         Ok(TestTimeline(Arc::new(AtomicU64::new(initial_value))))
     }
 
-    fn submit(&self, _queue: QueueType, _submission: &Submission<'_, Self>) -> Result<()> {
+    fn submit(&self, queue: QueueType, submission: &Submission<'_, Self>) -> Result<()> {
+        if submission
+            .command_buffers
+            .iter()
+            .any(|command| command.queue_type() != queue)
+        {
+            return Err(InvalidResourceKind::Mismatch
+                .with_detail("command buffer queue does not match submission queue")
+                .into());
+        }
+        for frame in submission.surface_frames {
+            frame
+                .submitted
+                .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+                .map_err(|_| {
+                    InvalidResourceKind::BadState
+                        .with_detail("surface frame was submitted more than once")
+                })?;
+        }
         Ok(())
     }
 
-    fn create_surface(&self, _info: SurfaceCreateInfo<'_>) -> Result<TestResource> {
+    fn create_surface(&self, _info: SurfaceCreateInfo) -> Result<TestResource> {
         Ok(TestResource)
     }
 
@@ -383,16 +558,49 @@ fn image_usage_flags_preserve_all_requested_roles() {
 fn semantic_types_do_not_encode_backend_constants() {
     assert_eq!(Extent3d::new_2d(1920, 1080).depth, 1);
     assert_eq!(SampleCount::Four as u8, 4);
-    assert_eq!(BufferBarrier::<TestBackend>::WHOLE_SIZE, u64::MAX);
+    assert_eq!(BufferBarrier::<TestBackend>::REMAINING_SIZE, u64::MAX);
     assert_eq!(
         PipelineStages::ALL,
-        PipelineStages::COPY
-            | PipelineStages::VERTEX
-            | PipelineStages::FRAGMENT
+        PipelineStages::INDIRECT
+            | PipelineStages::VERTEX_INPUT
+            | PipelineStages::VERTEX_SHADER
+            | PipelineStages::EARLY_DEPTH_STENCIL
+            | PipelineStages::FRAGMENT_SHADER
+            | PipelineStages::LATE_DEPTH_STENCIL
             | PipelineStages::COLOR_OUTPUT
-            | PipelineStages::COMPUTE
+            | PipelineStages::COMPUTE_SHADER
+            | PipelineStages::COPY
+            | PipelineStages::HOST
     );
     assert!(SampleCount::Four < SampleCount::Eight);
+    assert_eq!(TextureFormat::Rgba16Float.texel_size(), 8);
+    assert!(
+        SampleCounts::ONE
+            .union(SampleCounts::FOUR)
+            .supports(SampleCount::Four)
+    );
+    assert!(!SampleCounts::ONE.supports(SampleCount::Two));
+    assert!(
+        TestBackend
+            .format_capabilities(TextureFormat::Rgba8Unorm)
+            .supports(ImageUsages::SAMPLED | ImageUsages::COPY_DST)
+    );
+}
+
+#[test]
+fn surface_create_info_keeps_its_target_alive() {
+    let target = Arc::new(TestSurfaceTarget);
+    let weak = Arc::downgrade(&target);
+    let info = SurfaceCreateInfo::new(target.clone());
+
+    drop(target);
+    assert!(weak.upgrade().is_some());
+    assert!(matches!(
+        info.window_handle(),
+        Err(HandleError::Unavailable)
+    ));
+    drop(info);
+    assert!(weak.upgrade().is_none());
 }
 
 #[test]
@@ -428,8 +636,12 @@ fn resources_own_their_stateful_operations() -> Result<()> {
     buffer.write(8, &[1, 2, 3, 4])?;
     assert!(matches!(
         buffer.write(9, &[1, 2, 3, 4]),
-        Err(Error::InvalidResource(InvalidResource::OutOfRange))
+        Err(Error::InvalidResource(error))
+            if error.kind() == InvalidResourceKind::OutOfRange
     ));
+    let mut bytes = [0; 4];
+    buffer.read(8, &mut bytes)?;
+    assert_eq!(bytes, [1, 2, 3, 4]);
 
     let fence = TestFence::default();
     assert!(matches!(fence.wait(0), Err(Error::Timeout)));
@@ -478,8 +690,9 @@ fn typed_errors_describe_recoverable_conditions() {
         "unsupported RHI operation: Metal Shading Language shader source is not supported by this backend"
     );
     assert_eq!(
-        Error::from(InvalidResource::ForeignInstance).to_string(),
-        "invalid resource description: resource belongs to a different RHI instance"
+        Error::from(InvalidResourceKind::ForeignInstance.with_detail("buffer came from backend B"))
+            .to_string(),
+        "invalid RHI request: resource belongs to a different RHI instance: buffer came from backend B"
     );
 }
 
@@ -533,4 +746,72 @@ fn backend_contract_accepts_borrowed_descriptors_and_submission() -> Result<()> 
     };
 
     backend.submit(QueueType::Graphics, &submission)
+}
+
+#[test]
+fn command_buffers_report_incompatible_queue_commands() -> Result<()> {
+    let backend = TestBackend;
+    let mut pool = backend.create_command_pool(QueueType::Copy)?;
+    let mut command = backend.create_command_buffer(&mut pool)?;
+
+    let error = command
+        .draw(3, 1, 0, 0)
+        .expect_err("draws require a graphics command buffer");
+    assert!(matches!(
+        error,
+        Error::InvalidResource(error) if error.kind() == InvalidResourceKind::Mismatch
+    ));
+
+    let src = TestBuffer::new(1);
+    let dst = TestBuffer::new(1);
+    command.copy_buffer(
+        &src,
+        &dst,
+        &[BufferCopy {
+            src_offset: 0,
+            dst_offset: 0,
+            size: 1,
+        }],
+    )?;
+    Ok(())
+}
+
+#[test]
+fn surface_frames_reject_invalid_lifecycle_transitions() -> Result<()> {
+    let backend = TestBackend;
+    let mut swapchain = TestSwapchain;
+
+    let unsubmitted = swapchain.acquire(u64::MAX)?;
+    assert!(matches!(
+        swapchain.present(unsubmitted),
+        Err(Error::InvalidResource(error))
+            if error.kind() == InvalidResourceKind::BadState
+    ));
+
+    let submitted = swapchain.acquire(u64::MAX)?;
+    {
+        let frames = [&submitted];
+        let submission = Submission {
+            command_buffers: &[],
+            surface_frames: &frames,
+            wait_timelines: &[],
+            signal_timelines: &[],
+            fence: None,
+        };
+        backend.submit(QueueType::Graphics, &submission)?;
+        assert!(matches!(
+            backend.submit(QueueType::Graphics, &submission),
+            Err(Error::InvalidResource(error))
+                if error.kind() == InvalidResourceKind::BadState
+        ));
+    }
+    assert!(matches!(
+        swapchain.discard(submitted),
+        Err(Error::InvalidResource(error))
+            if error.kind() == InvalidResourceKind::BadState
+    ));
+
+    assert!(matches!(swapchain.acquire(0), Err(Error::Timeout)));
+    assert_eq!(swapchain.image_count().get(), 2);
+    Ok(())
 }

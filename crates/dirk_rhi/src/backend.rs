@@ -9,8 +9,9 @@ use raw_window_handle::{DisplayHandle, WindowHandle};
 
 use crate::{
     BindGroupDesc, BindGroupLayoutDesc, Buffer, BufferDesc, CommandBuffer, GraphicsPipelineDesc,
-    ImageDesc, ImageViewDesc, PipelineLayoutDesc, QueueType, Result, SamplerDesc, ShaderDesc,
-    SurfaceCreateInfo, SurfaceFrame, Swapchain, SwapchainDesc, TextureFormat, TimelinePoint,
+    ImageDesc, ImageUsages, ImageViewDesc, PipelineLayoutDesc, QueueType, Result, SampleCounts,
+    SamplerDesc, ShaderDesc, SurfaceCreateInfo, SurfaceFrame, Swapchain, SwapchainDesc,
+    TextureFormat, TimelinePoint,
 };
 
 /// Application metadata and backend policy used during device creation.
@@ -28,6 +29,9 @@ pub struct RhiCreateInfo<'a> {
     /// Display and window handles the selected device must be able to present
     /// to.
     ///
+    /// Backends may inspect these handles during device selection but must not
+    /// retain them after [`Backend::new`] returns.
+    ///
     /// Headless users may leave this unset and create a surface later, at
     /// which point presentation support can still be rejected by the backend.
     pub compatible_surface: Option<(DisplayHandle<'a>, WindowHandle<'a>)>,
@@ -36,18 +40,35 @@ pub struct RhiCreateInfo<'a> {
 /// Selected device capabilities relevant to the renderer.
 #[derive(Clone, Copy, Debug)]
 pub struct Capabilities {
-    /// Maximum supported color/depth sample count.
-    pub max_samples: crate::SampleCount,
     /// Maximum supported texture anisotropy.
     pub max_sampler_anisotropy: u16,
     /// Minimum alignment for a uniform-buffer binding offset, in bytes.
     pub min_uniform_buffer_offset_alignment: u64,
     /// Minimum alignment for a storage-buffer binding offset, in bytes.
     pub min_storage_buffer_offset_alignment: u64,
+    /// Required alignment of buffer offsets used for buffer/image copies.
+    pub buffer_copy_offset_alignment: u64,
+    /// Required alignment of buffer row pitches used for buffer/image copies.
+    pub buffer_copy_row_pitch_alignment: u32,
     /// Whether a distinct compute queue is available.
     pub dedicated_compute_queue: bool,
     /// Whether a distinct copy queue is available.
     pub dedicated_copy_queue: bool,
+}
+
+/// Capabilities of one texture format on the selected device.
+#[derive(Clone, Copy, Debug)]
+pub struct FormatCapabilities {
+    /// Image uses supported by the format.
+    pub usages: ImageUsages,
+}
+
+impl FormatCapabilities {
+    /// Returns whether all requested image usages are supported.
+    #[must_use]
+    pub const fn supports(self, usages: ImageUsages) -> bool {
+        self.usages.contains(usages)
+    }
 }
 
 /// CPU-waitable submission completion primitive.
@@ -61,20 +82,17 @@ pub trait Fence: Send + Sync + 'static {
     ///
     /// # Synchronization
     ///
-    /// Native fence state is not internally synchronized: at most one thread
-    /// may wait on this fence at a time, and callers must order waits
-    /// against [`Self::reset`](Fence::reset) and against the submission that
-    /// signals the fence.
+    /// Implementations must serialize native host access so concurrent safe
+    /// calls cannot violate backend external-synchronization rules.
     fn wait(&self, timeout_ns: u64) -> Result<()>;
     /// Resets this signaled fence for reuse.
     ///
     /// # Synchronization
     ///
-    /// The caller must ensure no thread is concurrently waiting on or
-    /// resetting this fence, and that every submission signaling it has been
-    /// waited on (or otherwise completed) first; resetting a fence that is
-    /// still pending on a submission or under concurrent state access is
-    /// invalid in the native APIs.
+    /// Implementations must return
+    /// [`InvalidResourceKind::BadState`](crate::InvalidResourceKind::BadState)
+    /// if a signaling submission has not completed, and must serialize reset
+    /// against concurrent safe host operations.
     fn reset(&self) -> Result<()>;
 }
 
@@ -90,11 +108,9 @@ pub trait TimelineSemaphore: Clone + Send + Sync + 'static {
     ///
     /// # Synchronization
     ///
-    /// Native semaphore state is not internally synchronized: at most one
-    /// thread may wait on or observe this semaphore at a time, and callers
-    /// must order waits and calls to [`Self::value`](TimelineSemaphore::value)
-    /// against the submissions that signal it. Cloned handles alias the same
-    /// native semaphore and do not add synchronization.
+    /// Implementations must serialize host operations where required by the
+    /// native backend. Cloned handles alias the same synchronization state and
+    /// therefore share that serialization.
     fn wait(&self, value: u64, timeout_ns: u64) -> Result<()>;
     /// Returns this semaphore's current value.
     fn value(&self) -> Result<u64>;
@@ -163,6 +179,8 @@ pub trait Backend: Sized + Send + Sync + 'static {
     /// Timeline synchronization primitive.
     type TimelineSemaphore: TimelineSemaphore;
     /// Presentation surface.
+    /// Implementations must retain the [`crate::SurfaceTarget`] supplied at
+    /// creation until the last surface handle is dropped.
     type Surface: Clone + Send + Sync + 'static;
     /// Presentation swapchain.
     type Swapchain: Swapchain<Self>;
@@ -175,7 +193,11 @@ pub trait Backend: Sized + Send + Sync + 'static {
     fn capabilities(&self) -> Capabilities;
     /// Returns the depth attachment formats supported by the selected
     /// device, ordered from most to least preferred.
-    fn supported_depth_formats(&self) -> &'static [TextureFormat];
+    fn supported_depth_formats(&self) -> &[TextureFormat];
+    /// Returns selected-device support for one texture format.
+    fn format_capabilities(&self, format: TextureFormat) -> FormatCapabilities;
+    /// Returns sample counts supported by `format` for all requested `usages`.
+    fn supported_sample_counts(&self, format: TextureFormat, usages: ImageUsages) -> SampleCounts;
     /// Waits until all submitted device work completes.
     fn wait_idle(&self) -> Result<()>;
     /// Reclaims resources whose GPU use has completed.
@@ -218,10 +240,15 @@ pub trait Backend: Sized + Send + Sync + 'static {
     /// Creates a timeline semaphore.
     fn create_timeline_semaphore(&self, initial_value: u64) -> Result<Self::TimelineSemaphore>;
     /// Submits command buffers and synchronization to a queue.
+    ///
+    /// Implementations must serialize access to an aliased native queue,
+    /// reject command buffers recorded for a different queue, reject duplicate
+    /// or stale surface frames, and keep submitted native objects alive until
+    /// execution completes.
     fn submit(&self, queue: QueueType, submission: &Submission<'_, Self>) -> Result<()>;
 
     /// Creates a presentation surface.
-    fn create_surface(&self, info: SurfaceCreateInfo<'_>) -> Result<Self::Surface>;
+    fn create_surface(&self, info: SurfaceCreateInfo) -> Result<Self::Surface>;
     /// Creates a presentation swapchain.
     fn create_swapchain(&self, desc: &SwapchainDesc<'_, Self>) -> Result<Self::Swapchain>;
 }
