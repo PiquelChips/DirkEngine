@@ -2,11 +2,6 @@ use std::{marker::PhantomData, sync::Arc};
 
 use parking_lot::Mutex;
 
-#[cfg(renderer_editor)]
-use std::ops::Deref;
-
-#[cfg(renderer_editor)]
-use ash::vk;
 use dirk_rhi::{Backend as _, CommandBuffer as _, Fence as _, QueueType, Submission};
 
 use crate::{
@@ -60,17 +55,10 @@ impl<Type: Pool> CommandPool<Type> {
         })
     }
 
-    #[cfg(renderer_editor)]
-    pub fn raw(&self) -> vk::CommandPool {
-        self.inner.lock().raw()
-    }
-
     pub fn allocate_buffer(&self) -> Result<CommandBuffer> {
         let mut pool = self.inner.lock();
         let inner = self.rhi.create_command_buffer(&mut pool)?;
         Ok(CommandBuffer {
-            #[cfg(renderer_editor)]
-            raw: inner.raw(),
             inner,
             rhi: self.rhi.clone(),
             queue: Type::QUEUE,
@@ -86,8 +74,6 @@ impl<Type: Pool> CommandPool<Type> {
 
 /// Renderer command buffer backed by the active RHI.
 pub struct CommandBuffer {
-    #[cfg(renderer_editor)]
-    raw: vk::CommandBuffer,
     inner: ActiveCommandBuffer,
     rhi: Arc<ActiveRhi>,
     queue: QueueType,
@@ -128,14 +114,5 @@ impl CommandBuffer {
         )?;
         fence.wait(u64::MAX)?;
         Ok(())
-    }
-}
-
-#[cfg(renderer_editor)]
-impl Deref for CommandBuffer {
-    type Target = vk::CommandBuffer;
-
-    fn deref(&self) -> &Self::Target {
-        &self.raw
     }
 }
